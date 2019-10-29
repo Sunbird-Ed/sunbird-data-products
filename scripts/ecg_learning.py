@@ -2,23 +2,18 @@ import pdb
 import json
 import requests
 import os
-import time
 import argparse
 import findspark
 
 from datetime import datetime, timedelta
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, StructField, StructType, StringType, IntegerType
+from pyspark.sql.types import StructField, StructType, StringType, IntegerType
 from pathlib import Path
-from azure.storage.blob import BlockBlobService
 from pyspark.sql import functions as F
 
 from utils import create_json, write_data_to_blob, get_data_from_blob
 
 priometheus_host = os.environ['PROMETHEUS_HOST']
-account_name = os.environ['AZURE_STORAGE_ACCOUNT_NEW']
-account_key = os.environ['AZURE_STORAGE_ACCESS_KEY_NEW']
-block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
 findspark.init()
 
 def parsing_necessary_details(from_time, to_time):

@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 from azure.storage.blob import BlockBlobService
@@ -50,6 +49,9 @@ def write_data_to_blob(read_loc, file_name):
 
 def get_data_from_blob(slug, filename):
     try:
+        account_name = os.environ['AZURE_STORAGE_ACCOUNT_NEW']
+        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY_NEW']
+        block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
         container_name = 'reports'
         block_blob_service.get_blob_to_path(
           container_name=container_name,
