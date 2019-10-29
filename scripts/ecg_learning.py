@@ -41,6 +41,8 @@ def init(from_time, to_time):
 
     spark = SparkSession.builder.appName("ECGLearning").master("local[*]").getOrCreate()
 
+    os.makedirs(os.path.join(write_path, "reports", 'public'), exist_ok=True)
+
     # Create data frame
     ecg_data_rdd = spark.sparkContext.parallelize(ecg_data)
     schema = StructType([
@@ -55,7 +57,7 @@ def init(from_time, to_time):
     tps_df = tps_df.withColumn("time", F.from_unixtime(tps_df["time"], "yyyy/MM/dd hh:mm:ss"))
 
     # Downloading the current file from blob container
-    get_data_from_blob('public', csv_file_name)
+    get_data_from_blob(write_path, 'public', csv_file_name)
     current_blob_df = spark.read.csv(os.path.join(write_path, 'public', csv_file_name), header=True)
     current_blob_df = current_blob_df.withColumn("tps", current_blob_df["tps"].cast("int"))
 
@@ -80,6 +82,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--data_store_location", type=str, help="the path to local data folder")
 args = parser.parse_args()
 write_path = Path(args.data_store_location).joinpath('ecg_learning_reports')
+write_path.mkdir(exist_ok=True)
 
 print("ECG::Start")
 blob_file_name = "ecg_nation_learning"

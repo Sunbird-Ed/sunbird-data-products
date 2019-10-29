@@ -47,7 +47,7 @@ def write_data_to_blob(read_loc, file_name):
 
     block_blob_service.create_blob_from_path(container_name, local_file, full_path)
 
-def get_data_from_blob(slug, filename):
+def get_data_from_blob(write_path, slug, filename):
     try:
         account_name = os.environ['AZURE_STORAGE_ACCOUNT_NEW']
         account_key = os.environ['AZURE_STORAGE_ACCESS_KEY_NEW']
