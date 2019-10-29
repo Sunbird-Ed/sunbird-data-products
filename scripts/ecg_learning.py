@@ -86,8 +86,8 @@ def init(from_time, to_time):
     tps_df = tps_df.withColumn("time", F.from_unixtime(tps_df["time"], "yyyy/MM/dd hh:mm:ss"))
 
     # Downloading the current file from blob container
-    get_data_from_blob('public', "ecg_nation_learning.csv")
-    current_blob_df = spark.read.csv(os.path.join(write_path, 'public', "ecg_nation_learning.csv"), header=True)
+    get_data_from_blob('public', csv_file_name)
+    current_blob_df = spark.read.csv(os.path.join(write_path, 'public', csv_file_name), header=True)
     current_blob_df = current_blob_df.withColumn("tps", current_blob_df["tps"].cast("int"))
 
     # removing the first day's data on 7 days data
@@ -98,13 +98,13 @@ def init(from_time, to_time):
     current_blob_df = current_blob_df.sort("time")
 
     os.makedirs(os.path.join(write_path, 'public'), exist_ok=True)
-    current_blob_df.toPandas().to_csv(os.path.join(write_path, 'public', "ecg_nation_learning1.csv"),index=False)
+    current_blob_df.toPandas().to_csv(os.path.join(write_path, 'public', csv_file_name),index=False)
 
-    create_json(os.path.join(write_path, 'public', "ecg_nation_learning1.csv"))
+    create_json(os.path.join(write_path, 'public', csv_file_name))
 
     # # Uploading updated data to Azure blob container
-    write_to_azure(write_path, os.path.join('public', "ecg_nation_learning.csv"))
-    write_to_azure(write_path, os.path.join('public', "ecg_nation_learning.json"))
+    write_to_azure(write_path, os.path.join('public', csv_file_name))
+    write_to_azure(write_path, os.path.join('public', json_file_name))
 
 
 parser = argparse.ArgumentParser()
@@ -113,6 +113,9 @@ args = parser.parse_args()
 write_path = Path(args.data_store_location).joinpath('ecg_learning_reports')
 
 print("ECG::Start")
+blob_file_name = "ecg_nation_learning"
+csv_file_name = "{}.csv".format(blob_file_name)
+json_file_name = "{}.json".format(blob_file_name)
 current_time = datetime.now()
 from_time = current_time.replace(hour=(current_time.hour-1), minute=15, second=0,microsecond=0).timestamp()
 to_time = int(current_time.timestamp())
