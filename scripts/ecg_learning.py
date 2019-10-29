@@ -38,7 +38,7 @@ def parsing_necessary_details(from_time, to_time):
     return response.json()["data"]["result"][0]["values"]
 
 
-def write_to_azure(read_loc, file_name):
+def write_data_to_blob(read_loc, file_name):
     container_name = 'reports'
 
     local_file = file_name
@@ -73,13 +73,13 @@ def init(from_time, to_time):
     spark = SparkSession.builder.appName("ECGLearning").master("local[*]").getOrCreate()
 
     # Create data frame
-    rdd = spark.sparkContext.parallelize(ecg_data)
+    ecg_data_rdd = spark.sparkContext.parallelize(ecg_data)
     schema = StructType([
         StructField('time', IntegerType(), True),
         StructField('tps', StringType(), True)
     ])
 
-    tps_df = spark.createDataFrame(rdd,schema)
+    tps_df = spark.createDataFrame(ecg_data_rdd,schema)
 
     tps_df = tps_df.withColumn("tps", tps_df["tps"].cast("float"))
     tps_df = tps_df.withColumn("tps", F.ceil(tps_df["tps"]))
@@ -103,8 +103,8 @@ def init(from_time, to_time):
     create_json(os.path.join(write_path, 'public', csv_file_name))
 
     # # Uploading updated data to Azure blob container
-    write_to_azure(write_path, os.path.join('public', csv_file_name))
-    write_to_azure(write_path, os.path.join('public', json_file_name))
+    write_data_to_blob(write_path, os.path.join('public', csv_file_name))
+    write_data_to_blob(write_path, os.path.join('public', json_file_name))
 
 
 parser = argparse.ArgumentParser()
