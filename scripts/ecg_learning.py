@@ -11,14 +11,9 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, StructField, StructType, StringType, IntegerType
 from pathlib import Path
 from azure.storage.blob import BlockBlobService
-
 from pyspark.sql import functions as F
 
-from utils import create_json
-
-
-# Prometheus to GrafanaAPI
-# https://{host}/grafana/api/datasources/proxy/5/api/v1/query_range?query=sum(rate(nginx_request_status_count%7Bcluster%3D~%22Swarm1%7CSwarm2%22%7D%5B5m%5D))&start=1570386600&end=1571037300&step=900
+from utils import create_json, write_data_to_blob, get_data_from_blob
 
 priometheus_host = os.environ['PROMETHEUS_HOST']
 account_name = os.environ['AZURE_STORAGE_ACCOUNT_NEW']
@@ -38,16 +33,6 @@ def parsing_necessary_details(from_time, to_time):
     return response.json()["data"]["result"][0]["values"]
 
 
-def write_data_to_blob(read_loc, file_name):
-    container_name = 'reports'
-
-    local_file = file_name
-
-    full_path = os.path.join(read_loc, local_file)
-
-    block_blob_service.create_blob_from_path(container_name, local_file, full_path)
-
-
 def remove_last_day(df):
     current_hour = current_time.hour
     if current_hour == 0 & df.count() >= 672:
@@ -55,17 +40,6 @@ def remove_last_day(df):
             df = df.filter(~F.col("time").contains(first_date))
 
     return df
-
-def get_data_from_blob(slug, filename):
-    try:
-        container_name = 'reports'
-        block_blob_service.get_blob_to_path(
-          container_name=container_name,
-          blob_name=slug + '/' + filename,
-          file_path=str(write_path.joinpath('reports', slug, filename))
-        )
-    except Exception:
-        print('Failed to read from blob!'+filename)
 
 def init(from_time, to_time):
     ecg_data = parsing_necessary_details(from_time, to_time)
@@ -100,7 +74,7 @@ def init(from_time, to_time):
     os.makedirs(os.path.join(write_path, 'public'), exist_ok=True)
     current_blob_df.toPandas().to_csv(os.path.join(write_path, 'public', csv_file_name),index=False)
 
-    create_json(os.path.join(write_path, 'public', csv_file_name))
+    create_json(os.path.join(write_path, 'public', csv_file_name), True)
 
     # # Uploading updated data to Azure blob container
     write_data_to_blob(write_path, os.path.join('public', csv_file_name))
