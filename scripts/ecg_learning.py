@@ -41,7 +41,7 @@ def init(from_time, to_time):
 
     spark = SparkSession.builder.appName("ECGLearning").master("local[*]").getOrCreate()
 
-    os.makedirs(os.path.join(write_path, "reports", 'public'), exist_ok=True)
+    os.makedirs(os.path.join(write_path, 'public'), exist_ok=True)
 
     # Create data frame
     ecg_data_rdd = spark.sparkContext.parallelize(ecg_data)
@@ -89,7 +89,14 @@ blob_file_name = "ecg_nation_learning"
 csv_file_name = "{}.csv".format(blob_file_name)
 json_file_name = "{}.json".format(blob_file_name)
 current_time = datetime.now()
+
+# For Last 1 hour
 from_time = current_time.replace(hour=(current_time.hour-1), minute=15, second=0,microsecond=0).timestamp()
+
+# For last 7 days
+# from_day = (datetime.today() + timedelta(days=-7))
+# from_time = int(datetime.combine(from_day, datetime.min.time()).timestamp())
+
 to_time = int(current_time.timestamp())
 
 init(from_time, to_time)
