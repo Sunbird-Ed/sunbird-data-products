@@ -56,7 +56,7 @@ def get_data_from_blob(write_path, slug, filename):
         block_blob_service.get_blob_to_path(
           container_name=container_name,
           blob_name=slug + '/' + filename,
-          file_path=str(write_path.joinpath('reports', slug, filename))
+          file_path=str(write_path.joinpath(slug, filename))
         )
     except Exception:
         print('Failed to read from blob!'+filename)
