@@ -16,7 +16,7 @@ from utils import create_json, write_data_to_blob, get_data_from_blob
 priometheus_host = os.environ['PROMETHEUS_HOST']
 findspark.init()
 
-def parsing_necessary_details(from_time, to_time):
+def get_monitoring_data(from_time, to_time):
     url = "{}/prometheus/api/v1/query_range".format(priometheus_host)
     querystring = {"query": "sum(rate(nginx_request_status_count{cluster=~\"Swarm1|Swarm2\"}[5m]))","start":str(from_time),"end":str(to_time),"step":"900"}
     headers = {
@@ -37,9 +37,10 @@ def remove_last_day(df):
     return df
 
 def init(from_time, to_time):
-    ecg_data = parsing_necessary_details(from_time, to_time)
+    ecg_data = get_monitoring_data(from_time, to_time)
 
     spark = SparkSession.builder.appName("ECGLearning").master("local[*]").getOrCreate()
+    spark.conf.set('spark.sql.session.timeZone', 'Asia/Kolkata')
 
     os.makedirs(os.path.join(write_path, 'public'), exist_ok=True)
 
@@ -54,19 +55,19 @@ def init(from_time, to_time):
 
     tps_df = tps_df.withColumn("tps", tps_df["tps"].cast("float"))
     tps_df = tps_df.withColumn("tps", F.ceil(tps_df["tps"]))
-    tps_df = tps_df.withColumn("time", F.from_unixtime(tps_df["time"], "yyyy/MM/dd hh:mm:ss"))
+    tps_df = tps_df.withColumn("time", F.from_unixtime(tps_df["time"], "yyyy/MM/dd HH:mm:ss"))
 
     # Downloading the current file from blob container
     get_data_from_blob(write_path, 'public', csv_file_name)
     current_blob_df = spark.read.csv(os.path.join(write_path, 'public', csv_file_name), header=True)
     current_blob_df = current_blob_df.withColumn("tps", current_blob_df["tps"].cast("int"))
 
-    # removing the first day's data on 7 days data
-    current_blob_df = remove_last_day(current_blob_df)
-
     current_blob_df = current_blob_df.union(tps_df)
     current_blob_df = current_blob_df.dropDuplicates(["time"])
     current_blob_df = current_blob_df.sort("time")
+
+    # removing the first day's data on 7 days data
+    current_blob_df = remove_last_day(current_blob_df)
 
     os.makedirs(os.path.join(write_path, 'public'), exist_ok=True)
     current_blob_df.toPandas().to_csv(os.path.join(write_path, 'public', csv_file_name),index=False)
@@ -91,7 +92,7 @@ json_file_name = "{}.json".format(blob_file_name)
 current_time = datetime.now()
 
 # For Last 1 hour
-from_time = current_time.replace(hour=(current_time.hour-1), minute=15, second=0,microsecond=0).timestamp()
+from_time = int(current_time.replace(hour=(current_time.hour-1), minute=15, second=0,microsecond=0).timestamp())
 
 # For last 7 days
 # from_day = (datetime.today() + timedelta(days=-7))
