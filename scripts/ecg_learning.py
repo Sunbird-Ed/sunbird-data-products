@@ -81,7 +81,9 @@ def init(from_time, to_time):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_store_location", type=str, help="the path to local data folder")
+parser.add_argument("--initial", type=str, help="run for 7 days")
 args = parser.parse_args()
+is_initial = args.initial
 write_path = Path(args.data_store_location).joinpath('ecg_learning_reports')
 write_path.mkdir(exist_ok=True)
 
@@ -91,12 +93,13 @@ csv_file_name = "{}.csv".format(blob_file_name)
 json_file_name = "{}.json".format(blob_file_name)
 current_time = datetime.now()
 
-# For Last 1 hour
-from_time = int(current_time.replace(hour=(current_time.hour-1), minute=15, second=0,microsecond=0).timestamp())
-
-# For last 7 days
-# from_day = (datetime.today() + timedelta(days=-7))
-# from_time = int(datetime.combine(from_day, datetime.min.time()).timestamp())
+if is_initial=="true":
+    # For last 7 days
+    from_day = (datetime.today() + timedelta(days=-7))
+    from_time = int(datetime.combine(from_day, datetime.min.time()).timestamp())
+else:
+    # For Last 1 hour
+    from_time = int(current_time.replace(hour=(current_time.hour-1), minute=15, second=0,microsecond=0).timestamp())
 
 to_time = int(current_time.timestamp())
 
