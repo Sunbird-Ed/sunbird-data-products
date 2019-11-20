@@ -1,16 +1,17 @@
 """
 Compute unique devices in a district over a month
 """
-import argparse
+import json
 from datetime import date, datetime
 from pathlib import Path
+from string import Template
 
+import argparse
 import pandas as pd
 import requests
 from utils import create_json, post_data_to_blob
 
 
-# TODO: Remove DIKSHA specific filters from query
 def unique_users(result_loc_, date_, query_, state_):
     """
     Query druid for unique users by district over a month for a state
@@ -28,10 +29,12 @@ def unique_users(result_loc_, date_, query_, state_):
     else:
         start_date = datetime(year - 1, 12, 1)
     with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
-        query = f.read()
-    query = query.replace('state_name', state_)
-    query = query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
-    query = query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+        query = Template(f.read())
+    query = query.substitute(app=config['context']['pdata']['id']['app'],
+                             portal=config['context']['pdata']['id']['portal'],
+                             state=state_,
+                             start_date=start_date.strftime('%Y-%m-%dT00:00:00+00:00'),
+                             end_date=date_.strftime('%Y-%m-%dT00:00:00+00:00'))
     response = requests.request("POST", url, data=query, headers=headers)
     if response.status_code == 200:
         if len(response.json()) == 0:
@@ -68,7 +71,6 @@ result_path = Path(args.data_store_location).joinpath('portal_dashboards')
 result_path.mkdir(exist_ok=True)
 result_path.parent.joinpath("district_reports").mkdir(exist_ok=True)
 result_path.parent.joinpath("district_reports", analysis_date.strftime("%Y-%m-%d)")).mkdir(exist_ok=True)
-# TODO: Move city-district and state-slug mapping outside
 tenant_info = pd.read_csv(file_path.parent.parent.joinpath('resources').joinpath('slug_state_mapping.csv'))
 city_district = pd.read_csv(file_path.parent.parent.joinpath('resources').joinpath('city_district_mapping.csv')).fillna(
     'Unknown')
@@ -76,6 +78,8 @@ url = "{}druid/v2/".format(args.Druid_hostname)
 headers = {
     'Content-Type': "application/json"
 }
+with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+    config = json.loads(f.read())
 for ind, row in tenant_info.iterrows():
     print(row['state'])
     result_path.joinpath(row["slug"]).mkdir(exist_ok=True)

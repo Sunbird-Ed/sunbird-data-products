@@ -1,11 +1,12 @@
 """
 Course consumption report
 """
-import argparse
+import json
 import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import argparse
 import findspark
 import pandas as pd
 from elasticsearch import Elasticsearch
@@ -16,7 +17,6 @@ from utils import get_tenant_info, create_json, get_data_from_blob, post_data_to
 findspark.init()
 
 
-# TODO: Remove DIKSHA specific filters
 def get_course_plays(result_loc_, date_):
     """
     Query de-normalised WFS for content play filtered by course id at rollup L1
@@ -33,7 +33,8 @@ def get_course_plays(result_loc_, date_):
     path = 'wasbs://{}@{}.blob.core.windows.net/telemetry-denormalized/summary/{}-*'.format(container, account_name,
                                                                                             date_.strftime('%Y-%m-%d'))
     data = spark.read.json(path).filter(
-        func.col("dimensions.pdata.id").isin("prod.diksha.app", "prod.diksha.portal") &
+        func.col("dimensions.pdata.id").isin(config['context']['pdata']['id']['app'],
+                                             config['context']['pdata']['id']['portal']) &
         func.col("dimensions.type").isin("content") &
         func.col('dimensions.mode').isin('play') &
         func.col("object.rollup.l1").isin(courses.identifier.unique().tolist())
@@ -162,6 +163,8 @@ elastic_search = args.elastic_search
 execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 analysis_date = execution_date - timedelta(days=1)
 result_loc.joinpath(analysis_date.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
+with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+    config = json.loads(f.read())
 get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=analysis_date)
 get_courses(result_loc_=result_loc, druid_ip_=druid_ip, query_file_='course_list.json', date_=analysis_date)
 get_course_plays(result_loc_=result_loc, date_=analysis_date)

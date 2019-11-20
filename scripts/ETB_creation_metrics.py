@@ -525,6 +525,7 @@ data_store_location.joinpath('textbook_reports', end_date_.strftime('%Y-%m-%d'))
 data_store_location.joinpath('portal_dashboards').mkdir(exist_ok=True)
 get_tenant_info(result_loc_=data_store_location.joinpath('textbook_reports'),
                 org_search_=org_search, date_=end_date_)
+# TODO: SB-15177 store scan counts in cassandra
 get_scan_counts(result_loc_=data_store_location.joinpath('textbook_reports'), druid_=druid_ip, date_=end_date_)
 backend_grade = pd.read_csv(Path(__file__).parent.parent.joinpath('resources', 'grade_sort.csv')).set_index('grade')
 board_slug = pd.read_csv(data_store_location.joinpath(

@@ -1,11 +1,12 @@
 """
 content level plays, timespent and ratings by week
 """
-import argparse
+import json
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from string import Template
 
+import argparse
 import pandas as pd
 from azure.common import AzureMissingResourceHttpError
 from cassandra.cluster import Cluster
@@ -85,7 +86,6 @@ def insert_data_to_cassandra(result_loc_, date_, cassandra_, keyspace_):
     cluster.shutdown()
 
 
-# TODO: remove DIKSHA specific filters
 def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
     """
     query cassandra table for 1 week of content play and timespent.
@@ -121,8 +121,8 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
                 'Timespent on App': 0,
                 'Timespent on Portal': 0
             }
-        pdata_id = 'App' if row.pdata_id == 'prod.diksha.app' else 'Portal' if row.pdata_id == 'prod.diksha.portal' \
-            else 'error'
+        pdata_id = 'App' if row.pdata_id == config['context']['pdata']['id']['app'] else 'Portal' if \
+            row.pdata_id == config['context']['pdata']['id']['portal'] else 'error'
         df_dict[row.content_id]['Number of Plays on ' + pdata_id] += row.metric['plays']
         df_dict[row.content_id]['Timespent on ' + pdata_id] = row.metric['timespent']
     temp = []
@@ -207,6 +207,8 @@ cassandra = args.cassandra_host
 keyspace = args.keyspace_prefix + 'content_db'
 execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 result_loc = data_store_location.joinpath('content_plays')
+with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+    config = json.loads(f.read())
 get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
 get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
 define_keyspace(cassandra_=cassandra, keyspace_=keyspace)

@@ -7,7 +7,7 @@
   "intervals": {
     "type": "intervals",
     "intervals": [
-      "start_date/end_date"
+      "$start_date/$end_date"
     ]
   },
   "filter": {
@@ -17,15 +17,15 @@
         "type": "in",
         "dimension": "context_pdata_id",
         "values": [
-          "prod.diksha.app",
-          "prod.diksha.portal"
+          "$app",
+          "$portal"
         ],
         "extractionFn": null
       },
       {
         "type": "selector",
         "dimension": "device_loc_state",
-        "value": "state_name",
+        "value": "$state",
         "extractionFn": null
       }
     ]

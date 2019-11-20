@@ -1,11 +1,12 @@
 """
 Generate daily consumption metrics from blob storage
 """
-import argparse
+import json
 import os
 from datetime import date, timedelta, datetime
 from pathlib import Path
 
+import argparse
 import findspark
 import pandas as pd
 from pyspark.sql import SparkSession
@@ -16,7 +17,6 @@ findspark.init()
 
 
 # TODO: Compute Downloads using SHARE-In events
-# TODO: Remove DIKSHA specific filters
 def downloads(result_loc_, date_):
     """
     Compute daily content downloads by channel
@@ -32,7 +32,7 @@ def downloads(result_loc_, date_):
     path = 'wasbs://{}@{}.blob.core.windows.net/telemetry-denormalized/raw/{}-*'.format(container, account_name,
                                                                                         date_.strftime('%Y-%m-%d'))
     data = spark.read.json(path).filter(
-        func.col("context.pdata.id").isin("prod.diksha.app") &
+        func.col("context.pdata.id").isin(config['context']['pdata']['id']['app']) &
         func.col("edata.subtype").isin("ContentDownload-Success") &
         func.col("eid").isin("INTERACT")
     ).select(
@@ -62,7 +62,6 @@ def downloads(result_loc_, date_):
 
 
 # TODO: Have channel id for Object rollup L1
-# TODO: Remove DIKSHA specific filters
 def app_and_plays(result_loc_, date_):
     """
     Compute App Sessions and content play sessions and time spent on content consumption.
@@ -78,7 +77,8 @@ def app_and_plays(result_loc_, date_):
     path = 'wasbs://{}@{}.blob.core.windows.net/telemetry-denormalized/summary/{}-*'.format(container, account_name,
                                                                                             date_.strftime('%Y-%m-%d'))
     data = spark.read.json(path).filter(
-        func.col("dimensions.pdata.id").isin("prod.diksha.app", "prod.diksha.portal") &
+        func.col("dimensions.pdata.id").isin(config['context']['pdata']['id']['app'],
+                                             config['context']['pdata']['id']['portal']) &
         func.col("dimensions.type").isin("content", "app")
     ).select(
         func.col("dimensions.sid"),
@@ -92,7 +92,7 @@ def app_and_plays(result_loc_, date_):
     )
     app = data.filter(
         func.col('type').isin('app') &
-        func.col('pdata_id').isin('prod.diksha.app')
+        func.col('pdata_id').isin(config['context']['pdata']['id']['app'])
     )
     app_df = app.select(
         func.count('sid').alias('Total App Sessions'),
@@ -160,7 +160,6 @@ def dialscans(result_loc_, date_):
     spark.stop()
 
 
-# TODO: Remove DIKSHA specific filters
 def daily_metrics(read_loc_, date_):
     """
     merge the three metrics
@@ -170,8 +169,9 @@ def daily_metrics(read_loc_, date_):
     """
     try:
         board_slug = \
-        pd.read_csv(data_store_location.joinpath('textbook_reports', date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[
-            ['id', 'slug']]
+            pd.read_csv(
+                data_store_location.joinpath('textbook_reports', date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[
+                ['id', 'slug']]
         board_slug.set_index('id', inplace=True)
     except Exception:
         raise Exception('Board Slug Error!')
@@ -201,12 +201,13 @@ def daily_metrics(read_loc_, date_):
         plays_df = pd.read_csv(read_loc_.joinpath('play', date_.strftime('%Y-%m-%d'), 'plays.csv'), header=[0, 1],
                                index_col=0)
         plays_df = plays_df.reset_index().join(board_slug, on='channel', how='left')[
-            [('Total Content Plays', 'prod.diksha.app'),
-             ('Total Content Plays', 'prod.diksha.portal'),
-             ('Total Devices that played content', 'prod.diksha.app'),
-             ('Total Devices that played content', 'prod.diksha.portal'),
-             ('Content Play Time (in hours)', 'prod.diksha.app'),
-             ('Content Play Time (in hours)', 'prod.diksha.portal'), 'slug']].dropna(subset=['slug'])
+            [('Total Content Plays', config['context']['pdata']['id']['app']),
+             ('Total Content Plays', config['context']['pdata']['id']['portal']),
+             ('Total Devices that played content', config['context']['pdata']['id']['app']),
+             ('Total Devices that played content', config['context']['pdata']['id']['portal']),
+             ('Content Play Time (in hours)', config['context']['pdata']['id']['app']),
+             ('Content Play Time (in hours)', config['context']['pdata']['id']['portal']), 'slug']].dropna(
+            subset=['slug'])
         plays_df.columns = ['Total Content Plays on App',
                             'Total Content Plays on Portal', 'Total Devices that played content on App',
                             'Total Devices that played content on Portal',
@@ -363,7 +364,8 @@ data_store_location.joinpath('play').mkdir(exist_ok=True)
 data_store_location.joinpath('downloads').mkdir(exist_ok=True)
 data_store_location.joinpath('dialcode_scans').mkdir(exist_ok=True)
 data_store_location.joinpath('portal_dashboards').mkdir(exist_ok=True)
-
+with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+    config = json.loads(f.read())
 get_textbook_snapshot(result_loc_=data_store_location.joinpath('tb_metadata'), content_search_=content_search,
                       content_hierarchy_=content_hierarchy, date_=analysis_date)
 print('[Success] Textbook Snapshot')

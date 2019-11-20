@@ -1,17 +1,18 @@
 """
 Generate district level scans, plays and unique devices on a weekly basis
 """
-import argparse
+import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from string import Template
 
+import argparse
 import pandas as pd
 import requests
 from azure.common import AzureMissingResourceHttpError
 from utils import create_json, get_data_from_blob, post_data_to_blob
 
 
-# TODO: Remove DIKSHA specific filters from query
 def district_devices(result_loc_, date_, query_, state_):
     """
     compute unique devices for a state over a week
@@ -24,10 +25,12 @@ def district_devices(result_loc_, date_, query_, state_):
     slug_ = result_loc_.name
     start_date = date_ - timedelta(days=7)
     with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
-        query = f.read()
-    query = query.replace('state_name', state_)
-    query = query.replace('start_date', datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'))
-    query = query.replace('end_date', datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
+        query = Template(f.read())
+    query = query.substitute(app=config['context']['pdata']['id']['app'],
+                             portal=config['context']['pdata']['id']['portal'],
+                             state=state_,
+                             start_date=datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'),
+                             end_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
     response = requests.request("POST", url, data=query, headers=headers)
     if response.status_code == 200:
         if len(response.json()) == 0:
@@ -48,7 +51,6 @@ def district_devices(result_loc_, date_, query_, state_):
         exit(1)
 
 
-# TODO: Remove DIKSHA specific filters from query
 def district_plays(result_loc_, date_, query_, state_):
     """
     compute content plays per district over the week for the state
@@ -61,10 +63,12 @@ def district_plays(result_loc_, date_, query_, state_):
     slug_ = result_loc_.name
     start_date = date_ - timedelta(days=7)
     with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
-        query = f.read()
-    query = query.replace('state_name', state_)
-    query = query.replace('start_date', datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'))
-    query = query.replace('end_date', datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
+        query = Template(f.read())
+    query = query.substitute(app=config['context']['pdata']['id']['app'],
+                             portal=config['context']['pdata']['id']['portal'],
+                             state=state_,
+                             start_date=datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'),
+                             end_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
     response = requests.request("POST", url, data=query, headers=headers)
     if response.status_code == 200:
         if len(response.json()) == 0:
@@ -84,7 +88,6 @@ def district_plays(result_loc_, date_, query_, state_):
         exit(1)
 
 
-# TODO: Remove DIKSHA specific filters from query
 def district_scans(result_loc_, date_, query_, state_):
     """
     compute scans for a district over the week for the state
@@ -97,10 +100,12 @@ def district_scans(result_loc_, date_, query_, state_):
     slug_ = result_loc_.name
     start_date = date_ - timedelta(days=7)
     with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
-        query = f.read()
-    query = query.replace('state_name', state_)
-    query = query.replace('start_date', datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'))
-    query = query.replace('end_date', datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
+        query = Template(f.read())
+    query = query.substitute(app=config['context']['pdata']['id']['app'],
+                             portal=config['context']['pdata']['id']['portal'],
+                             state=state_,
+                             start_date=datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'),
+                             end_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
     response = requests.request("POST", url, data=query, headers=headers)
     if response.status_code == 200:
         if len(response.json()) == 0:
@@ -201,7 +206,6 @@ file_path = Path(__file__)
 result_path = Path(args.data_store_location).joinpath('district_reports')
 result_path.mkdir(exist_ok=True)
 analysis_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
-# TODO: Move city-district and state-slug mapping outside
 tenant_info = pd.read_csv(file_path.parent.parent.joinpath('resources').joinpath('slug_state_mapping.csv'))
 city_district = pd.read_csv(file_path.parent.parent.joinpath('resources').joinpath('city_district_mapping.csv')).fillna(
     'Unknown')
@@ -209,6 +213,9 @@ url = "{}druid/v2/".format(args.Druid_hostname)
 headers = {
     'Content-Type': "application/json"
 }
+with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+    config = json.loads(f.read())
+
 for ind, row in tenant_info.iterrows():
     state = row['state']
     print(state)
