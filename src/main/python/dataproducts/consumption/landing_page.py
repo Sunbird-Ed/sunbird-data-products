@@ -1,11 +1,11 @@
 """
 Compute aggregated metrics over academic year
 """
-import argparse
 import json
 import os
 from pathlib import Path
 
+import argparse
 import pandas as pd
 from azure.storage.blob import BlockBlobService
 from pandas.errors import EmptyDataError

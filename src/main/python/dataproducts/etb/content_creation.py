@@ -1,15 +1,16 @@
 """
 Generate a report that specifies number of contents created in last week and overall across Live, Review and Draft.
 """
-import argparse
 from datetime import date, timedelta, datetime
 from pathlib import Path
 from string import Template
 from time import sleep
 
+import argparse
 import pandas as pd
 import requests
-from utils import get_tenant_info, create_json, post_data_to_blob
+
+from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob
 
 
 def weekly_creation(result_loc_, content_search_, date_):

@@ -10,7 +10,8 @@ import argparse
 import pandas as pd
 import requests
 from azure.common import AzureMissingResourceHttpError
-from utils import create_json, get_data_from_blob, post_data_to_blob
+
+from src.main.python.util.utils import create_json, get_data_from_blob, post_data_to_blob
 
 
 def district_devices(result_loc_, date_, query_, state_):
@@ -203,25 +204,28 @@ parser.add_argument("-execution_date", type=str, default=date.today().strftime("
 args = parser.parse_args()
 
 file_path = Path(__file__)
-result_path = Path(args.data_store_location).joinpath('district_reports')
-result_path.mkdir(exist_ok=True)
+result_loc = Path(args.data_store_location).joinpath('district_reports')
+result_loc.mkdir(exist_ok=True)
+result_loc.parent.joinpath('config').mkdir(exist_ok=True)
 analysis_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
-tenant_info = pd.read_csv(file_path.parent.parent.joinpath('resources').joinpath('slug_state_mapping.csv'))
-city_district = pd.read_csv(file_path.parent.parent.joinpath('resources').joinpath('city_district_mapping.csv')).fillna(
-    'Unknown')
+get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
+tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
+get_data_from_blob(result_loc.joinpath('city_district_mapping.csv'))
+city_district = pd.read_csv(result_loc.joinpath('city_district_mapping.csv'))
 url = "{}druid/v2/".format(args.Druid_hostname)
 headers = {
     'Content-Type': "application/json"
 }
-with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+result_loc.parent.joinpath('config').mkdir(exist_ok=True)
+get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
+with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
     config = json.loads(f.read())
-
 for ind, row in tenant_info.iterrows():
     state = row['state']
     print(state)
-    result_path.joinpath(analysis_date.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
-    result_path.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug']).mkdir(exist_ok=True)
-    path = result_path.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug'])
+    result_loc.joinpath(analysis_date.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
+    result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug']).mkdir(exist_ok=True)
+    path = result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug'])
     if isinstance(state, str):
         district_devices(result_loc_=path, date_=analysis_date, query_='district_devices.json', state_=state)
         district_plays(result_loc_=path, date_=analysis_date, query_='district_plays.json', state_=state)

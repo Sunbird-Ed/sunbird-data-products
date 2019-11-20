@@ -1,13 +1,14 @@
 """
 generate course related enrolment and completion report.
 """
-import argparse
 from datetime import date, datetime
 from pathlib import Path
 
+import argparse
 import pandas as pd
 from elasticsearch import Elasticsearch
-from utils import get_tenant_info, create_json, get_data_from_blob, post_data_to_blob, get_courses
+
+from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob, get_courses
 
 
 def get_course_enrollments(result_loc_, elastic_search_, date_, size_=1000):

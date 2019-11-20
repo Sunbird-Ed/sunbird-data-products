@@ -1,16 +1,17 @@
 """
 Generate ETB and Live QR Exception Report
 """
-import argparse
 import time
 from datetime import datetime
 from pathlib import Path
 
+import argparse
 import pandas as pd
 import requests
 from anytree.importer import DictImporter
 from anytree.search import findall
-from utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts
+
+from src.main.python.util.utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts
 
 
 def parse_etb(tb, row_):
@@ -527,7 +528,9 @@ get_tenant_info(result_loc_=data_store_location.joinpath('textbook_reports'),
                 org_search_=org_search, date_=end_date_)
 # TODO: SB-15177 store scan counts in cassandra
 get_scan_counts(result_loc_=data_store_location.joinpath('textbook_reports'), druid_=druid_ip, date_=end_date_)
-backend_grade = pd.read_csv(Path(__file__).parent.parent.joinpath('resources', 'grade_sort.csv')).set_index('grade')
+backend_grade = pd.read_csv(
+    Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'common', 'grade_sort.csv')
+).set_index('grade')
 board_slug = pd.read_csv(data_store_location.joinpath(
     'textbook_reports', end_date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
 board_slug.set_index('id', inplace=True)

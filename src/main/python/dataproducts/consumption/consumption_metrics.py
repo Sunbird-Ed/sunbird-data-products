@@ -11,7 +11,9 @@ import findspark
 import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as func
-from utils import create_json, post_data_to_blob, get_data_from_blob, get_tenant_info, get_textbook_snapshot
+
+from src.main.python.util.utils import create_json, post_data_to_blob, get_data_from_blob, \
+    get_tenant_info, get_textbook_snapshot
 
 findspark.init()
 
@@ -364,7 +366,9 @@ data_store_location.joinpath('play').mkdir(exist_ok=True)
 data_store_location.joinpath('downloads').mkdir(exist_ok=True)
 data_store_location.joinpath('dialcode_scans').mkdir(exist_ok=True)
 data_store_location.joinpath('portal_dashboards').mkdir(exist_ok=True)
-with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+data_store_location.joinpath('config').mkdir(exist_ok=True)
+get_data_from_blob(data_store_location.joinpath('config', 'diksha_config.json'))
+with open(data_store_location.joinpath('config', 'diksha_config.json'), 'r') as f:
     config = json.loads(f.read())
 get_textbook_snapshot(result_loc_=data_store_location.joinpath('tb_metadata'), content_search_=content_search,
                       content_hierarchy_=content_hierarchy, date_=analysis_date)

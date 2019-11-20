@@ -9,8 +9,8 @@ from time import sleep
 
 import pandas as pd
 import requests
-from azure.storage.blob import BlockBlobService
 from azure.common import AzureMissingResourceHttpError
+from azure.storage.blob import BlockBlobService
 
 
 def parse_tb(tb, returnable, row_):
@@ -196,8 +196,8 @@ def get_content_model(result_loc_, druid_, date_):
             'Content-Type': "application/json"
         }
         url = "{}druid/v2/".format(druid_)
-        file_path = Path(__file__)
-        with open(file_path.parent.parent.joinpath('resources', 'content_list.json')) as f:
+        with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
+                                                                                    'content_list.json')) as f:
             query = f.read()
         qr = json.loads(query)
         response = requests.request("POST", url, data=query, headers=headers)
@@ -230,8 +230,8 @@ def get_scan_counts(result_loc_, druid_, date_):
             'Content-Type': "application/json"
         }
         url = "{}druid/v2/".format(druid_)
-        file_path = Path(__file__)
-        with open(file_path.parent.parent.joinpath('resources', 'scan_counts.json')) as f:
+        with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
+                                                                                    'scan_counts.json')) as f:
             query = f.read()
         start_date = date_ - timedelta(days=7)
         query = query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
@@ -366,7 +366,8 @@ def get_courses(result_loc_, druid_, query_file_, date_):
     :param date_: datetime object to pass to file path
     :return: Nones
     """
-    with open(Path(__file__).parent.parent.joinpath('resources', query_file_)) as f:
+    with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
+                                                                                query_file_)) as f:
         query = f.read()
     response = requests.request("POST", url='{}druid/v2'.format(druid_), data=query)
     result = response.json()
@@ -389,8 +390,8 @@ def get_content_plays(result_loc_, date_, druid_):
     }
     url = "{}druid/v2/".format(druid_)
     start_date = date_ - timedelta(days=1)
-    file_path = Path(__file__)
-    with open(file_path.parent.parent.joinpath('resources', 'content_plays.json')) as f:
+    with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
+                                                                                'content_plays.json')) as f:
         druid_query = f.read()
     druid_query = druid_query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
     druid_query = druid_query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))

@@ -163,7 +163,9 @@ elastic_search = args.elastic_search
 execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 analysis_date = execution_date - timedelta(days=1)
 result_loc.joinpath(analysis_date.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
-with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+result_loc.parent.joinpath('config').mkdir(exist_ok=True)
+get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
+with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
     config = json.loads(f.read())
 get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=analysis_date)
 get_courses(result_loc_=result_loc, druid_ip_=druid_ip, query_file_='course_list.json', date_=analysis_date)

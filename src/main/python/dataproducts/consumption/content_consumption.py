@@ -10,8 +10,9 @@ import argparse
 import pandas as pd
 from azure.common import AzureMissingResourceHttpError
 from cassandra.cluster import Cluster
-from utils import create_json, get_tenant_info, get_data_from_blob, post_data_to_blob, get_content_model, \
-    get_content_plays
+
+from src.main.python.util.utils import create_json, get_tenant_info, get_data_from_blob, \
+    post_data_to_blob, get_content_model, get_content_plays
 
 
 def mime_type(series):
@@ -207,7 +208,9 @@ cassandra = args.cassandra_host
 keyspace = args.keyspace_prefix + 'content_db'
 execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 result_loc = data_store_location.joinpath('content_plays')
-with open(Path(__file__).parent.parent.joinpath('resources', 'diksha_config.json'), 'r') as f:
+result_loc.parent.joinpath('config').mkdir(exist_ok=True)
+get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
+with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
     config = json.loads(f.read())
 get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
 get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
