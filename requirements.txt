@@ -6,3 +6,4 @@ pyspark
 azure
 argparse
 elasticsearch
+cassandra-driver
