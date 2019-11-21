@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -8,6 +9,8 @@ import requests
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField, StructType, StringType, IntegerType
+
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import create_json, write_data_to_blob, get_data_from_blob
 

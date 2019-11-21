@@ -2,11 +2,14 @@
 CMO-PMO Dashbaord report generation.
 Reads daily metric data from blob storage and uploads
 """
+import sys
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
 import argparse
 import pandas as pd
+
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import post_data_to_blob, create_json, get_tenant_info, get_data_from_blob
 

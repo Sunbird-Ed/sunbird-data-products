@@ -1,6 +1,7 @@
 """
 Generate ETB and Live QR Exception Report
 """
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ import pandas as pd
 import requests
 from anytree.importer import DictImporter
 from anytree.search import findall
+
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts
 

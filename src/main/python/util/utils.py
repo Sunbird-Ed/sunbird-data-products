@@ -189,6 +189,7 @@ def get_content_model(result_loc_, druid_, date_):
     get current content model snapshot
     :param result_loc_: pathlib.Path object to store resultant CSV at
     :param druid_: host ip and port for druid broker
+    :param date_: datetime object to pass in path
     :return: None
     """
     try:
@@ -416,3 +417,7 @@ def write_data_to_blob(read_loc, file_name):
     full_path = os.path.join(read_loc, local_file)
 
     block_blob_service.create_blob_from_path(container_name, local_file, full_path)
+
+
+def generate_metrics_summary(result_loc_, metrics):
+    pass

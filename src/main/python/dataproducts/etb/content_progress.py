@@ -2,6 +2,7 @@
 Generate content wise reports for an aggregated, and status wise views
 """
 import re
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from string import Template
@@ -10,6 +11,8 @@ import argparse
 import numpy as np
 import pandas as pd
 import requests
+
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob
 

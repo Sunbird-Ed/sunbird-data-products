@@ -2,6 +2,7 @@
 Compute unique devices in a district over a month
 """
 import json
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from string import Template
@@ -9,6 +10,8 @@ from string import Template
 import argparse
 import pandas as pd
 import requests
+
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import create_json, get_data_from_blob, post_data_to_blob
 

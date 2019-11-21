@@ -2,6 +2,7 @@
 content level plays, timespent and ratings by week
 """
 import json
+import sys
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from string import Template
@@ -11,6 +12,7 @@ import pandas as pd
 from azure.common import AzureMissingResourceHttpError
 from cassandra.cluster import Cluster
 
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 from src.main.python.util.utils import create_json, get_tenant_info, get_data_from_blob, \
     post_data_to_blob, get_content_model, get_content_plays
 
@@ -146,7 +148,6 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
     content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))[
         ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier', 'name', 'mimeType', 'createdOn', 'author',
          'lastPublishedOn', 'lastUpdatedOn', 'me_averageRating', 'me_totalRatings']]
-    content_model = content_model[content_model['status'] == 'Live']
     content_model['channel'] = content_model['channel'].astype(str)
     content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
     content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
@@ -158,7 +159,7 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
         lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
     content_model['Last Updated On'] = content_model['Last Updated On'].fillna('T').apply(
         lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
-    df = content_model.join(df.set_index('identifier'), on='Content ID', how='right').fillna('Unknown')
+    df = content_model.join(df.set_index('identifier'), on='Content ID', how='left').fillna('Unknown')
     df.sort_values(inplace=True, ascending=[1, 1, 1, 1, 1, 0],
                    by=['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Total No of Plays (App and Portal)'])
     df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'weekly_plays.csv'), index=False)

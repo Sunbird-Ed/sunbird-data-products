@@ -3,6 +3,7 @@ Generate daily consumption metrics from blob storage
 """
 import json
 import os
+import sys
 from datetime import date, timedelta, datetime
 from pathlib import Path
 
@@ -11,6 +12,8 @@ import findspark
 import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as func
+
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import create_json, post_data_to_blob, get_data_from_blob, \
     get_tenant_info, get_textbook_snapshot
@@ -41,6 +44,7 @@ def downloads(result_loc_, date_):
         func.col("object.id").alias("object_id"),
         "context.did"
     )
+    inputCount1 = data.count()
     content = spark.read.csv(
         str(result_loc_.parent.joinpath('tb_metadata', date_.strftime('%Y-%m-%d'), 'textbook_snapshot.csv')),
         header=True
@@ -92,6 +96,7 @@ def app_and_plays(result_loc_, date_):
         func.col("edata.eks.time_spent"),
         func.col("object.rollup.l1")
     )
+    inputCount2 = data.count()
     app = data.filter(
         func.col('type').isin('app') &
         func.col('pdata_id').isin(config['context']['pdata']['id']['app'])
@@ -145,14 +150,16 @@ def dialscans(result_loc_, date_):
     path = 'wasbs://{}@{}.blob.core.windows.net/telemetry-denormalized/raw/{}-*'.format(container, account_name,
                                                                                         date_.strftime('%Y-%m-%d'))
     failed_flag = func.udf(lambda x: 'Successful QR Scans' if x > 0 else 'Failed QR Scans')
-    df = spark.read.json(path).filter(
+    data = spark.read.json(path).filter(
         func.col("eid").isin("SEARCH") &
         func.col('edata.filters.dialcodes').isNotNull()
     ).select(
         func.col('dialcodedata.channel').alias('dialcode_channel'),
         func.col('edata.filters.dialcodes'),
         failed_flag('edata.size').alias('failed_flag')
-    ).groupby(
+    )
+    input3 = data.count()
+    df = data.groupby(
         func.col('dialcode_channel'),
         func.col('failed_flag')
     ).count().toPandas()

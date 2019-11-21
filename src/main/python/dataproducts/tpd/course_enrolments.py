@@ -1,12 +1,15 @@
 """
 generate course related enrolment and completion report.
 """
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
 import argparse
 import pandas as pd
 from elasticsearch import Elasticsearch
+
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob, get_courses
 
