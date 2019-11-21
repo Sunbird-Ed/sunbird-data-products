@@ -1,9 +1,11 @@
 import json
 import os
 from datetime import datetime
-
+from pytz import timezone
 import pandas as pd
 from azure.storage.blob import BlockBlobService
+from kafka_utils import push_metrics
+import hashlib
 
 def create_json(read_loc_, last_update=False):
     try:
@@ -60,3 +62,32 @@ def get_data_from_blob(write_path, slug, filename):
         )
     except Exception:
         print('Failed to read from blob!'+filename)
+
+def push_metric_event(metrics, subsystem):
+    eid = "METRIC"
+    ets = int(round(time.time()*1000))
+    midStr = eid + str(ets) + subsystem
+    actor = {
+        "id": "analytics",
+        "type": "System"
+    }
+    context = {
+        "channel": "data-pipeline",
+        "env": "",
+        "pdata": {
+            "id": "pipeline.monitoring",
+            "ver": "1.0",
+            "pid": "adhoc.job.metrics"
+        }
+    }
+    metric = {
+        "eid": eid,
+        "ver": "3.0",
+        "ets": ets,
+        "mid": hashlib.md5(midStr.encode()).hexdigest(),
+        "@timestamp": datetime.now(timezone("UTC")).strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "actor": actor,
+        "context": context,
+        "edata": metrics
+    }
+    push_metrics("telemetry.metric", metric)        
