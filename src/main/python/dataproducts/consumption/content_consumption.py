@@ -6,14 +6,18 @@ import sys
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from string import Template
+import pdb
+import os
 
 import argparse
 import pandas as pd
 from azure.common import AzureMissingResourceHttpError
 from cassandra.cluster import Cluster
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
-from src.main.python.util.utils import create_json, get_tenant_info, get_data_from_blob, \
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
+
+from utils import create_json, get_tenant_info, get_data_from_blob, \
     post_data_to_blob, get_content_model, get_content_plays
 
 
