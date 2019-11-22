@@ -14,12 +14,12 @@ sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
 from src.main.python.util.utils import create_json, write_data_to_blob, get_data_from_blob
 
-priometheus_host = os.environ['PROMETHEUS_HOST']
+prometheus_host = os.environ['PROMETHEUS_HOST']
 findspark.init()
 
 
 def get_monitoring_data(from_time, to_time):
-    url = "{}/prometheus/api/v1/query_range".format(priometheus_host)
+    url = "{}/prometheus/api/v1/query_range".format(prometheus_host)
     querystring = {"query": "sum(rate(nginx_request_status_count{cluster=~\"Swarm1|Swarm2\"}[5m]))",
                    "start": str(from_time), "end": str(to_time), "step": "900"}
     headers = {
@@ -87,7 +87,8 @@ if is_bootstrap == "true":
     from_time = int(datetime.combine(from_day, datetime.min.time()).timestamp())
 else:
     # For Last 1 hour
-    from_time = int(current_time.replace(hour=(current_time.hour - 1), minute=15, second=0, microsecond=0).timestamp())
+    from_day = (datetime.today() + timedelta(hours=-1))
+    from_time = int(from_day.replace(minute=15, second=0, microsecond=0).timestamp())
 to_time = int(current_time.timestamp())
 init(from_time, to_time)
 print("ECG::Completed")

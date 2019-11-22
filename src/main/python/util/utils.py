@@ -272,7 +272,10 @@ def create_json(read_loc_, last_update=False):
         df = pd.read_csv(read_loc_).fillna('')
         if last_update:
             try:
-                _lastUpdateOn = pd.to_datetime(df['Date'], format='%d-%m-%Y').max().timestamp() * 1000
+                if "Date" in df.columns.values.tolist():
+                    _lastUpdateOn = pd.to_datetime(df['Date'], format='%d-%m-%Y').max().timestamp() * 1000
+                else:
+                    _lastUpdateOn = datetime.now().timestamp() * 1000
             except ValueError:
                 return
             df = df.astype('str')
@@ -406,8 +409,8 @@ def get_content_plays(result_loc_, date_, druid_):
 
 
 def write_data_to_blob(read_loc, file_name):
-    account_name = os.environ['AZURE_STORAGE_ACCOUNT_NEW']
-    account_key = os.environ['AZURE_STORAGE_ACCESS_KEY_NEW']
+    account_name = os.environ['AZURE_STORAGE_ACCOUNT']
+    account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
     block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
 
     container_name = 'reports'
