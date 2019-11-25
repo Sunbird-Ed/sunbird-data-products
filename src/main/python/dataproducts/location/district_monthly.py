@@ -2,7 +2,7 @@
 Compute unique devices in a district over a month
 """
 import json
-import sys
+import sys, time
 from datetime import date, datetime
 from pathlib import Path
 from string import Template
@@ -13,7 +13,7 @@ import requests
 
 sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
-from src.main.python.util.utils import create_json, get_data_from_blob, post_data_to_blob
+from src.main.python.util.utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
 
 
 def unique_users(result_loc_, date_, query_, state_):
@@ -62,6 +62,7 @@ def unique_users(result_loc_, date_, query_, state_):
             f.write(state_ + 'summary ' + response.status_code + response.text)
 
 
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="data folder location")
 parser.add_argument("Druid_hostname", type=str, help="Host address for Druid")
@@ -93,3 +94,21 @@ for ind, row in tenant_info.iterrows():
     if isinstance(row['state'], str):
         unique_users(result_loc_=result_loc.joinpath(row["slug"]), date_=analysis_date,
                      query_='district_devices_monthly.json', state_=row['state'])
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = {
+    "system": "AdhocJob",
+    "subsystem": "District Monthly Report",
+    "metrics": [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        }
+    ]
+}
+push_metric_event(metrics, "District Monthly Report")

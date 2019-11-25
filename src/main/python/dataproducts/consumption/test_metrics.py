@@ -1,5 +1,10 @@
 from datetime import datetime, date, timedelta
 import json, time, pytz
+import sys, os
+
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
+
 from utils import push_metric_event
 
 start_time = int(round(time.time()))

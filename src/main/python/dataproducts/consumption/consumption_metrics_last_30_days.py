@@ -2,7 +2,7 @@
 CMO-PMO Dashbaord report generation.
 Reads daily metric data from blob storage and uploads
 """
-import sys
+import sys, time
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
@@ -11,7 +11,7 @@ import pandas as pd
 
 sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
-from src.main.python.util.utils import post_data_to_blob, create_json, get_tenant_info, get_data_from_blob
+from src.main.python.util.utils import post_data_to_blob, create_json, get_tenant_info, get_data_from_blob, push_metric_event
 
 
 def data_wrangling(result_loc_, date_):
@@ -29,7 +29,7 @@ def data_wrangling(result_loc_, date_):
         result_loc_.parent.parent.joinpath('public').mkdir(exist_ok=True)
         df.to_csv(result_loc_.parent.parent.joinpath('public', 'cmo_dashboard.csv'), index=False)
 
-
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="the path to local data folder")
 parser.add_argument("org_search", type=str, help="host address for Org API")
@@ -58,3 +58,21 @@ for slug in slug_list:
         post_data_to_blob(result_loc_=data_store_location.joinpath(slug, 'cmo_dashboard.csv'))
     except:
         pass
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = {
+    "system": "AdhocJob",
+    "subsystem": "Consumption Metrics Last 30 Days",
+    "metrics": [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        }
+    ]
+}
+push_metric_event(metrics, "Consumption Metrics Last 30 Days")

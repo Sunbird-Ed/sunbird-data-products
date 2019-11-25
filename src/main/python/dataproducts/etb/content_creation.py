@@ -1,7 +1,7 @@
 """
 Generate a report that specifies number of contents created in last week and overall across Live, Review and Draft.
 """
-import sys
+import sys, time
 from datetime import date, timedelta, datetime
 from pathlib import Path
 from string import Template
@@ -13,7 +13,7 @@ import requests
 
 sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 
-from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob
+from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob, push_metric_event
 
 
 def weekly_creation(result_loc_, content_search_, date_):
@@ -188,7 +188,7 @@ def combine_creation_reports(result_loc_, date_):
         except KeyError as ke:
             print(row_['id'], ke)
 
-
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="data folder location")
 parser.add_argument("org_search", type=str, help="host address for Org API")
@@ -204,3 +204,21 @@ get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_
 weekly_creation(result_loc_=result_loc, date_=execution_date, content_search_=content_search)
 overall_creation(result_loc_=result_loc, date_=execution_date, content_search_=content_search)
 combine_creation_reports(result_loc_=result_loc, date_=execution_date)
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = {
+    "system": "AdhocJob",
+    "subsystem": "Content Creation",
+    "metrics": [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        }
+    ]
+}
+push_metric_event(metrics, "Content Creation")

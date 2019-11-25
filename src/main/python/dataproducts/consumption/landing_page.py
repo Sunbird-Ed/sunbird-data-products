@@ -2,14 +2,17 @@
 Compute aggregated metrics over academic year
 """
 import json
-import os
+import os, sys, time
 from pathlib import Path
-
+from datetime import datetime, date
 import argparse
 import pandas as pd
 from azure.storage.blob import BlockBlobService
 from pandas.errors import EmptyDataError
 
+sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+
+from src.main.python.util.utils import push_metric_event
 
 def post_data_to_blob(result_loc, slug):
     """
@@ -42,6 +45,7 @@ def post_data_to_blob(result_loc, slug):
         raise Exception('Failed to post to blob!')
 
 
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="the path to local data folder")
 args = parser.parse_args()
@@ -79,3 +83,21 @@ for file_path in data_store_location.glob('portal_dashboards/*/daily_metrics.csv
     except EmptyDataError:
         pass
 print('[SUCCESS] Landing Page!')
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = {
+    "system": "AdhocJob",
+    "subsystem": "Landing Page",
+    "metrics": [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": date.today().strftime("%Y-%m-%d")
+        }
+    ]
+}
+push_metric_event(metrics, "Landing Page")

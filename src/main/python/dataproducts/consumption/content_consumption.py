@@ -2,7 +2,7 @@
 content level plays, timespent and ratings by week
 """
 import json
-import sys
+import sys, time
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from string import Template
@@ -14,7 +14,7 @@ from cassandra.cluster import Cluster
 
 sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
 from src.main.python.util.utils import create_json, get_tenant_info, get_data_from_blob, \
-    post_data_to_blob, get_content_model, get_content_plays
+    post_data_to_blob, get_content_model, get_content_plays, push_metric_event
 
 
 def mime_type(series):
@@ -192,7 +192,7 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
         create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
         post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
 
-
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="the path to local data folder")
 parser.add_argument("org_search", type=str, help="host address for Org API")
@@ -221,3 +221,21 @@ for i in range(7):
     get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
     insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
 get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace)
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = {
+    "system": "AdhocJob",
+    "subsystem": "Content Consumption Metrics",
+    "metrics": [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        }
+    ]
+}
+push_metric_event(metrics, "Content Consumption Metrics")

@@ -3,7 +3,7 @@ Course consumption report
 """
 import json
 import os
-import sys
+import sys, time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as func
 
 sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
-from src.main.python.util.utils import get_tenant_info, create_json, get_data_from_blob, post_data_to_blob, get_courses
+from src.main.python.util.utils import get_tenant_info, create_json, get_data_from_blob, post_data_to_blob, get_courses, push_metric_event
 
 findspark.init()
 
@@ -150,6 +150,7 @@ def generate_course_usage(result_loc_, date_):
             print(channel, 'channel not in tenant list')
 
 
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="data folder location")
 parser.add_argument("org_search", type=str, help="host address for Org API")
@@ -176,3 +177,21 @@ get_course_plays(result_loc_=result_loc, date_=analysis_date)
 get_user_courses(result_loc_=result_loc, date_=analysis_date, elastic_search_=elastic_search)
 get_course_batch(result_loc_=result_loc, date_=analysis_date, elastic_search_=elastic_search)
 generate_course_usage(result_loc_=result_loc, date_=analysis_date)
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = {
+    "system": "AdhocJob",
+    "subsystem": "Course Consumption Report",
+    "metrics": [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        }
+    ]
+}
+push_metric_event(metrics, "Course Consumption Report")
