@@ -427,12 +427,12 @@ def generate_metrics_summary(result_loc_, metrics):
 
 def push_metric_event(metrics, subsystem):
     env = os.environ['ENV']
+    kafka_broker = os.environ['KAFKA_BROKER_HOST']
     with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'common',
                                                                                 'config.json')) as f:
         config = f.read()
     conf = json.loads(config)
     kafka_topic = conf['kafka_metrics_topic']
-    kafka_broker = conf['bootstrap_servers']
     eid = "METRIC"
     ets = int(round(time.time()*1000))
     midStr = eid + str(ets) + subsystem
