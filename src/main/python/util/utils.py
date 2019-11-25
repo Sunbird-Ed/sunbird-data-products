@@ -143,7 +143,7 @@ def get_tenant_info(result_loc_, org_search_, date_):
     :param date_: datetime object to pass to file path
     :return: None
     """
-    url = "{}/org/v1/search".format(org_search_)
+    url = "{}v1/org/search".format(org_search_)
     payload = """{
     "request":{
         "filters": {
@@ -196,7 +196,7 @@ def get_content_model(result_loc_, druid_, date_):
         headers = {
             'Content-Type': "application/json"
         }
-        url = "{}/druid/v2/".format(druid_)
+        url = "{}druid/v2/".format(druid_)
         with open(Path(__file__).parent.parent.parent.parent.parent.joinpath('resources', 'queries',
                                                                                     'content_list.json')) as f:
             query = f.read()
@@ -230,7 +230,7 @@ def get_scan_counts(result_loc_, druid_, date_):
         headers = {
             'Content-Type': "application/json"
         }
-        url = "{}/druid/v2/".format(druid_)
+        url = "{}druid/v2/".format(druid_)
         with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
                                                                                     'scan_counts.json')) as f:
             query = f.read()
@@ -373,7 +373,7 @@ def get_courses(result_loc_, druid_, query_file_, date_):
     with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
                                                                                 query_file_)) as f:
         query = f.read()
-    response = requests.request("POST", url='{}/druid/v2'.format(druid_), data=query)
+    response = requests.request("POST", url='{}druid/v2'.format(druid_), data=query)
     result = response.json()
     courses = pd.DataFrame([eve['event'] for event in result for eve in event['result']['events']])
     courses = courses.drop(['', 'timestamp'], axis=1)
@@ -392,7 +392,7 @@ def get_content_plays(result_loc_, date_, druid_):
     headers = {
         'Content-Type': "application/json"
     }
-    url = "{}/druid/v2/".format(druid_)
+    url = "{}druid/v2/".format(druid_)
     start_date = date_ - timedelta(days=1)
     with open(Path(__file__).parent.parent.parent.parent.parent.joinpath('resources', 'queries',
                                                                                 'content_plays.json')) as f:
