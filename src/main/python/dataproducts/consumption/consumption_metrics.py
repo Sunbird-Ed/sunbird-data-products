@@ -1,7 +1,7 @@
 """
 Generate daily consumption metrics from blob storage
 """
-import json
+import json, time
 import os
 import sys
 from datetime import date, timedelta, datetime
@@ -17,7 +17,7 @@ util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
 sys.path.append(util_path)
 
 from utils import create_json, post_data_to_blob, get_data_from_blob, \
-    get_tenant_info, get_textbook_snapshot
+    get_tenant_info, get_textbook_snapshot, push_metric_event
 
 findspark.init()
 
@@ -349,7 +349,7 @@ def daily_metrics(read_loc_, date_):
     except Exception:
         raise Exception('State Metrics Error!')
 
-
+start_time_sec = int(round(time.time()))
 start_time = datetime.now()
 print("Started at: ", start_time.strftime('%Y-%m-%d %H:%M:%S'))
 parser = argparse.ArgumentParser()
@@ -395,3 +395,17 @@ print('[Success] Daily metrics')
 end_time = datetime.now()
 print("Ended at: ", end_time.strftime('%Y-%m-%d %H:%M:%S'))
 print("Time taken: ", str(end_time - start_time))
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
+push_metric_event(metrics, "Consumption Metrics")

@@ -1,7 +1,7 @@
 """
 generate course related enrolment and completion report.
 """
-import sys
+import sys, time
 import os
 from datetime import date, datetime
 from pathlib import Path
@@ -13,7 +13,7 @@ from elasticsearch import Elasticsearch
 util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
 sys.path.append(util_path)
 
-from utils import get_tenant_info, create_json, post_data_to_blob, get_courses
+from utils import get_tenant_info, create_json, post_data_to_blob, get_courses, push_metric_event
 
 
 def get_course_enrollments(result_loc_, elastic_search_, date_, size_=1000):
@@ -52,6 +52,7 @@ def get_course_enrollments(result_loc_, elastic_search_, date_, size_=1000):
             pass
 
 
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="data folder location")
 parser.add_argument("org_search", type=str, help="host address for Org API")
@@ -71,3 +72,17 @@ execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
 get_courses(result_loc_=result_loc, druid_=druid_ip, query_file_='course_list.json', date_=execution_date)
 get_course_enrollments(result_loc_=result_loc, elastic_search_=elastic_search, date_=execution_date, size_=resp_size)
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
+push_metric_event(metrics, "Course Enrollments Report")

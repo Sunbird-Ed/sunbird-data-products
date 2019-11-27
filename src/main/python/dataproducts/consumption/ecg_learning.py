@@ -1,5 +1,5 @@
 import os
-import sys
+import sys, time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from pyspark.sql.types import StructField, StructType, StringType, IntegerType
 util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
 sys.path.append(util_path)
 
-from utils import create_json, write_data_to_blob, get_data_from_blob
+from utils import create_json, write_data_to_blob, get_data_from_blob, push_metric_event
 
 prometheus_host = os.environ['PROMETHEUS_HOST']
 findspark.init()
@@ -69,7 +69,7 @@ def init(from_time, to_time):
     write_data_to_blob(write_path, os.path.join('public', csv_file_name))
     write_data_to_blob(write_path, os.path.join('public', json_file_name))
 
-
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_store_location", type=str, help="the path to local data folder")
 parser.add_argument("--bootstrap", type=str, help="run for 7 days")
@@ -93,3 +93,17 @@ else:
 to_time = int(current_time.timestamp())
 init(from_time, to_time)
 print("ECG::Completed")
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(current_time, "%Y-%m-%d")
+    }
+]
+push_metric_event(metrics, "ECG Learning")

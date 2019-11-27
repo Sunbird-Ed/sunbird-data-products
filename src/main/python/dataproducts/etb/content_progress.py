@@ -2,7 +2,7 @@
 Generate content wise reports for an aggregated, and status wise views
 """
 import re
-import sys
+import sys, time
 import os
 from datetime import date, datetime
 from pathlib import Path
@@ -16,7 +16,7 @@ import requests
 util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
 sys.path.append(util_path)
 
-from utils import get_tenant_info, create_json, post_data_to_blob
+from utils import get_tenant_info, create_json, post_data_to_blob, push_metric_event
 
 
 def grade_map(series):
@@ -348,7 +348,7 @@ def gen_non_live_status_report(result_loc_):
     post_data_to_blob(
         result_loc_.parent.parent.joinpath('portal_dashboards', result_loc_.name, 'Content_Progress_Report_3.csv'))
 
-
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("data_store_location", type=str, help="data folder location")
 parser.add_argument("org_search", type=str, help="host address for Org API")
@@ -373,3 +373,17 @@ for ind_, row_ in board_slug.iterrows():
         gen_aggregated_report(result_loc_=result_loc.joinpath('content_progress', row_['slug']))
         gen_live_status_report(result_loc_=result_loc.joinpath('content_progress', row_['slug']))
         gen_non_live_status_report(result_loc_=result_loc.joinpath('content_progress', row_['slug']))
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
+push_metric_event(metrics, "Content Progress")

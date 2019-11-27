@@ -16,7 +16,7 @@ from anytree.search import findall
 util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
 sys.path.append(util_path)
 
-from utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts
+from utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts, push_metric_event
 
 
 def parse_etb(tb, row_):
@@ -508,7 +508,7 @@ def generate_reports(result_loc_, content_search_, content_hierarchy_, date_):
                 f.write('ConnectionError: Failed to fetch Hierarchy for {} in {} state.\n'.format(tb_id['identifier'],
                                                                                                   tb_id['status']))
 
-
+start_time_sec = int(round(time.time()))
 start_time = datetime.now()
 print("Started at: ", start_time.strftime('%Y-%m-%d %H:%M:%S'))
 parser = argparse.ArgumentParser()
@@ -544,3 +544,17 @@ generate_reports(result_loc_=data_store_location, content_search_=content_search
 end_time = datetime.now()
 print("Ended at: ", end_time.strftime('%Y-%m-%d %H:%M:%S'))
 print("Time taken: ", str(end_time - start_time))
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
+push_metric_event(metrics, "ETB Creation Metrics")
