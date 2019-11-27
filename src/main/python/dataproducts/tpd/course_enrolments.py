@@ -2,6 +2,7 @@
 generate course related enrolment and completion report.
 """
 import sys, time
+import os
 from datetime import date, datetime
 from pathlib import Path
 
@@ -9,9 +10,10 @@ import argparse
 import pandas as pd
 from elasticsearch import Elasticsearch
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob, get_courses, push_metric_event
+from utils import get_tenant_info, create_json, post_data_to_blob, get_courses, push_metric_event
 
 
 def get_course_enrollments(result_loc_, elastic_search_, date_, size_=1000):

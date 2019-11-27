@@ -3,6 +3,7 @@ Generate district level scans, plays and unique devices on a weekly basis
 """
 import json
 import sys, time
+import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from string import Template
@@ -12,9 +13,10 @@ import pandas as pd
 import requests
 from azure.common import AzureMissingResourceHttpError
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
+from utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
 
 
 def district_devices(result_loc_, date_, query_, state_):

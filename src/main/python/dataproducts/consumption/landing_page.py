@@ -10,9 +10,10 @@ import pandas as pd
 from azure.storage.blob import BlockBlobService
 from pandas.errors import EmptyDataError
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import push_metric_event
+from utils import push_metric_event
 
 def post_data_to_blob(result_loc, slug):
     """

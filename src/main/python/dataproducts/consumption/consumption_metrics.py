@@ -13,9 +13,10 @@ import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as func
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import create_json, post_data_to_blob, get_data_from_blob, \
+from utils import create_json, post_data_to_blob, get_data_from_blob, \
     get_tenant_info, get_textbook_snapshot, push_metric_event
 
 findspark.init()

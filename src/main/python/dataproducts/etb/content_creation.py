@@ -2,6 +2,7 @@
 Generate a report that specifies number of contents created in last week and overall across Live, Review and Draft.
 """
 import sys, time
+import os
 from datetime import date, timedelta, datetime
 from pathlib import Path
 from string import Template
@@ -11,9 +12,10 @@ import argparse
 import pandas as pd
 import requests
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob, push_metric_event
+from utils import get_tenant_info, create_json, post_data_to_blob, push_metric_event
 
 
 def weekly_creation(result_loc_, content_search_, date_):
