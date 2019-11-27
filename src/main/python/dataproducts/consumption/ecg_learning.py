@@ -10,16 +10,17 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField, StructType, StringType, IntegerType
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import create_json, write_data_to_blob, get_data_from_blob
+from utils import create_json, write_data_to_blob, get_data_from_blob
 
-priometheus_host = os.environ['PROMETHEUS_HOST']
+prometheus_host = os.environ['PROMETHEUS_HOST']
 findspark.init()
 
 
 def get_monitoring_data(from_time, to_time):
-    url = "{}/prometheus/api/v1/query_range".format(priometheus_host)
+    url = "{}/prometheus/api/v1/query_range".format(prometheus_host)
     querystring = {"query": "sum(rate(nginx_request_status_count{cluster=~\"Swarm1|Swarm2\"}[5m]))",
                    "start": str(from_time), "end": str(to_time), "step": "900"}
     headers = {
@@ -31,7 +32,7 @@ def get_monitoring_data(from_time, to_time):
 
 def remove_last_day(df):
     current_hour = current_time.hour
-    if current_hour == 0 & df.count() >= 672:
+    if current_hour == 0 and df.count() >= 672:
         first_date = (current_time + timedelta(days=-8)).strftime("%Y/%m/%d")
         df = df.filter(~F.col("time").contains(first_date))
     return df
@@ -87,7 +88,8 @@ if is_bootstrap == "true":
     from_time = int(datetime.combine(from_day, datetime.min.time()).timestamp())
 else:
     # For Last 1 hour
-    from_time = int(current_time.replace(hour=(current_time.hour - 1), minute=15, second=0, microsecond=0).timestamp())
+    from_day = (datetime.today() + timedelta(hours=-1))
+    from_time = int(from_day.replace(minute=15, second=0, microsecond=0).timestamp())
 to_time = int(current_time.timestamp())
 init(from_time, to_time)
 print("ECG::Completed")

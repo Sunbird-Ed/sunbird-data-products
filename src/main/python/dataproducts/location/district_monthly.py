@@ -3,6 +3,7 @@ Compute unique devices in a district over a month
 """
 import json
 import sys
+import os
 from datetime import date, datetime
 from pathlib import Path
 from string import Template
@@ -11,9 +12,10 @@ import argparse
 import pandas as pd
 import requests
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import create_json, get_data_from_blob, post_data_to_blob
+from utils import create_json, get_data_from_blob, post_data_to_blob
 
 
 def unique_users(result_loc_, date_, query_, state_):

@@ -3,6 +3,7 @@ Generate content wise reports for an aggregated, and status wise views
 """
 import re
 import sys
+import os
 from datetime import date, datetime
 from pathlib import Path
 from string import Template
@@ -12,9 +13,10 @@ import numpy as np
 import pandas as pd
 import requests
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import get_tenant_info, create_json, post_data_to_blob
+from utils import get_tenant_info, create_json, post_data_to_blob
 
 
 def grade_map(series):

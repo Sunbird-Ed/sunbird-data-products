@@ -2,6 +2,7 @@
 Generate ETB and Live QR Exception Report
 """
 import sys
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -12,9 +13,10 @@ import requests
 from anytree.importer import DictImporter
 from anytree.search import findall
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
 
-from src.main.python.util.utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts
+from utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts
 
 
 def parse_etb(tb, row_):

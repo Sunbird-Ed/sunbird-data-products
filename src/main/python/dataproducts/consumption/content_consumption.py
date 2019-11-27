@@ -6,14 +6,18 @@ import sys
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from string import Template
+import pdb
+import os
 
 import argparse
 import pandas as pd
 from azure.common import AzureMissingResourceHttpError
 from cassandra.cluster import Cluster
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
-from src.main.python.util.utils import create_json, get_tenant_info, get_data_from_blob, \
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
+
+from utils import create_json, get_tenant_info, get_data_from_blob, \
     post_data_to_blob, get_content_model, get_content_plays
 
 
@@ -194,21 +198,22 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("data_store_location", type=str, help="the path to local data folder")
-parser.add_argument("org_search", type=str, help="host address for Org API")
-parser.add_argument("Druid_hostname", type=str, help="Host address for Druid")
-parser.add_argument("cassandra_host", type=str, help="Host address for Cassandra")
-parser.add_argument("keyspace_prefix", type=str, help="Environment for keyspace in Cassandra")
-parser.add_argument("-execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
+parser.add_argument("--data_store_location", type=str, help="the path to local data folder")
+parser.add_argument("--org_search", type=str, help="host address for Org API")
+parser.add_argument("--druid_hostname", type=str, help="Host address for Druid")
+parser.add_argument("--cassandra_host", type=str, help="Host address for Cassandra")
+parser.add_argument("--keyspace_prefix", type=str, help="Environment for keyspace in Cassandra")
+parser.add_argument("--execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
                     help="DD/MM/YYYY, optional argument for backfill jobs")
 args = parser.parse_args()
 data_store_location = Path(args.data_store_location)
 org_search = args.org_search
-druid = args.Druid_hostname
+druid = args.druid_hostname
 cassandra = args.cassandra_host
 keyspace = args.keyspace_prefix + 'content_db'
 execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 result_loc = data_store_location.joinpath('content_plays')
+result_loc.parent.joinpath('portal_dashboards').mkdir(exist_ok=True)
 result_loc.parent.joinpath('config').mkdir(exist_ok=True)
 get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
 with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:

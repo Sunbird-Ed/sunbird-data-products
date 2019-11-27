@@ -2,8 +2,8 @@
 Course consumption report
 """
 import json
-import os
 import sys
+import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -14,8 +14,10 @@ from elasticsearch import Elasticsearch
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as func
 
-sys.path.append(Path(__file__).parent.parent.parent.parent.parent.parent)
-from src.main.python.util.utils import get_tenant_info, create_json, get_data_from_blob, post_data_to_blob, get_courses
+util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
+sys.path.append(util_path)
+
+from utils import get_tenant_info, create_json, get_data_from_blob, post_data_to_blob, get_courses
 
 findspark.init()
 
