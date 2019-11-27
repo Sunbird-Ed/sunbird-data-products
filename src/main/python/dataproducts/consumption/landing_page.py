@@ -87,18 +87,14 @@ print('[SUCCESS] Landing Page!')
 
 end_time_sec = int(round(time.time()))
 time_taken = end_time_sec - start_time_sec
-metrics = {
-    "system": "AdhocJob",
-    "subsystem": "Landing Page",
-    "metrics": [
-        {
-            "metric": "timeTakenSecs",
-            "value": time_taken
-        },
-        {
-            "metric": "date",
-            "value": date.today().strftime("%Y-%m-%d")
-        }
-    ]
-}
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": date.today().strftime("%Y-%m-%d")
+    }
+]
 push_metric_event(metrics, "Landing Page")

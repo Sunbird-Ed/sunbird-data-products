@@ -99,18 +99,14 @@ for ind, row in tenant_info.iterrows():
 
 end_time_sec = int(round(time.time()))
 time_taken = end_time_sec - start_time_sec
-metrics = {
-    "system": "AdhocJob",
-    "subsystem": "District Monthly Report",
-    "metrics": [
-        {
-            "metric": "timeTakenSecs",
-            "value": time_taken
-        },
-        {
-            "metric": "date",
-            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
-        }
-    ]
-}
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
 push_metric_event(metrics, "District Monthly Report")

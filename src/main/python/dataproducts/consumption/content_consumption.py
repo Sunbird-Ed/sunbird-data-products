@@ -229,18 +229,14 @@ get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassan
 
 end_time_sec = int(round(time.time()))
 time_taken = end_time_sec - start_time_sec
-metrics = {
-    "system": "AdhocJob",
-    "subsystem": "Content Consumption Metrics",
-    "metrics": [
-        {
-            "metric": "timeTakenSecs",
-            "value": time_taken
-        },
-        {
-            "metric": "date",
-            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
-        }
-    ]
-}
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
 push_metric_event(metrics, "Content Consumption Metrics")

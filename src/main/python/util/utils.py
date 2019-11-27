@@ -428,7 +428,7 @@ def write_data_to_blob(read_loc, file_name):
 def generate_metrics_summary(result_loc_, metrics):
     pass
 
-def push_metric_event(metrics, subsystem):
+def push_metric_event(metrics_list, subsystem):
     env = os.environ['ENV']
     kafka_broker = os.environ['KAFKA_BROKER_HOST']
     with open(Path(__file__).parent.parent.parent.parent.parent.joinpath('resources', 'common',
@@ -451,6 +451,11 @@ def push_metric_event(metrics, subsystem):
             "ver": "1.0",
             "pid": "adhoc.job.metrics"
         }
+    }
+    metrics = {
+        "system": "AdhocJob",
+        "subsystem": subsystem,
+        "metrics": metrics_list
     }
     metric = {
         "eid": eid,

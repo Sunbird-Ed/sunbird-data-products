@@ -63,18 +63,14 @@ for slug in slug_list:
 
 end_time_sec = int(round(time.time()))
 time_taken = end_time_sec - start_time_sec
-metrics = {
-    "system": "AdhocJob",
-    "subsystem": "Consumption Metrics Last 30 Days",
-    "metrics": [
-        {
-            "metric": "timeTakenSecs",
-            "value": time_taken
-        },
-        {
-            "metric": "date",
-            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
-        }
-    ]
-}
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
 push_metric_event(metrics, "Consumption Metrics Last 30 Days")

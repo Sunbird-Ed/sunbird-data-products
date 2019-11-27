@@ -75,18 +75,14 @@ get_course_enrollments(result_loc_=result_loc, elastic_search_=elastic_search, d
 
 end_time_sec = int(round(time.time()))
 time_taken = end_time_sec - start_time_sec
-metrics = {
-    "system": "AdhocJob",
-    "subsystem": "Course Enrollments Report",
-    "metrics": [
-        {
-            "metric": "timeTakenSecs",
-            "value": time_taken
-        },
-        {
-            "metric": "date",
-            "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
-        }
-    ]
-}
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
 push_metric_event(metrics, "Course Enrollments Report")
