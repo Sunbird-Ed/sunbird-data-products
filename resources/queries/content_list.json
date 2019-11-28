@@ -5,6 +5,14 @@
     "type": "and",
     "fields": [
       {
+        "type": "not",
+        "field": {
+          "type": "selector",
+          "dimension": "objectType",
+          "value": "AssessmentItem"
+        }
+      },
+      {
         "type": "selector",
         "dimension": "contentType",
         "value": "Resource"
@@ -35,6 +43,7 @@
     "resourceType",
     "status",
     "author",
+    "creator",
     "createdOn",
     "lastPublishedOn",
     "lastUpdatedOn",
@@ -46,6 +55,6 @@
   ],
   "pagingSpec": {
     "pagingIdentifiers": {},
-    "threshold": 10000
+    "threshold": 50000
   }
 }
