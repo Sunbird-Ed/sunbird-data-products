@@ -5,12 +5,15 @@ import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+import time
 from time import sleep
-
 import pandas as pd
 import requests
 from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
+from kafka_utils import push_metrics
+import hashlib
+from pytz import timezone
 
 
 def parse_tb(tb, returnable, row_):
@@ -424,3 +427,45 @@ def write_data_to_blob(read_loc, file_name):
 
 def generate_metrics_summary(result_loc_, metrics):
     pass
+
+def push_metric_event(metrics_list, subsystem):
+    env = os.environ['ENV']
+    kafka_broker = os.environ['KAFKA_BROKER_HOST']
+    with open(Path(__file__).parent.parent.parent.parent.parent.joinpath('resources', 'common',
+                                                                                'config.json')) as f:
+        config = f.read()
+    conf = json.loads(config)
+    kafka_topic = conf['kafka_metrics_topic']
+    eid = "METRIC"
+    ets = int(round(time.time()*1000))
+    midStr = eid + str(ets) + subsystem
+    actor = {
+        "id": "analytics",
+        "type": "System"
+    }
+    context = {
+        "channel": "data-pipeline",
+        "env": "",
+        "pdata": {
+            "id": "pipeline.monitoring",
+            "ver": "1.0",
+            "pid": "adhoc.job.metrics"
+        }
+    }
+    metrics = {
+        "system": "AdhocJob",
+        "subsystem": subsystem,
+        "metrics": metrics_list
+    }
+    metric = {
+        "eid": eid,
+        "ver": "3.0",
+        "ets": ets,
+        "mid": hashlib.md5(midStr.encode()).hexdigest(),
+        "@timestamp": datetime.now(timezone("UTC")).strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "actor": actor,
+        "context": context,
+        "edata": metrics
+    }
+    topic = env+"."+kafka_topic
+    push_metrics(kafka_broker, topic, metric)

@@ -2,7 +2,7 @@
 Generate district level scans, plays and unique devices on a weekly basis
 """
 import json
-import sys
+import sys, time
 import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -16,7 +16,7 @@ from azure.common import AzureMissingResourceHttpError
 util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
 sys.path.append(util_path)
 
-from utils import create_json, get_data_from_blob, post_data_to_blob
+from utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
 
 
 def district_devices(result_loc_, date_, query_, state_):
@@ -199,6 +199,7 @@ def merge_metrics(result_loc_, date_):
         result_loc_.parent.parent.parent.joinpath("portal_dashboards", slug_, "aggregated_district_data.csv"))
 
 
+start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_store_location", type=str, help="data folder location")
 parser.add_argument("--druid_hostname", type=str, help="Host address for Druid")
@@ -232,3 +233,17 @@ for ind, row in tenant_info.iterrows():
         district_plays(result_loc_=path, date_=analysis_date, query_='district_plays.json', state_=state)
         district_scans(result_loc_=path, date_=analysis_date, query_='district_scans.json', state_=state)
         merge_metrics(result_loc_=path, date_=analysis_date)
+
+end_time_sec = int(round(time.time()))
+time_taken = end_time_sec - start_time_sec
+metrics = [
+    {
+        "metric": "timeTakenSecs",
+        "value": time_taken
+    },
+    {
+        "metric": "date",
+        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+    }
+]
+push_metric_event(metrics, "District Weekly Report")
