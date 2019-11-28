@@ -31,7 +31,7 @@ def unique_users(result_loc_, date_, query_, state_):
     year = date_.year
     month = date_.month
     if month != 1:
-        start_date = datetime(year, 11, 1)
+        start_date = datetime(year, month - 1, 1)
     else:
         start_date = datetime(year - 1, 12, 1)
     with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
