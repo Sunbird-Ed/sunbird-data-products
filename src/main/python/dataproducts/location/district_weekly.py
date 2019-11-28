@@ -45,8 +45,8 @@ def district_devices(result_loc_, date_, query_, state_):
         for response in response.json():
             data.append(response['event'])
         df = pd.DataFrame(data).fillna('Unknown')
-        df.to_csv(result_loc_.joinpath("district_devices.csv"), index=False)
-        post_data_to_blob(result_loc_.joinpath("district_devices.csv"), backup=True)
+        df.to_csv(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), index=False)
+        post_data_to_blob(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), backup=True)
         df['Unique Devices'] = df['Unique Devices'].astype(int)
         df = df[['District', 'Platform', 'Unique Devices']]
         df.to_csv(result_loc_.joinpath("aggregated_district_unique_devices.csv"), index=False)
@@ -82,8 +82,8 @@ def district_plays(result_loc_, date_, query_, state_):
         for response in response.json():
             data.append(response['event'])
         df = pd.DataFrame(data).fillna('Unknown')
-        df.to_csv(result_loc_.joinpath("district_plays.csv"), index=False)
-        post_data_to_blob(result_loc_.joinpath("district_plays.csv"), backup=True)
+        df.to_csv(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), index=False)
+        post_data_to_blob(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), backup=True)
         df = df[['District', 'Platform','Number of Content Plays']]
         df.to_csv(result_loc_.joinpath("aggregated_district_content_plays.csv"), index=False)
     else:
@@ -118,8 +118,8 @@ def district_scans(result_loc_, date_, query_, state_):
         for response in response.json():
             data.append(response['event'])
         df = pd.DataFrame(data).fillna('Unknown')
-        df.to_csv(result_loc_.joinpath("district_scans.csv"), index=False)
-        post_data_to_blob(result_loc_.joinpath("district_scans.csv"), backup=True)
+        df.to_csv(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), index=False)
+        post_data_to_blob(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), backup=True)
         df = df[['District', 'Platform', 'Number of QR Scans']]
         df.to_csv(result_loc_.joinpath("aggregated_district_qr_scans.csv"), index=False)
     else:

@@ -31,10 +31,10 @@ def unique_users(result_loc_, date_, query_, state_):
     year = date_.year
     month = date_.month
     if month != 1:
-        start_date = datetime(year, month - 1, 1)
+        start_date = datetime(year, 11, 1)
     else:
         start_date = datetime(year - 1, 12, 1)
-    with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
+    with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
         query = Template(f.read())
     query = query.substitute(app=config['context']['pdata']['id']['app'],
                              portal=config['context']['pdata']['id']['portal'],
@@ -49,13 +49,12 @@ def unique_users(result_loc_, date_, query_, state_):
         for response in response.json():
             data.append(response['event'])
         df = pd.DataFrame(data).fillna('Unknown')
-        df.to_csv(result_loc_.parent.parent.joinpath("district_reports", date_.strftime("%Y-%m-%d)"),
+        df.to_csv(result_loc_.parent.joinpath(date_.strftime("%Y-%m-%d"),
                                                      "{}_monthly.csv".format(slug_)), index=False)
-        post_data_to_blob(result_loc_.parent.parent.joinpath("district_reports", date_.strftime("%Y-%m-%d)"),
+        post_data_to_blob(result_loc_.parent.joinpath(date_.strftime("%Y-%m-%d"),
                                                              "{}_monthly.csv".format(slug_)), backup=True)
         df['Unique Devices'] = df['Unique Devices'].astype(int)
-        df = df.join(city_district[city_district['state'] == state_].set_index('City'), on='City', how='left').fillna(
-            'Unknown').groupby('District')['Unique Devices'].sum().reset_index()
+        df = df[['District', 'Unique Devices']]
         df.to_csv(result_loc_.joinpath("aggregated_unique_users_summary.csv"), index=False)
         create_json(result_loc_.joinpath("aggregated_unique_users_summary.csv"))
         post_data_to_blob(result_loc_.joinpath("aggregated_unique_users_summary.csv"))
@@ -65,24 +64,23 @@ def unique_users(result_loc_, date_, query_, state_):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("data_store_location", type=str, help="data folder location")
-parser.add_argument("Druid_hostname", type=str, help="Host address for Druid")
-parser.add_argument("-execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
+parser.add_argument("--data_store_location", type=str, help="data folder location")
+parser.add_argument("--druid_hostname", type=str, help="Host address for Druid")
+parser.add_argument("--execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
                     help="DD/MM/YYYY, optional argument for backfill jobs")
 args = parser.parse_args()
 
 analysis_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 file_path = Path(__file__)
-result_loc = Path(args.data_store_location).joinpath('portal_dashboards')
+result_loc = Path(args.data_store_location).joinpath('district_reports')
 result_loc.mkdir(exist_ok=True)
-result_loc.parent.joinpath("district_reports").mkdir(exist_ok=True)
-result_loc.parent.joinpath("district_reports", analysis_date.strftime("%Y-%m-%d")).mkdir(exist_ok=True)
+result_loc.joinpath(analysis_date.strftime("%Y-%m-%d")).mkdir(exist_ok=True)
 result_loc.parent.joinpath('config').mkdir(exist_ok=True)
 get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
 tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
-get_data_from_blob(result_loc.joinpath('city_district_mapping.csv'))
-city_district = pd.read_csv(result_loc.joinpath('city_district_mapping.csv'))
-url = "{}druid/v2/".format(args.Druid_hostname)
+# get_data_from_blob(result_loc.joinpath('city_district_mapping.csv'))
+# city_district = pd.read_csv(result_loc.joinpath('city_district_mapping.csv'))
+url = "{}druid/v2/".format(args.druid_hostname)
 headers = {
     'Content-Type': "application/json"
 }
