@@ -34,7 +34,7 @@
       },
       {
         "type": "selector",
-        "dimension": "device_loc_state",
+        "dimension": "derived_loc_state",
         "value": "$state"
       }
     ]
@@ -45,8 +45,8 @@
   "dimensions": [
     {
       "type": "default",
-      "dimension": "device_loc_city",
-      "outputName": "City",
+      "dimension": "derived_loc_district",
+      "outputName": "District",
       "outputType": "STRING"
     },
     {

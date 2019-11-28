@@ -30,7 +30,7 @@ def district_devices(result_loc_, date_, query_, state_):
     """
     slug_ = result_loc_.name
     start_date = date_ - timedelta(days=7)
-    with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
+    with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
         query = Template(f.read())
     query = query.substitute(app=config['context']['pdata']['id']['app'],
                              portal=config['context']['pdata']['id']['portal'],
@@ -48,11 +48,10 @@ def district_devices(result_loc_, date_, query_, state_):
         df.to_csv(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), index=False)
         post_data_to_blob(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), backup=True)
         df['Unique Devices'] = df['Unique Devices'].astype(int)
-        df = df.join(city_district[city_district['state'] == state_].set_index('City'), on='City', how='left').fillna(
-            'Unknown').groupby(['District', 'Platform'])['Unique Devices'].sum().reset_index()
-        df.to_csv(result_loc_.parent.joinpath("{}_aggregated_district_unique_devices.csv".format(slug_)), index=False)
+        df = df[['District', 'Platform', 'Unique Devices']]
+        df.to_csv(result_loc_.joinpath("aggregated_district_unique_devices.csv"), index=False)
     else:
-        with open(result_loc_.parent.joinpath('error_log.log'), 'a') as f:
+        with open(result_loc_.joinpath('error_log.log'), 'a') as f:
             f.write(state_ + 'devices ' + str(response.status_code) + response.text)
         exit(1)
 
@@ -67,8 +66,8 @@ def district_plays(result_loc_, date_, query_, state_):
     :return: None
     """
     slug_ = result_loc_.name
-    start_date = date_ - timedelta(days=7)
-    with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
+    start_date = date_ - timedelta(days=3)
+    with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
         query = Template(f.read())
     query = query.substitute(app=config['context']['pdata']['id']['app'],
                              portal=config['context']['pdata']['id']['portal'],
@@ -85,9 +84,8 @@ def district_plays(result_loc_, date_, query_, state_):
         df = pd.DataFrame(data).fillna('Unknown')
         df.to_csv(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), index=False)
         post_data_to_blob(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), backup=True)
-        df = df.join(city_district[city_district['state'] == state_].set_index('City'), on='City', how='left').fillna(
-            'Unknown').groupby(['District', 'Platform'])['Number of Content Plays'].sum().reset_index()
-        df.to_csv(result_loc_.parent.joinpath("{}_aggregated_district_content_plays.csv".format(slug_)), index=False)
+        df = df[['District', 'Platform','Number of Content Plays']]
+        df.to_csv(result_loc_.joinpath("aggregated_district_content_plays.csv"), index=False)
     else:
         with open(result_loc_.parent.joinpath('error_log.log'), 'a') as f:
             f.write(state_ + 'plays ' + str(response.status_code) + response.text)
@@ -105,7 +103,7 @@ def district_scans(result_loc_, date_, query_, state_):
     """
     slug_ = result_loc_.name
     start_date = date_ - timedelta(days=7)
-    with open(file_path.parent.joinpath('resources').joinpath(query_)) as f:
+    with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
         query = Template(f.read())
     query = query.substitute(app=config['context']['pdata']['id']['app'],
                              portal=config['context']['pdata']['id']['portal'],
@@ -122,9 +120,8 @@ def district_scans(result_loc_, date_, query_, state_):
         df = pd.DataFrame(data).fillna('Unknown')
         df.to_csv(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), index=False)
         post_data_to_blob(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), backup=True)
-        df = df.join(city_district[city_district['state'] == state_].set_index('City'), on='City', how='left').fillna(
-            'Unknown').groupby(['District', 'Platform'])['Number of QR Scans'].sum().reset_index()
-        df.to_csv(result_loc_.parent.joinpath("{}_aggregated_district_qr_scans.csv".format(slug_)), index=False)
+        df = df[['District', 'Platform', 'Number of QR Scans']]
+        df.to_csv(result_loc_.joinpath("aggregated_district_qr_scans.csv"), index=False)
     else:
         with open(result_loc_.parent.joinpath('error_log.log'), 'a') as f:
             f.write(state_ + 'scans ' + str(response.status_code) + response.text)
@@ -139,23 +136,24 @@ def merge_metrics(result_loc_, date_):
     :return: None
     """
     slug_ = result_loc_.name
+    result_loc_.parent.parent.parent.joinpath("portal_dashboards").mkdir(exist_ok=True)
     try:
         devices_df = pd.read_csv(
-            result_loc_.parent.joinpath("{}_aggregated_district_unique_devices.csv".format(slug_))).set_index(
+            result_loc_.joinpath("aggregated_district_unique_devices.csv")).set_index(
             ['District', 'Platform'])
     except FileNotFoundError:
         devices_df = pd.DataFrame([], columns=['District', 'Platform', 'Unique Devices']).set_index(
             ['District', 'Platform'])
     try:
         plays_df = pd.read_csv(
-            result_loc_.parent.joinpath("{}_aggregated_district_content_plays.csv".format(slug_))).set_index(
+            result_loc_.joinpath("aggregated_district_content_plays.csv")).set_index(
             ['District', 'Platform'])
     except FileNotFoundError:
         plays_df = pd.DataFrame([], columns=['District', 'Platform', 'Number of Content Plays']).set_index(
             ['District', 'Platform'])
     try:
         scans_df = pd.read_csv(
-            result_loc_.parent.joinpath("{}_aggregated_district_qr_scans.csv".format(slug_))).set_index(
+            result_loc_.joinpath("aggregated_district_qr_scans.csv")).set_index(
             ['District', 'Platform'])
     except FileNotFoundError:
         scans_df = pd.DataFrame([['', '', 0]], columns=['District', 'Platform', 'Number of QR Scans']).set_index(
@@ -203,9 +201,9 @@ def merge_metrics(result_loc_, date_):
 
 start_time_sec = int(round(time.time()))
 parser = argparse.ArgumentParser()
-parser.add_argument("data_store_location", type=str, help="data folder location")
-parser.add_argument("Druid_hostname", type=str, help="Host address for Druid")
-parser.add_argument("-execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
+parser.add_argument("--data_store_location", type=str, help="data folder location")
+parser.add_argument("--druid_hostname", type=str, help="Host address for Druid")
+parser.add_argument("--execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
                     help="DD/MM/YYYY, optional argument for backfill jobs")
 args = parser.parse_args()
 
@@ -216,9 +214,7 @@ result_loc.parent.joinpath('config').mkdir(exist_ok=True)
 analysis_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
 tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
-get_data_from_blob(result_loc.joinpath('city_district_mapping.csv'))
-city_district = pd.read_csv(result_loc.joinpath('city_district_mapping.csv'))
-url = "{}druid/v2/".format(args.Druid_hostname)
+url = "{}druid/v2/".format(args.druid_hostname)
 headers = {
     'Content-Type': "application/json"
 }
