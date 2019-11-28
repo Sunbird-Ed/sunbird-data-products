@@ -79,8 +79,6 @@ result_loc.joinpath(analysis_date.strftime("%Y-%m-%d")).mkdir(exist_ok=True)
 result_loc.parent.joinpath('config').mkdir(exist_ok=True)
 get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
 tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
-# get_data_from_blob(result_loc.joinpath('city_district_mapping.csv'))
-# city_district = pd.read_csv(result_loc.joinpath('city_district_mapping.csv'))
 url = "{}druid/v2/".format(args.druid_hostname)
 headers = {
     'Content-Type': "application/json"
