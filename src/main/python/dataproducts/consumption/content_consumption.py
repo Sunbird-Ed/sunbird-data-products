@@ -149,19 +149,19 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
              'Average Play Time in mins on Portal']]
     content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))[
         ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier', 'name', 'mimeType', 'createdOn', 'creator',
-         'lastPublishedOn', 'lastUpdatedOn', 'me_averageRating']]
+         'lastPublishedOn', 'me_averageRating']]
     content_model["creator"] = content_model["creator"].str.replace("null", "")
     content_model['channel'] = content_model['channel'].astype(str)
     content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
     content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                              'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
-                             'Last Updated On', 'Average Rating(out of 5)']
+                             'Average Rating(out of 5)']
     content_model['Created On'] = content_model['Created On'].fillna('T').apply(
         lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
     content_model['Last Published On'] = content_model['Last Published On'].fillna('T').apply(
         lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
-    content_model['Last Updated On'] = content_model['Last Updated On'].fillna('T').apply(
-        lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
+    # content_model['Last Updated On'] = content_model['Last Updated On'].fillna('T').apply(
+    #     lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
     df = content_model.join(df.set_index('identifier'), on='Content ID', how='left')
     df['Last Date of the week'] = (date_ - timedelta(days=1)).strftime('%d-%m-%Y')
     df['Total No of Plays (App and Portal)'] = df['Total No of Plays (App and Portal)'].fillna(0)
@@ -195,7 +195,7 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
             subset=['Content ID', 'Last Date of the week'], keep='first')
         content_aggregates = content_aggregates[
             ['Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name', 'Mime Type', 'Created On',
-             'Creator (User Name)', 'Last Published On', 'Last Updated On', 'Total No of Plays (App and Portal)',
+             'Creator (User Name)', 'Last Published On', 'Total No of Plays (App and Portal)',
              'Number of Plays on App', 'Number of Plays on Portal', 'Average Play Time in mins (On App and Portal)',
              'Average Play Time in mins on App', 'Average Play Time in mins on Portal', 'Average Rating(out of 5)',
              'Last Date of the week']]
