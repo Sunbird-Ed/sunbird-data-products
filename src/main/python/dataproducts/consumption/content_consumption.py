@@ -136,34 +136,43 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
     for k, v in df_dict.items():
         temp.append(v)
     df = pd.DataFrame(temp)
-    df['Last Date of the week'] = (date_ - timedelta(days=1)).strftime('%d-%m-%Y')
     df['Total No of Plays (App and Portal)'] = df['Number of Plays on App'] + df['Number of Plays on Portal']
     df['Average Play Time in mins on App'] = round(df['Timespent on App'] / (60 * df['Number of Plays on App']), 2)
     df['Average Play Time in mins on Portal'] = round(
         df['Timespent on Portal'] / (60 * df['Number of Plays on Portal']), 2)
     df['Average Play Time in mins (On App and Portal)'] = round(
         (df['Timespent on App'] + df['Timespent on Portal']) / (60 * df['Total No of Plays (App and Portal)']), 2)
-    df = df.fillna(0)
     df = df[['identifier', 'Total No of Plays (App and Portal)', 'Number of Plays on App', 'Number of Plays on Portal',
              'Average Play Time in mins (On App and Portal)',
              'Average Play Time in mins on App',
-             'Average Play Time in mins on Portal',
-             'Last Date of the week']]
+             'Average Play Time in mins on Portal']]
     content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))[
-        ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier', 'name', 'mimeType', 'createdOn', 'author',
-         'lastPublishedOn', 'lastUpdatedOn', 'me_averageRating', 'me_totalRatings']]
+        ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier', 'name', 'mimeType', 'createdOn', 'creator',
+         'lastPublishedOn', 'me_averageRating']]
+    content_model["creator"] = content_model["creator"].str.replace("null", "")
     content_model['channel'] = content_model['channel'].astype(str)
     content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
     content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
-                             'Mime Type', 'Created On', 'Creator (Author)', 'Last Published On',
-                             'Last Updated On', 'Average Rating(out of 5)', 'Total Ratings']
+                             'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
+                             'Average Rating(out of 5)']
+    content_model['Content ID'] = content_model['Content ID'].str.replace(".img", "")
     content_model['Created On'] = content_model['Created On'].fillna('T').apply(
         lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
     content_model['Last Published On'] = content_model['Last Published On'].fillna('T').apply(
         lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
-    content_model['Last Updated On'] = content_model['Last Updated On'].fillna('T').apply(
-        lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
-    df = content_model.join(df.set_index('identifier'), on='Content ID', how='left').fillna('Unknown')
+    # content_model['Last Updated On'] = content_model['Last Updated On'].fillna('T').apply(
+    #     lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
+    df = content_model.join(df.set_index('identifier'), on='Content ID', how='left')
+    df['Last Date of the week'] = (date_ - timedelta(days=1)).strftime('%d-%m-%Y')
+    df['Total No of Plays (App and Portal)'] = df['Total No of Plays (App and Portal)'].fillna(0)
+    df['Number of Plays on App'] = df['Number of Plays on App'].fillna(0)
+    df['Number of Plays on Portal'] = df['Number of Plays on Portal'].fillna(0)
+    df['Average Play Time in mins (On App and Portal)'] = df[
+        'Average Play Time in mins (On App and Portal)'].fillna(0)
+    df['Average Play Time in mins on App'] = df['Average Play Time in mins on App'].fillna(0)
+    df['Average Play Time in mins on Portal'] = df['Average Play Time in mins on Portal'].fillna(
+        0)
+    df = df.fillna('Unknown')
     df.sort_values(inplace=True, ascending=[1, 1, 1, 1, 1, 0],
                    by=['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Total No of Plays (App and Portal)'])
     df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'weekly_plays.csv'), index=False)
@@ -186,17 +195,19 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
             subset=['Content ID', 'Last Date of the week'], keep='first')
         content_aggregates = content_aggregates[
             ['Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name', 'Mime Type', 'Created On',
-             'Creator (Author)', 'Last Published On', 'Last Updated On', 'Total No of Plays (App and Portal)',
+             'Creator (User Name)', 'Last Published On', 'Total No of Plays (App and Portal)',
              'Number of Plays on App', 'Number of Plays on Portal', 'Average Play Time in mins (On App and Portal)',
              'Average Play Time in mins on App', 'Average Play Time in mins on Portal', 'Average Rating(out of 5)',
-             'Total Ratings', 'Last Date of the week']]
+             'Last Date of the week']]
         result_loc_.parent.joinpath('portal_dashboards', slug).mkdir(exist_ok=True)
         content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'),
-                                  index=False)
+                                  index=False, encoding='utf-8-sig')
         create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
         post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
 
+
 start_time_sec = int(round(time.time()))
+print("Content Consumption Report::Start")
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_store_location", type=str, help="the path to local data folder")
 parser.add_argument("--org_search", type=str, help="host address for Org API")
@@ -226,7 +237,7 @@ for i in range(7):
     get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
     insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
 get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace)
-
+print("Content Consumption Report::Completed")
 end_time_sec = int(round(time.time()))
 time_taken = end_time_sec - start_time_sec
 metrics = [
@@ -236,7 +247,7 @@ metrics = [
     },
     {
         "metric": "date",
-        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        "value": execution_date
     }
 ]
 push_metric_event(metrics, "Content Consumption Metrics")
