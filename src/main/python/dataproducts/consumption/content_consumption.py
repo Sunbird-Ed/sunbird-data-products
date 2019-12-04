@@ -142,7 +142,6 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
         df['Timespent on Portal'] / (60 * df['Number of Plays on Portal']), 2)
     df['Average Play Time in mins (On App and Portal)'] = round(
         (df['Timespent on App'] + df['Timespent on Portal']) / (60 * df['Total No of Plays (App and Portal)']), 2)
-    # df = df.fillna(0)
     df = df[['identifier', 'Total No of Plays (App and Portal)', 'Number of Plays on App', 'Number of Plays on Portal',
              'Average Play Time in mins (On App and Portal)',
              'Average Play Time in mins on App',
@@ -156,6 +155,7 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
     content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                              'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
                              'Average Rating(out of 5)']
+    content_model['Content ID'] = content_model['Content ID'].str.replace(".img", "")
     content_model['Created On'] = content_model['Created On'].fillna('T').apply(
         lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
     content_model['Last Published On'] = content_model['Last Published On'].fillna('T').apply(
@@ -247,7 +247,7 @@ metrics = [
     },
     {
         "metric": "date",
-        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        "value": execution_date
     }
 ]
 push_metric_event(metrics, "Content Consumption Metrics")

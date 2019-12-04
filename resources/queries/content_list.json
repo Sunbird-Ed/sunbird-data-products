@@ -5,12 +5,9 @@
     "type": "and",
     "fields": [
       {
-        "type": "not",
-        "field": {
-          "type": "selector",
-          "dimension": "objectType",
-          "value": "AssessmentItem"
-        }
+        "type": "selector",
+        "dimension": "objectType",
+        "value": "Content"
       },
       {
         "type": "selector",
@@ -55,6 +52,6 @@
   ],
   "pagingSpec": {
     "pagingIdentifiers": {},
-    "threshold": 50000
+    "threshold": 10000
   }
 }
