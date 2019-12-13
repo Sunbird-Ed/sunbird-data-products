@@ -6,6 +6,11 @@
     "fields": [
       {
         "type": "selector",
+        "dimension": "objectType",
+        "value": "Content"
+      },
+      {
+        "type": "selector",
         "dimension": "contentType",
         "value": "Resource"
       },
@@ -35,6 +40,7 @@
     "resourceType",
     "status",
     "author",
+    "creator",
     "createdOn",
     "lastPublishedOn",
     "lastUpdatedOn",

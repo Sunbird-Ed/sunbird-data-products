@@ -1,6 +1,7 @@
+import json
+
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
-import json
 
 #producer = KafkaProducer(bootstrap_servers=['localhost:9092'])
 
