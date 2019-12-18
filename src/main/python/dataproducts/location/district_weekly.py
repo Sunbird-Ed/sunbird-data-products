@@ -4,13 +4,14 @@ Generate district level scans, plays and unique devices on a weekly basis
 import json
 import sys, time
 import os
+import pdb
+import argparse
+import pandas as pd
+import requests
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from string import Template
 
-import argparse
-import pandas as pd
-import requests
 from azure.common import AzureMissingResourceHttpError
 
 util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
@@ -44,7 +45,9 @@ def district_devices(result_loc_, date_, query_, state_):
         data = []
         for response in response.json():
             data.append(response['event'])
-        df = pd.DataFrame(data).fillna('Unknown')
+        df = pd.DataFrame(data)
+        df['District'] = df.get('District', pd.Series(index=df.index, name='District'))
+        df = df.fillna('Unknown')
         df.to_csv(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), index=False)
         post_data_to_blob(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), backup=True)
         df['Unique Devices'] = df['Unique Devices'].astype(int)
@@ -81,7 +84,9 @@ def district_plays(result_loc_, date_, query_, state_):
         data = []
         for response in response.json():
             data.append(response['event'])
-        df = pd.DataFrame(data).fillna('Unknown')
+        df = pd.DataFrame(data)
+        df['District'] = df.get('District', pd.Series(index=df.index, name='District'))
+        df = df.fillna('Unknown')
         df.to_csv(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), index=False)
         post_data_to_blob(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), backup=True)
         df = df[['District', 'Platform','Number of Content Plays']]
@@ -117,7 +122,9 @@ def district_scans(result_loc_, date_, query_, state_):
         data = []
         for response in response.json():
             data.append(response['event'])
-        df = pd.DataFrame(data).fillna('Unknown')
+        df = pd.DataFrame(data)
+        df['District'] = df.get('District', pd.Series(index=df.index, name='District'))
+        df = df.fillna('Unknown')
         df.to_csv(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), index=False)
         post_data_to_blob(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), backup=True)
         df = df[['District', 'Platform', 'Number of QR Scans']]
@@ -156,7 +163,7 @@ def merge_metrics(result_loc_, date_):
             result_loc_.joinpath("aggregated_district_qr_scans.csv")).set_index(
             ['District', 'Platform'])
     except FileNotFoundError:
-        scans_df = pd.DataFrame([['', '', 0]], columns=['District', 'Platform', 'Number of QR Scans']).set_index(
+        scans_df = pd.DataFrame([], columns=['District', 'Platform', 'Number of QR Scans']).set_index(
             ['District', 'Platform'])
     district_df = devices_df.join(scans_df, how='outer').join(plays_df, how='outer').reset_index().pivot(
         index='District', columns='Platform')
@@ -243,7 +250,7 @@ metrics = [
     },
     {
         "metric": "date",
-        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        "value": analysis_date
     }
 ]
 push_metric_event(metrics, "District Weekly Report")

@@ -3,17 +3,17 @@ Store all utility and reusable functions.
 """
 import json
 import os
+import time
+import hashlib
+import requests
+import pandas as pd
+from time import sleep
 from datetime import datetime, timedelta
 from pathlib import Path
-import time
-from time import sleep
-import pandas as pd
-import requests
+from pytz import timezone
 from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
 from kafka_utils import push_metrics
-import hashlib
-from pytz import timezone
 
 
 def parse_tb(tb, returnable, row_):

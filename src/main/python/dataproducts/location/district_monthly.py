@@ -4,13 +4,12 @@ Compute unique devices in a district over a month
 import json
 import sys, time
 import os
-from datetime import date, datetime
-from pathlib import Path
-from string import Template
-
 import argparse
 import pandas as pd
 import requests
+from datetime import date, datetime
+from pathlib import Path
+from string import Template
 
 util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
 sys.path.append(util_path)
@@ -102,7 +101,7 @@ metrics = [
     },
     {
         "metric": "date",
-        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        "value": analysis_date
     }
 ]
 push_metric_event(metrics, "District Monthly Report")
