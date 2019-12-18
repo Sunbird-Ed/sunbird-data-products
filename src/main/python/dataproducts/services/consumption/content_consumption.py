@@ -3,21 +3,18 @@ content level plays, timespent and ratings by week
 """
 import json
 import sys, time
+import pdb
+import os
+import argparse
+import pandas as pd
+
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from string import Template
-import pdb
-import os
-
-import argparse
-import pandas as pd
 from azure.common import AzureMissingResourceHttpError
 from cassandra.cluster import Cluster
 
-util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
-sys.path.append(util_path)
-
-from utils import create_json, get_tenant_info, get_data_from_blob, \
+from dataproducts.util.utils import create_json, get_tenant_info, get_data_from_blob, \
     post_data_to_blob, get_content_model, get_content_plays, push_metric_event
 
 
@@ -206,48 +203,49 @@ def get_weekly_plays(result_loc_, date_, cassandra_, keyspace_):
         post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
 
 
-start_time_sec = int(round(time.time()))
-print("Content Consumption Report::Start")
-parser = argparse.ArgumentParser()
-parser.add_argument("--data_store_location", type=str, help="the path to local data folder")
-parser.add_argument("--org_search", type=str, help="host address for Org API")
-parser.add_argument("--druid_hostname", type=str, help="Host address for Druid")
-parser.add_argument("--cassandra_host", type=str, help="Host address for Cassandra")
-parser.add_argument("--keyspace_prefix", type=str, help="Environment for keyspace in Cassandra")
-parser.add_argument("--execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
-                    help="DD/MM/YYYY, optional argument for backfill jobs")
-args = parser.parse_args()
-data_store_location = Path(args.data_store_location)
-org_search = args.org_search
-druid = args.druid_hostname
-cassandra = args.cassandra_host
-keyspace = args.keyspace_prefix + 'content_db'
-execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
-result_loc = data_store_location.joinpath('content_plays')
-result_loc.parent.joinpath('portal_dashboards').mkdir(exist_ok=True)
-result_loc.parent.joinpath('config').mkdir(exist_ok=True)
-get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
-with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
-    config = json.loads(f.read())
-get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
-get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
-define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
-for i in range(7):
-    analysis_date = execution_date - timedelta(days=i)
-    get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
-    insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
-get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace)
-print("Content Consumption Report::Completed")
-end_time_sec = int(round(time.time()))
-time_taken = end_time_sec - start_time_sec
-metrics = [
-    {
-        "metric": "timeTakenSecs",
-        "value": time_taken
-    },
-    {
-        "metric": "date",
-        "value": execution_date
-    }
-]
-push_metric_event(metrics, "Content Consumption Metrics")
+def init(data_store_location, org_search, druid_hostname, cassandra_host, keyspace_prefix, execution_date):
+    start_time_sec = int(round(time.time()))
+    print("Content Consumption Report::Start")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_store_location", type=str, help="the path to local data folder")
+    parser.add_argument("--org_search", type=str, help="host address for Org API")
+    parser.add_argument("--druid_hostname", type=str, help="Host address for Druid")
+    parser.add_argument("--cassandra_host", type=str, help="Host address for Cassandra")
+    parser.add_argument("--keyspace_prefix", type=str, help="Environment for keyspace in Cassandra")
+    parser.add_argument("--execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+    args = parser.parse_args()
+    data_store_location = Path(args.data_store_location)
+    org_search = args.org_search
+    druid = args.druid_hostname
+    cassandra = args.cassandra_host
+    keyspace = args.keyspace_prefix + 'content_db'
+    execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
+    result_loc = data_store_location.joinpath('content_plays')
+    result_loc.parent.joinpath('portal_dashboards').mkdir(exist_ok=True)
+    result_loc.parent.joinpath('config').mkdir(exist_ok=True)
+    get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
+    with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
+        config = json.loads(f.read())
+    get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
+    get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
+    define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
+    for i in range(7):
+        analysis_date = execution_date - timedelta(days=i)
+        get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
+        insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
+    get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace)
+    print("Content Consumption Report::Completed")
+    end_time_sec = int(round(time.time()))
+    time_taken = end_time_sec - start_time_sec
+    metrics = [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": execution_date
+        }
+    ]
+    push_metric_event(metrics, "Content Consumption Metrics")

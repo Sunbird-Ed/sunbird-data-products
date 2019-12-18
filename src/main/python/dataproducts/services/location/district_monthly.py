@@ -7,14 +7,12 @@ import os
 import argparse
 import pandas as pd
 import requests
+
 from datetime import date, datetime
 from pathlib import Path
 from string import Template
 
-util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
-sys.path.append(util_path)
-
-from utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
+from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
 
 
 def unique_users(result_loc_, date_, query_, state_):

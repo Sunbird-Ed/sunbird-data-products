@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import pdb
+import argparse
+
+from datetime import date
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='dataproduct')
+    parser.add_argument("-v", "--version", help="MLWB version"
+                        , action='store_true', dest='version', default=False)
+    subparsers = parser.add_subparsers(dest='cmd', help='sub-commands')
+
+    parser_ecg = subparsers.add_parser('ecg_learning',
+                        help='Pulse of nation learning')
+    parser_ecg.add_argument("--data_store_location", type=str,
+                        help="The path to local data folder")
+    parser_ecg.add_argument("--bootstrap", action='store_true',
+                        help="Run for 7 days", default=False)
+
+    parser_dweekly = subparsers.add_parser('district_weekly',
+                        help='District wise weekly report')
+    parser_dweekly.add_argument("--data_store_location", type=str,
+                        help="The path to local data folder")
+    parser_dweekly.add_argument("--druid_hostname", type=str,
+                        help="Host address for Druid")
+    parser_dweekly.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_cc = subparsers.add_parser('content_consumption',
+                        help='Content consumption report')
+    parser_cc.add_argument("--data_store_location", type=str,
+                        help="the path to local data folder")
+    parser_cc.add_argument("--org_search", type=str,
+                        help="host address for Org API")
+    parser_cc.add_argument("--druid_hostname", type=str,
+                        help="Host address for Druid")
+    parser_cc.add_argument("--cassandra_host", type=str,
+                        help="Host address for Cassandra")
+    parser_cc.add_argument("--keyspace_prefix", type=str,
+                        help="Environment for keyspace in Cassandra")
+    parser_cc.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    args = parser.parse_args()
+
+
+    if args.cmd == "ecg_learning":
+        from dataproducts.services.consumption import ecg_learning
+
+        ecg_learning.init(args.data_store_location, args.bootstrap)
+    elif args.cmd == "district_weekly":
+        from dataproducts.services.location import district_weekly
+
+        district_weekly.init(args.data_store_location, args.druid_hostname,
+                            args.execution_date)
+    elif args.cmd == "content_consumption":
+        from dataproducts.services.consumption import content_consumption
+
+        content_consumption.init(args.data_store_location, args.org_search,
+                            args.druid_hostname, args.cassandra_host,
+                            args.keyspace_prefix, args.execution_date)
+
+    if args.version:
+        print("version - 1.0.0")

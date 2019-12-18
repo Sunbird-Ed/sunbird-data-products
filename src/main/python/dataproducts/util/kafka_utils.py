@@ -3,10 +3,10 @@ import json
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
-#producer = KafkaProducer(bootstrap_servers=['localhost:9092'])
 
 def get_producer(broker_host):
     return KafkaProducer(bootstrap_servers=[broker_host])
+
 
 def push_metrics(broker_host, topic, metric):
     jd = json.dumps(metric)

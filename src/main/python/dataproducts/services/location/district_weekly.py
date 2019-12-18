@@ -8,17 +8,15 @@ import pdb
 import argparse
 import pandas as pd
 import requests
+
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from string import Template
-
 from azure.common import AzureMissingResourceHttpError
 
-util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
-sys.path.append(util_path)
+from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
 
-from utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
-
+config = {}
 
 def district_devices(result_loc_, date_, query_, state_):
     """
@@ -29,6 +27,7 @@ def district_devices(result_loc_, date_, query_, state_):
     :param state_: state to be used in query
     :return: None
     """
+    global config
     slug_ = result_loc_.name
     start_date = date_ - timedelta(days=7)
     with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
@@ -68,8 +67,9 @@ def district_plays(result_loc_, date_, query_, state_):
     :param state_: state to be used in query
     :return: None
     """
+    global config
     slug_ = result_loc_.name
-    start_date = date_ - timedelta(days=3)
+    start_date = date_ - timedelta(days=7)
     with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
         query = Template(f.read())
     query = query.substitute(app=config['context']['pdata']['id']['app'],
@@ -106,6 +106,7 @@ def district_scans(result_loc_, date_, query_, state_):
     :param state_: state to be used in query
     :return: None
     """
+    global config
     slug_ = result_loc_.name
     start_date = date_ - timedelta(days=7)
     with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
@@ -206,51 +207,46 @@ def merge_metrics(result_loc_, date_):
         result_loc_.parent.parent.parent.joinpath("portal_dashboards", slug_, "aggregated_district_data.csv"))
 
 
-start_time_sec = int(round(time.time()))
-parser = argparse.ArgumentParser()
-parser.add_argument("--data_store_location", type=str, help="data folder location")
-parser.add_argument("--druid_hostname", type=str, help="Host address for Druid")
-parser.add_argument("--execution_date", type=str, default=date.today().strftime("%d/%m/%Y"),
-                    help="DD/MM/YYYY, optional argument for backfill jobs")
-args = parser.parse_args()
-
-file_path = Path(__file__)
-result_loc = Path(args.data_store_location).joinpath('district_reports')
-result_loc.mkdir(exist_ok=True)
-result_loc.parent.joinpath('config').mkdir(exist_ok=True)
-analysis_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
-get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
-tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
-url = "{}druid/v2/".format(args.druid_hostname)
-headers = {
-    'Content-Type': "application/json"
-}
-result_loc.parent.joinpath('config').mkdir(exist_ok=True)
-get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
-with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
-    config = json.loads(f.read())
-for ind, row in tenant_info.iterrows():
-    state = row['state']
-    print(state)
-    result_loc.joinpath(analysis_date.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
-    result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug']).mkdir(exist_ok=True)
-    path = result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug'])
-    if isinstance(state, str):
-        district_devices(result_loc_=path, date_=analysis_date, query_='district_devices.json', state_=state)
-        district_plays(result_loc_=path, date_=analysis_date, query_='district_plays.json', state_=state)
-        district_scans(result_loc_=path, date_=analysis_date, query_='district_scans.json', state_=state)
-        merge_metrics(result_loc_=path, date_=analysis_date)
-
-end_time_sec = int(round(time.time()))
-time_taken = end_time_sec - start_time_sec
-metrics = [
-    {
-        "metric": "timeTakenSecs",
-        "value": time_taken
-    },
-    {
-        "metric": "date",
-        "value": analysis_date
+def init(data_store_location, druid_hostname, execution_date):
+    global config
+    start_time_sec = int(round(time.time()))
+    file_path = Path(__file__)
+    result_loc = Path(data_store_location).joinpath('district_reports')
+    result_loc.mkdir(exist_ok=True)
+    result_loc.parent.joinpath('config').mkdir(exist_ok=True)
+    analysis_date = datetime.strptime(execution_date, "%d/%m/%Y")
+    get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
+    tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
+    url = "{}druid/v2/".format(druid_hostname)
+    headers = {
+        'Content-Type': "application/json"
     }
-]
-push_metric_event(metrics, "District Weekly Report")
+    result_loc.parent.joinpath('config').mkdir(exist_ok=True)
+    get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
+    with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
+        config = json.loads(f.read())
+    for ind, row in tenant_info.iterrows():
+        state = row['state']
+        print(state)
+        result_loc.joinpath(analysis_date.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
+        result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug']).mkdir(exist_ok=True)
+        path = result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug'])
+        if isinstance(state, str):
+            district_devices(result_loc_=path, date_=analysis_date, query_='district_devices.json', state_=state)
+            district_plays(result_loc_=path, date_=analysis_date, query_='district_plays.json', state_=state)
+            district_scans(result_loc_=path, date_=analysis_date, query_='district_scans.json', state_=state)
+            merge_metrics(result_loc_=path, date_=analysis_date)
+
+    end_time_sec = int(round(time.time()))
+    time_taken = end_time_sec - start_time_sec
+    metrics = [
+        {
+            "metric": "timeTakenSecs",
+            "value": time_taken
+        },
+        {
+            "metric": "date",
+            "value": analysis_date
+        }
+    ]
+    push_metric_event(metrics, "District Weekly Report")
