@@ -49,22 +49,27 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-
     if args.cmd == "ecg_learning":
-        from dataproducts.services.consumption import ecg_learning
+        from dataproducts.services.consumption.ecg_learning import ECGLearning
 
-        ecg_learning.init(args.data_store_location, args.bootstrap)
+        ecg = ECGLearning(args.data_store_location, args.bootstrap)
+        ecg.init()
+
     elif args.cmd == "district_weekly":
-        from dataproducts.services.location import district_weekly
+        from dataproducts.services.location.district_weekly import DistrictWeekly
 
-        district_weekly.init(args.data_store_location, args.druid_hostname,
+        dist_weekly = DistrictWeekly(args.data_store_location, args.druid_hostname,
                             args.execution_date)
-    elif args.cmd == "content_consumption":
-        from dataproducts.services.consumption import content_consumption
+        dist_weekly.init()
 
-        content_consumption.init(args.data_store_location, args.org_search,
+    elif args.cmd == "content_consumption":
+        from dataproducts.services.consumption.content_consumption import ContentConsumption
+
+        cont_consumption = ContentConsumption(args.data_store_location, args.org_search,
                             args.druid_hostname, args.cassandra_host,
                             args.keyspace_prefix, args.execution_date)
+        cont_consumption.init()
+
 
     if args.version:
         print("version - 1.0.0")
