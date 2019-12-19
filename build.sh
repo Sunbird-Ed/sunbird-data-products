@@ -19,4 +19,4 @@ fi
 
 cp target/dist/dataproducts-1.0.0/dist/* bin/
 
-rm -rf target
+# rm -rf target

@@ -15,6 +15,7 @@ from string import Template
 from azure.common import AzureMissingResourceHttpError
 
 from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
+from dataproducts.resources.queries import district_devices, district_plays, district_scans
 
 class DistrictWeekly:
 
@@ -25,19 +26,17 @@ class DistrictWeekly:
         self.config = {}
 
 
-    def district_devices(self, result_loc_, date_, query_, state_):
+    def district_devices(self, result_loc_, date_, state_):
         """
         compute unique devices for a state over a week
         :param result_loc_: pathlib.Path object to store resultant CSV at.
         :param date_: datetime object to use for query and path
-        :param query_: json template for query
         :param state_: state to be used in query
         :return: None
         """
         slug_ = result_loc_.name
         start_date = date_ - timedelta(days=7)
-        with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
-            query = Template(f.read())
+        query = Template(district_devices.init())
         query = query.substitute(app=config['context']['pdata']['id']['app'],
                                  portal=config['context']['pdata']['id']['portal'],
                                  state=state_,
@@ -64,7 +63,7 @@ class DistrictWeekly:
             exit(1)
 
 
-    def district_plays(self, result_loc_, date_, query_, state_):
+    def district_plays(self, result_loc_, date_, state_):
         """
         compute content plays per district over the week for the state
         :param result_loc_: pathlib.Path object to store resultant CSV at.
@@ -75,8 +74,7 @@ class DistrictWeekly:
         """
         slug_ = result_loc_.name
         start_date = date_ - timedelta(days=7)
-        with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
-            query = Template(f.read())
+        query = Template(district_plays.init())
         query = query.substitute(app=config['context']['pdata']['id']['app'],
                                  portal=config['context']['pdata']['id']['portal'],
                                  state=state_,
@@ -102,7 +100,7 @@ class DistrictWeekly:
             exit(1)
 
 
-    def district_scans(self, result_loc_, date_, query_, state_):
+    def district_scans(self, result_loc_, date_, state_):
         """
         compute scans for a district over the week for the state
         :param result_loc_: pathlib.Path object to store resultant CSV at.
@@ -113,8 +111,7 @@ class DistrictWeekly:
         """
         slug_ = result_loc_.name
         start_date = date_ - timedelta(days=7)
-        with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
-            query = Template(f.read())
+        query = Template(district_scans.init())
         query = query.substitute(app=config['context']['pdata']['id']['app'],
                                  portal=config['context']['pdata']['id']['portal'],
                                  state=state_,
@@ -235,9 +232,9 @@ class DistrictWeekly:
             result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug']).mkdir(exist_ok=True)
             path = result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug'])
             if isinstance(state, str):
-                district_devices(result_loc_=path, date_=analysis_date, query_='district_devices.json', state_=state)
-                district_plays(result_loc_=path, date_=analysis_date, query_='district_plays.json', state_=state)
-                district_scans(result_loc_=path, date_=analysis_date, query_='district_scans.json', state_=state)
+                district_devices(result_loc_=path, date_=analysis_date, state_=state)
+                district_plays(result_loc_=path, date_=analysis_date, state_=state)
+                district_scans(result_loc_=path, date_=analysis_date, state_=state)
                 merge_metrics(result_loc_=path, date_=analysis_date)
 
         end_time_sec = int(round(time.time()))

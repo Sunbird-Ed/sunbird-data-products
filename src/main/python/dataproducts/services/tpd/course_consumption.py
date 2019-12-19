@@ -174,7 +174,7 @@ get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
 with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
     config = json.loads(f.read())
 get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=analysis_date)
-get_courses(result_loc_=result_loc, druid_ip_=druid_ip, query_file_='course_list.json', date_=analysis_date)
+get_courses(result_loc_=result_loc, druid_ip_=druid_ip, date_=analysis_date)
 get_course_plays(result_loc_=result_loc, date_=analysis_date)
 get_user_courses(result_loc_=result_loc, date_=analysis_date, elastic_search_=elastic_search)
 get_course_batch(result_loc_=result_loc, date_=analysis_date, elastic_search_=elastic_search)

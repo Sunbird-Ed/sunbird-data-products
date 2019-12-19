@@ -13,10 +13,8 @@ import requests
 from anytree.importer import DictImporter
 from anytree.search import findall
 
-util_path = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'util'))
-sys.path.append(util_path)
-
-from utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts, push_metric_event
+from dataproducts.util.utils import create_json, post_data_to_blob, get_tenant_info, get_scan_counts, push_metric_event
+from dataproducts.resources.common import grade_sort
 
 
 def parse_etb(tb, row_):
@@ -533,9 +531,7 @@ get_tenant_info(result_loc_=data_store_location.joinpath('textbook_reports'),
                 org_search_=org_search, date_=end_date_)
 # TODO: SB-15177 store scan counts in cassandra
 get_scan_counts(result_loc_=data_store_location.joinpath('textbook_reports'), druid_=druid_ip, date_=end_date_)
-backend_grade = pd.read_csv(
-    Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'common', 'grade_sort.csv')
-).set_index('grade')
+backend_grade = pd.read_csv(grade_sort.init()).set_index('grade')
 board_slug = pd.read_csv(data_store_location.joinpath(
     'textbook_reports', end_date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
 board_slug.set_index('id', inplace=True)

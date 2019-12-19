@@ -9,7 +9,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField, StructType, StringType, IntegerType
 
-from dataproducts.util.utils import create_json, write_data_to_blob, get_data_from_blob, push_metric_event
+from dataproducts.util.utils import create_json, write_data_to_blob, \
+                get_data_from_blob, push_metric_event
 
 class ECGLearning:
     def __init__(self, data_store_location, is_bootstrap):
@@ -22,7 +23,7 @@ class ECGLearning:
 
 
     def get_monitoring_data(self, from_time, to_time):
-        url = "{}/prometheus/api/v1/query_range".format(prometheus_host)
+        url = "{}/prometheus/api/v1/query_range".format(self.prometheus_host)
         querystring = {"query": "sum(rate(nginx_request_status_count{cluster=~\"Swarm1|Swarm2\"}[5m]))",
                        "start": str(from_time), "end": str(to_time), "step": "900"}
         headers = {
@@ -90,7 +91,7 @@ class ECGLearning:
         self.csv_file_name = "{}.csv".format(blob_file_name)
         self.json_file_name = "{}.json".format(blob_file_name)
         self.current_time = datetime.now()
-        if is_bootstrap:
+        if self.is_bootstrap:
             # For last 7 days
             from_day = (datetime.today() + timedelta(days=-7))
             from_time = int(datetime.combine(from_day, datetime.min.time()).timestamp())
@@ -111,7 +112,7 @@ class ECGLearning:
             },
             {
                 "metric": "date",
-                "value": datetime.strptime(self.current_time, "%Y-%m-%d")
+                "value": self.current_time
             }
         ]
         push_metric_event(metrics, "ECG Learning")

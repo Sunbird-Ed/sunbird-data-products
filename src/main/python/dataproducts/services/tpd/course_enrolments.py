@@ -70,7 +70,7 @@ elastic_search = args.elastic_search
 resp_size = args.response_size
 execution_date = datetime.strptime(args.execution_date, "%d/%m/%Y")
 get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
-get_courses(result_loc_=result_loc, druid_=druid_ip, query_file_='course_list.json', date_=execution_date)
+get_courses(result_loc_=result_loc, druid_=druid_ip, date_=execution_date)
 get_course_enrollments(result_loc_=result_loc, elastic_search_=elastic_search, date_=execution_date, size_=resp_size)
 
 end_time_sec = int(round(time.time()))

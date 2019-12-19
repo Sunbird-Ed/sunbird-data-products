@@ -12,10 +12,11 @@ from datetime import date, datetime
 from pathlib import Path
 from string import Template
 
-from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
+from dataproducts.util.utils import create_json, get_data_from_blob, \
+                            post_data_to_blob, push_metric_event
+from dataproducts.resources.queries import district_devices_monthly
 
-
-def unique_users(result_loc_, date_, query_, state_):
+def unique_users(result_loc_, date_, state_):
     """
     Query druid for unique users by district over a month for a state
     :param result_loc_: pathlib.Path object to store resultant CSV
@@ -31,8 +32,7 @@ def unique_users(result_loc_, date_, query_, state_):
         start_date = datetime(year, month - 1, 1)
     else:
         start_date = datetime(year - 1, 12, 1)
-    with open(file_path.parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries').joinpath(query_)) as f:
-        query = Template(f.read())
+    query = Template(district_devices_monthly.init())
     query = query.substitute(app=config['context']['pdata']['id']['app'],
                              portal=config['context']['pdata']['id']['portal'],
                              state=state_,
@@ -88,7 +88,7 @@ for ind, row in tenant_info.iterrows():
     result_loc.joinpath(row["slug"]).mkdir(exist_ok=True)
     if isinstance(row['state'], str):
         unique_users(result_loc_=result_loc.joinpath(row["slug"]), date_=analysis_date,
-                     query_='district_devices_monthly.json', state_=row['state'])
+                     state_=row['state'])
 
 end_time_sec = int(round(time.time()))
 time_taken = end_time_sec - start_time_sec

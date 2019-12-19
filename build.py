@@ -3,6 +3,7 @@ from pybuilder.core import use_plugin, init
 use_plugin("python.core")
 use_plugin("python.install_dependencies")
 use_plugin("python.distutils")
+use_plugin("copy_resources")
 
 default_task = "publish"
 name = "dataproducts"

@@ -5,6 +5,7 @@ import json
 import os
 import time
 import hashlib
+import pdb
 import requests
 import pandas as pd
 
@@ -16,6 +17,9 @@ from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
 
 from dataproducts.util.kafka_utils import push_metrics
+from dataproducts.resources.common import common_config
+from dataproducts.resources.queries import content_list, scan_counts, \
+                    course_list, content_plays
 
 
 def parse_tb(tb, returnable, row_):
@@ -150,15 +154,15 @@ def get_tenant_info(result_loc_, org_search_, date_):
     """
     url = "{}v1/org/search".format(org_search_)
     payload = """{
-    "request":{
-        "filters": {
-            "isRootOrg": true
-        },
-        "offset": 0,
-        "limit": 1000,
-        "fields": ["id","channel","slug","orgName"]
-    }
-}"""
+        "request":{
+            "filters": {
+                "isRootOrg": true
+            },
+            "offset": 0,
+            "limit": 1000,
+            "fields": ["id","channel","slug","orgName"]
+        }
+    }"""
     headers = {
         'Accept': "application/json",
         'Content-Type': "application/json",
@@ -202,16 +206,14 @@ def get_content_model(result_loc_, druid_, date_):
             'Content-Type': "application/json"
         }
         url = "{}druid/v2/".format(druid_)
-        with open(Path(__file__).parent.parent.parent.parent.parent.joinpath('resources', 'queries',
-                                                                                    'content_list.json')) as f:
-            query = f.read()
-        qr = json.loads(query)
-        response = requests.request("POST", url, data=query, headers=headers)
+        qr = content_list.init()
+        response = requests.request("POST", url, data=qr, headers=headers)
         result = response.json()
         response_list = []
         while result[0]['result']['events']:
             data = [event['event'] for segment in result for event in segment['result']['events']]
             response_list.append(pd.DataFrame(data))
+            qr = json.loads(qr)
             qr['pagingSpec']['pagingIdentifiers'] = result[0]['result']['pagingIdentifiers']
             response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
             result = response.json()
@@ -236,12 +238,10 @@ def get_scan_counts(result_loc_, druid_, date_):
             'Content-Type': "application/json"
         }
         url = "{}druid/v2/".format(druid_)
-        with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
-                                                                                    'scan_counts.json')) as f:
-            query = f.read()
         start_date = date_ - timedelta(days=7)
-        query = query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
-        query = query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+        query = scan_counts.init()
+        query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
+        query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
         response = requests.post(url, data=query, headers=headers)
         result = response.json()
         scans_df = pd.DataFrame([x['event'] for x in result])
@@ -366,7 +366,7 @@ def post_data_to_blob(result_loc_, backup=False):
         raise Exception('Failed to post to blob!')
 
 
-def get_courses(result_loc_, druid_, query_file_, date_):
+def get_courses(result_loc_, druid_, date_):
     """
     query content model snapshot on druid but filter for courses.
     :param result_loc_: pathlib.Path object to store resultant CSV at
@@ -375,9 +375,7 @@ def get_courses(result_loc_, druid_, query_file_, date_):
     :param date_: datetime object to pass to file path
     :return: Nones
     """
-    with open(Path(__file__).parent.parent.parent.parent.parent.parent.joinpath('resources', 'queries',
-                                                                                query_file_)) as f:
-        query = f.read()
+    query = course_list.init()
     response = requests.request("POST", url='{}druid/v2'.format(druid_), data=query)
     result = response.json()
     courses = pd.DataFrame([eve['event'] for event in result for eve in event['result']['events']])
@@ -399,12 +397,10 @@ def get_content_plays(result_loc_, date_, druid_):
     }
     url = "{}druid/v2/".format(druid_)
     start_date = date_ - timedelta(days=1)
-    with open(Path(__file__).parent.parent.parent.parent.parent.joinpath('resources', 'queries',
-                                                                                'content_plays.json')) as f:
-        druid_query = f.read()
-    druid_query = druid_query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
-    druid_query = druid_query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
-    response = requests.post(url, data=druid_query, headers=headers)
+    query = content_plays.init()
+    query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+    response = requests.post(url, data=query, headers=headers)
     result = response.json()
     data = pd.DataFrame([x['event'] for x in result])
     data['Date'] = date_.strftime('%Y%m%d')
@@ -433,11 +429,8 @@ def generate_metrics_summary(result_loc_, metrics):
 def push_metric_event(metrics_list, subsystem):
     env = os.environ['ENV']
     kafka_broker = os.environ['KAFKA_BROKER_HOST']
-    with open(Path(__file__).parent.parent.parent.parent.parent.joinpath('resources', 'common',
-                                                                                'config.json')) as f:
-        config = f.read()
-    conf = json.loads(config)
-    kafka_topic = conf['kafka_metrics_topic']
+    config = common_config.init()
+    kafka_topic = config['kafka_metrics_topic']
     eid = "METRIC"
     ets = int(round(time.time()*1000))
     midStr = eid + str(ets) + subsystem
