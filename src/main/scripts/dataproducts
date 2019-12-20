@@ -31,6 +31,16 @@ if __name__ == '__main__':
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
 
+    parser_dmonthly = subparsers.add_parser('district_monthly',
+                        help='District wise monthly report')
+    parser_dmonthly.add_argument("--data_store_location", type=str,
+                        help="The path to local data folder")
+    parser_dmonthly.add_argument("--druid_hostname", type=str,
+                        help="Host address for Druid")
+    parser_dmonthly.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
     parser_cc = subparsers.add_parser('content_consumption',
                         help='Content consumption report')
     parser_cc.add_argument("--data_store_location", type=str,
@@ -62,6 +72,13 @@ if __name__ == '__main__':
                             args.execution_date)
         dist_weekly.init()
 
+    elif args.cmd == "parser_dmonthly":
+        from dataproducts.services.location.district_monthly import DistrictMonthly
+
+        dist_weekly = DistrictMonthly(args.data_store_location, args.druid_hostname,
+                            args.execution_date)
+        dist_weekly.init()
+
     elif args.cmd == "content_consumption":
         from dataproducts.services.consumption.content_consumption import ContentConsumption
 
@@ -69,6 +86,7 @@ if __name__ == '__main__':
                             args.druid_hostname, args.cassandra_host,
                             args.keyspace_prefix, args.execution_date)
         cont_consumption.init()
+
 
 
     if args.version:

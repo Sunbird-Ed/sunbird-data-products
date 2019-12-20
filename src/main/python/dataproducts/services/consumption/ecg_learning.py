@@ -112,7 +112,7 @@ class ECGLearning:
             },
             {
                 "metric": "date",
-                "value": self.current_time
+                "value": self.current_time.strftime("%d/%m/%Y %H:%m")
             }
         ]
         push_metric_event(metrics, "ECG Learning")

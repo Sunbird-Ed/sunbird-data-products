@@ -5,7 +5,6 @@ import json
 import sys, time
 import os
 import pdb
-import argparse
 import pandas as pd
 import requests
 
@@ -18,7 +17,6 @@ from dataproducts.util.utils import create_json, get_data_from_blob, post_data_t
 from dataproducts.resources.queries import district_devices, district_plays, district_scans
 
 class DistrictWeekly:
-
     def __init__(self, data_store_location, druid_hostname, execution_date):
         self.data_store_location = data_store_location
         self.druid_hostname = druid_hostname
@@ -248,7 +246,7 @@ class DistrictWeekly:
             },
             {
                 "metric": "date",
-                "value": analysis_date
+                "value": self.execution_date
             }
         ]
         push_metric_event(metrics, "District Weekly Report")

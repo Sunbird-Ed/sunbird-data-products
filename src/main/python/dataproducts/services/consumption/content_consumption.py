@@ -5,7 +5,6 @@ import json
 import sys, time
 import pdb
 import os
-import argparse
 import pandas as pd
 
 from datetime import datetime, timedelta, date
@@ -247,7 +246,7 @@ class ContentConsumption:
             },
             {
                 "metric": "date",
-                "value": execution_date
+                "value": self.execution_date
             }
         ]
         push_metric_event(metrics, "Content Consumption Metrics")
