@@ -26,6 +26,7 @@ class ContentConsumption:
         self.cassandra_host = cassandra_host
         self.keyspace_prefix = keyspace_prefix
         self.execution_date = execution_date
+        self.config = {}
 
     def mime_type(self, series):
         """
@@ -134,8 +135,8 @@ class ContentConsumption:
                     'Timespent on App': 0,
                     'Timespent on Portal': 0
                 }
-            pdata_id = 'App' if row.pdata_id == config['context']['pdata']['id']['app'] else 'Portal' if \
-                row.pdata_id == config['context']['pdata']['id']['portal'] else 'error'
+            pdata_id = 'App' if row.pdata_id == self.config['context']['pdata']['id']['app'] else 'Portal' if \
+                row.pdata_id == self.config['context']['pdata']['id']['portal'] else 'error'
             df_dict[row.content_id]['Number of Plays on ' + pdata_id] += row.metric['plays']
             df_dict[row.content_id]['Timespent on ' + pdata_id] = row.metric['timespent']
         temp = []
@@ -157,7 +158,7 @@ class ContentConsumption:
              'lastPublishedOn', 'me_averageRating']]
         content_model["creator"] = content_model["creator"].str.replace("null", "")
         content_model['channel'] = content_model['channel'].astype(str)
-        content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
+        content_model['mimeType'] = content_model['mimeType'].apply(self.mime_type)
         content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                                  'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
                                  'Average Rating(out of 5)']
@@ -227,15 +228,15 @@ class ContentConsumption:
         result_loc.parent.joinpath('config').mkdir(exist_ok=True)
         get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
         with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
-            config = json.loads(f.read())
+            self.config = json.loads(f.read())
         get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
         get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
-        define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
+        self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         for i in range(7):
             analysis_date = execution_date - timedelta(days=i)
             get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
-            insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
-        get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace)
+            self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
+        self.get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace)
         print("Content Consumption Report::Completed")
         end_time_sec = int(round(time.time()))
         time_taken = end_time_sec - start_time_sec

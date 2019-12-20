@@ -210,10 +210,10 @@ def get_content_model(result_loc_, druid_, date_):
         response = requests.request("POST", url, data=qr, headers=headers)
         result = response.json()
         response_list = []
+        qr = json.loads(qr)
         while result[0]['result']['events']:
             data = [event['event'] for segment in result for event in segment['result']['events']]
             response_list.append(pd.DataFrame(data))
-            qr = json.loads(qr)
             qr['pagingSpec']['pagingIdentifiers'] = result[0]['result']['pagingIdentifiers']
             response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
             result = response.json()
@@ -398,8 +398,8 @@ def get_content_plays(result_loc_, date_, druid_):
     url = "{}druid/v2/".format(druid_)
     start_date = date_ - timedelta(days=1)
     query = content_plays.init()
-    query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
-    query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query = query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query = query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
     response = requests.post(url, data=query, headers=headers)
     result = response.json()
     data = pd.DataFrame([x['event'] for x in result])
