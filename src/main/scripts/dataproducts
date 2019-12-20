@@ -9,7 +9,7 @@ from datetime import date
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='dataproduct')
+    parser = argparse.ArgumentParser(prog='dataproducts')
     parser.add_argument("-v", "--version", help="MLWB version"
                         , action='store_true', dest='version', default=False)
     subparsers = parser.add_subparsers(dest='cmd', help='sub-commands')

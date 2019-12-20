@@ -24,6 +24,8 @@ class DistrictWeekly:
         self.druid_hostname = druid_hostname
         self.execution_date = execution_date
         self.config = {}
+        self.druid_url = ""
+        self.headers = {}
 
 
     def district_devices(self, result_loc_, date_, state_):
@@ -37,12 +39,12 @@ class DistrictWeekly:
         slug_ = result_loc_.name
         start_date = date_ - timedelta(days=7)
         query = Template(district_devices.init())
-        query = query.substitute(app=config['context']['pdata']['id']['app'],
-                                 portal=config['context']['pdata']['id']['portal'],
+        query = query.substitute(app=self.config['context']['pdata']['id']['app'],
+                                 portal=self.config['context']['pdata']['id']['portal'],
                                  state=state_,
                                  start_date=datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'),
                                  end_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
-        response = requests.request("POST", url, data=query, headers=headers)
+        response = requests.request("POST", self.druid_url, data=query, headers=self.headers)
         if response.status_code == 200:
             if len(response.json()) == 0:
                 return
@@ -75,12 +77,12 @@ class DistrictWeekly:
         slug_ = result_loc_.name
         start_date = date_ - timedelta(days=7)
         query = Template(district_plays.init())
-        query = query.substitute(app=config['context']['pdata']['id']['app'],
-                                 portal=config['context']['pdata']['id']['portal'],
+        query = query.substitute(app=self.config['context']['pdata']['id']['app'],
+                                 portal=self.config['context']['pdata']['id']['portal'],
                                  state=state_,
                                  start_date=datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'),
                                  end_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
-        response = requests.request("POST", url, data=query, headers=headers)
+        response = requests.request("POST", self.druid_url, data=query, headers=self.headers)
         if response.status_code == 200:
             if len(response.json()) == 0:
                 return
@@ -112,12 +114,12 @@ class DistrictWeekly:
         slug_ = result_loc_.name
         start_date = date_ - timedelta(days=7)
         query = Template(district_scans.init())
-        query = query.substitute(app=config['context']['pdata']['id']['app'],
-                                 portal=config['context']['pdata']['id']['portal'],
+        query = query.substitute(app=self.config['context']['pdata']['id']['app'],
+                                 portal=self.config['context']['pdata']['id']['portal'],
                                  state=state_,
                                  start_date=datetime.strftime(start_date, '%Y-%m-%dT00:00:00+00:00'),
                                  end_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'))
-        response = requests.request("POST", url, data=query, headers=headers)
+        response = requests.request("POST", self.druid_url, data=query, headers=self.headers)
         if response.status_code == 200:
             if len(response.json()) == 0:
                 return
@@ -217,14 +219,14 @@ class DistrictWeekly:
         analysis_date = datetime.strptime(self.execution_date, "%d/%m/%Y")
         get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
         tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
-        url = "{}druid/v2/".format(self.druid_hostname)
-        headers = {
+        self.druid_url = "{}druid/v2/".format(self.druid_hostname)
+        self.headers = {
             'Content-Type': "application/json"
         }
         result_loc.parent.joinpath('config').mkdir(exist_ok=True)
         get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
         with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
-            config = json.loads(f.read())
+            self.config = json.loads(f.read())
         for ind, row in tenant_info.iterrows():
             state = row['state']
             print(state)
@@ -232,10 +234,10 @@ class DistrictWeekly:
             result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug']).mkdir(exist_ok=True)
             path = result_loc.joinpath(analysis_date.strftime('%Y-%m-%d'), row['slug'])
             if isinstance(state, str):
-                district_devices(result_loc_=path, date_=analysis_date, state_=state)
-                district_plays(result_loc_=path, date_=analysis_date, state_=state)
-                district_scans(result_loc_=path, date_=analysis_date, state_=state)
-                merge_metrics(result_loc_=path, date_=analysis_date)
+                self.district_devices(result_loc_=path, date_=analysis_date, state_=state)
+                self.district_plays(result_loc_=path, date_=analysis_date, state_=state)
+                self.district_scans(result_loc_=path, date_=analysis_date, state_=state)
+                self.merge_metrics(result_loc_=path, date_=analysis_date)
 
         end_time_sec = int(round(time.time()))
         time_taken = end_time_sec - start_time_sec
