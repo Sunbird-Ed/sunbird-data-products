@@ -57,6 +57,22 @@ if __name__ == '__main__':
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
 
+    parser_dm = subparsers.add_parser('daily_metrics',
+                        help='Daily Metrics')
+    parser_dm.add_argument("--data_store_location", type=str,
+                        help="the path to local data folder")
+    parser_dm.add_argument("--org_search", type=str,
+                        help="host address for Org API")
+    parser_dm.add_argument("--druid_hostname", type=str,
+                        help="Host address for Druid")
+    parser_dm.add_argument("--content_search", type=str,
+                        help="Host address for Content Search API")
+    parser_dm.add_argument("--content_hierarchy", type=str,
+                        help="Host address for Content Hierarchy API")
+    parser_dm.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
     args = parser.parse_args()
 
     if args.cmd == "ecg_learning":
@@ -87,7 +103,13 @@ if __name__ == '__main__':
                             args.keyspace_prefix, args.execution_date)
         cont_consumption.init()
 
+    elif args.cmd == "daily_metrics":
+        from dataproducts.services.consumption.consumption_metrics import DailyMetrics
 
+        daily_metrics = DailyMetrics(args.data_store_location, args.org_search,
+                            args.druid_hostname, args.content_search,
+                            args.content_hierarchy, args.execution_date)
+        daily_metrics.init()
 
     if args.version:
         print("version - 1.0.0")
