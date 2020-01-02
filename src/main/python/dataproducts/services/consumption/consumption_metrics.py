@@ -389,8 +389,8 @@ class DailyMetrics:
                 blob_data = pd.DataFrame()
             blob_data = blob_data.append(pd.DataFrame(overall).transpose(), sort=False).fillna('')
             blob_data.index = pd.to_datetime(blob_data.Date, format='%d-%m-%Y')
-            blob_data.sort_index(inplace=True)
             blob_data.drop_duplicates('Date', inplace=True, keep='last')
+            blob_data.sort_index(inplace=True)
             # can remove after first run
             blob_data = blob_data[['Date', 'Total QR scans', 'Successful QR Scans', 'Failed QR Scans',
                                    'Unmapped QR Scans', 'Percentage (%) of Failed QR Scans',
@@ -444,8 +444,8 @@ class DailyMetrics:
                         blob_data = pd.DataFrame()
                     blob_data = blob_data.append(pd.DataFrame(value).transpose(), sort=False).fillna('')
                     blob_data.index = pd.to_datetime(blob_data.Date, format='%d-%m-%Y')
-                    blob_data.sort_index(inplace=True)
                     blob_data.drop_duplicates('Date', inplace=True, keep='last')
+                    blob_data.sort_index(inplace=True)
                     # can remove after first run
                     blob_data = blob_data[['Date', 'Total QR scans', 'Successful QR Scans', 'Failed QR Scans',
                                            'Percentage (%) of Failed QR Scans', 'Total Content Downloads',
