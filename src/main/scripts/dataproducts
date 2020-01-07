@@ -86,6 +86,8 @@ if __name__ == '__main__':
                         help="the path to local data folder")
     parser_gps.add_argument("--druid_hostname", type=str,
                         help="Host address for Druid")
+    parser_gps.add_argument("--org_search", type=str,
+                        help="host address for Org API")
     parser_gps.add_argument("--content_search", type=str,
                         help="Host address for Content Search API")
     parser_gps.add_argument("--content_hierarchy", type=str,
@@ -143,7 +145,8 @@ if __name__ == '__main__':
 
         gps_learning = GPSLearning(args.data_store_location,
                             args.druid_hostname, args.content_search,
-                            args.content_hierarchy, args.execution_date)
+                            args.content_hierarchy, args.execution_date,
+                            args.org_search)
         gps_learning.init()
 
 

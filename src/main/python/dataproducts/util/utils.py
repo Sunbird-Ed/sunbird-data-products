@@ -240,18 +240,18 @@ def get_scan_counts(result_loc_, druid_, date_):
         url = "{}druid/v2/".format(druid_)
         start_date = date_ - timedelta(days=7)
         query = scan_counts.init()
-        query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
-        query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+        query = query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
+        query = query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
         response = requests.post(url, data=query, headers=headers)
         result = response.json()
         scans_df = pd.DataFrame([x['event'] for x in result])
         scans_df['Date'] = date_.strftime('%Y-%m-%d')
         time_ = datetime.strftime(datetime.now(), '%Y-%m-%dT%H-%M-%S')
         scans_df.to_csv(
-            result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'weekly_dialcode_counts_{}.csv'.format(time_)),
+            result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'weekly_dialcode_counts.csv'),
             encoding='utf-8-sig', index=False)
         post_data_to_blob(
-            result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'weekly_dialcode_counts_{}.csv'.format(time_)),
+            result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'weekly_dialcode_counts.csv'),
             backup=True)
         get_data_from_blob(result_loc_.joinpath('dialcode_counts.csv'))
         scans_19 = pd.read_csv(result_loc_.joinpath('dialcode_counts.csv'), encoding='utf-8-sig')
@@ -261,8 +261,8 @@ def get_scan_counts(result_loc_, druid_, date_):
         scans_19.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'dialcode_counts.csv'), encoding='utf-8-sig',
                         index=False)
         post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'dialcode_counts.csv'), backup=True)
-    except Exception:
-        raise Exception('Getting Scan Counts Failed!')
+    except Exception as e:
+        raise Exception('Getting Scan Counts Failed! :: ' + str(e))
 
 
 def create_json(read_loc_, last_update=False):
@@ -304,7 +304,7 @@ def create_json(read_loc_, last_update=False):
         raise Exception('Failed to create JSON!')
 
 
-def get_data_from_blob(result_loc_):
+def get_data_from_blob(result_loc_, backup=False):
     """
     read a blob storage file
     :param result_loc_: pathlib.Path object to store the file at. the last two names in path structure is used to locate
@@ -316,12 +316,25 @@ def get_data_from_blob(result_loc_):
         account_name = os.environ['AZURE_STORAGE_ACCOUNT']
         account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
         block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
-        container_name = 'reports'
-        block_blob_service.get_blob_to_path(
-            container_name=container_name,
-            blob_name=result_loc_.parent.name + '/' + result_loc_.name,
-            file_path=str(result_loc_)
-        )
+
+        if backup:
+            container_name = 'portal-reports-backup'
+            file_name = result_loc_.name
+            date_name = result_loc_.parent.name
+            report_name = result_loc_.parent.parent.name
+
+            block_blob_service.get_blob_to_path(
+                container_name=container_name,
+                blob_name=report_name + '/' + date_name + '/' + file_name,
+                file_path=str(result_loc_)
+            )
+        else:
+            container_name = 'reports'
+            block_blob_service.get_blob_to_path(
+                container_name=container_name,
+                blob_name=result_loc_.parent.name + '/' + result_loc_.name,
+                file_path=str(result_loc_)
+            )
     except AzureMissingResourceHttpError:
         raise AzureMissingResourceHttpError("Missing resource!", 404)
     except Exception:
