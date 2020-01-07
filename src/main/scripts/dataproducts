@@ -21,6 +21,13 @@ if __name__ == '__main__':
     parser_ecg.add_argument("--bootstrap", action='store_true',
                         help="Run for 7 days", default=False)
 
+    parser_lpm = subparsers.add_parser('landing_page',
+                        help='Landing Page Metrics')
+    parser_lpm.add_argument("--data_store_location", type=str,
+                        help="The path to local data folder")
+    parser_lpm.add_argument("--org_search", type=str,
+                        help="host address for Org API")
+
     parser_dweekly = subparsers.add_parser('district_weekly',
                         help='District wise weekly report')
     parser_dweekly.add_argument("--data_store_location", type=str,
@@ -73,6 +80,20 @@ if __name__ == '__main__':
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
 
+    parser_gps = subparsers.add_parser('gps_learning',
+                        help='Daily Metrics')
+    parser_gps.add_argument("--data_store_location", type=str,
+                        help="the path to local data folder")
+    parser_gps.add_argument("--druid_hostname", type=str,
+                        help="Host address for Druid")
+    parser_gps.add_argument("--content_search", type=str,
+                        help="Host address for Content Search API")
+    parser_gps.add_argument("--content_hierarchy", type=str,
+                        help="Host address for Content Hierarchy API")
+    parser_gps.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
     args = parser.parse_args()
 
     if args.cmd == "ecg_learning":
@@ -80,6 +101,12 @@ if __name__ == '__main__':
 
         ecg = ECGLearning(args.data_store_location, args.bootstrap)
         ecg.init()
+
+    elif args.cmd == "landing_page":
+        from dataproducts.services.consumption.landing_page import LandingPageMetrics
+
+        lpm = LandingPageMetrics(args.data_store_location, args.org_search)
+        lpm.init()
 
     elif args.cmd == "district_weekly":
         from dataproducts.services.location.district_weekly import DistrictWeekly
@@ -91,9 +118,9 @@ if __name__ == '__main__':
     elif args.cmd == "district_monthly":
         from dataproducts.services.location.district_monthly import DistrictMonthly
 
-        dist_weekly = DistrictMonthly(args.data_store_location, args.druid_hostname,
+        dist_monthly = DistrictMonthly(args.data_store_location, args.druid_hostname,
                             args.execution_date)
-        dist_weekly.init()
+        dist_monthly.init()
 
     elif args.cmd == "content_consumption":
         from dataproducts.services.consumption.content_consumption import ContentConsumption
@@ -110,6 +137,15 @@ if __name__ == '__main__':
                             args.druid_hostname, args.content_search,
                             args.content_hierarchy, args.execution_date)
         daily_metrics.init()
+
+    elif args.cmd == "gps_learning":
+        from dataproducts.services.consumption.gps_learning import GPSLearning
+
+        gps_learning = GPSLearning(args.data_store_location,
+                            args.druid_hostname, args.content_search,
+                            args.content_hierarchy, args.execution_date)
+        gps_learning.init()
+
 
     if args.version:
         print("version - 1.0.0")
