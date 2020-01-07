@@ -65,42 +65,6 @@ class DailyMetrics:
         :param date_: datetime object to pass in query and path
         :return: None
         """
-        # spark = SparkSession.builder.appName("content_downloads").master("local[*]").getOrCreate()
-        # account_name = os.environ['AZURE_STORAGE_ACCOUNT']
-        # account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
-        # container = 'telemetry-data-store'
-        # spark.conf.set('fs.azure.account.key.{}.blob.core.windows.net'.format(account_name), account_key)
-        # path = 'wasbs://{}@{}.blob.core.windows.net/telemetry-denormalized/raw/{}-*'.format(container, account_name,
-        #                                                                                     date_.strftime('%Y-%m-%d'))
-        # data = spark.read.json(path).filter(
-        #     func.col("context.pdata.id").isin(config['context']['pdata']['id']['app']) &
-        #     func.col("edata.subtype").isin("ContentDownload-Success") &
-        #     func.col("eid").isin("INTERACT")
-        # ).select(
-        #     func.col("object.id").alias("object_id"),
-        #     "context.did"
-        # # )
-        # content = spark.read.csv(
-        #     str(result_loc_.parent.joinpath('tb_metadata', date_.strftime('%Y-%m-%d'), 'textbook_snapshot.csv')),
-        #     header=True
-        # ).filter(
-        #     func.col('contentType').isin('Resource')
-        # ).select(
-        #     func.col('identifier'),
-        #     func.col('channel')
-        # ).distinct()
-        # download_counts = data.join(
-        #     content,
-        #     data.object_id == content.identifier,
-        #     how='left'
-        # ).groupBy(
-        #     func.col('channel')
-        # ).count()
-        # result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
-        # download_counts.toPandas().to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'downloads.csv'), index=False)
-        # post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'downloads.csv'), backup=True)
-        # spark.stop()
-
         end_date = date_ + timedelta(days=1)
         query = Template(content_downloads.init())
         query = query.substitute(app=self.config['context']['pdata']['id']['app'],
@@ -136,73 +100,12 @@ class DailyMetrics:
         :param date_: datetime object to use in query and path
         :return: None
         """
-        # spark = SparkSession.builder.appName("content_plays").master("local[*]").getOrCreate()
-        # account_name = os.environ['AZURE_STORAGE_ACCOUNT']
-        # account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
-        # container = 'telemetry-data-store'
-        # spark.conf.set('fs.azure.account.key.{}.blob.core.windows.net'.format(account_name), account_key)
-        # path = 'wasbs://{}@{}.blob.core.windows.net/telemetry-denormalized/summary/{}-*'.format(container, account_name,
-        #                                                                                         date_.strftime('%Y-%m-%d'))
-        # data = spark.read.json(path).filter(
-        #     func.col("dimensions.pdata.id").isin(config['context']['pdata']['id']['app'],
-        #                                          config['context']['pdata']['id']['portal']) &
-        #     func.col("dimensions.type").isin("content", "app")
-        # ).select(
-        #     func.col("dimensions.sid"),
-        #     func.col("dimensions.pdata.id").alias("pdata_id"),
-        #     func.col("dimensions.type"),
-        #     func.col("dimensions.mode"),
-        #     func.col("dimensions.did"),
-        #     func.col("object.id").alias("object_id"),
-        #     func.col("edata.eks.time_spent"),
-        #     func.col("object.rollup.l1")
-        # )
-        # app = data.filter(
-        #     func.col('type').isin('app') &
-        #     func.col('pdata_id').isin(config['context']['pdata']['id']['app'])
-        # )
-        # app_df = app.select(
-        #     func.count('sid').alias('Total App Sessions'),
-        #     func.countDistinct('did').alias('Total Devices on App'),
-        #     (func.sum('time_spent') / 3600).alias('Total Time on App (in hours)')
-        # ).toPandas()
-        # result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
-        # app_df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'app_sessions.csv'), index=False)
-        # post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'app_sessions.csv'), backup=True)
-        # play = data.filter(func.col('mode').isin('play'))
-        # content = spark.read.csv(
-        #     str(result_loc_.parent.joinpath('tb_metadata', date_.strftime('%Y-%m-%d'), 'textbook_snapshot.csv')),
-        #     header=True
-        # ).select(
-        #     func.col('identifier'),
-        #     func.col('channel')
-        # ).distinct()
-        # play_df = play.join(
-        #     content,
-        #     play.l1 == content.identifier,
-        #     how='left'
-        # ).groupBy(
-        #     func.col('channel'),
-        #     func.col('pdata_id')
-        # ).agg(
-        #     func.count('sid').alias('Total Content Plays'),
-        #     func.countDistinct('did').alias('Total Devices that played content'),
-        #     (func.sum('time_spent') / 3600).alias('Content Play Time (in hours)')
-        # ).toPandas()
-        # x_play = play_df.pivot(index='channel', columns='pdata_id')
-        # x_play.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'plays.csv'))
-        # post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'plays.csv'), backup=True)
-        # spark.stop()
-
-
         # Overall app session metrics
         end_date = date_ + timedelta(days=1)
         query = Template(app_sessions_devices.init())
         query = query.substitute(app=self.config['context']['pdata']['id']['app'],
                                  start_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'),
-                                 end_date=datetime.strftime(end_date, '%Y-%m-%dT00:00:00+00:00'),
-                                 epoch_from=int(date_.timestamp() * 1000),
-                                 epoch_to=int(end_date.timestamp() * 1000))
+                                 end_date=datetime.strftime(end_date, '%Y-%m-%dT00:00:00+00:00'))
         headers = {
             'Content-Type': "application/json"
         }
@@ -222,9 +125,7 @@ class DailyMetrics:
         query = query.substitute(app=self.config['context']['pdata']['id']['app'],
                                  portal=self.config['context']['pdata']['id']['portal'],
                                  start_date=datetime.strftime(date_, '%Y-%m-%dT00:00:00+00:00'),
-                                 end_date=datetime.strftime(end_date, '%Y-%m-%dT00:00:00+00:00'),
-                                 epoch_from=int(date_.timestamp() * 1000),
-                                 epoch_to=int(end_date.timestamp() * 1000))
+                                 end_date=datetime.strftime(end_date, '%Y-%m-%dT00:00:00+00:00'))
         headers = {
             'Content-Type': "application/json"
         }
@@ -479,8 +380,8 @@ class DailyMetrics:
         get_data_from_blob(self.data_store_location.joinpath('config', 'diksha_config.json'))
         with open(self.data_store_location.joinpath('config', 'diksha_config.json'), 'r') as f:
             self.config = json.loads(f.read())
-        # get_textbook_snapshot(result_loc_=self.data_store_location.joinpath('tb_metadata'), content_search_=self.content_search,
-        #                       content_hierarchy_=self.content_hierarchy, date_=analysis_date)
+        get_textbook_snapshot(result_loc_=self.data_store_location.joinpath('tb_metadata'), content_search_=self.content_search,
+                              content_hierarchy_=self.content_hierarchy, date_=analysis_date)
         print('[Success] Textbook Snapshot')
         get_tenant_info(result_loc_=self.data_store_location.joinpath('textbook_reports'), org_search_=self.org_search,
                         date_=analysis_date)

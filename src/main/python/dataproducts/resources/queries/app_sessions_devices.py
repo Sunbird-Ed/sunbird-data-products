@@ -32,7 +32,6 @@ def init():
         "granularity": "all",
         "postAggregations": [],
         "intervals": [
-            "2019-12-08T00:00:00+00:00/2019-12-09T00:00:00+00:00",
             "$start_date/$end_date"
         ],
         "filter": {
@@ -47,24 +46,6 @@ def init():
                     "type": "selector",
                     "dimension": "dimensions_pdata_id",
                     "value": "$app"
-                },
-                {
-                    "type": "bound",
-                    "dimension": "context_date_range_to",
-                    "lower": null,
-                    "lowerStrict": false,
-                    "upper": $epoch_to,
-                    "upperStrict": true,
-                    "alphaNumeric": true
-                },
-                {
-                    "type": "bound",
-                    "dimension": "context_date_range_to",
-                    "lower": $epoch_from,
-                    "lowerStrict": true,
-                    "upper": null,
-                    "upperStrict": false,
-                    "alphaNumeric": true
                 }
             ]
         },
