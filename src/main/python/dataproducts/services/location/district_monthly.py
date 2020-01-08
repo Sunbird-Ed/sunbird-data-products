@@ -102,7 +102,7 @@ class DistrictMonthly:
             },
             {
                 "metric": "date",
-                "value": self.execution_date
+                "value": analysis_date.strftime("%Y-%m-%d")
             }
         ]
         push_metric_event(metrics, "District Monthly Report")

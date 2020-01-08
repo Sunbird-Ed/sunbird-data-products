@@ -216,7 +216,7 @@ metrics = [
     },
     {
         "metric": "date",
-        "value": datetime.strptime(args.execution_date, "%Y-%m-%d")
+        "value": args.execution_date
     }
 ]
 push_metric_event(metrics, "Content Creation")

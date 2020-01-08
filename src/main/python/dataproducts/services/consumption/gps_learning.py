@@ -260,6 +260,8 @@ class GPSLearning:
 
 
     def init(self):
+        start_time_sec = int(round(time.time()))
+        print("GPS::Start")
         execution_date_ = datetime.strptime(self.execution_date, "%d/%m/%Y")
         self.data_store_location.joinpath('textbook_reports', execution_date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
         get_scan_counts(result_loc_=self.data_store_location.joinpath('textbook_reports'),
@@ -270,3 +272,17 @@ class GPSLearning:
 
         self.get_tbs()
         self.generate_report()
+        print("GPS::End")
+        end_time_sec = int(round(time.time()))
+        time_taken = end_time_sec - start_time_sec
+        metrics = [
+            {
+                "metric": "timeTakenSecs",
+                "value": time_taken
+            },
+            {
+                "metric": "date",
+                "value": execution_date_.strftime("%Y-%m-%d")
+            }
+        ]
+        push_metric_event(metrics, "ECG Learning")

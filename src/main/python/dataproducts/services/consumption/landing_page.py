@@ -3,7 +3,6 @@ Compute aggregated metrics over academic year
 """
 import json
 import os, sys, time
-import argparse
 import pandas as pd
 import pdb
 

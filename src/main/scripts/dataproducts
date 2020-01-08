@@ -96,6 +96,27 @@ if __name__ == '__main__':
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
 
+    parser_etb = subparsers.add_parser('etb_metrics',
+                        help='ETB Creation Metrics & Dialcode Exception Report')
+    parser_etb.add_argument("--data_store_location", type=str,
+                        help="the path to local data folder")
+    parser_etb.add_argument("--druid_hostname", type=str,
+                        help="Host address for Druid")
+    parser_etb.add_argument("--org_search", type=str,
+                        help="host address for Org API")
+    parser_etb.add_argument("--content_search", type=str,
+                        help="Host address for Content Search API")
+    parser_etb.add_argument("--content_hierarchy", type=str,
+                        help="Host address for Content Hierarchy API")
+    parser_etb.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_ud = subparsers.add_parser('user_detail',
+                        help='Pulse of nation learning')
+    parser_ud.add_argument("--data_store_location", type=str,
+                        help="The path to local data folder")
+
     args = parser.parse_args()
 
     if args.cmd == "ecg_learning":
@@ -148,6 +169,21 @@ if __name__ == '__main__':
                             args.content_hierarchy, args.execution_date,
                             args.org_search)
         gps_learning.init()
+
+    elif args.cmd == "etb_metrics":
+        from dataproducts.services.etb.etb_metrics import ETBMetrics
+
+        etb_metrics = ETBMetrics(args.data_store_location,
+                            args.druid_hostname, args.content_search,
+                            args.content_hierarchy, args.execution_date,
+                            args.org_search)
+        etb_metrics.init()
+
+    elif args.cmd == "user_detail":
+        from dataproducts.services.location.user_detail_report import UserDetailReport
+
+        user_detail = UserDetailReport(args.data_store_location)
+        user_detail.init()
 
 
     if args.version:

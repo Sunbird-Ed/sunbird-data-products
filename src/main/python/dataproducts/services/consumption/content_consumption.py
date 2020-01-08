@@ -246,7 +246,7 @@ class ContentConsumption:
             },
             {
                 "metric": "date",
-                "value": self.execution_date
+                "value": execution_date.strftime("%Y-%m-%d")
             }
         ]
         push_metric_event(metrics, "Content Consumption Metrics")

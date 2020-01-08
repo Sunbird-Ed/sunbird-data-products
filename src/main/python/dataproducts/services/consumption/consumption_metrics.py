@@ -6,7 +6,6 @@ import os
 import sys
 import pdb
 import requests
-import argparse
 import findspark
 import pandas as pd
 
@@ -407,7 +406,7 @@ class DailyMetrics:
             },
             {
                 "metric": "date",
-                "value": self.execution_date
+                "value": execution_date.strftime("%Y-%m-%d")
             }
         ]
         push_metric_event(metrics, "Consumption Metrics")
