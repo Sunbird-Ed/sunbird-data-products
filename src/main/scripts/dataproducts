@@ -112,6 +112,18 @@ if __name__ == '__main__':
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
 
+    parser_cont_creation = subparsers.add_parser('content_creation',
+                        help='Content Creation Report')
+    parser_cont_creation.add_argument("--data_store_location", type=str,
+                        help="the path to local data folder")
+    parser_cont_creation.add_argument("--org_search", type=str,
+                        help="host address for Org API")
+    parser_cont_creation.add_argument("--content_search", type=str,
+                        help="Host address for Content Search API")
+    parser_cont_creation.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
     parser_ud = subparsers.add_parser('user_detail',
                         help='Pulse of nation learning')
     parser_ud.add_argument("--data_store_location", type=str,
@@ -178,6 +190,14 @@ if __name__ == '__main__':
                             args.content_hierarchy, args.execution_date,
                             args.org_search)
         etb_metrics.init()
+
+    elif args.cmd == "content_creation":
+        from dataproducts.services.etb.content_creation import ContentCreation
+
+        content_creation = ContentCreation(args.data_store_location,
+                            args.content_search, args.execution_date,
+                            args.org_search)
+        content_creation.init()
 
     elif args.cmd == "user_detail":
         from dataproducts.services.location.user_detail_report import UserDetailReport
