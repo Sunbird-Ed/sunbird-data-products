@@ -11,7 +11,6 @@ from pathlib import Path
 from string import Template
 from time import sleep
 
-
 from dataproducts.util.utils import get_tenant_info, create_json, post_data_to_blob, push_metric_event
 
 class ContentCreation:
