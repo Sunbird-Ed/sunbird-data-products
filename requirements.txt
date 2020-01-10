@@ -7,3 +7,6 @@ azure
 argparse
 elasticsearch
 cassandra-driver
+kafka-python
+anytree
+natsort

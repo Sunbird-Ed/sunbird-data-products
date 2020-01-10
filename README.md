@@ -1,4 +1,7 @@
-# sunbird-data-products
+# Sunbird-data-products
+
+## Getting started
+
 ### Setup
 * Python 3.6 
 * Create virtual environment `python3 -m venv /path/to/virtual/environment`
