@@ -140,7 +140,7 @@ if __name__ == '__main__':
                         help='Pulse of nation learning')
     parser_ud.add_argument("--data_store_location", type=str,
                         help="The path to local data folder")
-    parser_ud.add_argument("--states", type=list,
+    parser_ud.add_argument("--states", type=str,
                         help="State slugs in array")
 
     args = parser.parse_args()
