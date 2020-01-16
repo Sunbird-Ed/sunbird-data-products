@@ -19,9 +19,10 @@ from dataproducts.resources.queries import district_devices_monthly
 class DistrictMonthly:
 
     def __init__(self, data_store_location, druid_hostname, execution_date=date.today().strftime("%d/%m/%Y")):
-        self.data_store_location = data_store_location
+        self.data_store_location = Path(data_store_location)
         self.druid_hostname = druid_hostname
         self.execution_date = execution_date
+        self.config = {}
 
 
     def unique_users(self, result_loc_, date_, state_):
@@ -41,8 +42,8 @@ class DistrictMonthly:
         else:
             start_date = datetime(year - 1, 12, 1)
         query = Template(district_devices_monthly.init())
-        query = query.substitute(app=config['context']['pdata']['id']['app'],
-                                 portal=config['context']['pdata']['id']['portal'],
+        query = query.substitute(app=self.config['context']['pdata']['id']['app'],
+                                 portal=self.config['context']['pdata']['id']['portal'],
                                  state=state_,
                                  start_date=start_date.strftime('%Y-%m-%dT00:00:00+00:00'),
                                  end_date=date_.strftime('%Y-%m-%dT00:00:00+00:00'))
@@ -72,20 +73,19 @@ class DistrictMonthly:
         start_time_sec = int(round(time.time()))
 
         analysis_date = datetime.strptime(self.execution_date, "%d/%m/%Y")
-        file_path = Path(__file__)
-        result_loc = Path(self.data_store_location).joinpath('district_reports')
+        result_loc = self.data_store_location.joinpath('district_reports')
         result_loc.mkdir(exist_ok=True)
         result_loc.joinpath(analysis_date.strftime("%Y-%m-%d")).mkdir(exist_ok=True)
-        result_loc.parent.joinpath('config').mkdir(exist_ok=True)
+        self.data_store_location.joinpath('config').mkdir(exist_ok=True)
         get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
         tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
         url = "{}druid/v2/".format(self.druid_hostname)
         headers = {
             'Content-Type': "application/json"
         }
-        get_data_from_blob(result_loc.parent.joinpath('config', 'diksha_config.json'))
-        with open(result_loc.parent.joinpath('config', 'diksha_config.json'), 'r') as f:
-            config = json.loads(f.read())
+        get_data_from_blob(self.data_store_location.joinpath('config', 'diksha_config.json'))
+        with open(self.data_store_location.joinpath('config', 'diksha_config.json'), 'r') as f:
+            self.config = json.loads(f.read())
         for ind, row in tenant_info.iterrows():
             print(row['state'])
             result_loc.joinpath(row["slug"]).mkdir(exist_ok=True)
