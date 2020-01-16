@@ -17,6 +17,8 @@ if [ ! -d "bin" ]; then
   mkdir 'bin'
 fi
 
-cp target/dist/dataproducts-1.0.0/dist/* bin/
+cp target/dist/dataproducts*/dist/* bin/
+mv bin/dataproducts-*.tar.gz bin/dataproducts.tar.gz
+mv bin/dataproducts-*.whl bin/dataproducts.whl
 
 rm -rf target

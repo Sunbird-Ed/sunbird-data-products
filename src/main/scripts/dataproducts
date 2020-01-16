@@ -136,6 +136,16 @@ if __name__ == '__main__':
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
 
+    parser_cmo = subparsers.add_parser('cmo_dashboard',
+                        help='CMO Dashboard')
+    parser_cmo.add_argument("--data_store_location", type=str,
+                        help="the path to local data folder")
+    parser_cmo.add_argument("--org_search", type=str,
+                        help="host address for Org API")
+    parser_cmo.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
     parser_ud = subparsers.add_parser('user_detail',
                         help='Pulse of nation learning')
     parser_ud.add_argument("--data_store_location", type=str,
@@ -220,6 +230,13 @@ if __name__ == '__main__':
                             args.content_search, args.execution_date,
                             args.org_search)
         content_progress.init()
+
+    elif args.cmd == "cmo_dashboard":
+        from dataproducts.services.consumption.cmo_dashboard import CMODashboard
+
+        cmo_dashboard = CMODashboard(args.data_store_location,
+                            args.execution_date, args.org_search)
+        cmo_dashboard.init()
 
     elif args.cmd == "user_detail":
         from dataproducts.services.location.user_detail_report import UserDetailReport
