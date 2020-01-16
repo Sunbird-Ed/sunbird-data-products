@@ -530,10 +530,10 @@ class ETBMetrics:
         self.data_store_location.joinpath('textbook_reports').mkdir(exist_ok=True)
         self.data_store_location.joinpath('textbook_reports', end_date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
         self.data_store_location.joinpath('portal_dashboards').mkdir(exist_ok=True)
-        # get_tenant_info(result_loc_=self.data_store_location.joinpath('textbook_reports'),
-        #                 org_search_=self.org_search, date_=end_date_)
+        get_tenant_info(result_loc_=self.data_store_location.joinpath('textbook_reports'),
+                        org_search_=self.org_search, date_=end_date_)
         # # TODO: SB-15177 store scan counts in cassandra
-        # get_scan_counts(result_loc_=self.data_store_location.joinpath('textbook_reports'), druid_=self.druid_hostname, date_=end_date_)
+        get_scan_counts(result_loc_=self.data_store_location.joinpath('textbook_reports'), druid_=self.druid_hostname, date_=end_date_)
         self.backend_grade = pd.DataFrame(sorted_grades.init()).set_index('grade')
         self.generate_reports(result_loc_=self.data_store_location, content_search_=self.content_search, content_hierarchy_=self.content_hierarchy,
                          date_=end_date_)
