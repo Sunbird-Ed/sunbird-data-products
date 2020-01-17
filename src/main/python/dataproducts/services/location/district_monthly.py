@@ -47,6 +47,10 @@ class DistrictMonthly:
                                  state=state_,
                                  start_date=start_date.strftime('%Y-%m-%dT00:00:00+00:00'),
                                  end_date=date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+        url = "{}druid/v2/".format(self.druid_hostname)
+        headers = {
+            'Content-Type': "application/json"
+        }
         response = requests.request("POST", url, data=query, headers=headers)
         if response.status_code == 200:
             if len(response.json()) == 0:
@@ -79,10 +83,6 @@ class DistrictMonthly:
         self.data_store_location.joinpath('config').mkdir(exist_ok=True)
         get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
         tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
-        url = "{}druid/v2/".format(self.druid_hostname)
-        headers = {
-            'Content-Type': "application/json"
-        }
         get_data_from_blob(self.data_store_location.joinpath('config', 'diksha_config.json'))
         with open(self.data_store_location.joinpath('config', 'diksha_config.json'), 'r') as f:
             self.config = json.loads(f.read())
