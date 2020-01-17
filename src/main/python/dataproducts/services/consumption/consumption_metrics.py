@@ -397,12 +397,12 @@ class DailyMetrics:
         get_data_from_blob(self.data_store_location.joinpath('config', 'diksha_config.json'))
         with open(self.data_store_location.joinpath('config', 'diksha_config.json'), 'r') as f:
             self.config = json.loads(f.read())
-        # get_textbook_snapshot(result_loc_=self.data_store_location.joinpath('tb_metadata'), content_search_=self.content_search,
-        #                       content_hierarchy_=self.content_hierarchy, date_=analysis_date)
-        # print('[Success] Textbook Snapshot')
-        # get_tenant_info(result_loc_=self.data_store_location.joinpath('textbook_reports'), org_search_=self.org_search,
-        #                 date_=analysis_date)
-        # print('[Success] Tenant Info')
+        get_textbook_snapshot(result_loc_=self.data_store_location.joinpath('tb_metadata'), content_search_=self.content_search,
+                              content_hierarchy_=self.content_hierarchy, date_=analysis_date)
+        print('[Success] Textbook Snapshot')
+        get_tenant_info(result_loc_=self.data_store_location.joinpath('textbook_reports'), org_search_=self.org_search,
+                        date_=analysis_date)
+        print('[Success] Tenant Info')
         self.app_and_plays(result_loc_=self.data_store_location.joinpath('play'), date_=analysis_date)
         print('[Success] App and Plays')
         self.dialscans(result_loc_=self.data_store_location.joinpath('dialcode_scans'), date_=analysis_date)
