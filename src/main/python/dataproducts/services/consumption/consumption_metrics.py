@@ -174,6 +174,7 @@ class DailyMetrics:
         result = response.json()
         records = [events['event'] for events in result]
         data = pd.DataFrame(records)
+        data['dialcode_channel'] = data.get('dialcode_channel', pd.Series(index=data.index, name='dialcode_channel'))
         data['dialcode_channel'] = data['dialcode_channel'].fillna("")
         data['failed_flag'] = pd.np.where(data['edata_size'].astype(int) > 0, 'Successful QR Scans', 'Failed QR Scans')
         df = data.groupby(['dialcode_channel', 'failed_flag']).sum()
@@ -220,20 +221,37 @@ class DailyMetrics:
         try:
             app_df = pd.read_csv(read_loc_.joinpath('play', date_.strftime('%Y-%m-%d'), 'app_sessions.csv'))
             app_df = app_df[['Total App Sessions', 'Total Devices on App', 'Total Time on App (in hours)']]
-            plays_df = pd.read_csv(read_loc_.joinpath('play', date_.strftime('%Y-%m-%d'), 'plays.csv'), header=[0, 1],
-                                   index_col=0)
-            plays_df = plays_df.reset_index().join(board_slug, on='channel', how='left')[
-                [('Total Content Plays', self.config['context']['pdata']['id']['app']),
-                 ('Total Content Plays', self.config['context']['pdata']['id']['portal']),
-                 ('Total Devices that played content', self.config['context']['pdata']['id']['app']),
-                 ('Total Devices that played content', self.config['context']['pdata']['id']['portal']),
-                 ('Content Play Time (in hours)', self.config['context']['pdata']['id']['app']),
-                 ('Content Play Time (in hours)', self.config['context']['pdata']['id']['portal']), 'slug']].dropna(
-                subset=['slug'])
-            plays_df.columns = ['Total Content Plays on App',
+            plays_df = pd.read_csv(read_loc_.joinpath('play', date_.strftime('%Y-%m-%d'), 'plays.csv'), header=[0, 1], dtype={0: str})
+
+            # Making the channel column as index with string type since the csv is in multiindex format
+            plays_df.set_index(plays_df.columns[0], inplace=True)
+            plays_df.index.names = ['channel']
+            plays_df = plays_df[1:]
+
+            plays_df = plays_df.reset_index().join(board_slug, on='channel', how='left')
+            plays_df['Total Content Plays on App'] = plays_df.get(
+                ('Total Content Plays', self.config['context']['pdata']['id']['app']),
+                pd.Series(index=plays_df.index, name=('Total Content Plays', self.config['context']['pdata']['id']['app'])))
+            plays_df['Total Content Plays on Portal'] = plays_df.get(
+                ('Total Content Plays', self.config['context']['pdata']['id']['portal']),
+                pd.Series(index=plays_df.index, name=('Total Content Plays', self.config['context']['pdata']['id']['portal'])))
+            plays_df['Total Devices that played content on App'] = plays_df.get(
+                ('Total Devices that played content', self.config['context']['pdata']['id']['app']),
+                pd.Series(index=plays_df.index, name=('Total Devices that played content', self.config['context']['pdata']['id']['app'])))
+            plays_df['Total Devices that played content on Portal'] = plays_df.get(
+                ('Total Devices that played content', self.config['context']['pdata']['id']['portal']),
+                pd.Series(index=plays_df.index, name=('Total Devices that played content', self.config['context']['pdata']['id']['portal'])))
+            plays_df['Content Play Time on App (in hours)'] = plays_df.get(
+                ('Content Play Time (in hours)', self.config['context']['pdata']['id']['app']),
+                pd.Series(index=plays_df.index, name=('Content Play Time (in hours)', self.config['context']['pdata']['id']['app'])))
+            plays_df['Content Play Time on Portal (in hours)'] = plays_df.get(
+                ('Content Play Time (in hours)', self.config['context']['pdata']['id']['portal']),
+                pd.Series(index=plays_df.index, name=('Content Play Time (in hours)', self.config['context']['pdata']['id']['portal'])))
+            plays_df = plays_df[['Total Content Plays on App',
                                 'Total Content Plays on Portal', 'Total Devices that played content on App',
                                 'Total Devices that played content on Portal',
-                                'Content Play Time on App (in hours)', 'Content Play Time on Portal (in hours)', 'slug']
+                                'Content Play Time on App (in hours)', 'Content Play Time on Portal (in hours)', 'slug']].dropna(
+                                subset=['slug'])
         except Exception as e:
             raise Exception('App and Plays Error! :: {}'.format(str(e)))
         try:
