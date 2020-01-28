@@ -16,7 +16,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import StructField, StructType, StringType, IntegerType
 
 from dataproducts.util.utils import create_json, write_data_to_blob, post_data_to_blob, \
-                get_data_from_blob, push_metric_event, get_scan_counts
+                get_data_from_blob, push_metric_event, get_scan_counts, get_tenant_info
 
 
 class GPSLearning:
@@ -151,7 +151,7 @@ class GPSLearning:
                 else:
                     continue
 
-                if tb['children'] == None:
+                if tb['children'] == None or len(tb['children']) == 0:
                     continue
 
                 if 'index' not in tb['children'][0]:
