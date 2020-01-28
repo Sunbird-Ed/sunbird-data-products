@@ -6,7 +6,7 @@ use_plugin("python.distutils")
 
 default_task = "publish"
 name = "dataproducts"
-version = "2.7.3"
+version = "2.7.4"
 license = "MIT License"
 
 @init

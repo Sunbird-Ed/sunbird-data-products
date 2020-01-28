@@ -151,7 +151,7 @@ class GPSLearning:
                 else:
                     continue
 
-                if tb['children'] == None:
+                if tb['children'] == None or len(tb['children']) == 0:
                     continue
 
                 if 'index' not in tb['children'][0]:
