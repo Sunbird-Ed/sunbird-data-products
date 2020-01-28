@@ -55,6 +55,9 @@ class DistrictWeekly:
             df.to_csv(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), index=False)
             post_data_to_blob(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), backup=True)
             df['Unique Devices'] = df['Unique Devices'].astype(int)
+
+            df = df.groupby(['District', 'Platform']).sum().reset_index()
+
             df = df[['District', 'Platform', 'Unique Devices']]
             df.to_csv(result_loc_.joinpath("aggregated_district_unique_devices.csv"), index=False)
         else:

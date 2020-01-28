@@ -12,7 +12,7 @@ from pathlib import Path
 from string import Template
 
 from dataproducts.util.utils import create_json, get_data_from_blob, \
-                            post_data_to_blob, push_metric_event
+                            post_data_to_blob, push_metric_event, get_location_info
 from dataproducts.resources.queries import district_devices_monthly
 
 
@@ -83,6 +83,8 @@ class DistrictMonthly:
         self.data_store_location.joinpath('config').mkdir(exist_ok=True)
         get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
         tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
+        get_location_info(result_loc_=data_store_location.parent.joinpath('portal_dashboards'), location_search_=self.org_search,
+                        date_=analysis_date)
         get_data_from_blob(self.data_store_location.joinpath('config', 'diksha_config.json'))
         with open(self.data_store_location.joinpath('config', 'diksha_config.json'), 'r') as f:
             self.config = json.loads(f.read())

@@ -193,6 +193,62 @@ def get_tenant_info(result_loc_, org_search_, date_):
         print("Max retries reached...")
 
 
+def get_location_info(result_loc_, location_search_, date_):
+    """
+    get districts and state mapping of current environment
+    :param result_loc_: pathlib.Path object to store resultant CSV at
+    :param location_search_: host ip and port of server hosting location search API
+    :param date_: datetime object to pass to file path
+    :return: None
+    """
+    url = "{}api/data/v1/location/search".format(location_search_)
+    payload = """{
+        "request": {
+             "limit":200,
+             "filters": {
+                "type": ["district", "state"]
+             }
+        }
+    }"""
+    headers = {
+        'Accept': "application/json",
+        'Content-Type': "application/json",
+        'cache-control': "no-cache"
+    }
+    retry_count = 0
+    while retry_count < 5:
+        retry_count += 1
+        try:
+            response = requests.request("POST", url, data=payload, headers=headers)
+            result = response.json()['result']['response']
+            states = pd.DataFrame(
+                    list(filter(lambda x: x['type'] == "state", result))
+                )
+            states.rename(columns={"name": "state"}, inplace=True)
+            districts = pd.DataFrame(
+                    list(filter(lambda x: x['type'] == "district", result))
+                )
+            districts.rename(columns={"name": "district"}, inplace=True)
+            state_district_df = pd.merge(districts, states, left_on=['parentId'], right_on=['id'], how="inner")
+            state_district_df = state_district_df[['state', 'district']]
+            result_loc_.mkdir(exist_ok=True)
+            result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
+            state_district_df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'), index=False,
+                        encoding='utf-8')
+            post_data_to_blob(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'),
+                              backup=True)
+            break
+        except requests.exceptions.ConnectionError:
+            with open(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'etb_error_log.log'), 'a') as f:
+                f.write("Retry {} for location list\n".format(retry_count))
+            sleep(10)
+        except KeyError as ke:
+            print('Key not found in response: ', ke, response.text)
+            break
+    else:
+        print("Max retries reached...")
+
+
 def get_content_model(result_loc_, druid_, date_):
     """
     get current content model snapshot
