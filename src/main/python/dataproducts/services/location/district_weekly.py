@@ -13,14 +13,16 @@ from pathlib import Path
 from string import Template
 from azure.common import AzureMissingResourceHttpError
 
-from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, push_metric_event
+from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, \
+                                    push_metric_event, get_location_info
 from dataproducts.resources.queries import district_devices, district_plays, district_scans
 
 class DistrictWeekly:
-    def __init__(self, data_store_location, druid_hostname, execution_date):
+    def __init__(self, data_store_location, druid_hostname, execution_date, location_search):
         self.data_store_location = data_store_location
         self.druid_hostname = druid_hostname
         self.execution_date = execution_date
+        self.location_search = location_search
         self.config = {}
         self.druid_url = ""
         self.headers = {}
@@ -219,6 +221,7 @@ class DistrictWeekly:
         result_loc.parent.joinpath('config').mkdir(exist_ok=True)
         analysis_date = datetime.strptime(self.execution_date, "%d/%m/%Y")
         get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
+        get_location_info(result_loc.joinpath('portal_dashboards'), location_search, analysis_date)
         tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
         self.druid_url = "{}druid/v2/".format(self.druid_hostname)
         self.headers = {
