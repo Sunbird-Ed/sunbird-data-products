@@ -28,9 +28,7 @@ node() {
         }
 
             stage('Build') {
-                sh """
-                        docker run --rm -v /etc/passwd:/etc/passwd -u $(id -u):$(id -g) -v$(pwd):/home/work -e HOME=/home/work -w /home/work python:3.7 ./build.sh
-                   """
+                sh 'docker run --rm -v /etc/passwd:/etc/passwd -u $(id -u):$(id -g) -v$(pwd):/home/work -e HOME=/home/work -w /home/work python:3.7 ./build.sh'
             }
 
             stage('Archive artifacts'){
