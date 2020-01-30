@@ -3,3 +3,5 @@
 .DS_Store
 venv/*
 target
+adhoc-scripts/.settings
+*.log
