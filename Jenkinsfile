@@ -29,14 +29,7 @@ node() {
 
             stage('Build') {
                 sh """
-                        pyb install_dependencies clean publish
-                        tox
-                        if [ ! -d "bin" ]; then
-                          mkdir 'bin'
-                        fi
-                        cp target/dist/dataproducts*/dist/* bin/
-                        mv bin/dataproducts-*.tar.gz bin/dataproducts.tar.gz
-                        mv bin/dataproducts-*.whl bin/dataproducts.whl
+                        docker run --rm -v /etc/passwd:/etc/passwd -u $(id -u):$(id -g) -v$(pwd):/home/work -e HOME=/home/work -w /home/work python:3.7 ./build.sh
                    """
             }
 
