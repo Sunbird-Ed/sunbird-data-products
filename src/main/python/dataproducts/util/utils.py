@@ -204,7 +204,7 @@ def get_location_info(result_loc_, location_search_, date_):
     url = "{}api/data/v1/location/search".format(location_search_)
     payload = """{
         "request": {
-             "limit":200,
+             "limit": 5000,
              "filters": {
                 "type": ["district", "state"]
              }
@@ -213,7 +213,8 @@ def get_location_info(result_loc_, location_search_, date_):
     headers = {
         'Accept': "application/json",
         'Content-Type': "application/json",
-        'cache-control': "no-cache"
+        'cache-control': "no-cache",
+        'Authorization': "Bearer {}".format(os.environ['API_KEY'])
     }
     retry_count = 0
     while retry_count < 5:
@@ -247,6 +248,16 @@ def get_location_info(result_loc_, location_search_, date_):
             break
     else:
         print("Max retries reached...")
+
+
+def verify_state_district(loc_map_path_, state_, df_):
+    loc_df = pd.read_csv(loc_map_path_.joinpath('state_district.csv'))
+    state_districts = loc_df[loc_df['state'] == state_].district.to_list()
+    df_['District'] = pd.np.where(
+                        df_['District'].isin(loc_df[loc_df['state'] == state_].district.to_list()),
+                        df_['District'],
+                        None)
+    return df_
 
 
 def get_content_model(result_loc_, druid_, date_):

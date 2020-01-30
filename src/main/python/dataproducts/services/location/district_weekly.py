@@ -14,12 +14,12 @@ from string import Template
 from azure.common import AzureMissingResourceHttpError
 
 from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, \
-                                    push_metric_event, get_location_info
+                                    push_metric_event, get_location_info, verify_state_district
 from dataproducts.resources.queries import district_devices, district_plays, district_scans
 
 class DistrictWeekly:
     def __init__(self, data_store_location, druid_hostname, execution_date, location_search):
-        self.data_store_location = data_store_location
+        self.data_store_location = Path(data_store_location)
         self.druid_hostname = druid_hostname
         self.execution_date = execution_date
         self.location_search = location_search
@@ -53,7 +53,9 @@ class DistrictWeekly:
                 data.append(response['event'])
             df = pd.DataFrame(data)
             df['District'] = df.get('District', pd.Series(index=df.index, name='District'))
+            df = verify_state_district(result_loc_.parent, state_, df)
             df = df.fillna('Unknown')
+            df = df.groupby(['District', "Platform"]).sum().reset_index()
             df.to_csv(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), index=False)
             post_data_to_blob(result_loc_.parent.joinpath("{}_district_devices.csv".format(slug_)), backup=True)
             df['Unique Devices'] = df['Unique Devices'].astype(int)
@@ -94,7 +96,9 @@ class DistrictWeekly:
                 data.append(response['event'])
             df = pd.DataFrame(data)
             df['District'] = df.get('District', pd.Series(index=df.index, name='District'))
+            df = verify_state_district(result_loc_.parent, state_, df)
             df = df.fillna('Unknown')
+            df = df.groupby(['District', "Platform"]).sum().reset_index()
             df.to_csv(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), index=False)
             post_data_to_blob(result_loc_.parent.joinpath("{}_district_plays.csv".format(slug_)), backup=True)
             df = df[['District', 'Platform','Number of Content Plays']]
@@ -131,7 +135,9 @@ class DistrictWeekly:
                 data.append(response['event'])
             df = pd.DataFrame(data)
             df['District'] = df.get('District', pd.Series(index=df.index, name='District'))
+            df = verify_state_district(result_loc_.parent, state_, df)
             df = df.fillna('Unknown')
+            df = df.groupby(['District', "Platform"]).sum().reset_index()
             df.to_csv(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), index=False)
             post_data_to_blob(result_loc_.parent.joinpath("{}_district_scans.csv".format(slug_)), backup=True)
             df = df[['District', 'Platform', 'Number of QR Scans']]
@@ -151,6 +157,7 @@ class DistrictWeekly:
         """
         slug_ = result_loc_.name
         result_loc_.parent.parent.parent.joinpath("portal_dashboards").mkdir(exist_ok=True)
+        last_sunday = datetime.strftime(date_ - timedelta(days=1), '%d/%m/%Y')
         try:
             devices_df = pd.read_csv(
                 result_loc_.joinpath("aggregated_district_unique_devices.csv")).set_index(
@@ -177,7 +184,7 @@ class DistrictWeekly:
         district_df = district_df.join(district_df.sum(level=0, axis=1))
         district_df.columns = [col[0] + ' on ' + col[1].split('.')[-1] if isinstance(col, tuple) else 'Total ' + col for col
                                in district_df.columns]
-        district_df['Data as on Last day (Sunday) of the week'] = datetime.strftime(date_ - timedelta(days=1), '%d/%m/%Y')
+        district_df['Data as on Last day (Sunday) of the week'] = last_sunday
         district_df = district_df.reset_index()
         district_df.index = [pd.to_datetime(district_df['Data as on Last day (Sunday) of the week'], format='%d/%m/%Y'),
                              district_df['District']]
@@ -191,6 +198,7 @@ class DistrictWeekly:
                 result_loc_.parent.parent.parent.joinpath("portal_dashboards", slug_, "aggregated_district_data.csv"))
             blob_data = pd.read_csv(
                 result_loc_.parent.parent.parent.joinpath("portal_dashboards", slug_, "aggregated_district_data.csv"))
+            blob_data = blob_data[blob_data['Data as on Last day (Sunday) of the week'] != last_sunday]
             blob_data.index = [pd.to_datetime(blob_data['Data as on Last day (Sunday) of the week'], format='%d/%m/%Y'),
                                blob_data['District']]
         except AzureMissingResourceHttpError:
@@ -216,12 +224,12 @@ class DistrictWeekly:
     def init(self):
         start_time_sec = int(round(time.time()))
         file_path = Path(__file__)
-        result_loc = Path(self.data_store_location).joinpath('district_reports')
+        result_loc = self.data_store_location.joinpath('district_reports')
         result_loc.mkdir(exist_ok=True)
         result_loc.parent.joinpath('config').mkdir(exist_ok=True)
         analysis_date = datetime.strptime(self.execution_date, "%d/%m/%Y")
         get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
-        get_location_info(result_loc.joinpath('portal_dashboards'), location_search, analysis_date)
+        get_location_info(result_loc, self.location_search, analysis_date)
         tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
         self.druid_url = "{}druid/v2/".format(self.druid_hostname)
         self.headers = {

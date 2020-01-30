@@ -4,24 +4,26 @@ Compute unique devices in a district over a month
 import json
 import sys, time
 import os
-import pandas as pd
 import requests
+import pdb
+import pandas as pd
 
 from datetime import date, datetime
 from pathlib import Path
 from string import Template
 
-from dataproducts.util.utils import create_json, get_data_from_blob, \
-                            post_data_to_blob, push_metric_event, get_location_info
+from dataproducts.util.utils import create_json, get_data_from_blob, post_data_to_blob, \
+                                    push_metric_event, get_location_info, verify_state_district
 from dataproducts.resources.queries import district_devices_monthly
 
 
 class DistrictMonthly:
 
-    def __init__(self, data_store_location, druid_hostname, execution_date=date.today().strftime("%d/%m/%Y")):
+    def __init__(self, data_store_location, druid_hostname, execution_date, location_search):
         self.data_store_location = Path(data_store_location)
         self.druid_hostname = druid_hostname
         self.execution_date = execution_date
+        self.location_search = location_search
         self.config = {}
 
 
@@ -63,8 +65,11 @@ class DistrictMonthly:
                                                          "{}_monthly.csv".format(slug_)), index=False)
             post_data_to_blob(result_loc_.parent.joinpath(date_.strftime("%Y-%m-%d"),
                                                                  "{}_monthly.csv".format(slug_)), backup=True)
+            df['District'] = df.get('District', pd.Series(index=df.index, name='District'))
             df['Unique Devices'] = df['Unique Devices'].astype(int)
+            df = verify_state_district(result_loc_.parent.joinpath(date_.strftime('%Y-%m-%d')), state_, df)
             df = df[['District', 'Unique Devices']]
+            df = df.groupby('District').sum().reset_index()
             df.to_csv(result_loc_.joinpath("aggregated_unique_users_summary.csv"), index=False)
             create_json(result_loc_.joinpath("aggregated_unique_users_summary.csv"))
             post_data_to_blob(result_loc_.joinpath("aggregated_unique_users_summary.csv"))
@@ -83,7 +88,7 @@ class DistrictMonthly:
         self.data_store_location.joinpath('config').mkdir(exist_ok=True)
         get_data_from_blob(result_loc.joinpath('slug_state_mapping.csv'))
         tenant_info = pd.read_csv(result_loc.joinpath('slug_state_mapping.csv'))
-        get_location_info(result_loc_=data_store_location.parent.joinpath('portal_dashboards'), location_search_=self.org_search,
+        get_location_info(result_loc_=result_loc, location_search_=self.location_search,
                         date_=analysis_date)
         get_data_from_blob(self.data_store_location.joinpath('config', 'diksha_config.json'))
         with open(self.data_store_location.joinpath('config', 'diksha_config.json'), 'r') as f:
