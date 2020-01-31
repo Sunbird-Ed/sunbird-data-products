@@ -236,7 +236,6 @@ def get_location_info(result_loc_, location_search_, date_, iteration=0):
                     encoding='utf-8')
         post_data_to_blob(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'),
                           backup=True)
-        break
     except requests.exceptions.ConnectionError:
         with open(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'etb_error_log.log'), 'a') as f:
             f.write("Retry {} for location list\n".format(iteration))
@@ -245,11 +244,9 @@ def get_location_info(result_loc_, location_search_, date_, iteration=0):
             get_location_info(result_loc_, location_search_, date_, iteration)
             sleep(10)
         else:
-            break
             print("Max retries reached...")
     except KeyError as ke:
         print('Key not found in response: ', ke, response.text)
-        break
 
 
 def verify_state_district(loc_map_path_, state_, df_):
