@@ -193,7 +193,7 @@ def get_tenant_info(result_loc_, org_search_, date_):
         print("Max retries reached...")
 
 
-def get_location_info(result_loc_, location_search_, date_):
+def get_location_info(result_loc_, location_search_, date_, iteration=0):
     """
     get districts and state mapping of current environment
     :param result_loc_: pathlib.Path object to store resultant CSV at
@@ -216,38 +216,40 @@ def get_location_info(result_loc_, location_search_, date_):
         'cache-control': "no-cache",
         'Authorization': "Bearer {}".format(os.environ['API_KEY'])
     }
-    retry_count = 0
-    while retry_count < 5:
-        retry_count += 1
-        try:
-            response = requests.request("POST", url, data=payload, headers=headers)
-            result = response.json()['result']['response']
-            states = pd.DataFrame(
-                    list(filter(lambda x: x['type'] == "state", result))
-                )
-            states.rename(columns={"name": "state"}, inplace=True)
-            districts = pd.DataFrame(
-                    list(filter(lambda x: x['type'] == "district", result))
-                )
-            districts.rename(columns={"name": "district"}, inplace=True)
-            state_district_df = pd.merge(districts, states, left_on=['parentId'], right_on=['id'], how="inner")
-            state_district_df = state_district_df[['state', 'district']]
-            result_loc_.mkdir(exist_ok=True)
-            result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
-            state_district_df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'), index=False,
-                        encoding='utf-8')
-            post_data_to_blob(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'),
-                              backup=True)
-            break
-        except requests.exceptions.ConnectionError:
-            with open(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'etb_error_log.log'), 'a') as f:
-                f.write("Retry {} for location list\n".format(retry_count))
+
+    try:
+        response = requests.request("POST", url, data=payload, headers=headers)
+        result = response.json()['result']['response']
+        states = pd.DataFrame(
+                list(filter(lambda x: x['type'] == "state", result))
+            )
+        states.rename(columns={"name": "state"}, inplace=True)
+        districts = pd.DataFrame(
+                list(filter(lambda x: x['type'] == "district", result))
+            )
+        districts.rename(columns={"name": "district"}, inplace=True)
+        state_district_df = pd.merge(districts, states, left_on=['parentId'], right_on=['id'], how="inner")
+        state_district_df = state_district_df[['state', 'district']]
+        result_loc_.mkdir(exist_ok=True)
+        result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
+        state_district_df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'), index=False,
+                    encoding='utf-8')
+        post_data_to_blob(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'),
+                          backup=True)
+        break
+    except requests.exceptions.ConnectionError:
+        with open(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'etb_error_log.log'), 'a') as f:
+            f.write("Retry {} for location list\n".format(iteration))
+        if iteration < 5:
+            iteration += 1
+            get_location_info(result_loc_, location_search_, date_, iteration)
             sleep(10)
-        except KeyError as ke:
-            print('Key not found in response: ', ke, response.text)
+        else:
             break
-    else:
-        print("Max retries reached...")
+            print("Max retries reached...")
+    except KeyError as ke:
+        print('Key not found in response: ', ke, response.text)
+        break
 
 
 def verify_state_district(loc_map_path_, state_, df_):
