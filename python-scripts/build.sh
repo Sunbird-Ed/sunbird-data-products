@@ -2,16 +2,17 @@
 
 cd "$(dirname "$0")"
 
+rm -rf .local || true
 pybuilderInstalled=`pip freeze | grep 'pybuilder' | wc -l`
 
 if [ $pybuilderInstalled != 1 ]
 then
    echo "Installing pybuilder"
-   pip install pybuilder
+   pip install pybuilder --pre
 fi
+export PATH=$PATH:$(pwd)/.local/bin
 
-pyb install_dependencies clean publish
-tox
+pyb
 
 if [ ! -d "bin" ]; then
   mkdir 'bin'
