@@ -3,12 +3,12 @@ import org.apache.spark.rdd.RDD
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, RestUtil}
 
-case class Params(msgid: String)
-case class BatchEvent(mid: String, pid: String, params: Option[Params], events: Array[V3Event])
-case class BatchEventLite(mid: String, pid: String, params: Option[Params])
-case class V3EventLite(mid: String, eid: String);
-
 object DedupAnalyzer extends optional.Application {
+  
+  case class Params(msgid: String)
+  case class BatchEvent(mid: String, pid: String, params: Option[Params], events: Array[V3Event])
+  case class BatchEventLite(mid: String, pid: String, params: Option[Params])
+  case class V3EventLite(mid: String, eid: String);
   
   implicit val fc = new FrameworkContext();
 

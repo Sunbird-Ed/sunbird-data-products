@@ -11,11 +11,12 @@ import org.apache.spark.sql.SparkSession
 import com.datastax.spark.connector.toRDDFunctions
 import org.ekstep.analytics.framework.FrameworkContext
 
-case class DeviceProfileId(device_id: String)
-case class DeviceProfile(device_id: String, first_access: Option[Long], state_custom: Option[String], district_custom: Option[String], user_declared_state: Option[String], user_declared_district: Option[String])
-case class DeviceProfileOutput(userDeclared: Int, userUpdated: Int, userUpdatedState: Int, userUpdatedDist: Int)
 
 object LocationPopupAnalysis extends optional.Application {
+  
+  case class DeviceProfileId(device_id: String)
+  case class DeviceProfile(device_id: String, first_access: Option[Long], state_custom: Option[String], district_custom: Option[String], user_declared_state: Option[String], user_declared_district: Option[String])
+  case class DeviceProfileOutput(userDeclared: Int, userUpdated: Int, userUpdatedState: Int, userUpdatedDist: Int)
 
   def deviceStats(dp: DeviceProfile): DeviceProfileOutput = {
     val userDeclared = if (dp.user_declared_state.nonEmpty) 1 else 0;

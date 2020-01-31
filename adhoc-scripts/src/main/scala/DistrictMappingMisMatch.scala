@@ -10,12 +10,12 @@ import org.ekstep.analytics.framework.util.HTTPClient
 import redis.clients.jedis.JedisPool
 
 
-case class LocationList(count: Int, response: List[Map[String, String]])
-
-case class LocationResponse(id: String, ver: String, ts: String, params: Params, responseCode: String, result: LocationList)
-
 object DistrictMappingMisMatch extends optional.Application {
 
+    case class LocationList(count: Int, response: List[Map[String, String]])
+
+    case class LocationResponse(id: String, ver: String, ts: String, params: Params, responseCode: String, result: LocationList)
+  
     def main(cassandraHost: String, redisHost: String, env: String, locationIp : String): Unit = {
         implicit val fc = new FrameworkContext();
         implicit val spark = getSparkSession(cassandraHost, redisHost)
