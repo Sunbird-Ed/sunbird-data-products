@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 
-del os.environ['PYSPARK_SUBMIT_ARGS']
+#del os.environ['PYSPARK_SUBMIT_ARGS']
 account_name = os.environ['AZURE_STORAGE_ACCOUNT']
 account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
 

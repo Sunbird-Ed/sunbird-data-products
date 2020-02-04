@@ -30,18 +30,16 @@ parser.add_argument("kafka_broker_list", type=str, help="kafka broker details")
 parser.add_argument("delete_backups", type=str, default="False", help="boolean flag whether to delete backups")
 
 args = parser.parse_args()
-print(args)
 container = args.container
 prefix = args.prefix
 start_date = args.start_date
 end_date = args.end_date
 kafka_broker_list = args.kafka_broker_list
-#kafka_topic = args.kafka_topic
 delete_backups = args.delete_backups
 
 config_json = replay_config.init()
 
-pgGetSegmentsQuery = "select * from druid_segments where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
+#pgGetSegmentsQuery = "select * from druid_segments where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
 pgDisableSegmentsQuery = "update druid_segments set used='f' where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
 
 #if delete backups is true
@@ -63,6 +61,7 @@ try:
         try:
             if delete_backups == "True":
                 sinkSourcesList = getBackUpDetails(config_json, prefix)
+                # take backups before replay
                 for sink in sinkSourcesList:
                     if sink['type'] == 'azure':
                         backup_dir = 'backup-{}'.format(sink['prefix'])
@@ -70,10 +69,10 @@ try:
                         delete_data(container, sink['prefix'], date)
                     if sink['type'] == 'druid':
                         end_date = date + timedelta(1)
-                        pgGetSegmentsQuery.format(date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), sink['prefix'])
-                        segments = executeQuery('sowmya', '', 'localhost', 'postgis_test', pgGetSegmentsQuery)
+                        # pgGetSegmentsQuery.format(date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), sink['prefix'])
+                        # segments = executeQuery('sowmya', '', 'localhost', 'postgis_test', pgGetSegmentsQuery)
                 kafkaTopic = getKafkaTopic(config_json, prefix)
-                push_data(kafka_broker_list, kafkaTopic, container, prefix, date)
+                push_data(kafka_broker_list, kafkaTopic, container, backup_dir, date)
                 # delete backups and disable segments after replay
                 for sink in sinkSourcesList:
                     if sink['type'] == 'azure':
@@ -84,12 +83,14 @@ try:
                         pgDisableSegmentsQuery.format(date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), sink['prefix'])
                         segments = executeQuery('sowmya', '', 'localhost', 'postgis_test', pgDisableSegmentsQuery)
             else:
+                backup_dir = 'backup-{}'.format(prefix)
+                # copy_data(container, sink['prefix'], backup_dir, date)
+                # delete_data(container, sink['prefix'], date)
                 kafkaTopic = getKafkaTopic(config_json, prefix)
-                push_data(kafka_broker_list, kafkaTopic, container, prefix, date)
-                executeQuery('sowmya', '', 'localhost', 'postgis_test', 'select count(*) from geo_location_city')
+                push_data(kafka_broker_list, kafkaTopic, container, backup_dir, date)
         except Exception:
-            print("Replay failed for {}. Continuing replay for remaining dates".format(date))
-            pass
+            print("Replay failed for {}. Continuing replay for remaining dates".format(date.strftime('%Y-%m-%d')))
+            raise
 except Exception:
         raise
 

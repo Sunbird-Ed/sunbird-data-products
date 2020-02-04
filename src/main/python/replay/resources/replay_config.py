@@ -1,7 +1,7 @@
 def init():
     return {
         "ingest": {
-            "outputKafkaTopic": "telemetry.raw",
+            "outputKafkaTopic": "telemetry.ingest",
             "dependentSinkSources": [
                 {
                     "type": "azure",
@@ -38,7 +38,7 @@ def init():
             ]
         },
         "raw": {
-            "outputKafkaTopic": "telemetry.valid",
+            "outputKafkaTopic": "telemetry.raw",
             "dependentSinkSources": [
                 {
                     "type": "azure",
@@ -71,7 +71,7 @@ def init():
             ]
         },
         "unique": {
-            "outputKafkaTopic": "telemetry.sink",
+            "outputKafkaTopic": "telemetry.unique",
             "dependentSinkSources": [
                 {
                     "type": "azure",
