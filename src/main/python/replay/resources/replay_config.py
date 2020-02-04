@@ -2,6 +2,7 @@ def init():
     return {
         "ingest": {
             "outputKafkaTopic": "telemetry.ingest",
+            "inputPrefix": "ingest",
             "dependentSinkSources": [
                 {
                     "type": "azure",
@@ -17,7 +18,7 @@ def init():
                 },
                 {
                     "type": "azure",
-                    "prefix": "telemetry-denormalized"
+                    "prefix": "telemetry-denormalized/raw"
                 },
                 {
                     "type": "druid",
@@ -39,6 +40,7 @@ def init():
         },
         "raw": {
             "outputKafkaTopic": "telemetry.raw",
+            "inputPrefix": "raw",
             "dependentSinkSources": [
                 {
                     "type": "azure",
@@ -50,7 +52,7 @@ def init():
                 },
                 {
                     "type": "azure",
-                    "prefix": "telemetry-denormalized"
+                    "prefix": "telemetry-denormalized/raw"
                 },
                 {
                     "type": "druid",
@@ -72,6 +74,7 @@ def init():
         },
         "unique": {
             "outputKafkaTopic": "telemetry.unique",
+            "inputPrefix": "unique",
             "dependentSinkSources": [
                 {
                     "type": "azure",
@@ -79,7 +82,7 @@ def init():
                 },
                 {
                     "type": "azure",
-                    "prefix": "telemetry-denormalized"
+                    "prefix": "telemetry-denormalized/raw"
                 },
                 {
                     "type": "druid",
@@ -99,14 +102,40 @@ def init():
                 }
             ]
         },
+        "telemetry-denorm": {
+            "outputKafkaTopic": "telemetry.denorm",
+            "inputPrefix": "telemetry-denormalized/raw",
+            "dependentSinkSources": [
+                {
+                    "type": "druid",
+                    "prefix": "telemetry-events"
+                },
+                {
+                    "type": "druid",
+                    "prefix": "telemetry-feedback-events"
+                }
+            ]
+        },
+        "summary-denorm": {
+            "outputKafkaTopic": "telemetry.denorm",
+            "inputPrefix": "telemetry-denormalized/summary",
+            "dependentSinkSources": [
+                {
+                    "type": "druid",
+                    "prefix": "summary-events"
+                }
+            ]
+        },
         "failed": {
             "outputKafkaTopic": "telemetry.raw",
+            "inputPrefix": "failed",
             "dependentSinkSources": [
                 
             ]
         },
         "wfs": {
-            "outputKafkaTopic": "telemetry.sink",
+            "outputKafkaTopic": "telemetry.derived",
+            "inputPrefix": "derived/wfs",
             "dependentSinkSources": [
                 {
                     "type": "azure",
@@ -114,7 +143,7 @@ def init():
                 },
                 {
                     "type": "azure",
-                    "prefix": "telemetry-denormalized"
+                    "prefix": "telemetry-denormalized/summary"
                 },
                 {
                     "type": "druid",

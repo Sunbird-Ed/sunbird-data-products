@@ -17,8 +17,9 @@ from kafka.errors import KafkaError
 findspark.init()
 
 def push_data(broker_host, topic, container, prefix, date):
-    #path = get_data_path(container, prefix, date)
-    path = "wasbs://dev-data-store@sunbirddevtelemetry.blob.core.windows.net/unique/2020-01-01-1577818009896.json.gz"
+    path = get_data_path(container, prefix, date)
+    print(path)
+    # path = "wasbs://dev-data-store@sunbirddevtelemetry.blob.core.windows.net/unique/2020-01-01-1577818009896.json.gz"
     account_name = os.environ['AZURE_STORAGE_ACCOUNT']
     account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
     spark = SparkSession.builder.appName("data_replay").master("local[*]").getOrCreate()
