@@ -7,7 +7,7 @@ from datetime import date, timedelta, datetime
 import argparse
 from pathlib import Path
 
-util_path = os.path.abspath(os.path.join(__file__, '..', '..', 'util'))
+util_path = os.path.abspath(os.path.join(__file__, '..', 'util'))
 sys.path.append(util_path)
 resources_path = os.path.abspath(os.path.join(__file__, '..', 'resources'))
 sys.path.append(resources_path)
