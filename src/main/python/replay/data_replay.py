@@ -14,7 +14,7 @@ sys.path.append(resources_path)
 
 from azure_utils import copy_data, delete_data
 from postgres_utils import executeQuery
-from replay_utils import push_data, getDates, getBackUpDetails, getKafkaTopic
+from replay_utils import push_data, getDates, getBackUpDetails, getKafkaTopic, getInputPrefix
 import replay_config
 
 
@@ -63,24 +63,25 @@ try:
                 sinkSourcesList = getBackUpDetails(config_json, prefix)
                 # take backups before replay
                 print("Taking backups before starting replay")
+                input_prefix = getInputPrefix(config_json, prefix)
+                copy_data(container, input_prefix, 'backup-{}'.format(input_prefix), date)
+                delete_data(container, input_prefix, date)
                 for sink in sinkSourcesList:
                     if sink['type'] == 'azure':
                         backup_dir = 'backup-{}'.format(sink['prefix'])
                         copy_data(container, sink['prefix'], backup_dir, date)
                         delete_data(container, sink['prefix'], date)
-                    # if sink['type'] == 'druid':
-                    #     end_date = date + timedelta(1)
-                        # pgGetSegmentsQuery.format(date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), sink['prefix'])
-                        # segments = executeQuery('postgis_test', pgGetSegmentsQuery)
                 print("Taking backups completed. Starting data replay")
                 kafkaTopic = getKafkaTopic(config_json, prefix)
                 try:
-                    backup_prefix = 'backup-{}/{}'.format(prefix, prefix)
+                    backup_prefix = 'backup-{}/{}'.format(input_prefix, input_prefix)
                     push_data(kafka_broker_list, kafkaTopic, container, backup_prefix, date)
                     print("Data replay completed")
                 except Exception:
                     #restore backups if replay fails 
                     print("Error while data replay, restoring backups") 
+                    copy_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), input_prefix, date)
+                    delete_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), date)
                     for sink in sinkSourcesList:
                         if sink['type'] == 'azure':
                             backup_dir = 'backup-{}/{}'.format(sink['prefix'], sink['prefix'])
@@ -91,6 +92,7 @@ try:
                     raise  
                 # delete backups and disable segments after replay
                 print("Data replay completed. Deleting backups and druid segments")
+                delete_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), date)
                 for sink in sinkSourcesList:
                     if sink['type'] == 'azure':
                         backup_dir = 'backup-{}/{}'.format(sink['prefix'], sink['prefix'])

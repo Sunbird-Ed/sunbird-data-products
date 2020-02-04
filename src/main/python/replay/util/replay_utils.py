@@ -50,3 +50,6 @@ def getBackUpDetails(config_json, prefix):
 
 def getKafkaTopic(config_json, prefix):
     return config_json[prefix]['outputKafkaTopic']
+
+def getInputPrefix(config_json, prefix):
+    return config_json[prefix]['inputPrefix']    
