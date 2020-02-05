@@ -133,6 +133,13 @@ def init():
                 
             ]
         },
+        "batch-failed": {
+            "outputKafkaTopic": "telemetry.ingest",
+            "inputPrefix": "extractor-failed",
+            "dependentSinkSources": [
+                
+            ]
+        },
         "wfs": {
             "outputKafkaTopic": "telemetry.derived",
             "inputPrefix": "derived/wfs",

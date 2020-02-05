@@ -16,6 +16,8 @@ from kafka.errors import KafkaError
 
 findspark.init()
 
+pgDisableSegmentsQuery = "update druid_segments set used='f' where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
+
 def push_data(broker_host, topic, container, prefix, date):
     path = get_data_path(container, prefix, date)
     print(path)
@@ -52,4 +54,28 @@ def getKafkaTopic(config_json, prefix):
     return config_json[prefix]['outputKafkaTopic']
 
 def getInputPrefix(config_json, prefix):
-    return config_json[prefix]['inputPrefix']    
+    return config_json[prefix]['inputPrefix']   
+
+def backupData(sinkSourcesList, container, date):
+    for sink in sinkSourcesList:
+        if sink['type'] == 'azure':
+            backup_dir = 'backup-{}'.format(sink['prefix'])
+            copy_data(container, sink['prefix'], backup_dir, date)
+            delete_data(container, sink['prefix'], date)
+
+def deleteBackupData(sinkSourcesList, container, date):
+    for sink in sinkSourcesList:
+        if sink['type'] == 'azure':
+            backup_dir = 'backup-{}/{}'.format(sink['prefix'], sink['prefix'])
+            delete_data(container, backup_dir, date)
+        if sink['type'] == 'druid':
+            end_date = date + timedelta(1)
+            disableQuery = pgDisableSegmentsQuery.format(date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), sink['prefix'])
+            segments = executeQuery('postgis_test', disableQuery)
+
+def restoreBackupData(sinkSourcesList, container, date):
+    for sink in sinkSourcesList:
+        if sink['type'] == 'azure':
+            backup_dir = 'backup-{}/{}'.format(sink['prefix'], sink['prefix'])
+            copy_data(container, backup_dir, sink['prefix'], date)
+            delete_data(container, backup_dir, date)           
