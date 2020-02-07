@@ -131,6 +131,13 @@ def init():
             "inputPrefix": "failed",
             "dependentSinkSources": [
                 
+            ],
+            "filters": [
+                {
+                    "key": "flags",
+                    "operator": "Is Null",
+                    "value": ""
+                }
             ]
         },
         "batch-failed": {
@@ -138,6 +145,13 @@ def init():
             "inputPrefix": "extractor-failed",
             "dependentSinkSources": [
                 
+            ],
+            "filters": [
+                {
+                    "key": "flags",
+                    "operator": "Is Null",
+                    "value": ""
+                }
             ]
         },
         "wfs": {

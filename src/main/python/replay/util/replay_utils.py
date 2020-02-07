@@ -18,7 +18,7 @@ findspark.init()
 
 pgDisableSegmentsQuery = "update druid_segments set used='f' where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
 
-def push_data(broker_host, topic, container, prefix, date):
+def push_data(broker_host, topic, container, prefix, date, filters):
     path = get_data_path(container, prefix, date)
     print(path)
     # path = "wasbs://dev-data-store@sunbirddevtelemetry.blob.core.windows.net/unique/2020-01-01-1577818009896.json.gz"
@@ -29,12 +29,17 @@ def push_data(broker_host, topic, container, prefix, date):
     df = spark.read.json(path)
     inputCount = df.count()
     print(inputCount)
+    if filters:
+        filteredDf = df.filter(filters)
+    else :
+        filteredDf = df
+    print(filteredDf.count())
     def push_data_kafka(events):
         kafka_producer = KafkaProducer(bootstrap_servers=[broker_host])
         for event in events:
             kafka_producer.send(topic, bytearray(event, 'utf-8'))
             kafka_producer.flush()
-    df.toJSON().foreachPartition(push_data_kafka)
+    filteredDf.toJSON().foreachPartition(push_data_kafka)
     spark.stop()
     
 
@@ -49,6 +54,12 @@ def getDates(start, end):
 
 def getBackUpDetails(config_json, prefix):
     return config_json[prefix]['dependentSinkSources']
+
+def getFilterDetails(config_json, prefix):
+    if config_json[prefix].get('filters'):
+        return config_json[prefix].get('filters')
+    else:
+        return ""
 
 def getKafkaTopic(config_json, prefix):
     return config_json[prefix]['outputKafkaTopic']
@@ -79,3 +90,14 @@ def restoreBackupData(sinkSourcesList, container, date):
             backup_dir = 'backup-{}/{}'.format(sink['prefix'], sink['prefix'])
             copy_data(container, backup_dir, sink['prefix'], date)
             delete_data(container, backup_dir, date)           
+
+def getFilterStr(filters):
+    filterRes = []
+    for filter in filters:
+        if filter['value']:
+            filterRes.append('{} {} "{}"'.format(filter['key'], filter['operator'], filter['value']))
+        else:
+            filterRes.append('{} {}'.format(filter['key'], filter['operator']))
+    return " and ".join(filterRes)        
+
+

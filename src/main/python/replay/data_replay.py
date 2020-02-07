@@ -14,7 +14,7 @@ sys.path.append(resources_path)
 
 from azure_utils import copy_data, delete_data
 from postgres_utils import executeQuery
-from replay_utils import push_data, getDates, getBackUpDetails, getKafkaTopic, getInputPrefix, restoreBackupData, backupData, deleteBackupData
+from replay_utils import push_data, getDates, getBackUpDetails, getKafkaTopic, getInputPrefix, restoreBackupData, backupData, deleteBackupData, getFilterStr, getFilterDetails
 import replay_config
 
 
@@ -39,8 +39,6 @@ delete_backups = args.delete_backups
 
 config_json = replay_config.init()
 
-#pgGetSegmentsQuery = "select * from druid_segments where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
-
 #if delete backups is true
 # copy_data for from all data backups
 # delete_data from all data backups
@@ -55,7 +53,8 @@ config_json = replay_config.init()
 dateRange = getDates(start_date, end_date)
 print(dateRange)
 print(delete_backups)
-try:
+try:       
+    filterString = getFilterStr(getFilterDetails(config_json, prefix))
     for date in dateRange:
         try:
             if delete_backups == "True":
@@ -70,7 +69,7 @@ try:
                 kafkaTopic = getKafkaTopic(config_json, prefix)
                 try:
                     backup_prefix = 'backup-{}/{}'.format(input_prefix, input_prefix)
-                    push_data(kafka_broker_list, kafkaTopic, container, backup_prefix, date)
+                    push_data(kafka_broker_list, kafkaTopic, container, backup_prefix, date, filterString)
                     print("Data replay completed")
                 except Exception:
                     #restore backups if replay fails 
@@ -87,11 +86,21 @@ try:
                 deleteBackupData(sinkSourcesList, container, date)
                 print("Data replay completed. Deleted backups and druid segments")   
             else:
-                backup_dir = 'backup-{}'.format(prefix)
-                copy_data(container, sink['prefix'], backup_dir, date)
-                delete_data(container, sink['prefix'], date)
-                kafkaTopic = getKafkaTopic(config_json, prefix)
-                push_data(kafka_broker_list, kafkaTopic, container, backup_dir, date)
+                if "failed" in prefix:
+                    kafkaTopic = getKafkaTopic(config_json, prefix)
+                    push_data(kafka_broker_list, kafkaTopic, container, prefix, date, filterString)
+                else:  
+                    backup_dir = 'backup-{}'.format(prefix)
+                    copy_data(container, sink['prefix'], backup_dir, date)
+                    delete_data(container, sink['prefix'], date)
+                    kafkaTopic = getKafkaTopic(config_json, prefix)
+                    try:
+                        push_data(kafka_broker_list, kafkaTopic, container, backup_dir, date, filterString)
+                        print("Data replay completed")
+                    except Exception: 
+                        print("Error while data replay, restoring backups")
+                        copy_data(container, 'backup-{}/{}'.format(sink['prefix'], sink['prefix']), sink['prefix'], date)
+                        delete_data(container, 'backup-{}/{}'.format(sink['prefix'], sink['prefix']), date) 
         except Exception:
             print("Replay failed for {}. Continuing replay for remaining dates".format(date.strftime('%Y-%m-%d')))
             log.exception()
