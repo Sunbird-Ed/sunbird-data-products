@@ -47,7 +47,13 @@ def init():
             "lastPublishedOn",
             "lastUpdatedOn",
             "me_averageRating",
-            "me_totalRatings"
+            "me_totalRatings",
+            "me_total_time_spent_in_app",
+            "me_total_time_spent_in_portal",
+            "me_total_time_spent_in_desktop",
+            "me_total_plays_session_count_in_app",
+            "me_total_play_session_count_in_portal",
+            "me_total_play_session_count_in_desktop"
         ],
         "metrics": [
             ""
