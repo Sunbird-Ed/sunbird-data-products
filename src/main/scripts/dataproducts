@@ -34,6 +34,8 @@ if __name__ == '__main__':
                         help="The path to local data folder")
     parser_dweekly.add_argument("--druid_hostname", type=str,
                         help="Host address for Druid")
+    parser_dweekly.add_argument("--location_search", type=str,
+                        help="host address for Location API")
     parser_dweekly.add_argument("--execution_date", type=str,
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
@@ -44,6 +46,8 @@ if __name__ == '__main__':
                         help="The path to local data folder")
     parser_dmonthly.add_argument("--druid_hostname", type=str,
                         help="Host address for Druid")
+    parser_dmonthly.add_argument("--location_search", type=str,
+                        help="host address for Location API")
     parser_dmonthly.add_argument("--execution_date", type=str,
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
@@ -171,14 +175,14 @@ if __name__ == '__main__':
         from dataproducts.services.location.district_weekly import DistrictWeekly
 
         dist_weekly = DistrictWeekly(args.data_store_location, args.druid_hostname,
-                            args.execution_date)
+                            args.execution_date, args.location_search)
         dist_weekly.init()
 
     elif args.cmd == "district_monthly":
         from dataproducts.services.location.district_monthly import DistrictMonthly
 
         dist_monthly = DistrictMonthly(args.data_store_location, args.druid_hostname,
-                            args.execution_date)
+                            args.execution_date, args.location_search)
         dist_monthly.init()
 
     elif args.cmd == "content_consumption":
