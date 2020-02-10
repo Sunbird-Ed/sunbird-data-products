@@ -1,10 +1,10 @@
 import os
 import sys
 import findspark
+import argparse
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as func
 from datetime import date, timedelta, datetime
-import argparse
 from pathlib import Path
 
 util_path = os.path.abspath(os.path.join(__file__, '..', 'util'))
@@ -12,11 +12,10 @@ sys.path.append(util_path)
 resources_path = os.path.abspath(os.path.join(__file__, '..', 'resources'))
 sys.path.append(resources_path)
 
+import replay_config
 from azure_utils import copy_data, delete_data
 from postgres_utils import executeQuery
 from replay_utils import push_data, getDates, getBackUpDetails, getKafkaTopic, getInputPrefix, restoreBackupData, backupData, deleteBackupData, getFilterStr, getFilterDetails
-import replay_config
-
 
 start_time = datetime.now()
 print("Started at: ", start_time.strftime('%Y-%m-%d %H:%M:%S'))

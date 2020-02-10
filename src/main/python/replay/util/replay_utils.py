@@ -10,15 +10,11 @@ from datetime import date, timedelta, datetime
 from pyspark.sql.types import StringType
 from azure_utils import copy_data, delete_data, get_data_path
 from postgres_utils import executeQuery
-import json
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
-findspark.init()
-
-pgDisableSegmentsQuery = "update druid_segments set used='f' where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
-
 def push_data(broker_host, topic, container, prefix, date, filters):
+    findspark.init()
     path = get_data_path(container, prefix, date)
     print(path)
     # path = "wasbs://dev-data-store@sunbirddevtelemetry.blob.core.windows.net/unique/2020-01-01-1577818009896.json.gz"
@@ -75,6 +71,7 @@ def backupData(sinkSourcesList, container, date):
             delete_data(container, sink['prefix'], date)
 
 def deleteBackupData(sinkSourcesList, container, date):
+    pgDisableSegmentsQuery = "update druid_segments set used='f' where created_date >= '{}' and created_date <= '{}' and datasource = '{}' and used='t'"
     for sink in sinkSourcesList:
         if sink['type'] == 'azure':
             backup_dir = 'backup-{}/{}'.format(sink['prefix'], sink['prefix'])

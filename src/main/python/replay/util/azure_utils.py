@@ -19,11 +19,6 @@ def copy_data(container, prefix, destination_path, date):
         source = "https://{}.blob.core.windows.net/{}/{}".format(account_name, container, file)
         dest = file.split('/')[1]
         block_blob_service.copy_blob(container, '{}/{}'.format(destination_path, dest), source)
-    # command = 'az storage blob copy start-batch --connection-string "AccountName={};AccountKey={};EndpointSuffix=core.windows.net;DefaultEndpointsProtocol=https;" --source-container {} --destination-container {} --destination-path {} --pattern {}/{}*.gz'.format(account_name, account_key, container, container, destination_path, prefix, date.strftime('%Y-%m-%d'))
-    # print(command)
-    # stream = os.popen(command)
-    # output = stream.read()
-    # output
 
 # delete files
 def delete_data(container, prefix, date):
