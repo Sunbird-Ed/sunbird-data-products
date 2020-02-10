@@ -44,8 +44,6 @@ config_json = replay_config.init()
 # load_data from prefix and push to kafka topic
 
 dateRange = getDates(start_date, end_date)
-print(dateRange)
-print(delete_backups)
 try:       
     filterString = getFilterStr(getFilterDetails(config_json, prefix))
     for date in dateRange:

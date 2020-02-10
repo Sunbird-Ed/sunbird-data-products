@@ -16,20 +16,17 @@ from kafka.errors import KafkaError
 def push_data(broker_host, topic, container, prefix, date, filters):
     findspark.init()
     path = get_data_path(container, prefix, date)
-    print(path)
-    # path = "wasbs://dev-data-store@sunbirddevtelemetry.blob.core.windows.net/unique/2020-01-01-1577818009896.json.gz"
     account_name = os.environ['AZURE_STORAGE_ACCOUNT']
     account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
     spark = SparkSession.builder.appName("data_replay").master("local[*]").getOrCreate()
     spark.conf.set('fs.azure.account.key.{}.blob.core.windows.net'.format(account_name), account_key)
     df = spark.read.json(path)
-    inputCount = df.count()
-    print(inputCount)
+    print('Input data count: {}'.format(df.count()))
     if filters:
         filteredDf = df.filter(filters)
     else :
         filteredDf = df
-    print(filteredDf.count())
+        print('Final data count after filter: {}'.format(filteredDf.count))
     def push_data_kafka(events):
         kafka_producer = KafkaProducer(bootstrap_servers=[broker_host])
         for event in events:
