@@ -8,8 +8,8 @@ from pyspark.sql import functions as func
 from pathlib import Path
 from datetime import date, timedelta, datetime
 from pyspark.sql.types import StringType
-from azure_utils import copy_data, delete_data, get_data_path
-from postgres_utils import executeQuery
+from .azure_utils import copy_data, delete_data, get_data_path
+from .postgres_utils import executeQuery
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
