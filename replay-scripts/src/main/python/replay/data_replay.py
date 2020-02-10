@@ -19,7 +19,6 @@ parser.add_argument("prefix", type=str, help="replay data prefix")
 parser.add_argument("start_date", type=str, help="YYYY-MM-DD, replay start date")
 parser.add_argument("end_date", type=str, help="YYYY-MM-DD, replay end date")
 parser.add_argument("kafka_broker_list", type=str, help="kafka broker details")
-#parser.add_argument("kafka_topic", type=str, help="kafka topic")
 parser.add_argument("delete_backups", type=str, default="False", help="boolean flag whether to delete backups")
 
 args = parser.parse_args()
@@ -31,17 +30,6 @@ kafka_broker_list = args.kafka_broker_list
 delete_backups = args.delete_backups
 
 config_json = replay_config.init()
-
-#if delete backups is true
-# copy_data for from all data backups
-# delete_data from all data backups
-# get druid segments for the date range
-# load_data from prefix and push to kafka topic
-# delete_data backup took at the start
-# mark druid segments for deletion
-
-#if delete backups is false
-# load_data from prefix and push to kafka topic
 
 dateRange = getDates(start_date, end_date)
 try:       
