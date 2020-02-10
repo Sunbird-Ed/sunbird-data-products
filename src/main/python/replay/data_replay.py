@@ -68,21 +68,21 @@ try:
                 print("Taking backups completed. Starting data replay")
                 kafkaTopic = getKafkaTopic(config_json, prefix)
                 try:
-                    backup_prefix = 'backup-{}/{}'.format(input_prefix, input_prefix)
+                    backup_prefix = 'backup-{}'.format(input_prefix)
                     push_data(kafka_broker_list, kafkaTopic, container, backup_prefix, date, filterString)
                     print("Data replay completed")
                 except Exception:
                     #restore backups if replay fails 
                     print("Error while data replay, restoring backups") 
-                    copy_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), input_prefix, date)
-                    delete_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), date)
+                    copy_data(container, 'backup-{}'.format(input_prefix), input_prefix, date)
+                    delete_data(container, 'backup-{}'.format(input_prefix), date)
                     restoreBackupData(sinkSourcesList, container, date)
                     print("Error while data replay, backups restored") 
                     log.exception()        
                     raise  
                 # delete backups and disable segments after replay
                 print("Data replay completed. Deleting backups and druid segments")
-                delete_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), date)
+                delete_data(container, 'backup-{}'.format(input_prefix), date)
                 deleteBackupData(sinkSourcesList, container, date)
                 print("Data replay completed. Deleted backups and druid segments")   
             else:
@@ -99,8 +99,8 @@ try:
                         print("Data replay completed")
                     except Exception: 
                         print("Error while data replay, restoring backups")
-                        copy_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), input_prefix, date)
-                        delete_data(container, 'backup-{}/{}'.format(input_prefix, input_prefix), date) 
+                        copy_data(container, 'backup-{}'.format(input_prefix), input_prefix, date)
+                        delete_data(container, 'backup-{}'.format(input_prefix), date) 
         except Exception:
             print("Replay failed for {}. Continuing replay for remaining dates".format(date.strftime('%Y-%m-%d')))
             log.exception()
