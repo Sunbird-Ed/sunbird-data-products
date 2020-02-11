@@ -23,21 +23,21 @@ class UserDetailReport:
 
 
     def init(self):
+        os.makedirs(self.data_store_location.joinpath('location'), exist_ok=True)
         for slug in self.states.split(","):
             slug = slug.strip()
             try:
-                get_data_from_blob(self.data_store_location.joinpath('location', slug, 'user_detail.csv'))
+                get_data_from_blob(self.data_store_location.joinpath('location', slug, 'validated-user-detail.csv'))
             except Exception as e:
-                print("user_detail.csv not available for "+slug)
+                print("validated-user-detail.csv not available for "+slug)
                 continue
-            pdb.set_trace()
-            user_df = pd.read_csv(self.data_store_location.joinpath('location', slug, 'user_detail.csv'))
+            user_df = pd.read_csv(self.data_store_location.joinpath('location', slug, 'validated-user-detail.csv'))
             district_group = user_df.groupby('District name')
             os.makedirs(self.data_store_location.joinpath('location', slug, 'districts'), exist_ok=True)
             for district_name, user_data in user_df.groupby('District name'):
                 user_data.to_csv(self.data_store_location.joinpath('location', slug, 'districts', district_name.lower()+".csv"), index=False)
 
-            shutil.make_archive(str(self.data_store_location.joinpath('location', slug, 'districts')),
+            shutil.make_archive(str(self.data_store_location.joinpath('location', slug, 'validated-user-detail')),
                                 'zip',
                                 str(self.data_store_location.joinpath('location', slug, 'districts')))
-            post_data_to_blob(self.data_store_location.joinpath('location', slug, 'districts.zip'))
+            post_data_to_blob(self.data_store_location.joinpath('location', slug, 'validated-user-detail.zip'))
