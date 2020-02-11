@@ -36,6 +36,7 @@ node() {
 
         stage('Archive artifacts'){
             sh """
+                    cd python-scripts
                     mkdir dataproducts_artifacts
                     cp bin/dataproducts.tar.gz dataproducts_artifacts/
                     zip -j dataproducts_artifacts.zip:${artifact_version} dataproducts_artifacts/*
