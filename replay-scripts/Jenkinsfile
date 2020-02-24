@@ -29,7 +29,7 @@ node() {
 
             stage('Archive artifacts'){
                 sh """
-                        zip replay_scripts:${artifact_version}.zip replay-scripts/*
+                        zip -r replay_scripts:${artifact_version}.zip replay-scripts/*
                     """
                 archiveArtifacts artifacts: "replay_scripts:${artifact_version}.zip", fingerprint: true, onlyIfSuccessful: true
                 sh """echo {\\"artifact_name\\" : \\"replay_scripts\\", \\"artifact_version\\" : \\"${artifact_version}.zip\\", \\"node_name\\" : \\"${env.NODE_NAME}\\"} > metadata.json"""
