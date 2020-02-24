@@ -80,7 +80,7 @@ try:
                         print("Error while data replay, restoring backups")
                         copy_data(container, 'backup-{}'.format(input_prefix), input_prefix, date)
                         delete_data(container, 'backup-{}'.format(input_prefix), date) 
-        except Exception:
+        except Exception as log:
             print("Replay failed for {}. Continuing replay for remaining dates".format(date.strftime('%Y-%m-%d')))
             log.exception()
             pass
