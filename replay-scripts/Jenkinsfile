@@ -31,9 +31,9 @@ node() {
                 sh """
                         mkdir replay_script_artifacts
                         cp -r replay-scripts/* replay_script_artifacts/
-                        zip -j replay_script_artifacts.zip:${artifact_version} replay_script_artifacts/*
+                        zip -j replay_script_artifacts:${artifact_version}.zip replay_script_artifacts/*
                     """
-                archiveArtifacts artifacts: "replay_script_artifacts.zip:${artifact_version}", fingerprint: true, onlyIfSuccessful: true
+                archiveArtifacts artifacts: "replay_script_artifacts:${artifact_version}.zip", fingerprint: true, onlyIfSuccessful: true
                 sh """echo {\\"artifact_name\\" : \\"replay_script_artifacts.zip\\", \\"artifact_version\\" : \\"${artifact_version}\\", \\"node_name\\" : \\"${env.NODE_NAME}\\"} > metadata.json"""
                 archiveArtifacts artifacts: 'metadata.json', onlyIfSuccessful: true
                 currentBuild.result = "SUCCESS"
