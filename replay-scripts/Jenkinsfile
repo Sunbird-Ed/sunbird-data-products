@@ -30,7 +30,7 @@ node() {
             stage('Archive artifacts'){
                 sh """
                         mkdir replay_script_artifacts
-                        cp -r ../replay-scripts/* replay_script_artifacts/
+                        cp -r replay-scripts/* replay_script_artifacts/
                         zip -j replay_script_artifacts.zip:${artifact_version} replay_script_artifacts/*
                     """
                 archiveArtifacts artifacts: "replay_script_artifacts.zip:${artifact_version}", fingerprint: true, onlyIfSuccessful: true
