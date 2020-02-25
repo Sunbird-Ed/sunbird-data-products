@@ -18,8 +18,12 @@ def push_data(broker_host, topic, container, prefix, date, filters):
     path = get_data_path(container, prefix, date)
     account_name = os.environ['AZURE_STORAGE_ACCOUNT']
     account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+    env = os.environ['ENV']
+    final_topic = '{}.{}'.format(env, topic)
+    print('kafka topic: {}'.format(final_topic))
     spark = SparkSession.builder.appName("data_replay").master("local[*]").getOrCreate()
     spark.conf.set('fs.azure.account.key.{}.blob.core.windows.net'.format(account_name), account_key)
+
     df = spark.read.json(path)
     print('Input data count: {}'.format(df.count()))
     if filters:
@@ -30,7 +34,7 @@ def push_data(broker_host, topic, container, prefix, date, filters):
     def push_data_kafka(events):
         kafka_producer = KafkaProducer(bootstrap_servers=[broker_host])
         for event in events:
-            kafka_producer.send(topic, bytearray(event, 'utf-8'))
+            kafka_producer.send(final_topic, bytearray(event, 'utf-8'))
             kafka_producer.flush()
     filteredDf.toJSON().foreachPartition(push_data_kafka)
     spark.stop()

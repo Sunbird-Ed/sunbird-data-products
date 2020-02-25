@@ -76,13 +76,15 @@ try:
                     try:
                         push_data(kafka_broker_list, kafkaTopic, container, backup_dir, date, filterString)
                         print("Data replay completed")
-                    except Exception: 
+                        delete_data(container, 'backup-{}'.format(input_prefix), date)
+                    except Exception as e: 
+                        print(str(e))
                         print("Error while data replay, restoring backups")
                         copy_data(container, 'backup-{}'.format(input_prefix), input_prefix, date)
                         delete_data(container, 'backup-{}'.format(input_prefix), date) 
-        except Exception as log:
+        except Exception as ex:
             print("Replay failed for {}. Continuing replay for remaining dates".format(date.strftime('%Y-%m-%d')))
-            log.exception()
+            print(str(ex))
             pass
 except Exception:
         raise
