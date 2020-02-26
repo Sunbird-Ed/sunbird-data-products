@@ -16,8 +16,8 @@ from kafka.errors import KafkaError
 def push_data(broker_host, topic, container, prefix, date, filters):
     findspark.init()
     path = get_data_path(container, prefix, date)
-    account_name = os.environ['AZURE_STORAGE_ACCOUNT']
-    account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+    account_name = os.environ['azure_storage_key']
+    account_key = os.environ['azure_storage_secret']
     env = os.environ['ENV']
     final_topic = '{}.{}'.format(env, topic)
     print('kafka topic: {}'.format(final_topic))

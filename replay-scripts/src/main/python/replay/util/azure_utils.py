@@ -4,8 +4,8 @@ from pathlib import Path
 from azure.storage.blob import BlockBlobService
 
 #del os.environ['PYSPARK_SUBMIT_ARGS']
-account_name = os.environ['AZURE_STORAGE_ACCOUNT']
-account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+account_name = os.environ['azure_storage_key']
+account_key = os.environ['azure_storage_secret']
 block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
 
 def listBlobs(container, prefix, date):
