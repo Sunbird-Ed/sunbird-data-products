@@ -107,6 +107,7 @@ class ContentConsumption:
         df['channel'] = df['channel'].astype(str)
         df['mimeType'] = df['mimeType'].apply(self.mime_type)
 
+        df['me_totalDownloads'] = df['me_totalDownloads'].fillna(0)
         df['me_total_time_spent_in_app'] = df['me_total_time_spent_in_app'].fillna(0)
         df['me_total_time_spent_in_portal'] = df['me_total_time_spent_in_portal'].fillna(0)
         df['me_total_plays_session_count_in_app'] = df['me_total_plays_session_count_in_app'].fillna(0)
@@ -120,18 +121,22 @@ class ContentConsumption:
         df['Average Play Time in mins on Portal'] = round(
             df['me_total_time_spent_in_portal'] / (60 * df['me_total_play_session_count_in_portal']), 2)
         df['Average Play Time in mins (On App and Portal)'] = round(
-            (df['Average Play Time in mins on App'] + df['Average Play Time in mins (On App and Portal)']) / \
+            (df['Average Play Time in mins on App'] + df['Average Play Time in mins on Portal']) / \
             df['Total No of Plays (App and Portal)'], 2)
+        df['Average Play Time in mins on App'] = df['Average Play Time in mins on App'].fillna(0)
+        df['Average Play Time in mins on Portal'] = df['Average Play Time in mins on Portal'].fillna(0)
+        df['Average Play Time in mins (On App and Portal)'] = df['Average Play Time in mins (On App and Portal)'].fillna(0)
 
         df = df[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
-             'name', 'mimeType', 'createdOn', 'creator','lastPublishedOn', 'me_averageRating', 'me_totalRatings',
+             'name', 'mimeType', 'createdOn', 'creator','lastPublishedOn',
+             'me_averageRating', 'me_totalRatings', 'me_totalDownloads',
              'me_total_plays_session_count_in_app', 'me_total_play_session_count_in_portal',
              'Total No of Plays (App and Portal)', 'Average Play Time in mins on App', 'Average Play Time in mins on Portal',
              'Average Play Time in mins (On App and Portal)']]
 
-        df.colums = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
+        df.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                      'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
-                     'Average Rating(out of 5)', 'Total No of Ratings',
+                     'Average Rating(out of 5)', 'Total No of Ratings', 'No of Downloads',
                      'Number of Plays on App', 'Number of Plays on Portal', 'Total No of Plays (App and Portal)',
                      'Average Play Time in mins on App','Average Play Time in mins on Portal',
                      'Average Play Time in mins (On App and Portal)']
@@ -152,8 +157,9 @@ class ContentConsumption:
                 continue
             content_aggregates = df[df['channel'] == channel]
             content_aggregates.drop(['channel'], axis=1, inplace=True)
+            result_loc_.parent.joinpath('portal_dashboards', slug).mkdir(exist_ok=True)
 
-            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'),
+            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'),
                                       index=False, encoding='utf-8-sig')
             create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
             post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
@@ -291,7 +297,7 @@ class ContentConsumption:
         get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
 
         print("Success::Overall Content Consumption Report")
-        get_overall_report(result_loc_=result_loc, date_=execution_date)
+        self.get_overall_report(result_loc_=result_loc, date_=execution_date)
         # 2.9.0
         # self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         # for i in range(7):

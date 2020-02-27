@@ -48,6 +48,7 @@ def init():
             "lastUpdatedOn",
             "me_averageRating",
             "me_totalRatings",
+            "me_totalDownloads",
             "me_total_time_spent_in_app",
             "me_total_time_spent_in_portal",
             "me_total_time_spent_in_desktop",
@@ -60,7 +61,7 @@ def init():
         ],
         "pagingSpec": {
             "pagingIdentifiers": {},
-            "threshold": 10000
+            "threshold": 5000
         }
     }
     """
