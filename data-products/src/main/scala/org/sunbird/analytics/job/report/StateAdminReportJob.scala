@@ -77,7 +77,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         
         val organisationDF = loadOrganisationDF()
         val channelSlugDF = getChannelSlugDF(organisationDF)
-        val shadowUserStatusDF = appendShadowStatus(shadowUserDF);
+        val shadowUserStatusDF = appendShadowUserStatus(shadowUserDF);
         val shadowDataSummary = generateSummaryData(shadowUserStatusDF)
 
         val container = AppConf.getConfig("cloud.container.reports")
@@ -131,7 +131,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
       organisationDF.select(col("channel"), col("slug")).where(col("isrootorg") && col("status").===(1))
     }
     
-    def appendShadowStatus(shadowUserDF: Dataset[ShadowUserData])(implicit spark: SparkSession): DataFrame = {
+    def appendShadowUserStatus(shadowUserDF: Dataset[ShadowUserData])(implicit spark: SparkSession): DataFrame = {
         import spark.implicits._
         shadowUserDF.withColumn(
             "claim_status",
@@ -228,11 +228,4 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
 
   }
 
-}
-
-object StateAdminReportJobTest {
-    
-    def main(args: Array[String]): Unit = {
-        StateAdminReportJob.main("""{"model":"Test"}""");
-    }
 }
