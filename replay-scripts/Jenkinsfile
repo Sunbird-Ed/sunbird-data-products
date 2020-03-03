@@ -27,27 +27,17 @@ node() {
             }
         }
 
-        stage('Build') {
-            sh '''
-                cd python-scripts
-                docker run --rm -v /etc/passwd:/etc/passwd -u $(id -u):$(id -g) -v$(pwd):/home/work -e HOME=/home/work -w /home/work python:3.7 ./build.sh
-            '''
+            stage('Archive artifacts'){
+                sh """
+                        zip -r replay_scripts:${artifact_version}.zip replay-scripts/*
+                    """
+                archiveArtifacts artifacts: "replay_scripts:${artifact_version}.zip", fingerprint: true, onlyIfSuccessful: true
+                sh """echo {\\"artifact_name\\" : \\"replay_scripts\\", \\"artifact_version\\" : \\"${artifact_version}.zip\\", \\"node_name\\" : \\"${env.NODE_NAME}\\"} > metadata.json"""
+                archiveArtifacts artifacts: 'metadata.json', onlyIfSuccessful: true
+                currentBuild.result = "SUCCESS"
+                currentBuild.description = "Artifact: ${artifact_version}, Public: ${params.github_release_tag}"
+            }
         }
-
-        stage('Archive artifacts'){
-            sh """
-                    cd python-scripts
-                    mkdir dataproducts_artifacts
-                    cp bin/dataproducts.tar.gz dataproducts_artifacts/
-                    zip -j dataproducts_artifacts.zip:${artifact_version} dataproducts_artifacts/*
-                """
-            archiveArtifacts artifacts: "python-scripts/dataproducts_artifacts.zip:${artifact_version}", fingerprint: true, onlyIfSuccessful: true
-            sh """echo {\\"artifact_name\\" : \\"dataproducts_artifacts.zip\\", \\"artifact_version\\" : \\"${artifact_version}\\", \\"node_name\\" : \\"${env.NODE_NAME}\\"} > metadata.json"""
-            archiveArtifacts artifacts: 'metadata.json', onlyIfSuccessful: true
-            currentBuild.result = "SUCCESS"
-            currentBuild.description = "Artifact: ${artifact_version}, Public: ${params.github_release_tag}"
-        }
-    }
 
     catch (err) {
         currentBuild.result = "FAILURE"
