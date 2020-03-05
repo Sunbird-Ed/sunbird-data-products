@@ -24,6 +24,7 @@ object RejectedStatus extends UserStatus(2, "REJECTED")
 object FailedStatus extends UserStatus(3, "FAILED")
 object MultiMatchStatus extends UserStatus(4, "MULTIMATCH")
 object OrgExtIdMismatch extends UserStatus(5, "ORGEXTIDMISMATCH")
+object Eligible extends UserStatus(6, "ELIGIBLE")
 
 case class ShadowUserData(channel: String, userextid: String, addedby: String, claimedon: java.sql.Timestamp, claimstatus: Int,
                           createdon: java.sql.Timestamp, email: String, name: String, orgextid: String, processid: String,
@@ -76,14 +77,14 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         
         val organisationDF = loadOrganisationDF()
         val channelSlugDF = getChannelSlugDF(organisationDF)
-        val shadowDataSummary = generateSummaryData(shadowUserDF)
+        val shadowUserStatusDF = appendShadowUserStatus(shadowUserDF);
+        val shadowDataSummary = generateSummaryData(shadowUserStatusDF)
 
         val container = AppConf.getConfig("cloud.container.reports")
         val objectKey = AppConf.getConfig("admin.metrics.cloud.objectKey")
         val storageConfig = getStorageConfig(container, objectKey);
-        
         saveUserSummaryReport(shadowDataSummary, channelSlugDF, storageConfig)
-        saveUserDetailsReport(shadowUserDF.toDF(), channelSlugDF, storageConfig)
+        saveUserDetailsReport(shadowUserStatusDF, channelSlugDF, storageConfig)
 
         // Only claimed used
         val claimedShadowDataSummaryDF = claimedShadowUserDF.groupBy("channel")
@@ -129,22 +130,23 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     private def getChannelSlugDF(organisationDF: DataFrame)(implicit sparkSession: SparkSession): DataFrame = {
       organisationDF.select(col("channel"), col("slug")).where(col("isrootorg") && col("status").===(1))
     }
-
-    def generateSummaryData(shadowUserDF: Dataset[ShadowUserData])(implicit spark: SparkSession): DataFrame = {
+    
+    def appendShadowUserStatus(shadowUserDF: Dataset[ShadowUserData])(implicit spark: SparkSession): DataFrame = {
         import spark.implicits._
-        def transformClaimedStatusValue()(ds: Dataset[ShadowUserData]) = {
-            ds.withColumn(
-                "claim_status",
-                when($"claimstatus" === UnclaimedStatus.id, lit(UnclaimedStatus.status))
-                  .when($"claimstatus" === ClaimedStatus.id, lit(ClaimedStatus.status))
-                  .when($"claimstatus" === FailedStatus.id, lit(FailedStatus.status))
-                  .when($"claimstatus" === RejectedStatus.id, lit(RejectedStatus.status))
-                  .when($"claimstatus" === MultiMatchStatus.id, lit(MultiMatchStatus.status))
-                  .when($"claimstatus" === OrgExtIdMismatch.id, lit(OrgExtIdMismatch.status))
-                  .otherwise(lit("")))
-        }
+        shadowUserDF.withColumn(
+            "claim_status",
+            when($"claimstatus" === UnclaimedStatus.id, lit(UnclaimedStatus.status))
+                .when($"claimstatus" === ClaimedStatus.id, lit(ClaimedStatus.status))
+                .when($"claimstatus" === FailedStatus.id, lit(FailedStatus.status))
+                .when($"claimstatus" === RejectedStatus.id, lit(RejectedStatus.status))
+                .when($"claimstatus" === MultiMatchStatus.id, lit(MultiMatchStatus.status))
+                .when($"claimstatus" === OrgExtIdMismatch.id, lit(OrgExtIdMismatch.status))
+                .when($"claimstatus" === Eligible.id, lit(Eligible.status))
+                .otherwise(lit("")))
+    }
 
-        shadowUserDF.transform(transformClaimedStatusValue()).groupBy("channel")
+    def generateSummaryData(shadowUserDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+        shadowUserDF.groupBy("channel")
           .pivot("claim_status").agg(count("claim_status")).na.fill(0)
     }
 
@@ -167,7 +169,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
               concat_ws(",", col("userids")).as("Matching User ids"),
               col("claimedon").as("Claimed on"),
               col("orgextid").as("School external id"),
-              col("claimstatus").as("Claimed status"),
+              col("claim_status").as("Claimed status"),
               col("createdon").as("Created on"),
               col("updatedon").as("Last updated on")).filter(col(colName = "slug").isNotNull)
           .saveToBlobStore(storageConfig, "csv", "user-detail", Option(Map("header" -> "true")), Option(Seq("slug")))
