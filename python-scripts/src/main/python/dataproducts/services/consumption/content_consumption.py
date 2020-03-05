@@ -164,7 +164,7 @@ class ContentConsumption:
             create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
             post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
 
-    def get_weekly_plays(self, result_loc_, date_, cassandra_, keyspace_):
+    def get_weekly_plays(self, result_loc_, date_, cassandra_, keyspace_, week_count_):
         """
         query cassandra table for 1 week of content play and timespent.
         :param result_loc_: local path to store resultant csv
@@ -173,6 +173,7 @@ class ContentConsumption:
         :param keyspace_: keyspace in which we are working
         :return: None
         """
+        result_file_name = 'content_aggregates_{}w.csv'.format(week_count_)
         tenant_info = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
         tenant_info['id'] = tenant_info['id'].astype(str)
         tenant_info.set_index('id', inplace=True)
@@ -257,8 +258,8 @@ class ContentConsumption:
             content_aggregates = df[df['channel'] == channel]
             content_aggregates.drop(['channel'], axis=1, inplace=True)
             try:
-                get_data_from_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
-                blob_data = pd.read_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
+                get_data_from_blob(result_loc_.parent.joinpath('portal_dashboards', slug, result_file_name))
+                blob_data = pd.read_csv(result_loc_.parent.joinpath('portal_dashboards', slug, result_file_name))
             except AzureMissingResourceHttpError:
                 blob_data = pd.DataFrame()
             except FileNotFoundError:
@@ -271,11 +272,16 @@ class ContentConsumption:
                  'Number of Plays on App', 'Number of Plays on Portal', 'Average Play Time in mins (On App and Portal)',
                  'Average Play Time in mins on App', 'Average Play Time in mins on Portal', 'Average Rating(out of 5)',
                  'Last Date of the week']]
+
+            week_dates = list(content_aggregates[["Last Date of the week"]]
+                            .sort_values(by="Last Date of the week")['Last Date of the week']
+                            .unique())
+            content_aggregates = content_aggregates[content_aggregates['Last Date of the week'].isin(week_dates[-week_count_:])]
             result_loc_.parent.joinpath('portal_dashboards', slug).mkdir(exist_ok=True)
-            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'),
+            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, result_file_name),
                                       index=False, encoding='utf-8-sig')
-            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
-            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregates.csv'))
+            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, result_file_name))
+            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, result_file_name))
 
 
     def init(self):
@@ -296,15 +302,21 @@ class ContentConsumption:
         get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
         get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
 
-        print("Success::Overall Content Consumption Report")
         self.get_overall_report(result_loc_=result_loc, date_=execution_date)
+        print("Success::Overall Content Consumption Report")
         # 2.9.0
-        # self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
-        # for i in range(7):
-        #     analysis_date = execution_date - timedelta(days=i)
-        #     get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
-        #     self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
-        # self.get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace)
+        self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
+        for i in range(7):
+            analysis_date = execution_date - timedelta(days=i)
+            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
+            self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
+
+        # Content Consumption for last 6 weeks
+        self.get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace, week_count=6)
+
+        # Content Consumption for last week
+        self.get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace, week_count=1)
+
         print("Content Consumption Report::Completed")
         end_time_sec = int(round(time.time()))
         time_taken = end_time_sec - start_time_sec

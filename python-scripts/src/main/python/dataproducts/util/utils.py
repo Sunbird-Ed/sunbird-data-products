@@ -407,6 +407,33 @@ def get_data_from_blob(result_loc_, backup=False):
         raise Exception('Could not read from blob!')
 
 
+def get_dqp_data_from_blob(file_path, result_loc_):
+    """
+    read a blob storage file
+    :param result_loc_: pathlib.Path object to store the file at. the last two names in path structure is used to locate
+     file on blob storage container
+    :return: None
+    """
+    try:
+        local_file_path = str(result_loc_) + file_path
+        os.makedirs(local_file_path.parent, exist_ok=True)
+        account_name = os.environ['AZURE_STORAGE_ACCOUNT']
+        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+        block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
+
+        container_name = 'druid-reports'
+
+        block_blob_service.get_blob_to_path(
+            container_name=container_name,
+            blob_name=file_path,
+            file_path=local_file_path
+        )
+    except AzureMissingResourceHttpError:
+        raise AzureMissingResourceHttpError("Missing resource!", 404)
+    except Exception:
+        raise Exception('Could not read from blob!')
+
+
 def post_data_to_blob(result_loc_, backup=False):
     """
     write a local file to blob storage.
