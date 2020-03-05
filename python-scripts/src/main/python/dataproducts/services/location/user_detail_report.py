@@ -45,7 +45,7 @@ class UserDetailReport:
 
             shutil.move(state_result_loc.joinpath('validated-user-detail-state', '{}.csv'.format(slug)),
                 state_result_loc.joinpath('districts', 'validated-user-detail-state.csv'))
-            shutil.make_archive(str(state_result_loc.joinpath(slug)),
+            shutil.make_archive(str(state_result_loc.joinpath('validated-user-detail', slug)),
                                 'zip',
                                 str(state_result_loc.joinpath('districts')))
-            post_data_to_blob(result_loc.joinpath('validated-user-detail', '{}.zip'.format(slug)))
+            post_data_to_blob(state_result_loc.joinpath('validated-user-detail', '{}.zip'.format(slug)))
