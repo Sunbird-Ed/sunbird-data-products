@@ -26,24 +26,26 @@ class UserDetailReport:
         result_loc = self.data_store_location.joinpath('location')
         for slug in self.states.split(","):
             slug = slug.strip()
+            state_result_loc = result_loc.joinpath(slug)
+            os.makedirs(state_result_loc, exist_ok=True)
             try:
-                get_data_from_blob(result_loc.joinpath(slug, 'validated-user-detail.csv'))
+                get_data_from_blob(state_result_loc.joinpath('validated-user-detail', '{}.csv'.format(slug)))
             except Exception as e:
-                print("validated-user-detail.csv not available for "+slug)
+                print("validated-user-detail not available for "+slug)
                 continue
             try:
-                get_data_from_blob(result_loc.joinpath(slug, 'validated-user-detail-state.csv'))
+                get_data_from_blob(state_result_loc.joinpath('validated-user-detail-state', '{}.csv'.format(slug)))
             except Exception as e:
-                print("validated-user-detail-state.csv not available for "+slug)
-            user_df = pd.read_csv(result_loc.joinpath(slug, 'validated-user-detail.csv'))
+                print("validated-user-detail-state not available for "+slug)
+            user_df = pd.read_csv(state_result_loc.joinpath('validated-user-detail', '{}.csv'.format(slug)))
             district_group = user_df.groupby('District name')
-            os.makedirs(result_loc.joinpath(slug, 'districts'), exist_ok=True)
+            os.makedirs(state_result_loc.joinpath('districts'), exist_ok=True)
             for district_name, user_data in user_df.groupby('District name'):
-                user_data.to_csv(result_loc.joinpath(slug, 'districts', district_name.lower()+".csv"), index=False)
+                user_data.to_csv(state_result_loc.joinpath('districts', district_name.lower()+".csv"), index=False)
 
-            shutil.move(result_loc.joinpath(slug, 'validated-user-detail-state.csv'),
-                result_loc.joinpath(slug, 'districts', 'validated-user-detail-state.csv'))
-            shutil.make_archive(str(result_loc.joinpath(slug, 'districts')),
+            shutil.move(state_result_loc.joinpath('validated-user-detail-state', '{}.csv'.format(slug)),
+                state_result_loc.joinpath('districts', 'validated-user-detail-state.csv'))
+            shutil.make_archive(str(state_result_loc.joinpath(slug)),
                                 'zip',
-                                str(result_loc.joinpath(slug, 'districts')))
-            post_data_to_blob(result_loc.joinpath(slug, 'districts.zip'))
+                                str(state_result_loc.joinpath('districts')))
+            post_data_to_blob(result_loc.joinpath('validated-user-detail', '{}.zip'.format(slug)))
