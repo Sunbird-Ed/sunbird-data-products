@@ -5,6 +5,7 @@ import json
 import sys, time
 import pdb
 import os
+import requests
 import pandas as pd
 
 from datetime import datetime, timedelta, date
@@ -18,12 +19,14 @@ from dataproducts.util.utils import create_json, get_tenant_info, get_data_from_
 
 class ContentConsumption:
     def __init__(self, data_store_location, org_search, druid_hostname,
-                cassandra_host, keyspace_prefix, execution_date=date.today().strftime("%d/%m/%Y")):
+                cassandra_host, keyspace_prefix, content_search,
+                execution_date=date.today().strftime("%d/%m/%Y")):
         self.data_store_location = data_store_location
         self.org_search = org_search
         self.druid_hostname = druid_hostname
         self.cassandra_host = cassandra_host
         self.keyspace_prefix = keyspace_prefix
+        self.content_search = content_search
         self.execution_date = execution_date
         self.config = {}
 
@@ -98,11 +101,63 @@ class ContentConsumption:
         session.shutdown()
         cluster.shutdown()
 
+
+    def append_tb_mapping(self, result_loc_, df_):
+        textbooks = pd.read_csv(result_loc_.joinpath('tb_content_mapping.csv')) \
+                      .set_index("identifier")
+        df_.set_index("identifier", inplace=True)
+        merged_df = df_.join(textbooks, how="left", on="identifier")
+        merged_df["tb_id"] = merged_df["tb_id"].fillna("")
+        merged_df["tb_name"] = merged_df["tb_name"].fillna("")
+        return merged_df.reset_index()
+
+
+    def get_tb_content_mapping(self, result_loc_, content_search_):
+        """
+         get a list of textbook from LP API and iterate over the textbook hierarchy to create CSV
+        :param result_loc_: pathlib.Path object to store resultant CSV at
+        :param content_search_: ip and port of the server hosting LP content search API
+        """
+        tb_url = "{}v3/search".format(content_search_)
+        payload = """{
+                    "request": {
+                        "filters": {
+                            "contentType": ["Textbook"],
+                            "status": ["Live"]
+                        },
+                        "fields": ["childNodes", "identifier", "name"],
+                        "sort_by": {"createdOn":"desc"},
+                        "limit": 10000
+                    }
+                }"""
+        tb_headers = {
+            'content-type': "application/json; charset=utf-8",
+            'cache-control': "no-cache"
+        }
+        retry_count = 0
+        while retry_count < 5:
+            retry_count += 1
+            try:
+                response = requests.request("POST", tb_url, data=payload, headers=tb_headers)
+                textbooks = pd.DataFrame(response.json()['result']['content'])[
+                ["childNodes", "identifier", "name"]]
+                textbooks.columns = ["identifier", "tb_id", "tb_name"]
+                textbooks = textbooks.explode('identifier')
+                textbooks.to_csv(result_loc_.joinpath('tb_content_mapping.csv'), index=False)
+                break
+            except requests.exceptions.ConnectionError:
+                print("Retry {} for textbook list".format(retry_count))
+                sleep(10)
+        else:
+            print("Max retries reached...")
+
+
     def get_overall_report(self, result_loc_, date_):
         tenant_info = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
         tenant_info['id'] = tenant_info['id'].astype(str)
         tenant_info.set_index('id', inplace=True)
         df = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
+        df = self.append_tb_mapping(result_loc_, df)
         df['creator'] = df['creator'].str.replace('null', '')
         df['channel'] = df['channel'].astype(str)
         df['mimeType'] = df['mimeType'].apply(self.mime_type)
@@ -129,13 +184,14 @@ class ContentConsumption:
 
         df = df[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
              'name', 'mimeType', 'createdOn', 'creator','lastPublishedOn',
-             'me_averageRating', 'me_totalRatings', 'me_totalDownloads',
-             'me_total_plays_session_count_in_app', 'me_total_play_session_count_in_portal',
+             'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
+             'me_totalDownloads', 'me_total_plays_session_count_in_app', 'me_total_play_session_count_in_portal',
              'Total No of Plays (App and Portal)', 'Average Play Time in mins on App', 'Average Play Time in mins on Portal',
              'Average Play Time in mins (On App and Portal)']]
 
         df.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                      'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
+                     'Linked Textbook Id', 'Linked Textbook Name',
                      'Average Rating(out of 5)', 'Total No of Ratings', 'No of Downloads',
                      'Number of Plays on App', 'Number of Plays on Portal', 'Total No of Plays (App and Portal)',
                      'Average Play Time in mins on App','Average Play Time in mins on Portal',
@@ -295,6 +351,8 @@ class ContentConsumption:
             self.config = json.loads(f.read())
         get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
         get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
+        self.get_tb_content_mapping(result_loc_=result_loc,
+                                    content_search_=self.content_search)
 
         print("Success::Overall Content Consumption Report")
         self.get_overall_report(result_loc_=result_loc, date_=execution_date)
