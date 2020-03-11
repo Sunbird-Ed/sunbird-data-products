@@ -31,6 +31,7 @@ node('build-slave') {
         }
         stage('Build') {
             sh '''
+                cd data-products
                 mvn clean install -DskipTests
                 '''
         }
