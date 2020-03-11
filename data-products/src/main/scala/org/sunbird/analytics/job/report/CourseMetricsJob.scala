@@ -10,7 +10,7 @@ import org.apache.spark.sql.{ DataFrame, SparkSession }
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{ JSONUtils, JobLogger }
-import org.ekstep.analytics.util.ESUtil
+import org.sunbird.analytics.util.ESUtil
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 import org.sunbird.cloud.storage.conf.AppConf
