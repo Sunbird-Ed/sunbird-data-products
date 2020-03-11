@@ -37,10 +37,10 @@ node('build-slave') {
         }
         stage('Archive artifacts'){
             sh """
-                        mkdir lpa_dp_artifacts
-                        cp ./target/data-products-1.0.jar lpa_dp_artifacts
-                        zip -j lpa_dp_artifacts.zip:${artifact_version} lpa_dp_artifacts/*
-                    """
+                mkdir lpa_dp_artifacts
+                cp ./data-products/target/data-products-1.0.jar lpa_dp_artifacts
+                zip -j lpa_dp_artifacts.zip:${artifact_version} lpa_dp_artifacts/*
+            """
             archiveArtifacts artifacts: "lpa_dp_artifacts.zip:${artifact_version}", fingerprint: true, onlyIfSuccessful: true
             sh """echo {\\"artifact_name\\" : \\"lpa_dp_artifacts.zip\\", \\"artifact_version\\" : \\"${artifact_version}\\", \\"node_name\\" : \\"${env.NODE_NAME}\\"} > metadata.json"""
             archiveArtifacts artifacts: 'metadata.json', onlyIfSuccessful: true
