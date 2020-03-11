@@ -35,7 +35,39 @@ class DQPMerger:
 
 
     def rollup_report(self, report_df_):
-        maxDate = report_df_[self.report_config['rollupCol']].max()
+        rollupCol = self.report_config['rollupCol']
+        rollupRange = self.report_config['rollupRange'] - 1
+        report_df_[rollupCol] = pd.to_datetime(report_df_[rollupCol])
+
+        endDate = report_df_[rollupCol].max().date()
+        endYear = endDate.year
+        endMonth = endDate.month
+        endDay = endDate.day
+
+        if self.report_config['rollupAge'] == 'ACADEMIC_YEAR':
+            if endMonth <= 5:
+                endYear = endYear - 1 - rollupRange
+            else:
+                endYear = endYear - rollupRange
+            startDate = date(endYear, 6, 1)
+        elif self.report_config['rollupAge'] == 'GEN_YEAR':
+            endYear = endYear - rollupRange
+            startDate = date(endYear, 1, 1)
+        elif self.report_config['rollupAge'] == 'MONTH':
+            endMonth = endMonth - rollupRange
+            endYear = endYear + int(
+                        pd.np.floor((endMonth if endMonth != 0 else -1)/12)
+                      ) if endMonth < 1 else endYear
+            endMonth = endMonth + 12 if endMonth < 1 else endMonth
+            startDate = date(endYear, endMonth, 1)
+        elif self.report_config['rollupAge'] == 'WEEK':
+            startDate = endDate - timedelta(days=endDate.weekday(), weeks=rollupRange)
+        elif self.report_config['rollupAge'] == 'DAY':
+            startDate = endDate - timedelta(days=rollupRange)
+
+        report_df_ = report_df_[report_df_[rollupCol] >= pd.to_datetime(startDate)]
+
+        report_df_[rollupCol] = report_df_[rollupCol].astype(str)
 
         return report_df_
 
@@ -49,7 +81,7 @@ class DQPMerger:
 
         try:
             os.makedirs(self.base_path.joinpath(delta_path).parent, exist_ok=True)
-            # get_dqp_data_from_blob(delta_path, self.base_path)
+            get_dqp_data_from_blob(delta_path, self.base_path)
             delta_df = pd.read_csv(self.base_path.joinpath(delta_path))
         except:
             print('INFO::delta file is not available', delta_path)
@@ -57,7 +89,7 @@ class DQPMerger:
 
         try:
             os.makedirs(self.base_path.joinpath(report_path).parent, exist_ok=True)
-            # get_dqp_data_from_blob(report_path, self.base_path)
+            get_dqp_data_from_blob(report_path, self.base_path)
             report_df = pd.read_csv(self.base_path.joinpath(report_path))
         except:
             report_df = pd.DataFrame()
