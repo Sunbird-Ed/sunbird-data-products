@@ -8,7 +8,7 @@ from pathlib import Path
 from azure.common import AzureMissingResourceHttpError
 
 from dataproducts.util.utils import create_json, get_dqp_data_from_blob, \
-    post_data_to_blob, push_metric_event
+    post_data_to_blob, push_metric_event, get_data_from_blob
 
 class DQPMerger:
     def __init__(self, report_config):
@@ -83,15 +83,16 @@ class DQPMerger:
             os.makedirs(self.base_path.joinpath(delta_path).parent, exist_ok=True)
             get_dqp_data_from_blob(delta_path, self.base_path)
             delta_df = pd.read_csv(self.base_path.joinpath(delta_path))
-        except:
-            print('INFO::delta file is not available', delta_path)
+        except Exception as e:
+            print('ERROR::delta file is not available', delta_path)
             return True
 
         try:
             os.makedirs(self.base_path.joinpath(report_path).parent, exist_ok=True)
-            get_dqp_data_from_blob(report_path, self.base_path)
+            get_data_from_blob(self.base_path.joinpath(report_path))
             report_df = pd.read_csv(self.base_path.joinpath(report_path))
-        except:
+        except Exception as e:
+            print('INFO::report file is not available', report_path)
             report_df = pd.DataFrame()
 
             for col in delta_df.columns.to_list():
