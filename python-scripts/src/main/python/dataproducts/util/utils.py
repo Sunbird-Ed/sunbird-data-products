@@ -410,8 +410,7 @@ def get_data_from_blob(result_loc_, backup=False):
 def get_dqp_data_from_blob(file_path, result_loc_):
     """
     read a blob storage file
-    :param result_loc_: pathlib.Path object to store the file at. the last two names in path structure is used to locate
-     file on blob storage container
+    :param result_loc_: pathlib.Path object to store the file at.
     :return: None
     """
     try:

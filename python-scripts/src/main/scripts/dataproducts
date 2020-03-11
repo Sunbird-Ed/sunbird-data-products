@@ -3,6 +3,7 @@
 import os
 import sys
 import pdb
+import json
 import argparse
 
 from datetime import date
@@ -159,6 +160,11 @@ if __name__ == '__main__':
     parser_ud.add_argument("--states", type=str,
                         help="State slugs in array")
 
+    parser_dqp = subparsers.add_parser('dqp_merger',
+                        help='DQP Merger')
+    parser_dqp.add_argument("--report_config", type=json.loads,
+                        help="Merger specification")
+
     args = parser.parse_args()
 
     if args.cmd == "ecg_learning":
@@ -250,6 +256,12 @@ if __name__ == '__main__':
 
         user_detail = UserDetailReport(args.data_store_location, args.states)
         user_detail.init()
+
+    elif args.cmd == "dqp_merger":
+        from dataproducts.services.consumption.dqp_merger import DQPMerger
+
+        dqp_merger = DQPMerger(args.report_config)
+        dqp_merger.init()
 
 
     if args.version:
