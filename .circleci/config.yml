@@ -36,4 +36,4 @@ workflows:
   version: 2.1
   workflow:
     jobs:
-      - Sunbird-Ed-dp-build
+      - sunbird-ed-dp-build
