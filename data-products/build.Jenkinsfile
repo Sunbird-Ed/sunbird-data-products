@@ -38,7 +38,7 @@ node('build-slave') {
         stage('Archive artifacts'){
             sh """
                 mkdir lpa_dp_artifacts
-                cp ./data-products/target/data-products-1.0.jar lpa_dp_artifacts
+                cp ./data-products/target/data-products-1.0-distribution.tar.gz lpa_dp_artifacts
                 zip -j lpa_dp_artifacts.zip:${artifact_version} lpa_dp_artifacts/*
             """
             archiveArtifacts artifacts: "lpa_dp_artifacts.zip:${artifact_version}", fingerprint: true, onlyIfSuccessful: true
