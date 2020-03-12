@@ -65,8 +65,6 @@ if __name__ == '__main__':
                         help="Host address for Cassandra")
     parser_cc.add_argument("--keyspace_prefix", type=str,
                         help="Environment for keyspace in Cassandra")
-    parser_cc.add_argument("--content_search", type=str,
-                        help="Host address for Content Search API")
     parser_cc.add_argument("--execution_date", type=str,
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
@@ -198,8 +196,7 @@ if __name__ == '__main__':
 
         cont_consumption = ContentConsumption(args.data_store_location, args.org_search,
                             args.druid_hostname, args.cassandra_host,
-                            args.keyspace_prefix, args.content_search,
-                            args.execution_date)
+                            args.keyspace_prefix, args.execution_date)
         cont_consumption.init()
 
     elif args.cmd == "daily_metrics":
