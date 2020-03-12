@@ -23,7 +23,7 @@ jobs:
       - run: cd sunbird-core-dataproducts && mvn install -DskipTests
       - run:
           name: Ed-data-products-build
-          command: mvn scoverage:report
+          command: cd data-products && mvn scoverage:report
       - save_cache:
           key: dp-dependency-cache-{{ checksum "pom.xml" }}
           paths: ~/.m2
