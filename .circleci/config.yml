@@ -16,10 +16,22 @@ jobs:
             git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git -b $target_branch
             git clone https://github.com/project-sunbird/sunbird-analytics-core.git -b $target_branch
             fi
+
+      - restore_cache:
+          keys:
+            - dp-dependency-cache-{{ checksum "pom.xml" }}
+            - run: cd sunbird-analytics-core && mvn install -DskipTests
+            - run: cd sunbird-core-dataproducts && mvn install -DskipTests
+            - run:
+                name: Ed-data-products-build
+                command: cd data-products && mvn scoverage:report
+            - save_cache:
+                key: dp-dependency-cache-{{ checksum "pom.xml" }}
+                paths: ~/.m2
       - run:
           name: sonar
           command: |
-            cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products -Dsonar.host.url=https://sonarcloud.io -Dsonar.scala.coverage.reportPaths=/home/circleci/project/scoverage.xml -Dsonar.organization=sunbird-ed
+            cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.scala.coverage.reportPaths=/home/circleci/project/target/scoverage.xml -Dsonar.organization=sunbird-ed
 
 workflows:
   version: 2.1
