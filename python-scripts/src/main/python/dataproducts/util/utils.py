@@ -152,7 +152,7 @@ def get_tenant_info(result_loc_, org_search_, date_):
     :param date_: datetime object to pass to file path
     :return: None
     """
-    url = "{}org/v1/search".format(org_search_)
+    url = "{}v1/org/search".format(org_search_)
     payload = """{
         "request":{
             "filters": {
