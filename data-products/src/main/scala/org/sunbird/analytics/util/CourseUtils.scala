@@ -4,14 +4,14 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.util.Constants;
+import org.sunbird.analytics.util.Constants;
 import org.sunbird.cloud.storage.conf.AppConf
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.util.RestUtil
 import org.ekstep.analytics.model.OutputConfig
 import org.ekstep.analytics.model.ReportConfig
-import org.ekstep.analytics.util.BatchStatus
+import org.sunbird.analytics.util.BatchStatus
 import org.ekstep.analytics.framework.StorageConfig
 
 //Getting live courses from compositesearch
