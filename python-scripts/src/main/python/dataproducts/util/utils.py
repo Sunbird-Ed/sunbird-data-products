@@ -377,7 +377,6 @@ def get_data_batch_from_blob(result_loc_, prefix=None, backup=False):
         block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
         container_name = 'portal-reports-backup' if backup else 'reports'
         blob_list = block_blob_service.list_blobs(container_name, prefix=prefix)
-        pdb.set_trace()
 
         for blob in blob_list:
             blob_result_loc_ = result_loc_.joinpath(blob.name).parent
