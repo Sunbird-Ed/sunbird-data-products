@@ -152,7 +152,7 @@ def get_tenant_info(result_loc_, org_search_, date_):
     :param date_: datetime object to pass to file path
     :return: None
     """
-    url = "{}v1/org/search".format(org_search_)
+    url = "{}org/v1/search".format(org_search_)
     payload = """{
         "request":{
             "filters": {
@@ -259,12 +259,13 @@ def verify_state_district(loc_map_path_, state_, df_):
     return df_
 
 
-def get_content_model(result_loc_, druid_, date_):
+def get_content_model(result_loc_, druid_, date_, status_=["Live"]):
     """
     get current content model snapshot
     :param result_loc_: pathlib.Path object to store resultant CSV at
     :param druid_: host ip and port for druid broker
     :param date_: datetime object to pass in path
+    :status_: status of the content which has to retrieved
     :return: None
     """
     try:
@@ -273,10 +274,11 @@ def get_content_model(result_loc_, druid_, date_):
         }
         url = "{}druid/v2/".format(druid_)
         qr = content_list.init()
-        response = requests.request("POST", url, data=qr, headers=headers)
+        qr = json.loads(qr)
+        qr['filter']['fields'][2]['values'] = status_
+        response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
         result = response.json()
         response_list = []
-        qr = json.loads(qr)
         while result[0]['result']['events']:
             data = [event['event'] for segment in result for event in segment['result']['events']]
             response_list.append(pd.DataFrame(data))

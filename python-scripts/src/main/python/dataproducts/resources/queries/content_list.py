@@ -17,9 +17,12 @@ def init():
                     "value": "Resource"
                 },
                 {
-                    "type": "selector",
+                    "type": "in",
                     "dimension": "status",
-                    "value": "Live"
+                    "values": [
+                        "Live"
+                    ],
+                    "extractionFn": null
                 }
             ]
         },
@@ -45,6 +48,7 @@ def init():
             "creator",
             "createdOn",
             "lastPublishedOn",
+            "lastSubmittedOn",
             "lastUpdatedOn",
             "me_averageRating",
             "me_totalRatings",

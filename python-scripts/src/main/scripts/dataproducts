@@ -159,6 +159,18 @@ if __name__ == '__main__':
     parser_ud.add_argument("--states", type=str,
                         help="State slugs in array")
 
+    parser_ccs = subparsers.add_parser('content_creation_status',
+                        help='Content creation status')
+    parser_ccs.add_argument("--data_store_location", type=str,
+                        help="The path to local data folder")
+    parser_ccs.add_argument("--org_search", type=str,
+                        help="host address for Org API")
+    parser_ccs.add_argument("--druid_hostname", type=str,
+                        help="Host address for Druid")
+    parser_ccs.add_argument("--execution_date", type=str,
+                        default=date.today().strftime("%d/%m/%Y"),
+                        help="DD/MM/YYYY, optional argument for backfill jobs")
+
     args = parser.parse_args()
 
     if args.cmd == "ecg_learning":
@@ -250,6 +262,14 @@ if __name__ == '__main__':
 
         user_detail = UserDetailReport(args.data_store_location, args.states)
         user_detail.init()
+
+    elif args.cmd == "content_creation_status":
+        from dataproducts.services.etb.content_creation_status import ContentCreationStatus
+
+        content_creation_status = ContentCreationStatus(args.data_store_location,
+                            args.org_search, args.druid_hostname,
+                            args.execution_date)
+        content_creation_status.init()
 
 
     if args.version:
