@@ -370,6 +370,28 @@ def create_json(read_loc_, last_update=False):
         raise Exception('Failed to create JSON!')
 
 
+def get_data_batch_from_blob(result_loc_, prefix=None, backup=False):
+    try:
+        account_name = os.environ['AZURE_STORAGE_ACCOUNT']
+        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+        block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
+        container_name = 'portal-reports-backup' if backup else 'reports'
+        blob_list = block_blob_service.list_blobs(container_name, prefix=prefix)
+        pdb.set_trace()
+
+        for blob in blob_list:
+            blob_result_loc_ = result_loc_.joinpath(blob.name).parent
+            os.makedirs(blob_result_loc_, exist_ok=True)
+            block_blob_service.get_blob_to_path(
+                container_name=container_name,
+                blob_name=blob.name,
+                file_path=str(result_loc_) + "/" + blob.name
+            )
+  
+    except AzureMissingResourceHttpError:
+        raise AzureMissingResourceHttpError("Missing resource!", 404)    
+
+
 def get_data_from_blob(result_loc_, backup=False):
     """
     read a blob storage file
