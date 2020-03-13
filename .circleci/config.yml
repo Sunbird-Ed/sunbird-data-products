@@ -30,7 +30,7 @@ jobs:
       - run:
           name: sonar
           command: |
-            cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.scala.coverage.reportPaths=/home/circleci/project/data-products/target/scoverage.xml -Dsonar.organization=sunbird-ed
+            cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.exclusions=/home/circleci/project/adhoc-scripts/**,/home/circleci/project/replay-scripts/** -Dsonar.scala.coverage.reportPaths=/home/circleci/project/data-products/target/scoverage.xml -Dsonar.organization=sunbird-ed
 workflows:
   version: 2.1
   workflow:
