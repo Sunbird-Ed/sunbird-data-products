@@ -150,7 +150,7 @@ class ContentConsumption:
                 break
             except requests.exceptions.ConnectionError:
                 print("Retry {} for textbook list".format(retry_count))
-                sleep(10)
+                time.sleep(10)
         else:
             print("Max retries reached...")
 
