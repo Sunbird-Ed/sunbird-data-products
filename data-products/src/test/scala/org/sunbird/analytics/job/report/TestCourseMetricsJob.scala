@@ -4,6 +4,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.util.HadoopFileUtil
+import org.sunbird.analytics.job.report.{CourseMetricsJob, ReportGenerator}
 import org.sunbird.analytics.util.EmbeddedES
 import org.scalamock.scalatest.MockFactory
 
