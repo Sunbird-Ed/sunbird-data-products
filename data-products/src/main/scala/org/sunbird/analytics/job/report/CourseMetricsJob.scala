@@ -9,10 +9,9 @@ import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.sunbird.analytics.util.ESUtil
-import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
-import org.sunbird.analytics.job.report.BaseReportsJob
+import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.util.ESUtil
 import org.sunbird.cloud.storage.conf.AppConf
 
 case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boolean)
@@ -116,8 +115,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         reportDF.unpersist(true);
       });
       JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
-      createESIndex(newIndex)
     }
+    createESIndex(newIndex)
     userData._2.unpersist(true);
 
   }
