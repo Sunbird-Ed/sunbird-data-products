@@ -11,7 +11,7 @@ import org.sunbird.cloud.storage.BaseStorageService
 import org.sunbird.cloud.storage.conf.AppConf
 import org.sunbird.analytics.util.EmbeddedES
 import org.sunbird.analytics.util.ESUtil
-import org.ekstep.analytics.util.EsResponse
+import org.sunbird.analytics.util.EsResponse
 
 class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
 
