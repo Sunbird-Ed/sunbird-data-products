@@ -5,12 +5,11 @@ import pandas as pd
 
 from datetime import datetime, timedelta, date
 from pathlib import Path
-from azure.common import AzureMissingResourceHttpError
 
-from dataproducts.util.utils import create_json, get_dqp_data_from_blob, \
+from dataproducts.util.utils import create_json, download_file_from_store, \
     post_data_to_blob, push_metric_event, get_data_from_blob
 
-class DQPMerger:
+class ReportMerger:
     def __init__(self, report_config):
         self.report_config = report_config
         self.base_path = None
@@ -25,7 +24,7 @@ class DQPMerger:
         except Exception as e:
             raise Exception('Dimensions are not available in delta_file')
 
-        for index, delta_row in delta_df_.iterrows():
+        for index, delta_row in grouped_data.iterrows():
             formatted_query = ' and '.join(["`{}`!='{}'".format(dim, delta_row[dim]) for dim in dims])
             query.append("({})".format(formatted_query))
 
@@ -81,7 +80,12 @@ class DQPMerger:
 
         try:
             os.makedirs(self.base_path.joinpath(delta_path).parent, exist_ok=True)
-            get_dqp_data_from_blob(delta_path, self.base_path)
+
+            download_file_from_store(
+                container_name='telemetry-data-store',
+                blob_name=delta_path,
+                file_path=str(self.base_path.joinpath(delta_path))
+                )
             delta_df = pd.read_csv(self.base_path.joinpath(delta_path))
         except Exception as e:
             print('ERROR::delta file is not available', delta_path)
@@ -112,9 +116,9 @@ class DQPMerger:
 
 
     def init(self):
-        self.base_path = Path(self.report_config['basePath']).joinpath('dqp')
+        self.base_path = Path(self.report_config['basePath']).joinpath('report_merger')
         os.makedirs(self.base_path, exist_ok=True)
-        print('START::DQP Merger')
+        print('START::Report Merger')
         for file_paths in self.report_config['merge']['files']:
             self.merge_file(file_paths)
-        print('SUCCESS::DQP Merger')
+        print('SUCCESS::Report Merger')
