@@ -9,7 +9,7 @@ import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.ekstep.analytics.util.ESUtil
+import org.sunbird.analytics.util.ESUtil
 import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
 import org.sunbird.analytics.job.report.BaseReportsJob
