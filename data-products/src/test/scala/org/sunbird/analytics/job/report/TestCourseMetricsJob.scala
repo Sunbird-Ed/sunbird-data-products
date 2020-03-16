@@ -1,11 +1,10 @@
 package org.sunbird.analytics.job.report
 
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.util.HadoopFileUtil
-import org.sunbird.analytics.util.EmbeddedES
 import org.scalamock.scalatest.MockFactory
+import org.sunbird.analytics.util.EmbeddedES
 
 class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
   var spark: SparkSession = _
