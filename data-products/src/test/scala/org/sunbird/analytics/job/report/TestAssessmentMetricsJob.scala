@@ -1,17 +1,14 @@
 package org.sunbird.analytics.job.report
 
-import scala.collection.mutable.Buffer
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.util.RestUtil
-import org.sunbird.analytics.job.report.ReportGenerator
 import org.scalamock.scalatest.MockFactory
+import org.sunbird.analytics.util.{ESUtil, EmbeddedES, EsResponse}
 import org.sunbird.cloud.storage.BaseStorageService
 import org.sunbird.cloud.storage.conf.AppConf
-import org.sunbird.analytics.util.EmbeddedES
-import org.sunbird.analytics.util.ESUtil
-import org.sunbird.analytics.util.EsResponse
+
+import scala.collection.mutable.Buffer
 
 class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
 
