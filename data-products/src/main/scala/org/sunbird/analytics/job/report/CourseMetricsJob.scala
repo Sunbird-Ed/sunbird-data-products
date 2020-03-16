@@ -64,8 +64,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val time = CommonUtil.time({
       prepareReport(spark, storageConfig, loadData)
     });
-
-
     metrics.put("totalExecutionTime", time._1);
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
 
