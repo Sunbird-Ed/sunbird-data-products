@@ -260,12 +260,13 @@ def verify_state_district(loc_map_path_, state_, df_):
     return df_
 
 
-def get_content_model(result_loc_, druid_, date_):
+def get_content_model(result_loc_, druid_, date_, status_=["Live"]):
     """
     get current content model snapshot
     :param result_loc_: pathlib.Path object to store resultant CSV at
     :param druid_: host ip and port for druid broker
     :param date_: datetime object to pass in path
+    :status_: status of the content which has to retrieved
     :return: None
     """
     try:
@@ -274,10 +275,11 @@ def get_content_model(result_loc_, druid_, date_):
         }
         url = "{}druid/v2/".format(druid_)
         qr = content_list.init()
-        response = requests.request("POST", url, data=qr, headers=headers)
+        qr = json.loads(qr)
+        qr['filter']['fields'][2]['values'] = status_
+        response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
         result = response.json()
         response_list = []
-        qr = json.loads(qr)
         while result[0]['result']['events']:
             data = [event['event'] for segment in result for event in segment['result']['events']]
             response_list.append(pd.DataFrame(data))
@@ -399,6 +401,27 @@ def upload_file_to_store(blob_name, file_path, container_name):
         pass
     elif storage_provider == "GCP":
         pass
+
+
+def get_data_batch_from_blob(result_loc_, prefix=None, backup=False):
+    try:
+        account_name = os.environ['AZURE_STORAGE_ACCOUNT']
+        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+        block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
+        container_name = 'portal-reports-backup' if backup else 'reports'
+        blob_list = block_blob_service.list_blobs(container_name, prefix=prefix)
+
+        for blob in blob_list:
+            blob_result_loc_ = result_loc_.joinpath(blob.name).parent
+            os.makedirs(blob_result_loc_, exist_ok=True)
+            block_blob_service.get_blob_to_path(
+                container_name=container_name,
+                blob_name=blob.name,
+                file_path=str(result_loc_) + "/" + blob.name
+            )
+  
+    except AzureMissingResourceHttpError:
+        raise AzureMissingResourceHttpError("Missing resource!", 404)    
 
 
 def get_data_from_blob(result_loc_, backup=False):
