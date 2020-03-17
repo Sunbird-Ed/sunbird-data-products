@@ -67,9 +67,8 @@ class ContentCreationStatus:
 
         df = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))[[
             'board','medium','gradeLevel','subject','identifier','name','status',
-            'createdOn','creator','lastPublishedOn','lastUpdatedOn', 'channel'
+            'createdOn','creator','lastPublishedOn','lastUpdatedOn', 'channel', 'lastSubmittedOn'
         ]]
-
 
         if 'createdOn' not in df.columns:
             df['createdOn'] = 'T'
@@ -84,7 +83,7 @@ class ContentCreationStatus:
         review['lastSubmittedOn'] = review['lastSubmittedOn'].fillna('T').apply(self.date_format)
         review.rename(columns={'lastSubmittedOn': 'Pending in current status since'}, inplace=True)
 
-        only_draft = df[(df['status'] == 'Draft') | (df['lastPublishedOn'].isna())]
+        only_draft = df[(df['status'] == 'Draft') & (df['lastPublishedOn'].isna())]
         only_draft.loc[:, 'Pending in current status since'] = only_draft.loc[:, 'createdOn']
 
         published = df[(df['status'] == 'Unlisted') | \
@@ -101,10 +100,13 @@ class ContentCreationStatus:
             by=['board', 'medium', 'gradeSort', 'subject', 'name'],
             ascending=[False, True, True, True, True])
 
+        result_df = result_df.fillna('Unknown')
+
         result_df = result_df[[
             'board','medium','gradeLevel','subject','identifier','name','status',
             'createdOn', 'Pending in current status since', 'creator', 'channel'
         ]]
+
 
         result_df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'Content_Creation_Status_Overall.csv'),
             index=False, encoding='utf-8')
@@ -134,10 +136,10 @@ class ContentCreationStatus:
         result_loc.mkdir(exist_ok=True)
 
         execution_date = datetime.strptime(self.execution_date, "%d/%m/%Y")
-        # get_tenant_info(result_loc_=result_loc, org_search_=self.org_search, date_=execution_date)
+        get_tenant_info(result_loc_=result_loc, org_search_=self.org_search, date_=execution_date)
 
-        # get_content_model(result_loc_=result_loc, druid_=self.druid_hostname,
-        #             date_=execution_date, status_=['Live', 'Review', 'Draft', 'Unlisted'])
+        get_content_model(result_loc_=result_loc, druid_=self.druid_hostname,
+                    date_=execution_date, status_=['Live', 'Review', 'Draft', 'Unlisted'])
 
         self.generate_report(result_loc, execution_date)
         print('Content Creation Status Report::Completed')
