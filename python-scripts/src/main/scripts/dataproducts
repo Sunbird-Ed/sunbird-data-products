@@ -3,6 +3,7 @@
 import os
 import sys
 import pdb
+import json
 import argparse
 
 from datetime import date
@@ -159,6 +160,11 @@ if __name__ == '__main__':
     parser_ud.add_argument("--states", type=str,
                         help="State slugs in array")
 
+    parser_report_merger = subparsers.add_parser('report_merger',
+                        help='Report Merger')
+    parser_report_merger.add_argument("--report_config", type=json.loads,
+                        help="Merger specification")
+
     parser_ccs = subparsers.add_parser('content_creation_status',
                         help='Content creation status')
     parser_ccs.add_argument("--data_store_location", type=str,
@@ -263,6 +269,12 @@ if __name__ == '__main__':
         user_detail = UserDetailReport(args.data_store_location, args.states)
         user_detail.init()
 
+    elif args.cmd == "report_merger":
+        from dataproducts.services.consumption.report_merger import ReportMerger
+
+        report_merger = ReportMerger(args.report_config)
+        report_merger.init()
+
     elif args.cmd == "content_creation_status":
         from dataproducts.services.etb.content_creation_status import ContentCreationStatus
 
@@ -270,6 +282,7 @@ if __name__ == '__main__':
                             args.org_search, args.druid_hostname,
                             args.execution_date)
         content_creation_status.init()
+
 
 
     if args.version:

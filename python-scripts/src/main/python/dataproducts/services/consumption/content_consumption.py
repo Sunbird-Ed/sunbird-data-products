@@ -146,6 +146,8 @@ class ContentConsumption:
                 ["childNodes", "identifier", "name"]]
                 textbooks.columns = ["identifier", "tb_id", "tb_name"]
                 textbooks = textbooks.explode('identifier')
+                textbooks = textbooks.groupby("identifier").agg({"tb_id": ", ".join, "tb_name": ", ".join}) \
+                                                           .reset_index()
                 textbooks.to_csv(result_loc_.joinpath('tb_content_mapping.csv'), index=False)
                 break
             except requests.exceptions.ConnectionError:
@@ -194,7 +196,7 @@ class ContentConsumption:
 
         df.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                      'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
-                     'Linked Textbook Id', 'Linked Textbook Name',
+                     'Linked Textbook Id(s)', 'Linked Textbook Name(s)',
                      'Average Rating(out of 5)', 'Total No of Ratings', 'No of Downloads',
                      'Number of Plays on App', 'Number of Plays on Portal', 'Total No of Plays (App and Portal)',
                      'Average Play Time in mins on App','Average Play Time in mins on Portal',
@@ -289,7 +291,7 @@ class ContentConsumption:
              'lastPublishedOn', 'me_averageRating', 'tb_id', 'tb_name']]
         content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                                  'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
-                                 'Average Rating(out of 5)', 'Linked Textbook Id', 'Linked Textbook Name']
+                                 'Average Rating(out of 5)', 'Linked Textbook Id(s)', 'Linked Textbook Name(s)']
         content_model['Content ID'] = content_model['Content ID'].str.replace(".img", "")
         content_model['Created On'] = content_model['Created On'].fillna('T').apply(
             lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
@@ -332,7 +334,7 @@ class ContentConsumption:
                 subset=['Content ID', 'Last Date of the week'], keep='first')
             content_aggregates = content_aggregates[
                 ['Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name', 'Mime Type', 'Created On',
-                 'Creator (User Name)', 'Last Published On', 'Linked Textbook Id', 'Linked Textbook Name',
+                 'Creator (User Name)', 'Last Published On', 'Linked Textbook Id(s)', 'Linked Textbook Name(s)',
                  'Total No of Plays (App and Portal)', 'Number of Plays on App', 'Number of Plays on Portal',
                  'Average Play Time in mins (On App and Portal)', 'Average Play Time in mins on App',
                  'Average Play Time in mins on Portal', 'Average Rating(out of 5)',
