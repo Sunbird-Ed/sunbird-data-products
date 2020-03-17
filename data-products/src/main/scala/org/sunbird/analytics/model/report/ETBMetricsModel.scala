@@ -28,16 +28,16 @@ case class ContentInfo(channel: String, board: String, identifier: String, mediu
                        depth: Integer, dialcodes:List[String], createdOn: String, children: Option[List[ContentInfo]])
 
 // Textbook ID, Medium, Grade, Subject, Textbook Name, Textbook Status, Created On, Last Updated On, Total content linked, Total QR codes linked to content, Total number of QR codes with no linked content, Total number of leaf nodes, Number of leaf nodes with no content
-case class ETB_textbook_report(slug: String, identifier: String, name: String, medium: List[String], gradeLevel: List[String],
-                               subject: List[String], status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
+case class etbTextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel: String,
+                               subject:String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
                                totalQRLinked: Integer, totalQRNotLinked: Integer, leafNodesCount: Integer, leafNodeUnlinked: Integer, reportName: String)
 
 // Textbook ID, Medium, Grade, Subject, Textbook Name, Created On, Last Updated On, Total No of QR Codes, Number of QR codes with atleast 1 linked content,	Number of QR codes with no linked content, Term 1 QR Codes with no linked content, Term 2 QR Codes with no linked content
-case class DCE_textbook_report(slug: String, identifier: String, name: String, medium: List[String], gradeLevel: List[String], subject: List[String],
+case class dceTextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
                                createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
                                withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer, reportName: String)
 
-case class FinalOutput(identifier: String, etb: Option[ETB_textbook_report], dce: Option[DCE_textbook_report]) extends AlgoOutput with Output
+case class FinalOutput(identifier: String, etb: Option[etbTextbookReport], dce: Option[dceTextbookReport]) extends AlgoOutput with Output
 
 
 object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,FinalOutput] with Serializable {
@@ -61,18 +61,18 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
       val etbTextBookReport = events.map(report => {
-        if(report.etb.size!=0) report.etb.get else ETB_textbook_report("","","",List(""),List(""),List(""),"","","",0,0,0,0,0,"")
+        if(report.etb.size!=0) report.etb.get else etbTextbookReport("","","","","","","","","",0,0,0,0,0,"")
       }).filter(textbook=>textbook.identifier!="")
 
       val dceTextBookReport = events.map(report => {
-        if(report.dce.size!=0) report.dce.get else DCE_textbook_report("","","",List(""),List(""),List(""),"","",0,0,0,0,0,"")
+        if(report.dce.size!=0) report.dce.get else dceTextbookReport("","","","","","","","",0,0,0,0,0,"")
       }).filter(textbook=>textbook.identifier!="")
 
       reportConfig.output.map { f =>
-        val etbDf = etbTextBookReport.toDF().na.fill("unknown", Seq("slug"))
+        val etbDf = etbTextBookReport.toDF()
         CourseUtils.postDataToBlob(etbDf,f,config)
 
-        val dceDf = dceTextBookReport.toDF().na.fill("unknown", Seq("slug"))
+        val dceDf = dceTextBookReport.toDF()
         CourseUtils.postDataToBlob(dceDf,f,config)
       }
 
