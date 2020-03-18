@@ -396,7 +396,7 @@ class ContentConsumption:
         self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         for i in range(7):
             analysis_date = execution_date - timedelta(days=i)
-            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
+            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid, config_=self.config)
             self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
 
         # Content Consumption for last week

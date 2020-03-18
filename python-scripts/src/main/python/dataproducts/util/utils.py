@@ -535,12 +535,13 @@ def get_courses(result_loc_, druid_, date_):
     post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'courses.csv'), backup=True)
 
 
-def get_content_plays(result_loc_, date_, druid_):
+def get_content_plays(result_loc_, date_, druid_, config_):
     """
     Get content plays and timespent by content id.
     :param result_loc_: local path to store resultant csv
     :param date_: datetime object used for druid query
     :param druid_: druid broker ip and port in http://ip:port/ format
+    :param config_: Platform cofigs for druid query
     :return: None
     """
     headers = {
@@ -549,8 +550,10 @@ def get_content_plays(result_loc_, date_, druid_):
     url = "{}druid/v2/".format(druid_)
     start_date = date_ - timedelta(days=1)
     query = content_plays.init()
-    query = query.replace('start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
-    query = query.replace('end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query = query.replace('$start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query = query.replace('$end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query = query.replace('$app', config_['context']['pdata']['id']['app'])
+    query = query.replace('$portal', config_['context']['pdata']['id']['portal'])
     response = requests.post(url, data=query, headers=headers)
     result = response.json()
     data = pd.DataFrame([x['event'] for x in result])

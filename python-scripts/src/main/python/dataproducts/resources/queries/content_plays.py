@@ -4,7 +4,7 @@ def init():
         "queryType": "groupBy",
         "dataSource": "summary-events",
         "granularity": "day",
-        "intervals": "start_date/end_date",
+        "intervals": "$start_date/$end_date",
         "dimensions": [
             "dimensions_pdata_id",
             "object_id"
@@ -47,12 +47,12 @@ def init():
                         {
                             "type": "selector",
                             "dimension": "dimensions_pdata_id",
-                            "value": "prod.diksha.app"
+                            "value": "$app"
                         },
                         {
                             "type": "selector",
                             "dimension": "dimensions_pdata_id",
-                            "value": "prod.diksha.portal"
+                            "value": "$portal"
                         }
                     ]
                 }
