@@ -220,10 +220,10 @@ class ContentConsumption:
             content_aggregates.drop(['channel'], axis=1, inplace=True)
             result_loc_.parent.joinpath('portal_dashboards', slug).mkdir(exist_ok=True)
 
-            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'),
+            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'),
                                       index=False, encoding='utf-8-sig')
-            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
-            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
+            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
+            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
 
 
     def get_weekly_plays(self, result_loc_, date_, cassandra_, keyspace_, week_count_):
@@ -235,7 +235,7 @@ class ContentConsumption:
         :param keyspace_: keyspace in which we are working
         :return: None
         """
-        result_file_name = 'content_aggregates_{}w.csv'.format(week_count_)
+        result_file_name = 'content_consumption_lastweek.csv'
         tenant_info = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
         tenant_info['id'] = tenant_info['id'].astype(str)
         tenant_info.set_index('id', inplace=True)
@@ -362,11 +362,11 @@ class ContentConsumption:
 
         os.makedirs(result_loc_.joinpath('content_aggregates_compressed', slug), exist_ok=True)
 
-        shutil.make_archive(str(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_aggregates')),
+        shutil.make_archive(str(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_consumption')),
                             'zip',
                             str(result_loc_.joinpath("content_aggregates", slug)))
 
-        post_data_to_blob(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_aggregates.zip'))
+        post_data_to_blob(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_consumption.zip'))
 
 
     def init(self):
@@ -396,7 +396,7 @@ class ContentConsumption:
         self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         for i in range(7):
             analysis_date = execution_date - timedelta(days=i)
-            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
+            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid, config_=self.config)
             self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
 
         # Content Consumption for last week
