@@ -2,39 +2,34 @@ package org.ekstep.analytics.model.report
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
+import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework._
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, RestUtil}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.model.ReportConfig
+import org.ekstep.analytics.util.CourseUtils
 import org.ekstep.analytics.util.CourseUtils.loadData
-import org.ekstep.analytics.util.{Constants, CourseUtils}
+import org.sunbird.analytics.util.TextbookUtils
 import org.sunbird.cloud.storage.conf.AppConf
 
-import scala.io.Source
+case class TenantInfo(id: String, slug: String) extends AlgoInput
 
-case class ContentInfo(id: String, ver: String, ts: String, params: Params, responseCode: String,result: Result)
-case class Result(count: Int, content: List[ContentResult])
-case class Facets(name: String, count: Int)
-
-case class ContentResult(channel: String,identifier: String, board: String, gradeLevel: List[String], medium: String, subject: String,
+case class ContentResult(channel: String,identifier: String, board: String, gradeLevel: List[String], medium: Object, subject: Object,
                          status: String, creator: String,lastPublishedOn: String,lastSubmittedOn: String, createdFor: List[String],
                          createdOn: String, contentType: String, mimeType: String,
-                         resourceType: String, pkgVersion: Integer)
+                         resourceType: Object, pkgVersion: Integer)
 
-case class AggregatedReport (board: String, medium: String, gradeLevel: Seq[String], subject: String, resourceType: String,
+case class AggregatedReport (board: String, medium: Object, gradeLevel: Seq[String], subject: Object, resourceType: Object,
                              live: Integer, review: Integer, draft: Integer, unlisted: Integer,
                              application_ecml: Integer, vedio_youtube: Integer, video_mp4: Integer, application_pdf: Integer,
-                             application_html: Integer,identifier: String)
+                             application_html: Integer,identifier: String, slug: String)
 
-case class LiveReport (board: String, medium: String,gradeLevel: List[String], identifier: String,resourceType: String, createdOn: String,pkgVersion: Integer, creator: String,
-                     lastPublishedOn: String)
+case class LiveReport (board: String, medium: Object,gradeLevel: List[String], identifier: String,resourceType: Object, createdOn: String,pkgVersion: Integer, creator: String,
+                       lastPublishedOn: String, slug: String)
 
-case class NonLiveStatusReport(board: String, medium: String,gradeLevel: List[String], identifier: String,resourceType: String, status: String, pendingInCurrentStatus: String,
-                                creator: String, createdOn: String)
+case class NonLiveStatusReport(board: String, medium: Object,gradeLevel: List[String], identifier: String,resourceType: Object, status: String, pendingInCurrentStatus: String,
+                               creator: String, createdOn: String, slug: String)
 
 case class FinalOutput(identifier: String, aggregatedReport: Option[AggregatedReport], liveReport: Option[LiveReport], nonLiveStatusReport: Option[NonLiveStatusReport]) extends AlgoOutput with Output
-
-case class TenantInfo(id: String, slug: String) extends AlgoInput
 
 object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, FinalOutput, FinalOutput] with Serializable {
 
@@ -59,29 +54,51 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
 
   override def algorithm(data: RDD[TenantInfo], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[FinalOutput] = {
     val result = data.collect().map{f =>
-     val finalResult = getContentData(f.id, f.slug, config)
-      println("finalresult: " + finalResult)
+     val finalResult = getContentData(f.id, f.slug)
       finalResult
-    }
-    println("result: " + result)
-    sc.emptyRDD
+    }.reduce((a,b) => a)
+    result
   }
 
-  override def postProcess(events: RDD[FinalOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[FinalOutput] = {
-    events;
-  }
-
-
-  def getContentData(tenantId: String, slugName: String, config: Map[String, AnyRef])(implicit sc: SparkContext): RDD[FinalOutput] = {
-
+  override def postProcess(data: RDD[FinalOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[FinalOutput] = {
     implicit val sqlContext = new SQLContext(sc)
-    val contentResponse = getContentDataList(tenantId)
+    import sqlContext.implicits._
+
+    if(data.count() > 0) {
+      val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
+      val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
+
+      val aggregated = data.map{f => f.aggregatedReport.getOrElse(AggregatedReport("","",Seq(),"","",0,0,0,0,0,0,0,0,0,"","Unknown"))}
+      val liveStatus = data.map(f => f.liveReport.getOrElse(LiveReport("","",List(""),"","","",0,"","","Unknown")))
+      val nonLiveStatus = data.map(f => f.nonLiveStatusReport.getOrElse(NonLiveStatusReport("","",List(""),"","","","","","","Unknown")))
+      reportConfig.output.map{f =>
+        val aggDF = aggregated.toDF()
+        CourseUtils.postDataToBlob(aggDF, f, config)
+
+        val liveStatusDF = liveStatus.toDF()
+        CourseUtils.postDataToBlob(liveStatusDF, f, config)
+
+        val nonLiveStatusDF = nonLiveStatus.toDF()
+        CourseUtils.postDataToBlob(nonLiveStatusDF, f, config)
+      }
+    }
+    else {
+      JobLogger.log("No data found", None, Level.INFO)
+    }
+    data;
+  }
+
+
+  def getContentData(tenantId: String, slugName: String)(implicit sc: SparkContext): RDD[FinalOutput] = {
+
+    implicit val httpClient = RestUtil
+    val contentResponse = TextbookUtils.getContentDataList(tenantId, httpClient)
     if(contentResponse.count > 0) {
       val contentData = contentResponse.content
 
-      val aggregatedReportRDD = getAggregatedReport(contentData,config)
-      val liveStatusReportRDD = getLiveStatusReport(contentData, config)
-      val nonLiveStatusReportRDD = getNonLiveStatusReport(contentData, config)
+      val aggregatedReportRDD = getAggregatedReport(contentData, slugName)
+      val liveStatusReportRDD = getLiveStatusReport(contentData, slugName)
+      val nonLiveStatusReportRDD = getNonLiveStatusReport(contentData, slugName)
 
       val aggregatedMappingRDD = aggregatedReportRDD.map(f => (f.identifier,f))
       val liveStatusMappingRDD = liveStatusReportRDD.map(f => (f.identifier,f))
@@ -90,41 +107,23 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
       val joinedList_1 = aggregatedMappingRDD.fullOuterJoin(liveStatusMappingRDD)
       val joinedList_2 = joinedList_1.fullOuterJoin(nonLiveStatusMappingRDD)
 
+      val defaultAggregatedReport = AggregatedReport("","",Seq(),"","",0,0,0,0,0,0,0,0,0,"","Unknown")
+      val defualtLiveReport = LiveReport("","",List(""),"","","",0,"","","Unknown")
+      val defaultNonLiveReport = NonLiveStatusReport("","",List(""),"","","","","","","Unknown")
+
       val finalOutput = joinedList_2
-        .map{f => FinalOutput(f._1, f._2._1.get._1, f._2._1.get._2, f._2._2)}
+        .map{f =>
+          FinalOutput(f._1,
+            f._2._1.map(f => f._1.getOrElse(defaultAggregatedReport)),
+            f._2._1.map(f => f._2.getOrElse(defualtLiveReport)),
+            f._2._2)}
       finalOutput
     }
-    else sc.emptyRDD
+    else
+        sc.emptyRDD
   }
 
-  def getContentDataList(tenantId: String)(implicit sc: SparkContext): Result = {
-    implicit val sqlContext = new SQLContext(sc)
-    val url = Constants.COMPOSITE_SEARCH_URL
-//    println("tenantId: " + tenantId)
-    val request = s"""{
-                    |      "request": {
-                    |        "filters": {
-                    |           "status": ["Live","Draft","Review","Unlisted"],
-                    |          "contentType": ["Resource"],
-                    |          "createdFor": "$tenantId"
-                    |        },
-                    |        "fields": ["channel","identifier","board","gradeLevel",
-                    |          "medium","subject","status","creator","lastPublishedOn","createdFor",
-                    |          "createdOn","pkgVersion","contentType",
-                    |          "mimeType","resourceType", "lastSubmittedOn"
-                    |        ],
-                    |        "limit": 10000,
-                    |        "facets": [
-                    |          "status"
-                    |        ]
-                    |      }
-                    |    }""".stripMargin
-
-    val resultData = RestUtil.post[ContentInfo](url, request).result
-    resultData
-  }
-
-  def getAggregatedReport(data: List[ContentResult], config: Map[String, AnyRef])(implicit sc: SparkContext): RDD[AggregatedReport] = {
+  def getAggregatedReport(data: List[ContentResult], slug: String)(implicit sc: SparkContext): RDD[AggregatedReport] = {
     val groupByList = data.groupBy(f => (f.board, f.medium, f.gradeLevel, f.subject, f.resourceType))
       .map{f =>
         val newGroup = scala.collection.mutable.Map(
@@ -139,49 +138,48 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
       }
       .filter(f => f.getOrElse("board", null) != null || f.getOrElse("medium", null) != null || f.getOrElse("gradeLevel", null) != null || f.getOrElse("subject", null) != null)
       .map { f =>
-        AggregatedReport(f.getOrElse("board", "").asInstanceOf[String], f.getOrElse("medium", "").asInstanceOf[String],
-          f.getOrElse("gradeLevel", Seq()).asInstanceOf[Seq[String]], f.getOrElse("subject", "").asInstanceOf[String],
-          f.getOrElse("resourceType", "").asInstanceOf[String], f.getOrElse("Live", 0).asInstanceOf[Integer],
+        AggregatedReport(f.getOrElse("board", "").asInstanceOf[String], f.getOrElse("medium", "").asInstanceOf[Object],
+          f.getOrElse("gradeLevel", Seq()).asInstanceOf[Seq[String]], f.getOrElse("subject", "").asInstanceOf[Object],
+          f.getOrElse("resourceType", "").asInstanceOf[Object], f.getOrElse("Live", 0).asInstanceOf[Integer],
           f.getOrElse("Review", 0).asInstanceOf[Integer], f.getOrElse("Draft", 0).asInstanceOf[Integer], f.getOrElse("Unlisted", 0).asInstanceOf[Integer],
           f.getOrElse("application/vnd.ekstep.ecml-archive", 0).asInstanceOf[Integer], f.getOrElse("video/x-youtube", 0).asInstanceOf[Integer],
           f.getOrElse("video/mp4", 0).asInstanceOf[Integer] + f.getOrElse("video/webm", 0).asInstanceOf[Integer],
           f.getOrElse("application/pdf", 0).asInstanceOf[Integer] + f.getOrElse("application/epub", 0).asInstanceOf[Integer],
           f.getOrElse("application/vnd.ekstep.html-archive", 0).asInstanceOf[Integer] + f.getOrElse("application/vnd.ekstep.h5p-archive", 0).asInstanceOf[Integer],
-          f.getOrElse("identifier", "").asInstanceOf[String]
-        )
+          f.getOrElse("identifier", "").asInstanceOf[String], slug)
       }.toList
     val finalAggregatedRDD = sc.parallelize(groupByList)
     finalAggregatedRDD
   }
 
-  def getLiveStatusReport(data: List[ContentResult], config: Map[String, AnyRef])(implicit sc: SparkContext): RDD[LiveReport] = {
+  def getLiveStatusReport(data: List[ContentResult], slug: String)(implicit sc: SparkContext): RDD[LiveReport] = {
     val filteredList = data.filter(f => (f.status == "Live"))
       .map{f =>
-        LiveReport(f.board, f.medium, f.gradeLevel, f.identifier, f.resourceType, dataFormat(f.createdOn), f.pkgVersion, f.creator,dataFormat(f.lastPublishedOn))
+        LiveReport(f.board, f.medium, f.gradeLevel, f.identifier, f.resourceType, dataFormat(f.createdOn), f.pkgVersion, f.creator,dataFormat(f.lastPublishedOn), slug)
       }
     val finalLiveRDD = sc.parallelize(filteredList)
     finalLiveRDD
   }
 
-  def getNonLiveStatusReport(data: List[ContentResult], config: Map[String, AnyRef])(implicit sc: SparkContext): RDD[NonLiveStatusReport] = {
+  def getNonLiveStatusReport(data: List[ContentResult], slug: String)(implicit sc: SparkContext): RDD[NonLiveStatusReport] = {
     val reviewData = data.filter(f => (f.status == "Review"))
       .map{f =>
-        NonLiveStatusReport(f.board, f.medium, f.gradeLevel, f.identifier, f.resourceType, f.status, dataFormat(f.lastSubmittedOn), f.creator, dataFormat(f.createdOn))
+        NonLiveStatusReport(f.board, f.medium, f.gradeLevel, f.identifier, f.resourceType, f.status, dataFormat(f.lastSubmittedOn), f.creator, dataFormat(f.createdOn), slug)
       }
 
     val limitedSharingData = data.filter(f => (f.status == "Unlisted"))
       .map{f =>
-        NonLiveStatusReport(f.board, f.medium, f.gradeLevel, f.identifier, f.resourceType, f.status, dataFormat(f.lastPublishedOn), f.creator, dataFormat(f.createdOn))
+        NonLiveStatusReport(f.board, f.medium, f.gradeLevel, f.identifier, f.resourceType, f.status, dataFormat(f.lastPublishedOn), f.creator, dataFormat(f.createdOn), slug)
       }
 
     val publishedReport = data.filter(f => (f.status == "Draft" && f.lastPublishedOn != null))
       .map{f =>
-        NonLiveStatusReport(f.board, f.medium, f.gradeLevel,f.identifier, f.resourceType, f.status, dataFormat(f.lastPublishedOn), f.creator, dataFormat(f.createdOn))
+        NonLiveStatusReport(f.board, f.medium, f.gradeLevel,f.identifier, f.resourceType, f.status, dataFormat(f.lastPublishedOn), f.creator, dataFormat(f.createdOn), slug)
       }
 
     val nonPublishedReport = data.filter(f => (f.status == "Draft" && f.lastPublishedOn == null))
       .map{f =>
-        NonLiveStatusReport(f.board, f.medium, f.gradeLevel,f.identifier, f.resourceType, f.status, dataFormat(f.createdOn), f.creator, dataFormat(f.lastPublishedOn))
+        NonLiveStatusReport(f.board, f.medium, f.gradeLevel,f.identifier, f.resourceType, f.status, dataFormat(f.createdOn), f.creator, dataFormat(f.lastPublishedOn), slug)
       }
 
     val finalDraftReport = publishedReport.union(nonPublishedReport)
