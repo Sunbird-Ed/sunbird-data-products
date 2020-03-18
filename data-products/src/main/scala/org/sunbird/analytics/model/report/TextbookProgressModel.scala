@@ -6,8 +6,8 @@ import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.model.ReportConfig
-import org.ekstep.analytics.util.CourseUtils
-import org.ekstep.analytics.util.CourseUtils.loadData
+import org.sunbird.analytics.util.CourseUtils
+import org.sunbird.analytics.util.CourseUtils.loadData
 import org.sunbird.analytics.util.TextbookUtils
 import org.sunbird.cloud.storage.conf.AppConf
 
