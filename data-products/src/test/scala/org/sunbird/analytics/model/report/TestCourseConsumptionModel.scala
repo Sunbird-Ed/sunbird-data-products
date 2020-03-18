@@ -91,7 +91,7 @@ class TestCourseConsumptionModel extends SparkSpec(null) with MockFactory{
 
     val slug = result.map(f => f.slug).toList
     val reportName = result.map(_.reportName).toList.head
-    slug.head should be ("MPSlug")
+    slug.head should be ("OtherSlug1")
     val filePath = jobConfig.get.get("filePath").get.asInstanceOf[String]
     val key = jobConfig.get.get("key").get.asInstanceOf[String]
     val outDir = filePath + key + "renamed/" + reportId + "/" + slug.head + "/"
@@ -154,7 +154,7 @@ class TestCourseConsumptionModel extends SparkSpec(null) with MockFactory{
 
     val slug = result.map(f => f.slug).toList
     val reportName = result.map(_.reportName).toList.head
-    slug.head should be ("MPSlug")
+    slug.head should be ("OtherSlug1")
     val filePath = jobConfig.get.get("filePath").get.asInstanceOf[String]
     val key = jobConfig.get.get("key").get.asInstanceOf[String]
     val outDir = filePath + key + "renamed/" + reportId + "/" + slug.head + "/"
