@@ -243,6 +243,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
           .when(col("completionpercentage") > 100, 100)
           .otherwise(col("completionpercentage")).cast("int"))
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
+      .withColumn("certificate_status", when(col("certificates").isNotNull, "Issued").otherwise(""))
       .select(
         col("batchid"),
         col("userid"),
@@ -254,7 +255,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("active"),
         col("courseid"),
         col("course_completion"),
-        col("generatedOn")
+        col("generatedOn"),
+        col("certificate_status")
       )
 
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
@@ -323,7 +325,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("district_name").as("districtName"),
         col("block_name").as("blockName"),
         col("externalid").as("externalId"),
-        from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"))
+        from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
+          col("certificate_status").as("certificateStatus"))
 
     import spark.implicits._
     val batchDetails = Seq(BatchDetails(batch.batchid, courseCompletionCount, participantsCount)).toDF
@@ -373,7 +376,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("enrolleddate").as("Enrolment Date"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
-        col("completedon").as("Completion Date"))
+        col("completedon").as("Completion Date"),
+        col("certificate_status").as("Certificate Status"))
       .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
 
     val noOfRecords = reportDF.count()
