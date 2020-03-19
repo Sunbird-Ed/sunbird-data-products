@@ -95,7 +95,7 @@ class TestCourseConsumptionModel extends SparkSpec(null) with MockFactory{
     val filePath = jobConfig.get.get("filePath").get.asInstanceOf[String]
     val key = jobConfig.get.get("key").get.asInstanceOf[String]
     val outDir = filePath + key + "renamed/" + reportId + "/" + slug.head + "/"
-    outDir should be ("src/test/resources/druid-reports/renamed/tpd_metrics/MPSlug/")
+    outDir should be ("src/test/resources/druid-reports/renamed/tpd_metrics/OtherSlug1/")
   }
 
   it should "execute Course consumption model successfully and dispatch to azure even if output type is other than csv" in {
@@ -158,7 +158,7 @@ class TestCourseConsumptionModel extends SparkSpec(null) with MockFactory{
     val filePath = jobConfig.get.get("filePath").get.asInstanceOf[String]
     val key = jobConfig.get.get("key").get.asInstanceOf[String]
     val outDir = filePath + key + "renamed/" + reportId + "/" + slug.head + "/"
-    outDir should be ("src/test/resources/druid-reports/renamed/tpd_metrics/MPSlug/")
+    outDir should be ("src/test/resources/druid-reports/renamed/tpd_metrics/OtherSlug1/")
   }
 
   it should "execute successfully and provide null if there are no common keys" in {

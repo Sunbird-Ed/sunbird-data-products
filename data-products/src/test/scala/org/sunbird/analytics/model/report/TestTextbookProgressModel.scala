@@ -59,6 +59,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
 
+    println("res: " + res)
+
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
 
