@@ -3,7 +3,7 @@ package org.sunbird.analytics.util
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.Params
-import org.ekstep.analytics.framework.util.HTTPClient
+import org.ekstep.analytics.framework.util.{HTTPClient, RestUtil}
 import org.ekstep.analytics.model.report.ContentResult
 
 case class ContentInformation(id: String, ver: String, ts: String, params: Params, responseCode: String,result: TextbookResult)
@@ -11,11 +11,9 @@ case class TextbookResult(count: Int, content: List[ContentResult])
 
 
 object TextbookUtils {
-
   def getContentDataList(tenantId: String, restUtil: HTTPClient)(implicit sc: SparkContext): TextbookResult = {
     implicit val sqlContext = new SQLContext(sc)
     val url = Constants.COMPOSITE_SEARCH_URL
-    //    println("tenantId: " + tenantId)
     val request = s"""{
                      |      "request": {
                      |        "filters": {
@@ -35,8 +33,6 @@ object TextbookUtils {
                      |      }
                      |    }""".stripMargin
 
-    val resultData = restUtil.post[ContentInformation](url, request)
-      val finalResult = resultData.result
-    finalResult
+    RestUtil.post[ContentInformation](url, request).result
   }
 }

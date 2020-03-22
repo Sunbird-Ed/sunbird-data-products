@@ -15,5 +15,4 @@ object TextbookProgressJob extends optional.Application with IJob{
     JobDriver.run("batch", config, TextbookProgressModel);
     JobLogger.log("Job Completed.")
   }
-
 }
