@@ -3,14 +3,14 @@ package org.sunbird.analytics.util
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils}
-import org.sunbird.analytics.model.report.{ContentDetails, ContentInfo, dceTextbookReport, etbTextbookReport, FinalOutput, TenantInfo, TextBookDetails, TextBookInfo}
+import org.sunbird.analytics.model.report.{ContentDetails, ContentInfo, DCETextbookReport, ETBTextbookReport, FinalOutput, TenantInfo, TextBookDetails, TextBookInfo}
 import org.sunbird.cloud.storage.conf.AppConf
 
-case class etbTextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel: String,
+case class ETBTextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel: String,
                              subject: String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
                              totalQRLinked: Integer, totalQRNotLinked: Integer, leafNodesCount: Integer, leafNodeUnlinked: Integer)
 
-case class dceTextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
+case class DCETextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
                              createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
                              withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer)
 
@@ -24,8 +24,8 @@ object TextBookUtils {
   }
 
   def getTextbookHierarchy(textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext): (RDD[FinalOutput]) = {
-    var etbTextBookReport = List[etbTextbookData]()
-    var dceTextBookReport = List[dceTextbookData]()
+    var etbTextBookReport = List[ETBTextbookData]()
+    var dceTextBookReport = List[DCETextbookData]()
 
     textbookInfo.map(textbook => {
       var apiUrl = AppConf.getConfig("hierarchy.search.api.url")+AppConf.getConfig("hierarchy.search.api.path")
@@ -47,24 +47,23 @@ object TextBookUtils {
     val tenantRDD = tenantInfo.map(e=>(e.id,e))
 
     val etbTextBook = sc.parallelize(etbTextBookReport).map(e=>(e.channel,e))
-    val etb=etbTextbookData("","","","","","","","","",0,0,0,0,0)
-    val etbTextBookRDD = etbTextBook.fullOuterJoin(tenantRDD).map(etbReport => {
-
-      etbTextbookReport(etbReport._2._2.getOrElse(TenantInfo("","unknown")).slug, etbReport._2._1.getOrElse(etb).identifier,
-        etbReport._2._1.getOrElse(etb).name,etbReport._2._1.getOrElse(etb).medium,etbReport._2._1.getOrElse(etb).gradeLevel,
-        etbReport._2._1.getOrElse(etb).subject,etbReport._2._1.getOrElse(etb).status,etbReport._2._1.getOrElse(etb).createdOn,etbReport._2._1.getOrElse(etb).lastUpdatedOn,
-        etbReport._2._1.getOrElse(etb).totalContentLinked,etbReport._2._1.getOrElse(etb).totalQRLinked,etbReport._2._1.getOrElse(etb).totalQRNotLinked,
-        etbReport._2._1.getOrElse(etb).leafNodesCount,etbReport._2._1.getOrElse(etb).leafNodeUnlinked,"ETB_textbook_data")
+    val etb=ETBTextbookData("","","","","","","","","",0,0,0,0,0)
+    val etbTextBookRDD = etbTextBook.fullOuterJoin(tenantRDD).map(textbook => {
+      ETBTextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug, textbook._2._1.getOrElse(etb).identifier,
+        textbook._2._1.getOrElse(etb).name,textbook._2._1.getOrElse(etb).medium,textbook._2._1.getOrElse(etb).gradeLevel,
+        textbook._2._1.getOrElse(etb).subject,textbook._2._1.getOrElse(etb).status,textbook._2._1.getOrElse(etb).createdOn,textbook._2._1.getOrElse(etb).lastUpdatedOn,
+        textbook._2._1.getOrElse(etb).totalContentLinked,textbook._2._1.getOrElse(etb).totalQRLinked,textbook._2._1.getOrElse(etb).totalQRNotLinked,
+        textbook._2._1.getOrElse(etb).leafNodesCount,textbook._2._1.getOrElse(etb).leafNodeUnlinked,"ETB_textbook_data")
     })
 
     val dceTextBook = sc.parallelize(dceTextBookReport.filter(e=>(e.totalQRCodes!=0))).map(e=>(e.channel,e))
-    val dce=dceTextbookData("","","","","","","","",0,0,0,0,0)
-    val dceTextBookRDD = dceTextBook.fullOuterJoin(tenantRDD).map(dceReport => {
-      dceTextbookReport(dceReport._2._2.getOrElse(TenantInfo("","unknown")).slug,dceReport._2._1.getOrElse(dce).identifier,
-        dceReport._2._1.getOrElse(dce).name,dceReport._2._1.getOrElse(dce).medium,dceReport._2._1.getOrElse(dce).gradeLevel,dceReport._2._1.getOrElse(dce).subject,
-        dceReport._2._1.getOrElse(dce).createdOn,dceReport._2._1.getOrElse(dce).lastUpdatedOn,dceReport._2._1.getOrElse(dce).totalQRCodes,
-        dceReport._2._1.getOrElse(dce).contentLinkedQR,dceReport._2._1.getOrElse(dce).withoutContentQR,dceReport._2._1.getOrElse(dce).withoutContentT1,
-        dceReport._2._1.getOrElse(dce).withoutContentT2,"DCE_textbook_data")
+    val dce=DCETextbookData("","","","","","","","",0,0,0,0,0)
+    val dceTextBookRDD = dceTextBook.fullOuterJoin(tenantRDD).map(textbook => {
+      DCETextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dce).identifier,
+        textbook._2._1.getOrElse(dce).name,textbook._2._1.getOrElse(dce).medium,textbook._2._1.getOrElse(dce).gradeLevel,textbook._2._1.getOrElse(dce).subject,
+        textbook._2._1.getOrElse(dce).createdOn,textbook._2._1.getOrElse(dce).lastUpdatedOn,textbook._2._1.getOrElse(dce).totalQRCodes,
+        textbook._2._1.getOrElse(dce).contentLinkedQR,textbook._2._1.getOrElse(dce).withoutContentQR,textbook._2._1.getOrElse(dce).withoutContentT1,
+        textbook._2._1.getOrElse(dce).withoutContentT2,"DCE_textbook_data")
     })
 
     val dceRDD=dceTextBookRDD.map(e=>(e.identifier,e))
@@ -74,14 +73,14 @@ object TextBookUtils {
     finalOutput
   }
 
-  def generateDCETextbookReport(response: ContentInfo)(implicit sc: SparkContext): List[dceTextbookData] = {
+  def generateDCETextbookReport(response: ContentInfo)(implicit sc: SparkContext): List[DCETextbookData] = {
     var index=0
     var totalQRCodes=0
     var qrLinked=0
     var qrNotLinked=0
     var term1NotLinked=0
     var term2NotLinked=0
-    var dceReport = List[dceTextbookData]()
+    var dceReport = List[DCETextbookData]()
 
     if(response!=null && response.children.size>0 && response.status=="Live") {
       val lengthOfChapters = response.children.get.length
@@ -97,7 +96,7 @@ object TextBookUtils {
       val medium = if(response.medium!=null) response.medium.asInstanceOf[List[String]].mkString(",") else ""
       val subject = if(response.subject!=null) response.subject.asInstanceOf[List[String]].mkString(",") else ""
       val gradeLevel = if(response.gradeLevel!=null) response.gradeLevel.mkString(",") else ""
-      val dceDf = dceTextbookData(response.channel,response.identifier, response.name, medium, gradeLevel, subject,response.createdOn.substring(0,10), response.lastUpdatedOn.substring(0,10),totalQRCodes,qrLinked,qrNotLinked,term1NotLinked,term2NotLinked)
+      val dceDf = DCETextbookData(response.channel,response.identifier, response.name, medium, gradeLevel, subject,response.createdOn.substring(0,10), response.lastUpdatedOn.substring(0,10),totalQRCodes,qrLinked,qrNotLinked,term1NotLinked,term2NotLinked)
       dceReport = dceDf::dceReport
     }
     dceReport
@@ -134,12 +133,12 @@ object TextBookUtils {
     (counterValue,tempValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
   }
 
-  def generateETBTextbookReport(response: ContentInfo)(implicit sc: SparkContext): List[etbTextbookData] = {
+  def generateETBTextbookReport(response: ContentInfo)(implicit sc: SparkContext): List[ETBTextbookData] = {
     var qrLinkedContent = 0
     var qrNotLinked = 0
     var totalLeafNodes = 0
     var leafNodeswithoutContent = 0
-    var textBookReport = List[etbTextbookData]()
+    var textBookReport = List[ETBTextbookData]()
 
     if(response!=null && response.children.size>0) {
       val etbTextbook = parseETBTextbook(response.children.get,response,0,0,0,0)
@@ -150,7 +149,7 @@ object TextBookUtils {
       val medium = if(response.medium!=null) response.medium.asInstanceOf[List[String]].mkString(",") else ""
       val subject = if(response.subject!=null) response.subject.asInstanceOf[List[String]].mkString(",") else ""
       val gradeLevel = if(response.gradeLevel!=null) response.gradeLevel.mkString(",") else ""
-      val textbookDf = etbTextbookData(response.channel,response.identifier,response.name,medium,gradeLevel,subject,response.status,response.createdOn.substring(0,10),response.lastUpdatedOn.substring(0,10),response.leafNodesCount,qrLinkedContent,qrNotLinked,totalLeafNodes,leafNodeswithoutContent)
+      val textbookDf = ETBTextbookData(response.channel,response.identifier,response.name,medium,gradeLevel,subject,response.status,response.createdOn.substring(0,10),response.lastUpdatedOn.substring(0,10),response.leafNodesCount,qrLinkedContent,qrNotLinked,totalLeafNodes,leafNodeswithoutContent)
       textBookReport=textbookDf::textBookReport
     }
     textBookReport

@@ -7,8 +7,7 @@ import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, Re
 import org.ekstep.analytics.framework.{AlgoOutput, Empty, FrameworkContext, IBatchModelTemplate, Level, Output}
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
-import org.sunbird.analytics.util.CourseUtils
-import org.sunbird.analytics.util.TextBookUtils
+import org.sunbird.analytics.util.{CommonUtil, CourseUtils, TextBookUtils}
 
 case class TenantInfo(id: String, slug: String)
 case class TenantResponse(result: TenantResult)
@@ -28,16 +27,16 @@ case class ContentInfo(channel: String, board: String, identifier: String, mediu
                        depth: Integer, dialcodes:List[String], createdOn: String, children: Option[List[ContentInfo]])
 
 // Textbook ID, Medium, Grade, Subject, Textbook Name, Textbook Status, Created On, Last Updated On, Total content linked, Total QR codes linked to content, Total number of QR codes with no linked content, Total number of leaf nodes, Number of leaf nodes with no content
-case class etbTextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel: String,
+case class ETBTextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel: String,
                                subject:String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
                                totalQRLinked: Integer, totalQRNotLinked: Integer, leafNodesCount: Integer, leafNodeUnlinked: Integer, reportName: String)
 
 // Textbook ID, Medium, Grade, Subject, Textbook Name, Created On, Last Updated On, Total No of QR Codes, Number of QR codes with atleast 1 linked content,	Number of QR codes with no linked content, Term 1 QR Codes with no linked content, Term 2 QR Codes with no linked content
-case class dceTextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
+case class DCETextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
                                createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
                                withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer, reportName: String)
 
-case class FinalOutput(identifier: String, etb: Option[etbTextbookReport], dce: Option[dceTextbookReport]) extends AlgoOutput with Output
+case class FinalOutput(identifier: String, etb: Option[ETBTextbookReport], dce: Option[DCETextbookReport]) extends AlgoOutput with Output
 
 
 object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,FinalOutput] with Serializable {
@@ -45,6 +44,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
   override def name: String = "ETBMetricsModel"
 
   override def preProcess(events: RDD[Empty], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[Empty] = {
+    CommonUtil.setStorageConf(config.getOrElse("store", "local").toString, config.get("accountKey").asInstanceOf[Option[String]], config.get("accountSecret").asInstanceOf[Option[String]])
     sc.emptyRDD
   }
 
@@ -61,12 +61,12 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
       val etbTextBookReport = events.map(report => {
-        if(report.etb.size!=0) report.etb.get else etbTextbookReport("","","","","","","","","",0,0,0,0,0,"")
-      }).filter(textbook=>textbook.identifier!="")
+        if(report.etb.size!=0) report.etb.get else ETBTextbookReport("","","","","","","","","",0,0,0,0,0,"")
+      }).filter(textbook=> !textbook.identifier.isEmpty)
 
       val dceTextBookReport = events.map(report => {
-        if(report.dce.size!=0) report.dce.get else dceTextbookReport("","","","","","","","",0,0,0,0,0,"")
-      }).filter(textbook=>textbook.identifier!="")
+        if(report.dce.size!=0) report.dce.get else DCETextbookReport("","","","","","","","",0,0,0,0,0,"")
+      }).filter(textbook=> !textbook.identifier.isEmpty)
 
       reportConfig.output.map { f =>
         val etbDf = etbTextBookReport.toDF()
@@ -83,7 +83,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
   }
 
   def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext): (RDD[FinalOutput]) = {
-    implicit val httpClient = RestUtil
+    val httpClient = RestUtil
     val textBookInfo = TextBookUtils.getTextBooks(config, httpClient)
     val tenantInfo = getTenantInfo(httpClient)
     TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, httpClient)
