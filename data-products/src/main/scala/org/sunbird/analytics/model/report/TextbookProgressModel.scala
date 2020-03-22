@@ -59,7 +59,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
   override def postProcess(data: RDD[FinalOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[FinalOutput] = {
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
-    println("postprocess: " + data.count())
     if(data.count() > 0) {
       JobLogger.log("Textbook progress record counts per tenant: " + data.count(), None, INFO)
       val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
@@ -145,9 +144,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
 
   def getLiveStatusReport(data: List[ContentResult], slug: String)(implicit sc: SparkContext): RDD[LiveReport] = {
     val filteredList = data.filter(f => (f.status == "Live"))
-      .map{f =>
-        LiveReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), f.identifier, getFieldList(f.resourceType), dataFormat(f.createdOn), f.pkgVersion, f.creator,dataFormat(f.lastPublishedOn), slug)
-      }
+      .map{f => LiveReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), f.identifier, getFieldList(f.resourceType), dataFormat(f.createdOn), f.pkgVersion, f.creator,dataFormat(f.lastPublishedOn), slug)}
     sc.parallelize(filteredList)
   }
 
