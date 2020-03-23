@@ -20,8 +20,8 @@ jobs:
       - restore_cache:
           keys:
             - dp-dependency-cache-{{ checksum "pom.xml" }}
-      - run: cd sunbird-analytics-core && mvn clean install -DskipTests
-      - run: cd sunbird-core-dataproducts && mvn clean install -DskipTests
+      - run: cd sunbird-analytics-core && mvn install -DskipTests
+      - run: cd sunbird-core-dataproducts && mvn install -DskipTests
       - run:
           name: Ed-data-products-build
           command: cd data-products && mvn scoverage:report
