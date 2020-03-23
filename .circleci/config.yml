@@ -10,18 +10,15 @@ jobs:
             if [ -z $CIRCLE_PR_NUMBER ]; then
             target_branch=$CIRCLE_BRANCH
             git clone https://github.com/project-sunbird/sunbird-analytics-core.git -b $target_branch
-            git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git -b $target_branch
             else
             prdata=$(curl -X GET -u $GITHUB_USER_TOKEN:x-oauth-basic https://api.github.com/repos/Sunbird-Ed/sunbird-data-products/pulls/$CIRCLE_PR_NUMBER)
             target_branch=$(echo "${prdata}" | jq -r '.base.ref')
-            git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git -b $target_branch
             git clone https://github.com/project-sunbird/sunbird-analytics-core.git -b $target_branch
             fi
       - restore_cache:
           keys:
             - dp-dependency-cache-{{ checksum "pom.xml" }}
       - run: cd sunbird-analytics-core && mvn install -DskipTests
-      - run: cd sunbird-core-dataproducts && mvn install -DskipTests
       - run:
           name: Ed-data-products-build
           command: cd data-products && mvn scoverage:report
