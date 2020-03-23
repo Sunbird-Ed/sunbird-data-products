@@ -86,32 +86,38 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
 
 
   def getContentData(tenantId: String, slugName: String)(implicit sc: SparkContext): RDD[FinalOutput] = {
-    val unitrestUtil = UnirestUtil
-    val contentResponse = TextbookUtils.getContentDataList(tenantId, unitrestUtil)
+    val time = CommonUtil.time({
+      val unitrestUtil = UnirestUtil
+      val contentResponse = TextbookUtils.getContentDataList(tenantId, unitrestUtil)
 
-    if(contentResponse.count > 0) {
-      val contentData = contentResponse.content
+      if(contentResponse.count > 0) {
+        val contentData = contentResponse.content
 
-      val aggregatedReportRDD = getAggregatedReport(contentData, slugName)
-      val liveStatusReportRDD = getLiveStatusReport(contentData, slugName)
-      val nonLiveStatusReportRDD = getNonLiveStatusReport(contentData, slugName)
+        val aggregatedReportRDD = getAggregatedReport(contentData, slugName)
+        val liveStatusReportRDD = getLiveStatusReport(contentData, slugName)
+        val nonLiveStatusReportRDD = getNonLiveStatusReport(contentData, slugName)
 
-      val aggregatedMappingRDD = aggregatedReportRDD.map(f => (f.identifier,f))
-      val liveStatusMappingRDD = liveStatusReportRDD.map(f => (f.identifier,f))
-      val nonLiveStatusMappingRDD = nonLiveStatusReportRDD.map(f => (f.identifier,f))
+        val aggregatedMappingRDD = aggregatedReportRDD.map(f => (f.identifier,f))
+        val liveStatusMappingRDD = liveStatusReportRDD.map(f => (f.identifier,f))
+        val nonLiveStatusMappingRDD = nonLiveStatusReportRDD.map(f => (f.identifier,f))
 
-      val joinedList_1 = aggregatedMappingRDD.fullOuterJoin(liveStatusMappingRDD).fullOuterJoin(nonLiveStatusMappingRDD)
+        val joinedList_1 = aggregatedMappingRDD.fullOuterJoin(liveStatusMappingRDD).fullOuterJoin(nonLiveStatusMappingRDD)
 
-      val defaultAggregatedReport = AggregatedReport("","","","","",0,0,0,0,0,0,0,0,0,"","Unknown")
-      val defualtLiveReport = LiveReport("","","","","","",0,"","","Unknown")
+        val defaultAggregatedReport = AggregatedReport("","","","","",0,0,0,0,0,0,0,0,0,"","Unknown")
+        val defualtLiveReport = LiveReport("","","","","","",0,"","","Unknown")
 
-      joinedList_1
-        .map{f =>
-          FinalOutput(f._1,
-            f._2._1.map(f => f._1.getOrElse(defaultAggregatedReport)),
-            f._2._1.map(f => f._2.getOrElse(defualtLiveReport)),
-            f._2._2)}
-    } else {sc.emptyRDD}
+        JobLogger.log("TextbookProgressModel: For tenant: " + slugName + " total count of records: " + joinedList_1.count(), None, INFO)
+
+        joinedList_1
+          .map{f =>
+            FinalOutput(f._1,
+              f._2._1.map(f => f._1.getOrElse(defaultAggregatedReport)),
+              f._2._1.map(f => f._2.getOrElse(defualtLiveReport)),
+              f._2._2)}
+      } else {sc.emptyRDD}
+    })
+    JobLogger.log("TextbookProgressModel: For tenant: " + slugName + " Time taken to fetch the record: " + time._1, None, INFO)
+    time._2.map(f => f)
   }
 
   def getAggregatedReport(data: List[ContentResult], slug: String)(implicit sc: SparkContext): RDD[AggregatedReport] = {
