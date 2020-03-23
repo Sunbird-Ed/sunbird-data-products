@@ -7,7 +7,8 @@ import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, Re
 import org.ekstep.analytics.framework.{AlgoOutput, Empty, FrameworkContext, IBatchModelTemplate, Level, Output}
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
-import org.sunbird.analytics.util.{CommonUtil, CourseUtils, TextBookUtils}
+import org.ekstep.analytics.framework.util.CommonUtil
+import org.sunbird.analytics.util.{CourseUtils, TextBookUtils}
 
 case class TenantInfo(id: String, slug: String)
 case class TenantResponse(result: TenantResult)
