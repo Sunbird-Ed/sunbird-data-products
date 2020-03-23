@@ -150,4 +150,5 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
       .returns(userdata).anyNumberOfTimes()
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
+
 }
