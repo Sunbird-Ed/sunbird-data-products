@@ -5,10 +5,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework._
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.model.ReportConfig
 import org.sunbird.analytics.util.CourseUtils.loadData
-import org.sunbird.analytics.util.{CourseUtils, TextbookUtils}
+import org.sunbird.analytics.util.{CourseUtils, TextbookUtils, UnirestUtil}
 import org.sunbird.cloud.storage.conf.AppConf
 
 case class TenantInfo(id: String, slug: String) extends AlgoInput
@@ -86,9 +86,8 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
 
 
   def getContentData(tenantId: String, slugName: String)(implicit sc: SparkContext): RDD[FinalOutput] = {
-
-    implicit val httpClient = RestUtil
-    val contentResponse = TextbookUtils.getContentDataList(tenantId, httpClient)
+    val unitrestUtil = UnirestUtil
+    val contentResponse = TextbookUtils.getContentDataList(tenantId, unitrestUtil)
 
     if(contentResponse.count > 0) {
       val contentData = contentResponse.content
@@ -183,7 +182,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
     if (null != data) {
       if(data.isInstanceOf[String]) data.asInstanceOf[String]
       else data.asInstanceOf[List[String]].mkString(",")
-    }
-    else ""
+    } else ""
   }
 }

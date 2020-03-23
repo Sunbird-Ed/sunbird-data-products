@@ -1,7 +1,9 @@
 package org.ekstep.analytics.model.report
 
+import java.util
+
 import org.apache.spark.sql.SparkSession
-import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils}
+import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util._
@@ -24,7 +26,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     val jobConfig = JSONUtils.deserialize[JobConfig](config).modelParams
 
     implicit val mockFc = mock[FrameworkContext]
-    val mockRestUtil = mock[HTTPClient]
+    val mockRestUtil = mock[unirestClient]
 
     val mockStorageService = mock[BaseStorageService]
     (mockFc.getStorageService(_: String)).expects("azure").returns(mockStorageService).anyNumberOfTimes();
@@ -32,7 +34,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
 
 //        Mock for compositeSearch
-    val userdata = JSONUtils.deserialize[ContentInformation](Source.fromInputStream
+    val userdata = JSONUtils.serialize(Source.fromInputStream
     (getClass.getResourceAsStream("/textbook-report/contentSearchResponse.json")).getLines().mkString)
     val request = s"""{
                      |      "request": {
@@ -53,11 +55,13 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
                      |      }
                      |    }""".stripMargin
 
-    (mockRestUtil.post[ContentInformation](_: String, _: String, _: Option[Map[String,String]])(_: Manifest[ContentInformation]))
-      .expects(Constants.COMPOSITE_SEARCH_URL, request, None, *)
-        .returns(userdata).anyNumberOfTimes()
+    val header = new util.HashMap[String, String]()
+    header.put("Content-Type", "application/json")
+    (mockRestUtil.post(_: String, _: String, _: java.util.HashMap[String,String]))
+      .expects(Constants.COMPOSITE_SEARCH_URL, request, header)
+      .returns(userdata).anyNumberOfTimes()
 
-//    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
+    //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
 
@@ -66,7 +70,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     val jobConfig = JSONUtils.deserialize[JobConfig](config).modelParams
 
     implicit val mockFc = mock[FrameworkContext]
-    val mockRestUtil = mock[HTTPClient]
+    val mockRestUtil = mock[unirestClient]
 
     val mockStorageService = mock[BaseStorageService]
     (mockFc.getStorageService(_: String)).expects("azure").returns(mockStorageService).anyNumberOfTimes();
@@ -74,7 +78,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
 
     //        Mock for compositeSearch
-    val userdata = JSONUtils.deserialize[ContentInformation](Source.fromInputStream
+    val userdata = JSONUtils.serialize(Source.fromInputStream
     (getClass.getResourceAsStream("/textbook-report/contentSearchResponse.json")).getLines().mkString)
     val request = s"""{
                      |      "request": {
@@ -95,8 +99,10 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
                      |      }
                      |    }""".stripMargin
 
-    (mockRestUtil.post[ContentInformation](_: String, _: String, _: Option[Map[String,String]])(_: Manifest[ContentInformation]))
-      .expects(Constants.COMPOSITE_SEARCH_URL, request, None, *)
+    val header = new util.HashMap[String, String]()
+    header.put("Content-Type", "application/json")
+    (mockRestUtil.post(_: String, _: String, _: java.util.HashMap[String,String]))
+      .expects(Constants.COMPOSITE_SEARCH_URL, request, header)
       .returns(userdata).anyNumberOfTimes()
 
     //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
@@ -108,7 +114,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     val jobConfig = JSONUtils.deserialize[JobConfig](config).modelParams
 
     implicit val mockFc = mock[FrameworkContext]
-    val mockRestUtil = mock[HTTPClient]
+    val mockRestUtil = mock[unirestClient]
 
     val mockStorageService = mock[BaseStorageService]
     (mockFc.getStorageService(_: String)).expects("azure").returns(mockStorageService).anyNumberOfTimes();
@@ -116,7 +122,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
 
     //        Mock for compositeSearch
-    val userdata = JSONUtils.deserialize[ContentInformation](Source.fromInputStream
+    val userdata = JSONUtils.serialize(Source.fromInputStream
     (getClass.getResourceAsStream("/textbook-report/contentSearchResponse.json")).getLines().mkString)
     val request = s"""{
                      |      "request": {
@@ -137,12 +143,11 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
                      |      }
                      |    }""".stripMargin
 
-    (mockRestUtil.post[ContentInformation](_: String, _: String, _: Option[Map[String,String]])(_: Manifest[ContentInformation]))
-      .expects(Constants.COMPOSITE_SEARCH_URL, request, None, *)
+    val header = new util.HashMap[String, String]()
+    header.put("Content-Type", "application/json")
+    (mockRestUtil.post(_: String, _: String, _: java.util.HashMap[String,String]))
+      .expects(Constants.COMPOSITE_SEARCH_URL, request, header)
       .returns(userdata).anyNumberOfTimes()
-
-    //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
-
 }

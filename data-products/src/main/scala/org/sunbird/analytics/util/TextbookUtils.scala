@@ -1,9 +1,11 @@
 package org.sunbird.analytics.util
 
+import java.util
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.Params
-import org.ekstep.analytics.framework.util.{HTTPClient, RestUtil}
+import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.model.report.ContentResult
 
 case class ContentInformation(id: String, ver: String, ts: String, params: Params, responseCode: String,result: TextbookResult)
@@ -11,7 +13,7 @@ case class TextbookResult(count: Int, content: List[ContentResult])
 
 
 object TextbookUtils {
-  def getContentDataList(tenantId: String, restUtil: HTTPClient)(implicit sc: SparkContext): TextbookResult = {
+  def getContentDataList(tenantId: String, unirest: unirestClient)(implicit sc: SparkContext): TextbookResult = {
     implicit val sqlContext = new SQLContext(sc)
     val url = Constants.COMPOSITE_SEARCH_URL
     val request = s"""{
@@ -32,7 +34,9 @@ object TextbookUtils {
                      |        ]
                      |      }
                      |    }""".stripMargin
-
-    RestUtil.post[ContentInformation](url, request).result
+    val header = new util.HashMap[String, String]()
+    header.put("Content-Type", "application/json")
+    val response = unirest.post(url, request, header)
+    JSONUtils.deserialize[ContentInformation](response).result
   }
 }
