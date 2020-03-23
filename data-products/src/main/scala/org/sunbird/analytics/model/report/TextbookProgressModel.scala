@@ -60,7 +60,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
     if(data.count() > 0) {
-      JobLogger.log("Textbook progress record counts per tenant: " + data.count(), None, INFO)
       val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
@@ -105,9 +104,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
 
         val defaultAggregatedReport = AggregatedReport("","","","","",0,0,0,0,0,0,0,0,0,"","Unknown")
         val defualtLiveReport = LiveReport("","","","","","",0,"","","Unknown")
-
-        JobLogger.log("TextbookProgressModel: For tenant: " + slugName + " total count of records: " + joinedList_1.count(), None, INFO)
-
         joinedList_1
           .map{f =>
             FinalOutput(f._1,
@@ -116,7 +112,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty , TenantInfo, Fin
               f._2._2)}
       } else {sc.emptyRDD}
     })
-    JobLogger.log("TextbookProgressModel: For tenant: " + slugName + " Time taken to fetch the record: " + time._1, None, INFO)
+    JobLogger.log("TextbookProgressModel: For tenant: " + slugName, Option(Map("recordCount" -> time._2.count()), Map("timeTaken" -> time._1)), INFO)
     time._2.map(f => f)
   }
 
