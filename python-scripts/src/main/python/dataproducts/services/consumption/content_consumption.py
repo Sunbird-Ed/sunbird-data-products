@@ -146,6 +146,8 @@ class ContentConsumption:
                 ["childNodes", "identifier", "name"]]
                 textbooks.columns = ["identifier", "tb_id", "tb_name"]
                 textbooks = textbooks.explode('identifier')
+                textbooks = textbooks.groupby("identifier").agg({"tb_id": ", ".join, "tb_name": ", ".join}) \
+                                                           .reset_index()
                 textbooks.to_csv(result_loc_.joinpath('tb_content_mapping.csv'), index=False)
                 break
             except requests.exceptions.ConnectionError:
@@ -194,7 +196,7 @@ class ContentConsumption:
 
         df.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                      'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
-                     'Linked Textbook Id', 'Linked Textbook Name',
+                     'Linked Textbook Id(s)', 'Linked Textbook Name(s)',
                      'Average Rating(out of 5)', 'Total No of Ratings', 'No of Downloads',
                      'Number of Plays on App', 'Number of Plays on Portal', 'Total No of Plays (App and Portal)',
                      'Average Play Time in mins on App','Average Play Time in mins on Portal',
@@ -218,10 +220,10 @@ class ContentConsumption:
             content_aggregates.drop(['channel'], axis=1, inplace=True)
             result_loc_.parent.joinpath('portal_dashboards', slug).mkdir(exist_ok=True)
 
-            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'),
+            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'),
                                       index=False, encoding='utf-8-sig')
-            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
-            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
+            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
+            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
 
 
     def get_weekly_plays(self, result_loc_, date_, cassandra_, keyspace_, week_count_):
@@ -233,7 +235,7 @@ class ContentConsumption:
         :param keyspace_: keyspace in which we are working
         :return: None
         """
-        result_file_name = 'content_aggregates_{}w.csv'.format(week_count_)
+        result_file_name = 'content_consumption_lastweek.csv'
         tenant_info = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
         tenant_info['id'] = tenant_info['id'].astype(str)
         tenant_info.set_index('id', inplace=True)
@@ -289,7 +291,7 @@ class ContentConsumption:
              'lastPublishedOn', 'me_averageRating', 'tb_id', 'tb_name']]
         content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                                  'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
-                                 'Average Rating(out of 5)', 'Linked Textbook Id', 'Linked Textbook Name']
+                                 'Average Rating(out of 5)', 'Linked Textbook Id(s)', 'Linked Textbook Name(s)']
         content_model['Content ID'] = content_model['Content ID'].str.replace(".img", "")
         content_model['Created On'] = content_model['Created On'].fillna('T').apply(
             lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
@@ -332,7 +334,7 @@ class ContentConsumption:
                 subset=['Content ID', 'Last Date of the week'], keep='first')
             content_aggregates = content_aggregates[
                 ['Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name', 'Mime Type', 'Created On',
-                 'Creator (User Name)', 'Last Published On', 'Linked Textbook Id', 'Linked Textbook Name',
+                 'Creator (User Name)', 'Last Published On', 'Linked Textbook Id(s)', 'Linked Textbook Name(s)',
                  'Total No of Plays (App and Portal)', 'Number of Plays on App', 'Number of Plays on Portal',
                  'Average Play Time in mins (On App and Portal)', 'Average Play Time in mins on App',
                  'Average Play Time in mins on Portal', 'Average Rating(out of 5)',
@@ -360,11 +362,11 @@ class ContentConsumption:
 
         os.makedirs(result_loc_.joinpath('content_aggregates_compressed', slug), exist_ok=True)
 
-        shutil.make_archive(str(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_aggregates')),
+        shutil.make_archive(str(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_consumption')),
                             'zip',
                             str(result_loc_.joinpath("content_aggregates", slug)))
 
-        post_data_to_blob(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_aggregates.zip'))
+        post_data_to_blob(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_consumption.zip'))
 
 
     def init(self):
@@ -394,7 +396,7 @@ class ContentConsumption:
         self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         for i in range(7):
             analysis_date = execution_date - timedelta(days=i)
-            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
+            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid, config_=self.config)
             self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
 
         # Content Consumption for last week
