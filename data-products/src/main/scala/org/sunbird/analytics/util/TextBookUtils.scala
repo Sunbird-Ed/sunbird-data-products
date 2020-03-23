@@ -2,7 +2,7 @@ package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils}
+import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
 import org.sunbird.analytics.model.report.{ContentDetails, ContentInfo, DCETextbookReport, ETBTextbookReport, FinalOutput, TenantInfo, TextBookDetails, TextBookInfo}
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -27,12 +27,11 @@ object TextBookUtils {
     var etbTextBookReport = List[ETBTextbookData]()
     var dceTextBookReport = List[DCETextbookData]()
 
-    textbookInfo.map(textbook => {
+    sc.parallelize(textbookInfo).collect.map(textbook=>{
       var apiUrl = AppConf.getConfig("hierarchy.search.api.url")+AppConf.getConfig("hierarchy.search.api.path")
       if(textbook.status == "Live") { apiUrl = apiUrl+textbook.identifier }
       else { apiUrl = apiUrl+textbook.identifier+"?mode=edit" }
-
-      val response = restUtil.get[ContentDetails](apiUrl)
+      val response = RestUtil.get[ContentDetails](apiUrl)
 
       if(response.params.status=="successful") {
         val data = response.result.content
@@ -143,7 +142,7 @@ object TextBookUtils {
     if(response!=null && response.children.size>0) {
       val etbTextbook = parseETBTextbook(response.children.get,response,0,0,0,0)
       qrLinkedContent = etbTextbook._1
-      qrNotLinked = etbTextbook._2+1
+      qrNotLinked = etbTextbook._2
       leafNodeswithoutContent = etbTextbook._3
       totalLeafNodes = etbTextbook._4
       val medium = if(response.medium!=null) response.medium.asInstanceOf[List[String]].mkString(",") else ""
