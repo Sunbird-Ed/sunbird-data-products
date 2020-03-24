@@ -24,25 +24,22 @@ object TextBookUtils {
   }
 
   def getTextbookHierarchy(textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext): (RDD[FinalOutput]) = {
-    var etbTextBookReport = List[ETBTextbookData]()
-    var dceTextBookReport = List[DCETextbookData]()
 
-    sc.parallelize(textbookInfo).collect.map(textbook=>{
-      var apiUrl = AppConf.getConfig("hierarchy.search.api.url")+AppConf.getConfig("hierarchy.search.api.path")
-      if(textbook.status == "Live") { apiUrl = apiUrl+textbook.identifier }
-      else { apiUrl = apiUrl+textbook.identifier+"?mode=edit" }
-      val response = RestUtil.get[ContentDetails](apiUrl)
-
-      if(response.params.status=="successful") {
+    val reportTuple = for {textbook <- textbookInfo
+      baseUrl = AppConf.getConfig("hierarchy.search.api.url")+AppConf.getConfig("hierarchy.search.api.path")+textbook.identifier
+      finalUrl = if(textbook.status == "Live") baseUrl else baseUrl+"?mode=edit"
+      response = RestUtil.get[ContentDetails](finalUrl)
+      tupleData = if(response.params.status=="successful") {
         val data = response.result.content
-
-        val etbTextBookResponse = generateETBTextbookReport(data)
-        etbTextBookReport = etbTextBookReport ++ etbTextBookResponse
-
-        val dceTextBookResponse = generateDCETextbookReport(data)
-        dceTextBookReport = dceTextBookReport ++ dceTextBookResponse
+        val etbReport = generateETBTextbookReport(data)
+        val dceReport = generateDCETextbookReport(data)
+        (etbReport, dceReport)
       }
-    })
+      else (List(),List())
+    } yield tupleData
+
+    val etbTextBookReport = reportTuple.filter(f=> !f._1.isEmpty).map(f=>f._1.head)
+    val dceTextBookReport = reportTuple.filter(f=> !f._2.isEmpty).map(f=>f._2.head)
     val tenantRDD = tenantInfo.map(e=>(e.id,e))
 
     val etbTextBook = sc.parallelize(etbTextBookReport).map(e=>(e.channel,e))
