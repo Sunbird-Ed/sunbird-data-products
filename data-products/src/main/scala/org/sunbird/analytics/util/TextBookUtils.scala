@@ -14,6 +14,10 @@ case class DCETextbookData(channel: String, identifier: String, name: String, me
                              createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
                              withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer)
 
+object TBConstants {
+  val textbookunit = "TextBookUnit"
+}
+
 object TextBookUtils {
 
   def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo] = {
@@ -26,7 +30,7 @@ object TextBookUtils {
   def getTextbookHierarchy(textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext): (RDD[FinalOutput]) = {
     val reportTuple = for {textbook <- sc.parallelize(textbookInfo)
       baseUrl = AppConf.getConfig("hierarchy.search.api.url")+AppConf.getConfig("hierarchy.search.api.path")+textbook.identifier
-      finalUrl = if("Live".equals(textbook.status)) baseUrl else baseUrl+"?mode=edit"
+      finalUrl = if("Live".equals(textbook.status)) baseUrl else s"$baseUrl?mode=edit"
       response = RestUtil.get[ContentDetails](finalUrl)
       tupleData = if("successful".equals(response.params.status)) {
         val data = response.result.content
@@ -37,15 +41,15 @@ object TextBookUtils {
       else (List(),List())
     } yield tupleData
 
-    val etbTextBookReport = reportTuple.filter(f => !f._1.isEmpty).map(f => f._1.head)
-    val dceTextBookReport = reportTuple.filter(f => !f._2.isEmpty).map(f => f._2.head)
+    val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
+    val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
 
     generateTextBookReport(etbTextBookReport, dceTextBookReport, tenantInfo)
   }
 
   def generateTextBookReport(etbTextBookReport: RDD[ETBTextbookData], dceTextBookReport: RDD[DCETextbookData], tenantInfo: RDD[TenantInfo]): RDD[FinalOutput] = {
-    val tenantRDD = tenantInfo.map(e=>(e.id,e))
-    val etbTextBook = etbTextBookReport.map(e=>(e.channel,e))
+    val tenantRDD = tenantInfo.map(e => (e.id,e))
+    val etbTextBook = etbTextBookReport.map(e => (e.channel,e))
     val etb=ETBTextbookData("","","","","","","","","",0,0,0,0,0)
     val etbTextBookRDD = etbTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       ETBTextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug, textbook._2._1.getOrElse(etb).identifier,
@@ -55,8 +59,8 @@ object TextBookUtils {
         textbook._2._1.getOrElse(etb).leafNodesCount,textbook._2._1.getOrElse(etb).leafNodeUnlinked,"ETB_textbook_data")
     })
 
-    val dceTextBook = dceTextBookReport.filter(e=>(e.totalQRCodes!=0)).map(e=>(e.channel,e))
-    val dce=DCETextbookData("","","","","","","","",0,0,0,0,0)
+    val dceTextBook = dceTextBookReport.filter(e => (e.totalQRCodes!=0)).map(e => (e.channel,e))
+    val dce = DCETextbookData("","","","","","","","",0,0,0,0,0)
     val dceTextBookRDD = dceTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       DCETextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dce).identifier,
         textbook._2._1.getOrElse(dce).name,textbook._2._1.getOrElse(dce).medium,textbook._2._1.getOrElse(dce).gradeLevel,textbook._2._1.getOrElse(dce).subject,
@@ -65,16 +69,16 @@ object TextBookUtils {
         textbook._2._1.getOrElse(dce).withoutContentT2,"DCE_textbook_data")
     })
 
-    val dceRDD=dceTextBookRDD.map(e=>(e.identifier,e))
-    val etbRDD=etbTextBookRDD.map(e=>(e.identifier,e)).fullOuterJoin(dceRDD)
-    etbRDD.map(e=> FinalOutput(e._1,e._2._1,e._2._2))
+    val dceRDD = dceTextBookRDD.map(e => (e.identifier,e))
+    val etbRDD = etbTextBookRDD.map(e => (e.identifier,e)).fullOuterJoin(dceRDD)
+    etbRDD.map(e => FinalOutput(e._1,e._2._1,e._2._2))
   }
 
   def generateDCETextbookReport(response: ContentInfo): List[DCETextbookData] = {
     var index=0
     var dceReport = List[DCETextbookData]()
 
-    if(response!=null && response.children.size>0 && response.status=="Live") {
+    if(response!=null && response.children.isDefined && response.status=="Live") {
       val lengthOfChapters = response.children.get.length
       val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
       index = index+1
@@ -113,7 +117,7 @@ object TextBookUtils {
           else { term2NotLinked = term2NotLinked+1 }
         }
       }
-      if("TextBookUnit".equals(units.contentType.get)){
+      if(TBConstants.textbookunit.equals(units.contentType.get)) {
         val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),term,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
         tempValue = output._1
         counterQrLinked = output._3
@@ -128,7 +132,7 @@ object TextBookUtils {
   def generateETBTextbookReport(response: ContentInfo): List[ETBTextbookData] = {
     var textBookReport = List[ETBTextbookData]()
 
-    if(null != response && response.children.size>0) {
+    if(null != response && response.children.isDefined) {
       val etbTextbook = parseETBTextbook(response.children.get,response,0,0,0,0)
       val qrLinkedContent = etbTextbook._1
       val qrNotLinked = etbTextbook._2
@@ -150,14 +154,14 @@ object TextBookUtils {
     var totalLeafNodes = leafNodesCount
 
     data.map(units => {
-      if(units.children.size==0){ totalLeafNodes=totalLeafNodes+1 }
-      if(units.children.size==0 && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
+      if(units.children.isEmpty){ totalLeafNodes=totalLeafNodes+1 }
+      if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
       if(null != units.dialcodes){
         if(units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
         else { contentNotLinked=contentNotLinked+1 }
       }
 
-      if("TextBookUnit".equals(units.contentType.get)) {
+      if(TBConstants.textbookunit.equals(units.contentType.get)) {
         val output = parseETBTextbook(units.children.getOrElse(List[ContentInfo]()),response,qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
         qrLinkedContent = output._1
         contentNotLinked = output._2

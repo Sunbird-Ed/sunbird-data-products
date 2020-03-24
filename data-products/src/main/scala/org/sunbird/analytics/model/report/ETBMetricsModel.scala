@@ -84,10 +84,9 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
   }
 
   def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext): (RDD[FinalOutput]) = {
-    val httpClient = RestUtil
-    val textBookInfo = TextBookUtils.getTextBooks(config, httpClient)
-    val tenantInfo = getTenantInfo(httpClient)
-    TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, httpClient)
+    val textBookInfo = TextBookUtils.getTextBooks(config, RestUtil)
+    val tenantInfo = getTenantInfo(RestUtil)
+    TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, RestUtil)
   }
 
   def getTenantInfo(restUtil: HTTPClient)(implicit sc: SparkContext):  RDD[TenantInfo] = {
