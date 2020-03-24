@@ -26,7 +26,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     val jobConfig = JSONUtils.deserialize[JobConfig](config).modelParams
 
     implicit val mockFc = mock[FrameworkContext]
-    val mockRestUtil = mock[unirestClient]
+    val mockRestUtil = mock[UnirestClient]
 
     val mockStorageService = mock[BaseStorageService]
     (mockFc.getStorageService(_: String)).expects("azure").returns(mockStorageService).anyNumberOfTimes();
@@ -70,7 +70,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     val jobConfig = JSONUtils.deserialize[JobConfig](config).modelParams
 
     implicit val mockFc = mock[FrameworkContext]
-    val mockRestUtil = mock[unirestClient]
+    val mockRestUtil = mock[UnirestClient]
 
     val mockStorageService = mock[BaseStorageService]
     (mockFc.getStorageService(_: String)).expects("azure").returns(mockStorageService).anyNumberOfTimes();
@@ -114,7 +114,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     val jobConfig = JSONUtils.deserialize[JobConfig](config).modelParams
 
     implicit val mockFc = mock[FrameworkContext]
-    val mockRestUtil = mock[unirestClient]
+    val mockRestUtil = mock[UnirestClient]
 
     val mockStorageService = mock[BaseStorageService]
     (mockFc.getStorageService(_: String)).expects("azure").returns(mockStorageService).anyNumberOfTimes();
