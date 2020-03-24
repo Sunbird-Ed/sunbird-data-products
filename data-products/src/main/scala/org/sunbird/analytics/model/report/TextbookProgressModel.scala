@@ -62,28 +62,20 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInfo, Fina
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
       val aggregated = data.map { f => f.aggregatedReport.getOrElse(AggregatedReport("", "", "", "", "", 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "Unknown")) }
-      val liveStatus = data.map(f => f.liveReport.getOrElse(LiveReport("", "", "", "", "", "", 0, "", "", "Unknown")))
-      val nonLiveStatus = data.map(f => f.nonLiveStatusReport.getOrElse(NonLiveStatusReport("", "", "", "", "", "", "", "", "", "Unknown")))
+      val liveStatus = data.map( f => f.liveReport.getOrElse(LiveReport("", "", "", "", "", "", 0, "", "", "Unknown")))
+      val nonLiveStatus = data.map( f => f.nonLiveStatusReport.getOrElse(NonLiveStatusReport("", "", "", "", "", "", "", "", "", "Unknown")))
       reportConfig.output.map { f =>
-        val aggDF = aggregated.toDF()
-        CourseUtils.postDataToBlob(aggDF, f, config)
-
-        val liveStatusDF = liveStatus.toDF()
-        CourseUtils.postDataToBlob(liveStatusDF, f, config)
-
-        val nonLiveStatusDF = nonLiveStatus.toDF()
-        CourseUtils.postDataToBlob(nonLiveStatusDF, f, config)
+        CourseUtils.postDataToBlob(aggregated.toDF(), f, config)
+        CourseUtils.postDataToBlob(liveStatus.toDF(), f, config)
+        CourseUtils.postDataToBlob(nonLiveStatus.toDF(), f, config)
       }
     }
-    else {
-      JobLogger.log("No data found", None, Level.INFO)
-    }
+    else {JobLogger.log("No data found", None, Level.INFO)}
     data;
   }
 
-
   def getContentData(tenantId: String, slugName: String)(implicit sc: SparkContext): RDD[FinalOutput] = {
-    val time = CommonUtil.time({
+    val metrics = CommonUtil.time({
       val unitrestUtil = UnirestUtil
       val contentResponse = TextbookUtils.getContentDataList(tenantId, unitrestUtil)
 
@@ -113,12 +105,12 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInfo, Fina
         sc.emptyRDD
       }
     })
-    JobLogger.log("TextbookProgressModel: For tenant: " + slugName, Option(Map("recordCount" -> time._2.count(), "timeTaken" -> time._1)), INFO)
-    time._2.map(f => f)
+    JobLogger.log("TextbookProgressModel: For tenant: " + slugName, Option(Map("recordCount" -> metrics._2.count(), "timeTaken" -> metrics._1)), INFO)
+    metrics._2.map(f => f)
   }
 
   def getAggregatedReport(data: RDD[ContentResult], slug: String)(implicit sc: SparkContext): RDD[AggregatedReport] = {
-    val groupByList = data.groupBy(f => (f.board, f.medium, f.gradeLevel, f.subject, f.resourceType))
+    data.groupBy(f => (f.board, f.medium, f.gradeLevel, f.subject, f.resourceType))
       .map { f =>
         val newGroup = scala.collection.mutable.Map(
           "board" -> f._1._1,
@@ -129,7 +121,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInfo, Fina
         )
         f._2.groupBy { f => f.status }.map { case (x, y) => (x, y.size) } ++ f._2.groupBy { f => f.mimeType }.map { case (x, y) => (x, y.size) } ++ newGroup
       }
-      .filter(f => f.getOrElse("board", null) != null || f.getOrElse("medium", null) != null || f.getOrElse("gradeLevel", null) != null || f.getOrElse("subject", null) != null)
+      .filter(f => null != f.getOrElse("board", null) || null != f.getOrElse("medium", null)  || null != f.getOrElse("gradeLevel", null) || null != f.getOrElse("subject", null))
       .map { f =>
         AggregatedReport(f.getOrElse("board", "").asInstanceOf[String], getFieldList(f.getOrElse("medium", "").asInstanceOf[Object]),
           getFieldList(f.getOrElse("gradeLevel", List()).asInstanceOf[List[String]]), getFieldList(f.getOrElse("subject", "").asInstanceOf[Object]),
@@ -141,7 +133,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInfo, Fina
           f.getOrElse("application/vnd.ekstep.html-archive", 0).asInstanceOf[Integer] + f.getOrElse("application/vnd.ekstep.h5p-archive", 0).asInstanceOf[Integer],
           f.getOrElse("identifier", "").asInstanceOf[String], slug)
       }
-    groupByList
   }
 
   def getLiveStatusReport(data: RDD[ContentResult], slug: String)(implicit sc: SparkContext): RDD[LiveReport] = {
@@ -157,17 +148,17 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInfo, Fina
     val limitedSharingData = data.filter(f => (f.status == "Unlisted"))
       .map { f => NonLiveStatusReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), f.identifier, getFieldList(f.resourceType), f.status, dataFormat(f.lastPublishedOn), f.creator, dataFormat(f.createdOn), slug) }
 
-    val publishedReport = data.filter(f => (f.status == "Draft" && f.lastPublishedOn != null))
+    val publishedReport = data.filter(f => (f.status == "Draft" && null != f.lastPublishedOn))
       .map { f => NonLiveStatusReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), f.identifier, getFieldList(f.resourceType), f.status, dataFormat(f.lastPublishedOn), f.creator, dataFormat(f.createdOn), slug) }
 
-    val nonPublishedReport = data.filter(f => (f.status == "Draft" && f.lastPublishedOn == null))
+    val nonPublishedReport = data.filter(f => (f.status == "Draft" && null == f.lastPublishedOn))
       .map { f => NonLiveStatusReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), f.identifier, getFieldList(f.resourceType), f.status, dataFormat(f.createdOn), f.creator, dataFormat(f.lastPublishedOn), slug) }
 
     publishedReport.union(nonPublishedReport).union(reviewData).union(limitedSharingData)
   }
 
   def dataFormat(date: String): String = {
-    if (date != null) date.split("T")(0) else ""
+    if (null != date) date.split("T")(0) else ""
   }
 
   def getFieldList(data: Object): String = {
