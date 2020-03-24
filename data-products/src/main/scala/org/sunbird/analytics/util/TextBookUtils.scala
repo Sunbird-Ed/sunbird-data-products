@@ -25,7 +25,7 @@ object TextBookUtils {
 
   def getTextbookHierarchy(textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext): (RDD[FinalOutput]) = {
 
-    val reportTuple = for {textbook <- textbookInfo
+    val reportTuple = for {textbook <- sc.parallelize(textbookInfo)
       baseUrl = AppConf.getConfig("hierarchy.search.api.url")+AppConf.getConfig("hierarchy.search.api.path")+textbook.identifier
       finalUrl = if(textbook.status == "Live") baseUrl else baseUrl+"?mode=edit"
       response = RestUtil.get[ContentDetails](finalUrl)
@@ -42,7 +42,7 @@ object TextBookUtils {
     val dceTextBookReport = reportTuple.filter(f=> !f._2.isEmpty).map(f=>f._2.head)
     val tenantRDD = tenantInfo.map(e=>(e.id,e))
 
-    val etbTextBook = sc.parallelize(etbTextBookReport).map(e=>(e.channel,e))
+    val etbTextBook = etbTextBookReport.map(e=>(e.channel,e))
     val etb=ETBTextbookData("","","","","","","","","",0,0,0,0,0)
     val etbTextBookRDD = etbTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       ETBTextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug, textbook._2._1.getOrElse(etb).identifier,
@@ -52,7 +52,7 @@ object TextBookUtils {
         textbook._2._1.getOrElse(etb).leafNodesCount,textbook._2._1.getOrElse(etb).leafNodeUnlinked,"ETB_textbook_data")
     })
 
-    val dceTextBook = sc.parallelize(dceTextBookReport.filter(e=>(e.totalQRCodes!=0))).map(e=>(e.channel,e))
+    val dceTextBook = dceTextBookReport.filter(e=>(e.totalQRCodes!=0)).map(e=>(e.channel,e))
     val dce=DCETextbookData("","","","","","","","",0,0,0,0,0)
     val dceTextBookRDD = dceTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       DCETextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dce).identifier,
@@ -69,7 +69,7 @@ object TextBookUtils {
     finalOutput
   }
 
-  def generateDCETextbookReport(response: ContentInfo)(implicit sc: SparkContext): List[DCETextbookData] = {
+  def generateDCETextbookReport(response: ContentInfo): List[DCETextbookData] = {
     var index=0
     var totalQRCodes=0
     var qrLinked=0
@@ -129,7 +129,7 @@ object TextBookUtils {
     (counterValue,tempValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
   }
 
-  def generateETBTextbookReport(response: ContentInfo)(implicit sc: SparkContext): List[ETBTextbookData] = {
+  def generateETBTextbookReport(response: ContentInfo): List[ETBTextbookData] = {
     var qrLinkedContent = 0
     var qrNotLinked = 0
     var totalLeafNodes = 0
@@ -151,7 +151,7 @@ object TextBookUtils {
     textBookReport
   }
 
-  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Integer, contentNotLinkedQR:Integer, leafNodesContent:Integer, leafNodesCount:Integer)(implicit sc: SparkContext): (Integer,Integer,Integer,Integer) = {
+  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Integer, contentNotLinkedQR:Integer, leafNodesContent:Integer, leafNodesCount:Integer): (Integer,Integer,Integer,Integer) = {
     var qrLinkedContent = contentLinked
     var contentNotLinked = contentNotLinkedQR
     var leafNodeswithoutContent = leafNodesContent
