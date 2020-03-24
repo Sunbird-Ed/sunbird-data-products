@@ -13,7 +13,7 @@ case class TextbookResult(count: Int, content: List[ContentResult])
 
 
 object TextbookUtils {
-  def getContentDataList(tenantId: String, unirest: unirestClient)(implicit sc: SparkContext): TextbookResult = {
+  def getContentDataList(tenantId: String, unirest: UnirestClient)(implicit sc: SparkContext): TextbookResult = {
     implicit val sqlContext = new SQLContext(sc)
     val url = Constants.COMPOSITE_SEARCH_URL
     val request = s"""{
@@ -36,7 +36,7 @@ object TextbookUtils {
                      |    }""".stripMargin
     val header = new util.HashMap[String, String]()
     header.put("Content-Type", "application/json")
-    val response = unirest.post(url, request, header)
+    val response = unirest.post(url, request, Option(header))
     JSONUtils.deserialize[ContentInformation](response).result
   }
 }

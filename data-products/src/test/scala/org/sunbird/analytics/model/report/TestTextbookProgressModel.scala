@@ -57,8 +57,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     val header = new util.HashMap[String, String]()
     header.put("Content-Type", "application/json")
-    (mockRestUtil.post(_: String, _: String, _: java.util.HashMap[String,String]))
-      .expects(Constants.COMPOSITE_SEARCH_URL, request, header)
+    (mockRestUtil.post(_: String, _: String, _: Option[java.util.HashMap[String,String]]))
+      .expects(Constants.COMPOSITE_SEARCH_URL, request, Option(header))
       .returns(userdata).anyNumberOfTimes()
 
     //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
@@ -101,8 +101,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     val header = new util.HashMap[String, String]()
     header.put("Content-Type", "application/json")
-    (mockRestUtil.post(_: String, _: String, _: java.util.HashMap[String,String]))
-      .expects(Constants.COMPOSITE_SEARCH_URL, request, header)
+    (mockRestUtil.post(_: String, _: String, _: Option[java.util.HashMap[String,String]]))
+      .expects(Constants.COMPOSITE_SEARCH_URL, request, Option(header))
       .returns(userdata).anyNumberOfTimes()
 
     //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
@@ -145,8 +145,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     val header = new util.HashMap[String, String]()
     header.put("Content-Type", "application/json")
-    (mockRestUtil.post(_: String, _: String, _: java.util.HashMap[String,String]))
-      .expects(Constants.COMPOSITE_SEARCH_URL, request, header)
+    (mockRestUtil.post(_: String, _: String, _: Option[java.util.HashMap[String,String]]))
+      .expects(Constants.COMPOSITE_SEARCH_URL, request, Option(header))
       .returns(userdata).anyNumberOfTimes()
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }

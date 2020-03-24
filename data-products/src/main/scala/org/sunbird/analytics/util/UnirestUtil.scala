@@ -4,16 +4,16 @@ import kong.unirest.{Unirest, UnirestException}
 import org.ekstep.analytics.framework.Level.ERROR
 import org.ekstep.analytics.framework.util.JobLogger
 
-trait unirestClient {
-  def post(apiUrl: String, body: String, requestHeader:  java.util.HashMap[String, String]): String
+trait UnirestClient {
+  def post(apiUrl: String, body: String, requestHeader:  Option[java.util.HashMap[String, String]] = None): String
 }
 
-object UnirestUtil extends unirestClient {
+object UnirestUtil extends UnirestClient {
 
   implicit val className = "org.sunbird.analytics.util.UnirestUtil"
 
-  def post(apiUrl: String, body: String, requestHeader: java.util.HashMap[String, String]): String = {
-    val request = Unirest.post(apiUrl).headers(requestHeader).body(body)
+  def post(apiUrl: String, body: String, requestHeader: Option[java.util.HashMap[String, String]] = None): String = {
+    val request = Unirest.post(apiUrl).headers(requestHeader.getOrElse(new java.util.HashMap())).body(body)
     try {
       request.asString().getBody
     } catch {
