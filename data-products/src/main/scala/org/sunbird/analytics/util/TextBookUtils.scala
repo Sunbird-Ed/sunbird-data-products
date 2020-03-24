@@ -78,7 +78,7 @@ object TextBookUtils {
     var index=0
     var dceReport = List[DCETextbookData]()
 
-    if(response!=null && response.children.isDefined && response.status=="Live") {
+    if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
       val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
       index = index+1

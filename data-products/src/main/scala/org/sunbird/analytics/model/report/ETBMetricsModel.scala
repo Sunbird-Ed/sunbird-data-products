@@ -76,9 +76,6 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
         val dceDf = dceTextBookReport.toDF()
         CourseUtils.postDataToBlob(dceDf,f,config)
       }
-
-    } else {
-      JobLogger.log("No data found", None, Level.INFO)
     }
     events
   }
@@ -98,7 +95,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     val tenantConf = config.get("tenantConfig").get.asInstanceOf[Map[String, String]]
     val filters = if(tenantConf.get("tenantId").get.nonEmpty) s"""{"id":"${tenantConf.get("tenantId").get}"}""".stripMargin
     else if(tenantConf.get("slugName").get.nonEmpty) s"""{"slug":"${tenantConf.get("slugName").get}"}""".stripMargin
-    else s"""{"isRootOrg": "true" }""".stripMargin
+    else s"""{"isRootOrg":"true"}""".stripMargin
 
     val tenantRequest = s"""{
             |    "params": { },
