@@ -1,0 +1,1 @@
+{"id": "api.org.search","ver": "v1","ts": "2020-03-13 12:33:05:927+0000","params": {"resmsgid": null,"msgid": null,"err": null,"status": "success","errmsg": null},"responseCode": "OK","result": {"response": {"count": 3510,"content": [{"orgName": "FT_Org_Name_5699923728","channel": "FT_Org_Channel_1534700633","id": "b00bc992ef25f1a9a8d63291e20efc8d","slug": "Test-slug"}]}}}
