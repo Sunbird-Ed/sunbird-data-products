@@ -62,12 +62,17 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |"request": {
                     |   "filters": {
                     |       "contentType": ["Textbook"],
+                    |       "identifier":[],
                     |       "status": ["Live", "Review", "Draft"]
                     |   },
                     |   "sort_by": {"createdOn":"desc"},
                     |   "limit": 50
                     | }
                     |},
+                    |"tenantConfig": {
+                    |"tenantId":"",
+                    |  "slugName":"mitra"
+                    |	},
                     |	"key": "druid-reports/",
                     |  "format":"csv",
                     |	"filePath": "druid-reports/",
@@ -80,7 +85,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     //Mock for composite search
     val textBookData = JSONUtils.deserialize[TextBookDetails](Source.fromInputStream
     (getClass.getResourceAsStream("/reports/textbookDetails.json")).getLines().mkString)
-    val request = s"""{"request":{"filters":{"contentType":["Textbook"],"status":["Live","Review","Draft"]},"sort_by":{"createdOn":"desc"},"limit":50}}""".stripMargin
+    val request = s"""{"request":{"filters":{"contentType":["Textbook"],"identifier":[],"status":["Live","Review","Draft"]},"sort_by":{"createdOn":"desc"},"limit":50}}""".stripMargin
 
     (mockRestUtil.post[TextBookDetails](_: String, _: String, _: Option[Map[String,String]])(_: Manifest[TextBookDetails]))
       .expects("https://dev.sunbirded.org/action/composite/v3/search", v2 = request, None,*)
@@ -95,9 +100,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     val tenantRequest = """{
                           |    "params": { },
                           |    "request":{
-                          |        "filters": {
-                          |            "isRootOrg": true
-                          |        },
+                          |        "filters": {"slug":"mitra"},
                           |        "offset": 0,
                           |        "limit": 1000,
                           |        "fields": ["id", "channel", "slug", "orgName"]
@@ -107,7 +110,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
       .expects("https://dev.sunbirded.org/api/org/v1/search", v2 = tenantRequest, None,*)
       .returns(tenantInfo)
 
-    val resp = ETBMetricsModel.getTenantInfo(mockRestUtil)
+    val resp = ETBMetricsModel.getTenantInfo(jobConfig,mockRestUtil)
     implicit val httpClient = RestUtil
     val finalRes = TextBookUtils.getTextbookHierarchy(res,resp,httpClient)
     val etb = finalRes.map(k=>k.etb.get)

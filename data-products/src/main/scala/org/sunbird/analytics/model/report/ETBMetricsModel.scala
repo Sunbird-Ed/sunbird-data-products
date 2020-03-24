@@ -84,25 +84,32 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
   }
 
   def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext): (RDD[FinalOutput]) = {
-    val textBookInfo = TextBookUtils.getTextBooks(config, RestUtil)
-    val tenantInfo = getTenantInfo(RestUtil)
-    TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, RestUtil)
+    val metrics = CommonUtil.time({
+      val textBookInfo = TextBookUtils.getTextBooks(config, RestUtil)
+      val tenantInfo = getTenantInfo(config, RestUtil)
+      TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, RestUtil)
+    })
+    JobLogger.log("ETBMetricsModel: ",Option(Map("recordCount" -> metrics._2.count(), "timeTaken" -> metrics._1)), Level.INFO)
+    metrics._2
   }
 
-  def getTenantInfo(restUtil: HTTPClient)(implicit sc: SparkContext):  RDD[TenantInfo] = {
+  def getTenantInfo(config: Map[String, AnyRef], restUtil: HTTPClient)(implicit sc: SparkContext):  RDD[TenantInfo] = {
     val url = Constants.ORG_SEARCH_URL
-    val body = """{
-                 |    "params": { },
-                 |    "request":{
-                 |        "filters": {
-                 |            "isRootOrg": true
-                 |        },
-                 |        "offset": 0,
-                 |        "limit": 1000,
-                 |        "fields": ["id", "channel", "slug", "orgName"]
-                 |    }
-                 |}""".stripMargin
-    sc.parallelize(restUtil.post[TenantResponse](url, body).result.response.content)
+    val tenantConf = config.get("tenantConfig").get.asInstanceOf[Map[String, String]]
+    val filters = if(tenantConf.get("tenantId").get.nonEmpty) s"""{"id":"${tenantConf.get("tenantId").get}"}""".stripMargin
+    else if(tenantConf.get("slugName").get.nonEmpty) s"""{"slug":"${tenantConf.get("slugName").get}"}""".stripMargin
+    else s"""{"isRootOrg": "true" }""".stripMargin
+
+    val tenantRequest = s"""{
+            |    "params": { },
+            |    "request":{
+            |        "filters": $filters,
+            |        "offset": 0,
+            |        "limit": 1000,
+            |        "fields": ["id", "channel", "slug", "orgName"]
+            |    }
+            |}""".stripMargin
+    sc.parallelize(restUtil.post[TenantResponse](url, tenantRequest).result.response.content)
   }
 
 }
