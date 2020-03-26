@@ -2,12 +2,10 @@ package org.sunbird.analytics.model.report
 
 import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.FrameworkContext
-import org.sunbird.analytics.util.SparkSpec
+import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
-import org.sunbird.analytics.util.TextBookUtils
-import org.sunbird.analytics.model.report.ETBMetricsModel
-import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
+import org.sunbird.analytics.util.{SparkSpec, TextbookUtils}
 import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.io.Source
@@ -91,7 +89,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
       .expects("https://dev.sunbirded.org/action/composite/v3/search", v2 = request, None,*)
       .returns(textBookData)
 
-    val res = TextBookUtils.getTextBooks(jobConfig,mockRestUtil)
+    val res = TextbookUtils.getTextBooks(jobConfig,mockRestUtil)
 
     //Mock for Tenant Info
     val tenantInfo = JSONUtils.deserialize[TenantResponse](Source.fromInputStream
@@ -112,12 +110,11 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
 
     val resp = ETBMetricsModel.getTenantInfo(jobConfig,mockRestUtil)
     implicit val httpClient = RestUtil
-    val finalRes = TextBookUtils.getTextbookHierarchy(res,resp,httpClient)
+    val finalRes = TextbookUtils.getTextbookHierarchy(res,resp,httpClient)
     val etb = finalRes.map(k=>k.etb.get)
     val dce = finalRes.map(k=>k.dce.get)
 
     implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
     val resultRDD = ETBMetricsModel.execute(sc.emptyRDD, Option(jobConfig))
 

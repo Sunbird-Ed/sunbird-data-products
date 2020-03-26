@@ -8,7 +8,7 @@ import org.ekstep.analytics.framework.{AlgoOutput, Empty, FrameworkContext, IBat
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.CommonUtil
-import org.sunbird.analytics.util.{CourseUtils, TextBookUtils}
+import org.sunbird.analytics.util.{CourseUtils, TextbookUtils}
 
 case class TenantInfo(id: String, slug: String)
 case class TenantResponse(result: TenantResult)
@@ -82,9 +82,9 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
   def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext): (RDD[FinalOutput]) = {
     val metrics = CommonUtil.time({
-      val textBookInfo = TextBookUtils.getTextBooks(config, RestUtil)
+      val textBookInfo = TextbookUtils.getTextBooks(config, RestUtil)
       val tenantInfo = getTenantInfo(config, RestUtil)
-      TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, RestUtil)
+      TextbookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, RestUtil)
     })
     JobLogger.log("ETBMetricsModel: ",Option(Map("recordCount" -> metrics._2.count(), "timeTaken" -> metrics._1)), Level.INFO)
     metrics._2
