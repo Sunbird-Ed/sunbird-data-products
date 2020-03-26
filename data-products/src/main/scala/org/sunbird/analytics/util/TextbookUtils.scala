@@ -6,7 +6,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.Params
 import org.ekstep.analytics.framework.util.JSONUtils
-import org.ekstep.analytics.model.report.ContentResult
+import org.sunbird.analytics.model.report.ContentResult
 
 case class ContentInformation(id: String, ver: String, ts: String, params: Params, responseCode: String,result: TextbookResult)
 case class TextbookResult(count: Int, content: List[ContentResult])

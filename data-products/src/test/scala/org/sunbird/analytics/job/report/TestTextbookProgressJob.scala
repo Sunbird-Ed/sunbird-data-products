@@ -2,7 +2,6 @@ package org.sunbird.analytics.job.report
 
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{Dispatcher, Fetcher, JobConfig}
-import org.ekstep.analytics.job.report.TextbookProgressJob
 import org.ekstep.analytics.model.{OutputConfig, QueryDateRange, ReportConfig}
 import org.sunbird.analytics.util.SparkSpec
 

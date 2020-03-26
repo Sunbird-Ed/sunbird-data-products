@@ -1,4 +1,4 @@
-package org.ekstep.analytics.model.report
+package org.sunbird.analytics.model.report
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -30,7 +30,7 @@ case class FinalOutput(identifier: String, aggregatedReport: Option[AggregatedRe
 
 object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInfo, FinalOutput, FinalOutput] with Serializable {
 
-  implicit val className: String = "org.ekstep.analytics.model.TextbookProgressModel"
+  implicit val className: String = "org.sunbird.analytics.model.TextbookProgressModel"
 
   override def name: String = "TextbookProgressModel"
 

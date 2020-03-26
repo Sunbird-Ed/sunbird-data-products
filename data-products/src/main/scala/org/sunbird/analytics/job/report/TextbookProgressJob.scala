@@ -1,13 +1,13 @@
-package org.ekstep.analytics.job.report
+package org.sunbird.analytics.job.report
 
 import org.apache.spark.SparkContext
 import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobDriver}
-import org.ekstep.analytics.model.report.TextbookProgressModel
+import org.sunbird.analytics.model.report.TextbookProgressModel
 
 object TextbookProgressJob extends optional.Application with IJob{
 
-  implicit val className = "org.ekstep.analytics.job.TextbookProgressJob"
+  implicit val className = "org.sunbird.analytics.job.TextbookProgressJob"
 
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     implicit val sparkContext: SparkContext = sc.getOrElse(null);
