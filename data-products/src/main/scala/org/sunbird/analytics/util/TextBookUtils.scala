@@ -2,9 +2,12 @@ package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
-import org.sunbird.analytics.model.report.{ContentDetails, ContentInfo, DCETextbookReport, ETBTextbookReport, FinalOutput, TenantInfo, TextBookDetails, TextBookInfo}
+import org.sunbird.analytics.model.report.{ContentDetails, ContentInfo, DCETextbookReport, ETBTextbookReport, FinalOutput, TBContentResult, TenantInfo, TextBookDetails, TextBookInfo}
 import org.sunbird.cloud.storage.conf.AppConf
+import org.ekstep.analytics.framework.Params
+
 
 case class ETBTextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel: String,
                              subject: String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
@@ -13,6 +16,10 @@ case class ETBTextbookData(channel: String, identifier: String, name: String, me
 case class DCETextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
                              createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
                              withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer)
+
+case class ContentInformation(id: String, ver: String, ts: String, params: Params, responseCode: String,result: TextbookResult)
+case class TextbookResult(count: Int, content: List[TBContentResult])
+
 
 object TBConstants {
   val textbookunit = "TextBookUnit"
@@ -170,5 +177,32 @@ object TextBookUtils {
       }
     })
     (qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
+  }
+
+  def getContentDataList(tenantId: String, unirest: UnirestClient)(implicit sc: SparkContext): TextbookResult = {
+    implicit val sqlContext = new SQLContext(sc)
+    val url = Constants.COMPOSITE_SEARCH_URL
+    val request = s"""{
+                     |      "request": {
+                     |        "filters": {
+                     |           "status": ["Live","Draft","Review","Unlisted"],
+                     |          "contentType": ["Resource"],
+                     |          "createdFor": "$tenantId"
+                     |        },
+                     |        "fields": ["channel","identifier","board","gradeLevel",
+                     |          "medium","subject","status","creator","lastPublishedOn","createdFor",
+                     |          "createdOn","pkgVersion","contentType",
+                     |          "mimeType","resourceType", "lastSubmittedOn"
+                     |        ],
+                     |        "limit": 10000,
+                     |        "facets": [
+                     |          "status"
+                     |        ]
+                     |      }
+                     |    }""".stripMargin
+    val header = new java.util.HashMap[String, String]()
+    header.put("Content-Type", "application/json")
+    val response = unirest.post(url, request, Option(header))
+    JSONUtils.deserialize[ContentInformation](response).result
   }
 }
