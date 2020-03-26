@@ -1,0 +1,4 @@
+TextBook ID,TextBook Name,Medium,Grade,Subject,Created On,Last Updated On,Total number of QR codes,Number of QR codes with atleast 1 linked content,Number of QR codes with no linked content,Term 1 QR Codes with no linked content,Term 2 QR Codes with no linked content
+do_1129835448752783361144,Copy Collecction Testing For shallow Copy,"","","",2020-03-22,2020-03-22,1,1,0,0,0
+do_112976283013464064115,TestBook,English,Grade 1,Math,2020-03-12,2020-03-12,2,1,1,1,0
+do_112981906272051200117,Copy Collecction Testing For shallow Copy,"","","",2020-03-20,2020-03-20,1,1,0,0,0
