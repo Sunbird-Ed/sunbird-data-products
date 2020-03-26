@@ -68,7 +68,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
 
         val aggregatedReportDf = getAggregatedReport(contentData, slug)
           .na.fill("")
-
+        
         val liveStatusReportDf = getLiveStatusReport(contentData, slug)
           .drop("status","pendingInCurrentStatus")
           .na.fill("Missing Metadata")
@@ -117,7 +117,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
           f.getOrElse("application/vnd.ekstep.html-archive", 0).asInstanceOf[Integer] + f.getOrElse("application/vnd.ekstep.h5p-archive", 0).asInstanceOf[Integer],
           f.getOrElse("identifier", "").asInstanceOf[String], slug)
       }.toDF
-      .na.fill("Unknown", Seq("slug"))
   }
 
   def getLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
@@ -127,7 +126,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       .filter(f => (f.status == "Live"))
       .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.resourceType), dataFormat(f.createdOn), Option(f.pkgVersion), f.creator, Option(dataFormat(f.lastPublishedOn)), None, None, slug, "Live_Report") }
       .toDF
-      .na.fill("Unknown", Seq("slug"))
   }
 
   def getNonLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
