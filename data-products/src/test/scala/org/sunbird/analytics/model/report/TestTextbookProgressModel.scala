@@ -33,13 +33,14 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
     (mockStorageService.upload (_: String, _: String, _: String, _: Option[Boolean], _: Option[Int], _: Option[Int], _: Option[Int])).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
 
-    //        Mock for compositeSearch
+
+//        Mock for compositeSearch
     val userdata = JSONUtils.serialize(Source.fromInputStream
-    (getClass.getResourceAsStream("/textbook-reports/contentSearchResponse.json")).getLines().mkString)
+    (getClass.getResourceAsStream("/textbook-report/contentSearchResponse.json")).getLines().mkString)
     val request = s"""{
                      |      "request": {
                      |        "filters": {
-                     |           "status ": ["Live","Draft","Review","Unlisted"],
+                     |           "status": ["Live","Draft","Review","Unlisted"],
                      |          "contentType": ["Resource"],
                      |          "createdFor": "0123653943740170242"
                      |        },
@@ -79,7 +80,7 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     //        Mock for compositeSearch
     val userdata = JSONUtils.serialize(Source.fromInputStream
-    (getClass.getResourceAsStream("/textbook-reports/contentSearchResponse.json")).getLines().mkString)
+    (getClass.getResourceAsStream("/textbook-report/contentSearchResponse.json")).getLines().mkString)
     val request = s"""{
                      |      "request": {
                      |        "filters": {
@@ -123,7 +124,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     //        Mock for compositeSearch
     val userdata = JSONUtils.serialize(Source.fromInputStream
-    (getClass.getResourceAsStream("/textbook-reports/contentSearchResponse.json")).getLines().mkString)
+    (getClass.getResourceAsStream("/textbook-report/contentSearchResponse.json")).getLines().mkString)
+
     val request = s"""{
                      |      "request": {
                      |        "filters": {

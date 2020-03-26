@@ -99,7 +99,7 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
     val resultRDD = CourseEnrollmentModel.execute(sc.emptyRDD, Option(jobConfig))
     val result = resultRDD.collect()
 
-    resultRDD.count() should be(4)
+    resultRDD.count() should be(2)
 
     result.map(f => {
       f.completionCount should be(0)
@@ -177,7 +177,7 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
     val resultRDD = CourseEnrollmentModel.execute(sc.emptyRDD, Option(jobConfig))
     val result = resultRDD.collect()
 
-    resultRDD.count() should be(4)
+    resultRDD.count() should be(2)
 
     result.map(f => {
       f.completionCount should be(0)

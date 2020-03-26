@@ -5,7 +5,7 @@ import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobDriver}
 import org.sunbird.analytics.model.report.TextbookProgressModel
 
-object TextbookProgressJob extends optional.Application with IJob{
+object TextbookProgressJob extends optional.Application with IJob {
 
   implicit val className = "org.sunbird.analytics.job.TextbookProgressJob"
 
