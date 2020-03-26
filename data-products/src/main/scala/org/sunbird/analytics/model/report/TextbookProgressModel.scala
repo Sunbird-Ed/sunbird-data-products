@@ -57,6 +57,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
     val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
+    val slug = if (slugName.isEmpty) "Unknown" else slugName
     implicit val sqlContext = new SQLContext(sc)
     val metrics = CommonUtil.time({
       val unitrestUtil = UnirestUtil
@@ -65,15 +66,14 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       if (contentResponse.count > 0) {
         val contentData = sc.parallelize(contentResponse.content)
 
-        val aggregatedReportDf = getAggregatedReport(contentData, slugName)
-          .na.fill("Unknown", Seq("slug"))
+        val aggregatedReportDf = getAggregatedReport(contentData, slug)
           .na.fill("")
-        val liveStatusReportDf = getLiveStatusReport(contentData, slugName)
-          .na.fill("Unknown", Seq("slug"))
+
+        val liveStatusReportDf = getLiveStatusReport(contentData, slug)
           .drop("status","pendingInCurrentStatus")
           .na.fill("Missing Metadata")
-        val nonLiveStatusReportDf = getNonLiveStatusReport(contentData, slugName)
-          .na.fill("Unknown", Seq("slug"))
+
+        val nonLiveStatusReportDf = getNonLiveStatusReport(contentData, slug)
           .drop("lastPublishedOn", "pkgVersion")
           .na.fill("Missing Metadata")
 
@@ -116,7 +116,8 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
           f.getOrElse("application/pdf", 0).asInstanceOf[Integer] + f.getOrElse("application/epub", 0).asInstanceOf[Integer],
           f.getOrElse("application/vnd.ekstep.html-archive", 0).asInstanceOf[Integer] + f.getOrElse("application/vnd.ekstep.h5p-archive", 0).asInstanceOf[Integer],
           f.getOrElse("identifier", "").asInstanceOf[String], slug)
-      }.toDF()
+      }.toDF
+      .na.fill("Unknown", Seq("slug"))
   }
 
   def getLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
@@ -126,6 +127,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       .filter(f => (f.status == "Live"))
       .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.resourceType), dataFormat(f.createdOn), Option(f.pkgVersion), f.creator, Option(dataFormat(f.lastPublishedOn)), None, None, slug, "Live_Report") }
       .toDF
+      .na.fill("Unknown", Seq("slug"))
   }
 
   def getNonLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
