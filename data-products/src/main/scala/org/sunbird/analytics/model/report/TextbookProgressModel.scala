@@ -66,11 +66,14 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
         val contentData = sc.parallelize(contentResponse.content)
 
         val aggregatedReportDf = getAggregatedReport(contentData, slugName)
+          .na.fill("Unknown", Seq("slug"))
           .na.fill("")
         val liveStatusReportDf = getLiveStatusReport(contentData, slugName)
+          .na.fill("Unknown", Seq("slug"))
           .drop("status","pendingInCurrentStatus")
           .na.fill("Missing Metadata")
         val nonLiveStatusReportDf = getNonLiveStatusReport(contentData, slugName)
+          .na.fill("Unknown", Seq("slug"))
           .drop("lastPublishedOn", "pkgVersion")
           .na.fill("Missing Metadata")
 
