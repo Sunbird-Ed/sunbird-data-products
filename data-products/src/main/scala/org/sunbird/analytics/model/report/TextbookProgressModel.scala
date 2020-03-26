@@ -57,13 +57,13 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
     val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
-    val slug = if (slugName.isEmpty) "Unknown" else slugName
     implicit val sqlContext = new SQLContext(sc)
     val metrics = CommonUtil.time({
       val unitrestUtil = UnirestUtil
       val contentResponse = TextBookUtils.getContentDataList(tenantId, unitrestUtil)
 
       if (contentResponse.count > 0) {
+        val slug = if (slugName.isEmpty) "Unknown" else slugName
         val contentData = sc.parallelize(contentResponse.content)
 
         val aggregatedReportDf = getAggregatedReport(contentData, slug)
