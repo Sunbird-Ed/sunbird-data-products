@@ -88,9 +88,9 @@ object TextBookUtils {
       val qrNotLinked = dceTextbook._4
       val term1NotLinked = dceTextbook._5
       val term2NotLinked = dceTextbook._6
-      val medium = getFields(response.medium)
-      val subject = getFields(response.subject)
-      val gradeLevel = getFields(response.gradeLevel)
+      val medium = getString(response.medium)
+      val subject = getString(response.subject)
+      val gradeLevel = getString(response.gradeLevel)
       val createdOn = if(null != response.createdOn) response.createdOn.substring(0,10) else ""
       val lastUpdatedOn = if(null != response.lastUpdatedOn) response.lastUpdatedOn.substring(0,10) else ""
       val dceDf = DCETextbookData(response.channel,response.identifier, response.name, medium, gradeLevel, subject,createdOn, lastUpdatedOn,totalQRCodes,qrLinked,qrNotLinked,term1NotLinked,term2NotLinked)
@@ -136,9 +136,9 @@ object TextBookUtils {
       val qrNotLinked = etbTextbook._2
       val leafNodeswithoutContent = etbTextbook._3
       val totalLeafNodes = etbTextbook._4
-      val medium = getFields(response.medium)
-      val subject = getFields(response.subject)
-      val gradeLevel = getFields(response.gradeLevel)
+      val medium = getString(response.medium)
+      val subject = getString(response.subject)
+      val gradeLevel = getString(response.gradeLevel)
       val createdOn = if(null != response.createdOn) response.createdOn.substring(0,10) else ""
       val lastUpdatedOn = if(null != response.lastUpdatedOn) response.lastUpdatedOn.substring(0,10) else ""
       val textbookDf = ETBTextbookData(response.channel,response.identifier,response.name,medium,gradeLevel,subject,response.status,createdOn,lastUpdatedOn,response.leafNodesCount,qrLinkedContent,qrNotLinked,totalLeafNodes,leafNodeswithoutContent)
@@ -196,7 +196,7 @@ object TextBookUtils {
     val response = unirest.post(url, request, Option(header))
     JSONUtils.deserialize[ContentInformation](response).result
   }
-  def getFields(data: Object): String = {
+  def getString(data: Object): String = {
     if (null != data) {
       if (data.isInstanceOf[String]) data.asInstanceOf[String]
       else data.asInstanceOf[List[String]].mkString(",")
