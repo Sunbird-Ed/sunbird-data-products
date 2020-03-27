@@ -196,6 +196,7 @@ object TextBookUtils {
     val response = unirest.post(url, request, Option(header))
     JSONUtils.deserialize[ContentInformation](response).result
   }
+
   def getString(data: Object): String = {
     if (null != data) {
       if (data.isInstanceOf[String]) data.asInstanceOf[String]
