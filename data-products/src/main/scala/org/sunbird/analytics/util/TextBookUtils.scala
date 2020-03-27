@@ -28,8 +28,8 @@ object TextBookUtils {
   def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo] = {
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(config.get("esConfig").get)
-    val response = restUtil.post[TextBookDetails](apiURL, request).result.content
-    response
+    val response = restUtil.post[TextBookDetails](apiURL, request)
+    if(null != response && "successful".equals(response.params.status) && response.result.count>0) response.result.content else List()
   }
 
   def getTextbookHierarchy(textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext): (RDD[FinalOutput]) = {
@@ -74,6 +74,7 @@ object TextBookUtils {
     val etbRDD = etbTextBookRDD.map(e => (e.identifier,e)).fullOuterJoin(dceRDD)
     etbRDD.map(e => FinalOutput(e._1,e._2._1,e._2._2))
   }
+
   def generateDCETextbookReport(response: ContentInfo): List[DCETextbookData] = {
     var index=0
     var dceReport = List[DCETextbookData]()
@@ -97,6 +98,7 @@ object TextBookUtils {
     }
     dceReport
   }
+
   def parseDCETextbook(data: List[ContentInfo], term: String, counter: Integer,linkedQr: Integer, qrNotLinked:Integer, counterT1:Integer, counterT2:Integer): (Integer,Integer,Integer,Integer,Integer,Integer) = {
     var counterValue=counter
     var counterQrLinked = linkedQr
@@ -125,6 +127,7 @@ object TextBookUtils {
     })
     (counterValue,tempValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
   }
+
   def generateETBTextbookReport(response: ContentInfo): List[ETBTextbookData] = {
     var textBookReport = List[ETBTextbookData]()
     if(null != response && response.children.isDefined) {
@@ -143,6 +146,7 @@ object TextBookUtils {
     }
     textBookReport
   }
+  
   def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Integer, contentNotLinkedQR:Integer, leafNodesContent:Integer, leafNodesCount:Integer): (Integer,Integer,Integer,Integer) = {
     var qrLinkedContent = contentLinked
     var contentNotLinked = contentNotLinkedQR

@@ -15,10 +15,10 @@ case class TenantResponse(result: TenantResult)
 case class TenantResult(response: ContentList)
 case class ContentList(count: Int, content: List[TenantInfo])
 
-case class TextBookDetails(result: TBResult)
-case class TBResult(content: List[TextBookInfo])
+case class TextBookDetails(result: TBResult, params: Params)
+case class TBResult(content: List[TextBookInfo], count: Integer)
 case class TextBookInfo(channel: String, identifier: String, name: String, createdFor: List[String], createdOn: String, lastUpdatedOn: String,
-                        board: String, medium: String, gradeLevel: List[String], subject: String, status: String)
+                        board: String, medium: Object, gradeLevel: List[String], subject: Object, status: String)
 
 case class ContentDetails(params: Params, result: ContentResult)
 case class Params(status: String)
