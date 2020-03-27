@@ -42,9 +42,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
 
   override def algorithm(data: RDD[TenantInformation], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[Empty] = {
     val tenantConf = config("filter").asInstanceOf[Map[String, String]]
-
-    if (!tenantConf("tenantId").isEmpty && !tenantConf("slugName").isEmpty) getContentData(tenantConf("tenantId"), tenantConf("slugName"), config)
-    else if (!tenantConf("tenantId").isEmpty && tenantConf("slugName").isEmpty) getContentData(tenantConf("tenantId"), "Unknown", config)
+    if(!tenantConf("tenantId").isEmpty) getContentData(tenantConf("tenantId"), tenantConf("slugName"), config)
     else data.collect().map { f => getContentData(f.id, f.slug, config)}
     sc.emptyRDD
   }
@@ -63,12 +61,12 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       val contentResponse = TextBookUtils.getContentDataList(tenantId, unitrestUtil)
 
       if (contentResponse.count > 0) {
-        val slug = if (slugName.isEmpty) "Unknown" else slugName
+        val slug = if (slugName == null || slugName.isEmpty) "Unknown" else slugName
         val contentData = sc.parallelize(contentResponse.content)
 
         val aggregatedReportDf = getAggregatedReport(contentData, slug)
           .na.fill("")
-        
+
         val liveStatusReportDf = getLiveStatusReport(contentData, slug)
           .drop("status","pendingInCurrentStatus")
           .na.fill("Missing Metadata")
