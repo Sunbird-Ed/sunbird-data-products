@@ -63,14 +63,17 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       val contentResponse = TextBookUtils.getContentDataList(tenantId, unitrestUtil)
 
       if (contentResponse.count > 0) {
+        val slug = if (slugName.isEmpty) "Unknown" else slugName
         val contentData = sc.parallelize(contentResponse.content)
 
-        val aggregatedReportDf = getAggregatedReport(contentData, slugName)
+        val aggregatedReportDf = getAggregatedReport(contentData, slug)
           .na.fill("")
-        val liveStatusReportDf = getLiveStatusReport(contentData, slugName)
+        
+        val liveStatusReportDf = getLiveStatusReport(contentData, slug)
           .drop("status","pendingInCurrentStatus")
           .na.fill("Missing Metadata")
-        val nonLiveStatusReportDf = getNonLiveStatusReport(contentData, slugName)
+
+        val nonLiveStatusReportDf = getNonLiveStatusReport(contentData, slug)
           .drop("lastPublishedOn", "pkgVersion")
           .na.fill("Missing Metadata")
 
@@ -113,7 +116,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
           f.getOrElse("application/pdf", 0).asInstanceOf[Integer] + f.getOrElse("application/epub", 0).asInstanceOf[Integer],
           f.getOrElse("application/vnd.ekstep.html-archive", 0).asInstanceOf[Integer] + f.getOrElse("application/vnd.ekstep.h5p-archive", 0).asInstanceOf[Integer],
           f.getOrElse("identifier", "").asInstanceOf[String], slug)
-      }.toDF()
+      }.toDF
   }
 
   def getLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
