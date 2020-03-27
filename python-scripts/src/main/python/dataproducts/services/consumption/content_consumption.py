@@ -168,18 +168,18 @@ class ContentConsumption:
         df['mimeType'] = df['mimeType'].apply(self.mime_type)
 
         df['me_totalDownloads'] = df['me_totalDownloads'].fillna(0)
-        df['me_total_time_spent_in_app'] = df['me_total_time_spent_in_app'].fillna(0)
-        df['me_total_time_spent_in_portal'] = df['me_total_time_spent_in_portal'].fillna(0)
-        df['me_total_plays_session_count_in_app'] = df['me_total_plays_session_count_in_app'].fillna(0)
-        df['me_total_play_session_count_in_portal'] = df['me_total_play_session_count_in_portal'].fillna(0)
+        df['me_totalTimeSpentInApp'] = df['me_totalTimeSpentInApp'].fillna(0)
+        df['me_totalTimeSpentInPortal'] = df['me_totalTimeSpentInPortal'].fillna(0)
+        df['me_totalPlaySessionCountInApp'] = df['me_totalPlaySessionCountInApp'].fillna(0)
+        df['me_totalPlaySessionCountInPortal'] = df['me_totalPlaySessionCountInPortal'].fillna(0)
 
-        df['Total No of Plays (App and Portal)'] = df['me_total_plays_session_count_in_app'] + \
-                                                   df['me_total_play_session_count_in_portal']
+        df['Total No of Plays (App and Portal)'] = df['me_totalPlaySessionCountInApp'] + \
+                                                   df['me_totalPlaySessionCountInPortal']
 
         df['Average Play Time in mins on App'] = round(
-            df['me_total_time_spent_in_app'] / (60 * df['me_total_plays_session_count_in_app']), 2)
+            df['me_totalTimeSpentInApp'] / (60 * df['me_totalPlaySessionCountInApp']), 2)
         df['Average Play Time in mins on Portal'] = round(
-            df['me_total_time_spent_in_portal'] / (60 * df['me_total_play_session_count_in_portal']), 2)
+            df['me_totalTimeSpentInPortal'] / (60 * df['me_totalPlaySessionCountInPortal']), 2)
         df['Average Play Time in mins (On App and Portal)'] = round(
             (df['Average Play Time in mins on App'] + df['Average Play Time in mins on Portal']) / \
             df['Total No of Plays (App and Portal)'], 2)
@@ -190,7 +190,7 @@ class ContentConsumption:
         df = df[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
              'name', 'mimeType', 'createdOn', 'creator','lastPublishedOn',
              'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
-             'me_totalDownloads', 'me_total_plays_session_count_in_app', 'me_total_play_session_count_in_portal',
+             'me_totalDownloads', 'me_totalPlaySessionCountInApp', 'me_totalPlaySessionCountInPortal',
              'Total No of Plays (App and Portal)', 'Average Play Time in mins on App', 'Average Play Time in mins on Portal',
              'Average Play Time in mins (On App and Portal)']]
 
