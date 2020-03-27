@@ -88,9 +88,9 @@ object TextBookUtils {
       val qrNotLinked = dceTextbook._4
       val term1NotLinked = dceTextbook._5
       val term2NotLinked = dceTextbook._6
-      val medium = if(null != response.medium) JSONUtils.serialize(response.medium)  else ""
-      val subject = if(null != response.subject) JSONUtils.serialize(response.subject)  else ""
-      val gradeLevel = if(null != response.gradeLevel) JSONUtils.serialize(response.gradeLevel)  else ""
+      val medium = if(null != response.medium) JSONUtils.serialize(response.medium).replaceAll("[\\[|\\]|']", "")  else ""
+      val subject = if(null != response.subject) JSONUtils.serialize(response.subject).replaceAll("[\\[|\\]|']", "")  else ""
+      val gradeLevel = if(null != response.gradeLevel) JSONUtils.serialize(response.gradeLevel).replaceAll("[\\[|\\]|']", "")  else ""
       val createdOn = if(null != response.createdOn) response.createdOn.substring(0,10) else ""
       val lastUpdatedOn = if(null != response.lastUpdatedOn) response.lastUpdatedOn.substring(0,10) else ""
       val dceDf = DCETextbookData(response.channel,response.identifier, response.name, medium, gradeLevel, subject,createdOn, lastUpdatedOn,totalQRCodes,qrLinked,qrNotLinked,term1NotLinked,term2NotLinked)
@@ -136,9 +136,9 @@ object TextBookUtils {
       val qrNotLinked = etbTextbook._2
       val leafNodeswithoutContent = etbTextbook._3
       val totalLeafNodes = etbTextbook._4
-      val medium = if(null != response.medium) JSONUtils.serialize(response.medium)  else ""
-      val subject = if(null != response.subject) JSONUtils.serialize(response.subject)  else ""
-      val gradeLevel = if(null != response.gradeLevel) JSONUtils.serialize(response.gradeLevel)  else ""
+      val medium = if(null != response.medium) JSONUtils.serialize(response.medium).replaceAll("[\\[|\\]|']", "")  else ""
+      val subject = if(null != response.subject) JSONUtils.serialize(response.subject).replaceAll("[\\[|\\]|']", "")  else ""
+      val gradeLevel = if(null != response.gradeLevel) JSONUtils.serialize(response.gradeLevel).replaceAll("[\\[|\\]|']", "")  else ""
       val createdOn = if(null != response.createdOn) response.createdOn.substring(0,10) else ""
       val lastUpdatedOn = if(null != response.lastUpdatedOn) response.lastUpdatedOn.substring(0,10) else ""
       val textbookDf = ETBTextbookData(response.channel,response.identifier,response.name,medium,gradeLevel,subject,response.status,createdOn,lastUpdatedOn,response.leafNodesCount,qrLinkedContent,qrNotLinked,totalLeafNodes,leafNodeswithoutContent)
@@ -146,7 +146,7 @@ object TextBookUtils {
     }
     textBookReport
   }
-  
+
   def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Integer, contentNotLinkedQR:Integer, leafNodesContent:Integer, leafNodesCount:Integer): (Integer,Integer,Integer,Integer) = {
     var qrLinkedContent = contentLinked
     var contentNotLinked = contentNotLinkedQR
