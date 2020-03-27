@@ -78,7 +78,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |	"filePath": "druid-reports/",
                     |	"container": "test-container",
                     |	"folderPrefix": ["slug", "reportName"],
-                    | "store": "azure"
+                    | "store": "local"
                     |}""".stripMargin
     val jobConfig = JSONUtils.deserialize[Map[String, AnyRef]](config)
 
