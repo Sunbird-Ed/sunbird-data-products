@@ -170,7 +170,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             .when($"claimstatus" === ClaimedStatus.id, lit(ClaimedStatus.status))
             .when($"claimstatus" === FailedStatus.id, lit(FailedStatus.status))
             .when($"claimstatus" === RejectedStatus.id, lit(RejectedStatus.status))
-            .when($"claimstatus" === MultiMatchStatus.id, lit(FailedStatus.status))
+            .when($"claimstatus" === MultiMatchStatus.id, lit(MultiMatchStatus.status))
             .when($"claimstatus" === OrgExtIdMismatch.id, lit(FailedStatus.status))
             .when($"claimstatus" === Eligible.id, lit(Eligible.status)))
         userDetailReport.join(channelSlugDF, reportDF.col("channel") === channelSlugDF.col("channel"), "left_outer").select(
@@ -184,7 +184,8 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
               col("orgextid").as("School external id"),
               col("claim_status").as("Claimed status"),
               col("createdon").as("Created on"),
-              col("updatedon").as("Last updated on")).filter(col(colName ="shadow_user_status").isin("UNCLAIMED","CLAIMED","REJECTED","FAILED")).filter(col(colName = "slug").isNotNull)
+              col("updatedon").as("Last updated on")).filter(col(colName ="shadow_user_status").
+            isin(lit(UnclaimedStatus.status),lit(ClaimedStatus.status),lit(RejectedStatus.status),lit(FailedStatus.status),lit(MultiMatchStatus.status))).filter(col(colName = "slug").isNotNull)
           .saveToBlobStore(storageConfig, "csv", "user-detail", Option(Map("header" -> "true")), Option(Seq("shadow_user_status","slug")))
           
         JobLogger.log(s"StateAdminReportJob: user-details report records count = ${userDetailReport.count()}", None, INFO)
