@@ -11,11 +11,11 @@ import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
 import org.sunbird.analytics.model.report._
 
 case class ETBTextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel: String,
-                           subject: String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
-                           totalQRLinked: Integer, totalQRNotLinked: Integer, leafNodesCount: Integer, leafNodeUnlinked: Integer)
+                           subject: String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Int,
+                           totalQRLinked: Int, totalQRNotLinked: Int, leafNodesCount: Int, leafNodeUnlinked: Int)
 case class DCETextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
-                           createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
-                           withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer)
+                           createdOn: String, lastUpdatedOn: String, totalQRCodes: Int, contentLinkedQR: Int,
+                           withoutContentQR: Int, withoutContentT1: Int, withoutContentT2: Int)
 case class ContentInformation(id: String, ver: String, ts: String, params: Params, responseCode: String,result: TextbookResult)
 case class TextbookResult(count: Int, content: List[TBContentResult])
 
@@ -99,7 +99,7 @@ object TextBookUtils {
     dceReport
   }
 
-  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Integer,linkedQr: Integer, qrNotLinked:Integer, counterT1:Integer, counterT2:Integer): (Integer,Integer,Integer,Integer,Integer,Integer) = {
+  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int): (Int,Int,Int,Int,Int,Int) = {
     var counterValue=counter
     var counterQrLinked = linkedQr
     var counterNotLinked = qrNotLinked
@@ -147,7 +147,7 @@ object TextBookUtils {
     textBookReport
   }
 
-  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Integer, contentNotLinkedQR:Integer, leafNodesContent:Integer, leafNodesCount:Integer): (Integer,Integer,Integer,Integer) = {
+  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Int, contentNotLinkedQR:Int, leafNodesContent:Int, leafNodesCount:Int): (Int,Int,Int,Int) = {
     var qrLinkedContent = contentLinked
     var contentNotLinked = contentNotLinkedQR
     var leafNodeswithoutContent = leafNodesContent

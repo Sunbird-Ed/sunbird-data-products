@@ -16,7 +16,7 @@ case class TenantResult(response: ContentList)
 case class ContentList(count: Int, content: List[TenantInfo])
 
 case class TextBookDetails(result: TBResult, params: Params)
-case class TBResult(content: List[TextBookInfo], count: Integer)
+case class TBResult(content: List[TextBookInfo], count: Int)
 case class TextBookInfo(channel: String, identifier: String, name: String, createdFor: List[String], createdOn: String, lastUpdatedOn: String,
                         board: String, medium: Object, gradeLevel: List[String], subject: Object, status: String)
 
@@ -24,18 +24,18 @@ case class ContentDetails(params: Params, result: ContentResult)
 case class Params(status: String)
 case class ContentResult(content: ContentInfo)
 case class ContentInfo(channel: String, board: String, identifier: String, medium: Object, gradeLevel: List[String], subject: Object,
-                       name: String, status: String, contentType: Option[String], leafNodesCount: Integer, lastUpdatedOn: String,
-                       depth: Integer, dialcodes:List[String], createdOn: String, children: Option[List[ContentInfo]])
+                       name: String, status: String, contentType: Option[String], leafNodesCount: Int, lastUpdatedOn: String,
+                       depth: Int, dialcodes:List[String], createdOn: String, children: Option[List[ContentInfo]])
 
 // Textbook ID, Medium, Grade, Subject, Textbook Name, Textbook Status, Created On, Last Updated On, Total content linked, Total QR codes linked to content, Total number of QR codes with no linked content, Total number of leaf nodes, Number of leaf nodes with no content
 case class ETBTextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel: String,
-                               subject:String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
-                               totalQRLinked: Integer, totalQRNotLinked: Integer, leafNodesCount: Integer, leafNodeUnlinked: Integer, reportName: String)
+                               subject:String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Int,
+                               totalQRLinked: Int, totalQRNotLinked: Int, leafNodesCount: Int, leafNodeUnlinked: Int, reportName: String)
 
 // Textbook ID, Medium, Grade, Subject, Textbook Name, Created On, Last Updated On, Total No of QR Codes, Number of QR codes with atleast 1 linked content,	Number of QR codes with no linked content, Term 1 QR Codes with no linked content, Term 2 QR Codes with no linked content
 case class DCETextbookReport(slug: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
-                               createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
-                               withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer, reportName: String)
+                               createdOn: String, lastUpdatedOn: String, totalQRCodes: Int, contentLinkedQR: Int,
+                               withoutContentQR: Int, withoutContentT1: Int, withoutContentT2: Int, reportName: String)
 
 case class FinalOutput(identifier: String, etb: Option[ETBTextbookReport], dce: Option[DCETextbookReport]) extends AlgoOutput with Output
 
