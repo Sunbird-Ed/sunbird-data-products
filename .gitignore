@@ -5,3 +5,5 @@ venv/*
 target
 adhoc-scripts/.settings
 *.log
+data-products/.settings
+dependency-reduced-pom.xml
