@@ -243,7 +243,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
           .when(col("completionpercentage") > 100, 100)
           .otherwise(col("completionpercentage")).cast("int"))
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
-      .withColumn("certificate_status", when(col("certificates").isNotNull && col("certificates") =!= "null" && col("certificates") =!= "" &&  col("certificates").=!=("[]"), "Issued").otherwise(""))
+      .withColumn("certificate_status", when(col("certificates").isNotNull && !col("certificates").isNaN && col("certificates") =!= "null" && col("certificates") =!= "" &&  col("certificates").=!=("[]"), "Issued").otherwise(""))
       .select(
         col("batchid"),
         col("userid"),
