@@ -109,14 +109,14 @@ object TextBookUtils {
     data.map(units => {
       if(null != units.dialcodes){
         counterValue=counterValue+1
-        if(units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
+        if(null != units.leafNodesCount && units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
         else {
           counterNotLinked=counterNotLinked+1
           if("T1".equals(term)) { term1NotLinked=term1NotLinked+1 }
           else { term2NotLinked = term2NotLinked+1 }
         }
       }
-      if(TBConstants.textbookunit.equals(units.contentType.get)) {
+      if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),term,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
         tempValue = output._1
         counterQrLinked = output._3
@@ -156,10 +156,10 @@ object TextBookUtils {
       if(units.children.isEmpty){ totalLeafNodes=totalLeafNodes+1 }
       if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
       if(null != units.dialcodes){
-        if(units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
+        if(null != units.leafNodesCount && units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
         else { contentNotLinked=contentNotLinked+1 }
       }
-      if(TBConstants.textbookunit.equals(units.contentType.get)) {
+      if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         val output = parseETBTextbook(units.children.getOrElse(List[ContentInfo]()),response,qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
         qrLinkedContent = output._1
         contentNotLinked = output._2
