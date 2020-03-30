@@ -99,7 +99,7 @@ object TextBookUtils {
     dceReport
   }
 
-  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int): (Int,Int,Int,Int,Int,Int) = {
+  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int): (Int, Int, Int, Int, Int, Int) = {
     var counterValue=counter
     var counterQrLinked = linkedQr
     var counterNotLinked = qrNotLinked
@@ -147,7 +147,7 @@ object TextBookUtils {
     textBookReport
   }
 
-  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Int, contentNotLinkedQR:Int, leafNodesContent:Int, leafNodesCount:Int): (Int,Int,Int,Int) = {
+  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Int, contentNotLinkedQR:Int, leafNodesContent:Int, leafNodesCount:Int): (Int, Int, Int, Int) = {
     var qrLinkedContent = contentLinked
     var contentNotLinked = contentNotLinkedQR
     var leafNodeswithoutContent = leafNodesContent
