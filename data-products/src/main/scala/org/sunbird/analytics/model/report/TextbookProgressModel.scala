@@ -2,6 +2,7 @@ package org.sunbird.analytics.model.report
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
@@ -17,10 +18,10 @@ case class TenantInformation(id: String, slug: String) extends AlgoInput
 case class TBContentResult(channel: String, identifier: String, board: String, gradeLevel: List[String], medium: Object, subject: Object, status: String, creator: String, lastPublishedOn: String, lastSubmittedOn: String, createdFor: List[String], createdOn: String, contentType: String, mimeType: String, resourceType: Object, pkgVersion: Integer)
 
 //Aggregated Report for each tenant
-case class AggregatedReport(board: String, medium: String, gradeLevel: String, subject: String, resourceType: String, live: Integer, review: Integer, draft: Integer, unlisted: Integer, application_ecml: Integer, video_youtube: Integer, video_mp4: Integer, application_pdf: Integer, application_html: Integer, identifier: String, slug: String, reportName: String = "Aggregated Report")
+case class AggregatedReport(board: String, medium: String, gradeLevel: String, subject: String, resourceType: String, live: Integer, review: Integer, draft: Integer, unlisted: Integer, application_ecml: Integer, video_youtube: Integer, video_mp4: Integer, application_pdf: Integer, application_html: Integer, slug: String, reportName: String = "Aggregated Report")
 
 //Live Report for each tenant
-case class TBReport(board: String, medium: String, gradeLevel: String, resourceType: String, createdOn: String, pkgVersion: Option[Integer] = None, creator: String, lastPublishedOn: Option[String],status: Option[String] = None,pendingInCurrentStatus: Option[String] = None , slug: String, reportName: String)
+case class TBReport(board: String, medium: String, gradeLevel: String, subject: String, identifier: String , resourceType: String, createdOn: String, pkgVersion: Option[Integer] = None, creator: String, lastPublishedOn: Option[String],status: Option[String] = None,pendingInCurrentStatus: Option[String] = None ,lastPublishDate: Option[String] = None, slug: String, reportName: String)
 
 object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformation, Empty, Empty] with Serializable {
 
@@ -54,7 +55,6 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
   def getContentData(tenantId: String, slugName: String, config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): Unit = {
     val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
-
     implicit val sqlContext = new SQLContext(sc)
     val metrics = CommonUtil.time({
       val unitrestUtil = UnirestUtil
@@ -65,14 +65,17 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
         val contentData = sc.parallelize(contentResponse.content)
 
         val aggregatedReportDf = getAggregatedReport(contentData, slug)
+          .sort(desc("board"), asc("medium"), asc("gradeLevel"), asc("subject"), asc("resourceType"))
           .na.fill("")
 
         val liveStatusReportDf = getLiveStatusReport(contentData, slug)
-          .drop("status","pendingInCurrentStatus")
+          .drop("status","pendingInCurrentStatus", "lastPublishedOn")
+          .sort(desc("board"), asc("medium"), asc("gradeLevel"), asc("subject"), asc("resourceType"))
           .na.fill("Missing Metadata")
 
         val nonLiveStatusReportDf = getNonLiveStatusReport(contentData, slug)
-          .drop("lastPublishedOn", "pkgVersion")
+          .drop("lastPublishedOn", "pkgVersion", "lastPublishDate")
+          .sort(desc("board"), asc("medium"), asc("gradeLevel"), asc("subject"), asc("resourceType"), asc("status"))
           .na.fill("Missing Metadata")
 
         reportConfig.output.map { f =>
@@ -112,9 +115,9 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
           f.getOrElse("application/vnd.ekstep.ecml-archive", 0).asInstanceOf[Integer], f.getOrElse("video/x-youtube", 0).asInstanceOf[Integer],
           f.getOrElse("video/mp4", 0).asInstanceOf[Integer] + f.getOrElse("video/webm", 0).asInstanceOf[Integer],
           f.getOrElse("application/pdf", 0).asInstanceOf[Integer] + f.getOrElse("application/epub", 0).asInstanceOf[Integer],
-          f.getOrElse("application/vnd.ekstep.html-archive", 0).asInstanceOf[Integer] + f.getOrElse("application/vnd.ekstep.h5p-archive", 0).asInstanceOf[Integer],
-          f.getOrElse("identifier", "").asInstanceOf[String], slug)
+          f.getOrElse("application/vnd.ekstep.html-archive", 0).asInstanceOf[Integer] + f.getOrElse("application/vnd.ekstep.h5p-archive", 0).asInstanceOf[Integer], slug)
       }.toDF
+      .na.fill("Missing Metadata")
   }
 
   def getLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
@@ -122,8 +125,9 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
     import sqlContext.implicits._
     data
       .filter(f => (f.status == "Live"))
-      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.resourceType), dataFormat(f.createdOn), Option(f.pkgVersion), f.creator, Option(dataFormat(f.lastPublishedOn)), None, None, slug, "Live_Report") }
+      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.subject), f.identifier, getFieldList(f.resourceType), dataFormat(f.createdOn), Option(f.pkgVersion), f.creator, None, None, None,Option(dataFormat(f.lastPublishedOn)), slug, "Live_Report") }
       .toDF
+      .na.fill("Missing Metadata")
   }
 
   def getNonLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
@@ -131,18 +135,19 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
     import sqlContext.implicits._
 
     val reviewData = data.filter(f => (f.status == "Review"))
-      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.resourceType), dataFormat(f.createdOn), None, f.creator, None, Option(f.status), Option(dataFormat(f.lastSubmittedOn)), slug, "Non_Live_Status") }
+      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.subject), f.identifier, getFieldList(f.resourceType), dataFormat(f.createdOn), None, f.creator, None, Option(f.status), Option(dataFormat(f.lastSubmittedOn)),None, slug, "Non_Live_Status") }
 
     val limitedSharingData = data.filter(f => (f.status == "Unlisted"))
-      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.resourceType), dataFormat(f.createdOn), None, f.creator, None, Option(f.status), Option(dataFormat(f.lastPublishedOn)), slug, "Non_Live_Status") }
+      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.subject), f.identifier, getFieldList(f.resourceType), dataFormat(f.createdOn), None, f.creator, None, Option(f.status), Option(dataFormat(f.lastPublishedOn)),None, slug, "Non_Live_Status") }
 
     val publishedReport = data.filter(f => (f.status == "Draft" && null != f.lastPublishedOn))
-      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.resourceType),dataFormat(f.createdOn), None, f.creator,None, Option(f.status), Option(dataFormat(f.lastPublishedOn)), slug, "Non_Live_Status") }
+      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.subject), f.identifier, getFieldList(f.resourceType),dataFormat(f.createdOn), None, f.creator,None, Option(f.status), Option(dataFormat(f.lastPublishedOn)),None, slug, "Non_Live_Status") }
 
     val nonPublishedReport = data.filter(f => (f.status == "Draft" && null == f.lastPublishedOn))
-      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.resourceType),dataFormat(f.lastPublishedOn), None, f.creator,None, Option(f.status), Option(dataFormat(f.createdOn)), slug, "Non_Live_Status") }
+      .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.subject), f.identifier, getFieldList(f.resourceType),dataFormat(f.lastPublishedOn), None, f.creator,None, Option(f.status), Option(dataFormat(f.createdOn)),None, slug, "Non_Live_Status") }
 
     publishedReport.union(nonPublishedReport).union(reviewData).union(limitedSharingData).toDF()
+      .na.fill("Missing Metadata")
   }
 
   def dataFormat(date: String): String = {
