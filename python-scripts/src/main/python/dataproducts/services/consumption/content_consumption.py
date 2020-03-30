@@ -168,18 +168,18 @@ class ContentConsumption:
         df['mimeType'] = df['mimeType'].apply(self.mime_type)
 
         df['me_totalDownloads'] = df['me_totalDownloads'].fillna(0)
-        df['me_total_time_spent_in_app'] = df['me_total_time_spent_in_app'].fillna(0)
-        df['me_total_time_spent_in_portal'] = df['me_total_time_spent_in_portal'].fillna(0)
-        df['me_total_plays_session_count_in_app'] = df['me_total_plays_session_count_in_app'].fillna(0)
-        df['me_total_play_session_count_in_portal'] = df['me_total_play_session_count_in_portal'].fillna(0)
+        df['me_totalTimeSpentInApp'] = df['me_totalTimeSpentInApp'].fillna(0)
+        df['me_totalTimeSpentInPortal'] = df['me_totalTimeSpentInPortal'].fillna(0)
+        df['me_totalPlaySessionCountInApp'] = df['me_totalPlaySessionCountInApp'].fillna(0)
+        df['me_totalPlaySessionCountInPortal'] = df['me_totalPlaySessionCountInPortal'].fillna(0)
 
-        df['Total No of Plays (App and Portal)'] = df['me_total_plays_session_count_in_app'] + \
-                                                   df['me_total_play_session_count_in_portal']
+        df['Total No of Plays (App and Portal)'] = df['me_totalPlaySessionCountInApp'] + \
+                                                   df['me_totalPlaySessionCountInPortal']
 
         df['Average Play Time in mins on App'] = round(
-            df['me_total_time_spent_in_app'] / (60 * df['me_total_plays_session_count_in_app']), 2)
+            df['me_totalTimeSpentInApp'] / (60 * df['me_totalPlaySessionCountInApp']), 2)
         df['Average Play Time in mins on Portal'] = round(
-            df['me_total_time_spent_in_portal'] / (60 * df['me_total_play_session_count_in_portal']), 2)
+            df['me_totalTimeSpentInPortal'] / (60 * df['me_totalPlaySessionCountInPortal']), 2)
         df['Average Play Time in mins (On App and Portal)'] = round(
             (df['Average Play Time in mins on App'] + df['Average Play Time in mins on Portal']) / \
             df['Total No of Plays (App and Portal)'], 2)
@@ -190,7 +190,7 @@ class ContentConsumption:
         df = df[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
              'name', 'mimeType', 'createdOn', 'creator','lastPublishedOn',
              'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
-             'me_totalDownloads', 'me_total_plays_session_count_in_app', 'me_total_play_session_count_in_portal',
+             'me_totalDownloads', 'me_totalPlaySessionCountInApp', 'me_totalPlaySessionCountInPortal',
              'Total No of Plays (App and Portal)', 'Average Play Time in mins on App', 'Average Play Time in mins on Portal',
              'Average Play Time in mins (On App and Portal)']]
 
@@ -220,10 +220,10 @@ class ContentConsumption:
             content_aggregates.drop(['channel'], axis=1, inplace=True)
             result_loc_.parent.joinpath('portal_dashboards', slug).mkdir(exist_ok=True)
 
-            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'),
+            content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'),
                                       index=False, encoding='utf-8-sig')
-            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
-            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'overall_content_aggregates.csv'))
+            create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
+            post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
 
 
     def get_weekly_plays(self, result_loc_, date_, cassandra_, keyspace_, week_count_):
@@ -235,7 +235,7 @@ class ContentConsumption:
         :param keyspace_: keyspace in which we are working
         :return: None
         """
-        result_file_name = 'content_aggregates_{}w.csv'.format(week_count_)
+        result_file_name = 'content_consumption_lastweek.csv'
         tenant_info = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
         tenant_info['id'] = tenant_info['id'].astype(str)
         tenant_info.set_index('id', inplace=True)
@@ -362,11 +362,11 @@ class ContentConsumption:
 
         os.makedirs(result_loc_.joinpath('content_aggregates_compressed', slug), exist_ok=True)
 
-        shutil.make_archive(str(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_aggregates')),
+        shutil.make_archive(str(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_consumption')),
                             'zip',
                             str(result_loc_.joinpath("content_aggregates", slug)))
 
-        post_data_to_blob(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_aggregates.zip'))
+        post_data_to_blob(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_consumption.zip'))
 
 
     def init(self):
@@ -396,7 +396,7 @@ class ContentConsumption:
         self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         for i in range(7):
             analysis_date = execution_date - timedelta(days=i)
-            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid)
+            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid, config_=self.config)
             self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
 
         # Content Consumption for last week

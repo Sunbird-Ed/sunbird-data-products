@@ -53,12 +53,12 @@ def init():
             "me_averageRating",
             "me_totalRatings",
             "me_totalDownloads",
-            "me_total_time_spent_in_app",
-            "me_total_time_spent_in_portal",
-            "me_total_time_spent_in_desktop",
-            "me_total_plays_session_count_in_app",
-            "me_total_play_session_count_in_portal",
-            "me_total_play_session_count_in_desktop"
+            "me_totalTimeSpentInApp",
+            "me_totalTimeSpentInPortal",
+            "me_totalTimeSpentInDesktop",
+            "me_totalPlaySessionCountInApp",
+            "me_totalPlaySessionCountInPortal",
+            "me_totalPlaySessionCountInDesktop"
         ],
         "metrics": [
             ""
