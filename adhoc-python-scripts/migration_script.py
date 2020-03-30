@@ -4,8 +4,6 @@ from pyspark.sql import SparkSession, SQLContext
 from pyspark.sql import functions as F
 from pyspark.sql.types import *
 from datetime import datetime
-from sqlalchemy import create_engine
-from azure.storage.blob import BlockBlobService
 from pyspark.sql import functions as F
 from pyspark.sql.types import json
 
