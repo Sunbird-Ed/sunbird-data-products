@@ -21,7 +21,8 @@ url = "jdbc:postgresql://localhost:5432/<postgres-db>"
 connProperties = {
     "driver": "org.postgresql.Driver",
     "user": user_name,
-    "password": password
+    "password": password,
+    "stringtype": "unspecified"
 }
 fs.init()
 
