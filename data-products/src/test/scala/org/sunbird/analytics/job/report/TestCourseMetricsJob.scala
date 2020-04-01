@@ -1,10 +1,15 @@
 package org.sunbird.analytics.job.report
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.ekstep.analytics.framework.StorageConfig
-import org.ekstep.analytics.framework.util.HadoopFileUtil
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.EmbeddedES
+import org.apache.spark.sql.functions.{col, split, udf}
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
+
+import scala.collection.mutable
+
 
 class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
   var spark: SparkSession = _
@@ -92,18 +97,25 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .load("src/test/resources/course-metrics-updater/userOrgtable.csv")
       .cache()
   }
-
+  
   "TestUpdateCourseMetrics" should "generate reports for 10 batches and validate all scenarios" in {
 
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
       .returning(courseBatchDF);
-      
 
+
+    val convertMethod = udf((value: mutable.WrappedArray[String]) => {
+      if(null != value && value.length > 0)
+        value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
+      else null
+    }, new ArrayType(MapType(StringType, StringType), true))
+    
+    val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
       .anyNumberOfTimes()
-      .returning(userCoursesDF)
+      .returning(alteredUserCourseDf)
 
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
