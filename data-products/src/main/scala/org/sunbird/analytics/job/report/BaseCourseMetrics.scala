@@ -37,7 +37,11 @@ trait BaseCourseMetrics[T <: AnyRef, A <: BaseCourseMetricsOutput, B <: AlgoOutp
     val courseBatch = CourseUtils.getCourseBatchDetails(spark, CourseUtils.loadData)
     val tenantInfo = CourseUtils.getTenantInfo(spark, CourseUtils.loadData)
     val joinCourses = courses.join(courseBatch, (courses.col("identifier") === courseBatch.col("courseId")), "inner")
+    joinCourses.show()
     val joinWithTenant = joinCourses.join(tenantInfo, joinCourses.col("channel") === tenantInfo.col("id"), "inner")
-    joinWithTenant.na.fill("unknown", Seq("slug")).select("courseName","batchName","status","slug", "courseId", "batchId")
+    val finalRes = joinWithTenant.na.fill("unknown", Seq("slug")).select("courseName","batchName","status","slug", "courseId", "batchId")
+    println("final join result")
+    finalRes.show()
+    finalRes
   }
 }

@@ -76,9 +76,9 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
           .na.fill("Missing Metadata")
 
         reportConfig.output.map { f =>
-          CourseUtils.postDataToBlob(aggregatedReportDf,f,config)
-          CourseUtils.postDataToBlob(liveStatusReportDf,f,config)
-          CourseUtils.postDataToBlob(nonLiveStatusReportDf,f,config)
+          CourseUtils.postDataToBlob(aggregatedReportDf,f,config)(sc,fc,className)
+          CourseUtils.postDataToBlob(liveStatusReportDf,f,config)(sc,fc,className)
+          CourseUtils.postDataToBlob(nonLiveStatusReportDf,f,config)(sc,fc,className)
         }
       }
       else {
