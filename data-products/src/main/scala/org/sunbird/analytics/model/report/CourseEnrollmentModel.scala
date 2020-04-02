@@ -40,7 +40,7 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
       import sqlContext.implicits._
       reportConfig.output.map { f =>
           val df = data.toDF().na.fill(0L)
-          CourseUtils.postDataToBlob(df, f,config)
+          CourseUtils.postDataToBlob(df, f,config)(sc,fc,className)
       }
     } else {
       JobLogger.log("No data found", None, Level.INFO)

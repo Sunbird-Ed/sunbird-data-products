@@ -53,40 +53,50 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
     (mockStorageService.upload (_: String, _: String, _: String, _: Option[Boolean], _: Option[Int], _: Option[Int], _: Option[Int])).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
 
-    val config = s"""{
-                    |	"reportConfig": {
-                    |		"id": "tpd_metrics",
-                    |    "metrics" : [],
-                    |		"labels": {
-                    |			"completionCount": "Completion Count",
-                    |			"status": "Status",
-                    |			"enrollmentCount": "Enrollment Count",
-                    |			"courseName": "Course Name",
-                    |			"batchName": "Batch Name"
-                    |		},
-                    |		"output": [{
-                    |			"type": "csv",
-                    |			"dims": ["identifier", "channel", "name"],
-                    |			"fileParameters": ["id", "dims"]
-                    |		}]
-                    |	},
-                    | "esConfig": {
-                    | "request": {
-                    |        "filters":{
-                    |            "objectType": ["Content"],
-                    |            "contentType": ["Course"],
-                    |            "identifier": [],
-                    |            "status": ["Live"]
-                    |        },
-                    |        "limit": 10000
-                    |    }
-                    | },
-                    |	"key": "druid-reports/",
-                    |	"filePath": "druid-reports/",
-                    |	"container": "test-container",
-                    |	"folderPrefix": ["slug", "reportName"],
-                    | "store": "local"
-                    |}""".stripMargin
+    val config = """{
+                   |  "reportConfig": {
+                   |    "id": "tpd_metrics",
+                   |    "metrics": [],
+                   |    "labels": {
+                   |      "completionCount": "Completion Count",
+                   |      "status": "Status",
+                   |      "enrollmentCount": "Enrollment Count",
+                   |      "courseName": "Course Name",
+                   |      "batchName": "Batch Name"
+                   |    },
+                   |    "output": [
+                   |      {
+                   |        "type": "csv",
+                   |        "dims": []
+                   |      }
+                   |    ],
+                   |    "mergeConfig": {
+                   |      "frequency": "DAY",
+                   |      "basePath": "",
+                   |      "rollup": 0,
+                   |      "reportPath": "tpd_metrics.csv"
+                   |    }
+                   |  },
+                   |  "esConfig": {
+                   |    "request": {
+                   |      "filters": {
+                   |        "objectType": ["Content"],
+                   |        "contentType": ["Course"],
+                   |        "identifier": [],
+                   |        "status": ["Live"]
+                   |      },
+                   |      "limit": 10000
+                   |    }
+                   |  },
+                   |  "store": "local",
+                   |  "format": "csv",
+                   |  "key": "druid-reports/",
+                   |  "filePath": "src/test/resources/",
+                   |  "container": "'$bucket'",
+                   |  "folderPrefix": ["slug","reportName"],
+                   |  "sparkCassandraConnectionHost": "'$sunbirdPlatformCassandraHost'",
+                   |  "sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'"
+                   |}""".stripMargin
     val jobConfig = JSONUtils.deserialize[Map[String, AnyRef]](config)
     //Mock for compositeSearch
     val userdata = JSONUtils.deserialize[CourseDetails](Source.fromInputStream

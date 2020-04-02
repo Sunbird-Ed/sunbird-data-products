@@ -1,13 +1,12 @@
 package org.sunbird.analytics.util
 
 import scala.io.Source
-
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.util.JSONUtils
-import org.ekstep.analytics.model.OutputConfig
+import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.cloud.storage.BaseStorageService
 import org.sunbird.analytics.model.report.CourseEnrollmentOutput
@@ -70,8 +69,10 @@ class TestCourseUtils extends SparkSpec(null) with MockFactory{
                     |	"folderPrefix": []
                     |}""".stripMargin
     val jobConfig = JSONUtils.deserialize[Map[String, AnyRef]](config)
+    val configMap = jobConfig("reportConfig").asInstanceOf[Map[String, AnyRef]]
+    val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
     val dataDf = sc.parallelize(List(CourseEnrollmentOutput("2020-03-20","TestCourse","TestBatch","Ongoing",3,4,"unknown","course-enrollments"))).toDF()
-    CourseUtils.saveReport(dataDf,jobConfig)
+    CourseUtils.saveReport(dataDf,jobConfig, reportConfig)(sc,mockFc,"TestCourseUtil")
   }
 
   it should "execute even if druidQuery is not present" in {
@@ -90,6 +91,6 @@ class TestCourseUtils extends SparkSpec(null) with MockFactory{
     val userdata = Seq(
       ("2020-01-23","29 course","testCourseBatch","Ongoing",Some(0.09),"MPSlug","course_usage")
     ).toDF("date", "courseName", "batchName","status", "timespent", "slug", "reportName")
-    CourseUtils.postDataToBlob(userdata, outputConfig, jobConfig.get)
+    CourseUtils.postDataToBlob(userdata, outputConfig, jobConfig.get)(sc,mockFc,"TestCourseUtil")
   }
 }
