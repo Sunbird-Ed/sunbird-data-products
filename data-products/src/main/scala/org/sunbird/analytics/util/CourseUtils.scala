@@ -71,7 +71,6 @@ object CourseUtils {
     val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*).na.fill("unknown")
     val reportFinalId = if (outputConfig.label.nonEmpty && outputConfig.label.get.nonEmpty) reportConfig.id + "/" + outputConfig.label.get else reportConfig.id
     val finalDf = renamedDf.na.replace("Status", Map("0"->BatchStatus(0).toString, "1"->BatchStatus(1).toString, "2"->BatchStatus(2).toString))
-    finalDf.show()
     saveReport(finalDf, config ++ Map("dims" -> dimsLabels, "reportId" -> reportFinalId, "fileParameters" -> outputConfig.fileParameters), reportConfig)
   }
 
@@ -90,19 +89,14 @@ object CourseUtils {
       dims.foreach { f =>
         duplicateDimsDf = duplicateDimsDf.withColumn(f.concat("Duplicate"), col(f))
       }
-     duplicateDimsDf.show()
       duplicateDimsDf.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), Option(duplicateDims))
     } else {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), None)
     }
-    println("deltaFiles " + deltaFiles)
     if(mergeConfig.nonEmpty) {
       val mergeConf = mergeConfig.get
       val reportPath = mergeConf.reportPath
-      val fileList = deltaFiles.map{f =>
-        val reportPrefix = f.substring(0, f.lastIndexOf("/")).split(reportId)(1)
-        Map("reportPath" -> (reportPrefix + "/" + reportPath), "deltaPath" -> f.substring(f.indexOf(storageConfig.fileName, 0)))
-      }
+      val fileList = getDeltaFileList(deltaFiles,reportId,reportPath,storageConfig)
       val mergeScriptConfig = MergeScriptConfig(reportId, mergeConf.frequency, mergeConf.basePath, mergeConf.rollup,
         mergeConf.rollupAge, mergeConf.rollupCol, mergeConf.rollupRange, MergeFiles(fileList, List("Date")))
       mergeReport(mergeScriptConfig)
@@ -111,11 +105,25 @@ object CourseUtils {
     }
   }
 
+  def getDeltaFileList(deltaFiles: List[String], reportId: String, reportPath: String, storageConfig: StorageConfig): List[Map[String, String]] = {
+    if("content_progress_metrics".equals(reportId) || "etb_metrics".equals(reportId)) {
+      deltaFiles.map{f =>
+        val reportPrefix = f.split(reportId)(1)
+        Map("reportPath" -> reportPrefix, "deltaPath" -> f.substring(f.indexOf(storageConfig.fileName, 0)))
+      }
+    } else {
+      deltaFiles.map{f =>
+        val reportPrefix = f.substring(0, f.lastIndexOf("/")).split(reportId)(1)
+        Map("reportPath" -> (reportPrefix + "/" + reportPath), "deltaPath" -> f.substring(f.indexOf(storageConfig.fileName, 0)))
+      }
+    }
+  }
+
   def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")) (implicit className: String): Unit = {
     val mergeConfigStr = JSONUtils.serialize(mergeConfig)
     println("merge config: " + mergeConfigStr)
     val mergeReportCommand = Seq("bash", "-c",
-      s"source ${virtualEnvDir.get}/bin/activate; " +
+      s"source /Users/utkarshakapoor/Documents/workspace-stackroutelabs/adhoc-script/python-scripts/venv/bin/activate; " +
         s"dataproducts report_merger --report_config='$mergeConfigStr'")
     JobLogger.log(s"Merge report script command:: $mergeReportCommand", None, INFO)
     val mergeReportExitCode = ScriptDispatcher.dispatch(mergeReportCommand)

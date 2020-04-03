@@ -33,7 +33,6 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
 
   override def postProcess(data: RDD[CourseEnrollmentOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[CourseEnrollmentOutput] = {
     implicit val sqlContext = new SQLContext(sc)
-    println("count: " + data.count())
     if (data.count() > 0) {
       val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
@@ -65,7 +64,6 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
   }
 
   def getCourseBatchCounts(courseIds: String, batchIds: String)(implicit sc: SparkContext, sqlContext: SQLContext) : DataFrame = {
-
     val request = s"""{
                      |  "query": {
                      |    "bool": {

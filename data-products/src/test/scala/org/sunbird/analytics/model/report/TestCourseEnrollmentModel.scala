@@ -2,9 +2,9 @@ package org.sunbird.analytics.model.report
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.ekstep.analytics.framework._
+import org.ekstep.analytics.framework.{FrameworkContext, _}
 import org.ekstep.analytics.framework.util.JSONUtils
-import org.ekstep.analytics.model.{ReportConfig}
+import org.ekstep.analytics.model.ReportConfig
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
 import org.sunbird.cloud.storage.BaseStorageService
@@ -74,7 +74,7 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
                    |      "frequency": "DAY",
                    |      "basePath": "",
                    |      "rollup": 0,
-                   |      "reportPath": "tpd_metrics.csv"
+                   |      "reportPath": "course_enrollment.csv"
                    |    }
                    |  },
                    |  "esConfig": {
@@ -92,10 +92,10 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
                    |  "format": "csv",
                    |  "key": "druid-reports/",
                    |  "filePath": "src/test/resources/",
-                   |  "container": "'$bucket'",
+                   |  "container": "dev-data-store",
                    |  "folderPrefix": ["slug","reportName"],
-                   |  "sparkCassandraConnectionHost": "'$sunbirdPlatformCassandraHost'",
-                   |  "sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'"
+                   |  "sparkCassandraConnectionHost": "localhost",
+                   |  "sparkElasticsearchConnectionHost": "localhost"
                    |}""".stripMargin
     val jobConfig = JSONUtils.deserialize[Map[String, AnyRef]](config)
     //Mock for compositeSearch
