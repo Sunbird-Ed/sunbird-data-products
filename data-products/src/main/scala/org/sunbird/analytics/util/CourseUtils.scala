@@ -25,6 +25,8 @@ trait CourseReport {
 
 object CourseUtils {
 
+  implicit val className: String = "org.sunbird.analytics.util.CourseUtils"
+
   def getCourse(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext, sqlContext: SQLContext): DataFrame = {
     import sqlContext.implicits._
     val apiURL = Constants.COMPOSITE_SEARCH_URL
@@ -58,7 +60,7 @@ object CourseUtils {
     loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace)).select("slug","id")
   }
 
-  def postDataToBlob(data: DataFrame, outputConfig: OutputConfig, config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext, className: String) = {
+  def postDataToBlob(data: DataFrame, outputConfig: OutputConfig, config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext) = {
     val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
@@ -74,7 +76,7 @@ object CourseUtils {
     saveReport(finalDf, config ++ Map("dims" -> dimsLabels, "reportId" -> reportFinalId, "fileParameters" -> outputConfig.fileParameters), reportConfig)
   }
 
-  def saveReport(data: DataFrame, config: Map[String, AnyRef], reportConfig: ReportConfig)(implicit sc: SparkContext, fc: FrameworkContext, className: String): Unit = {
+  def saveReport(data: DataFrame, config: Map[String, AnyRef], reportConfig: ReportConfig)(implicit sc: SparkContext, fc: FrameworkContext): Unit = {
     val storageConfig = StorageConfig(config.getOrElse("store", "local").toString, config.getOrElse("container", "test-container").toString, config.getOrElse("filePath", "/tmp/druid-reports").toString, config.get("accountKey").asInstanceOf[Option[String]], config.get("accountSecret").asInstanceOf[Option[String]])
     val format = config.getOrElse("format", "csv").asInstanceOf[String]
     val filePath = config.getOrElse("filePath", AppConf.getConfig("spark_output_temp_dir")).asInstanceOf[String]
@@ -119,7 +121,7 @@ object CourseUtils {
     }
   }
 
-  def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")) (implicit className: String): Unit = {
+  def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")): Unit = {
     val mergeConfigStr = JSONUtils.serialize(mergeConfig)
     println("merge config: " + mergeConfigStr)
     val mergeReportCommand = Seq("bash", "-c",
