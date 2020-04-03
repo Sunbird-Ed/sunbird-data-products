@@ -1,6 +1,7 @@
 package org.sunbird.analytics.model.report
 
 import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.{FrameworkContext, _}
 import org.ekstep.analytics.framework.util.JSONUtils
@@ -105,27 +106,9 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
     import sqlContext.implicits._
     val userDF = userdata.toDF("channel", "identifier", "courseName")
     (mockCourseReport.getCourse(_: Map[String, AnyRef])(_: SparkContext)).expects(jobConfig, *).returns(userDF).anyNumberOfTimes()
-
     the[Exception] thrownBy {
       CourseEnrollmentModel.execute(sc.emptyRDD, Option(jobConfig))
     } should have message "Merge report script failed with exit code 127"
-    val resultRDD = CourseEnrollmentModel.execute(sc.emptyRDD, Option(jobConfig))
-    val result = resultRDD.collect()
-
-    resultRDD.count() should be(2)
-
-    result.map(f => {
-      f.completionCount should be(0)
-    })
-
-    val configMap = jobConfig.get("reportConfig").get.asInstanceOf[Map[String,AnyRef]]
-    val reportId = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap)).id
-
-    val slug = result.map(f => f.slug).toList
-    val reportName = result.map(_.reportName).toList.head
-    val filePath = jobConfig.get("filePath").get.asInstanceOf[String]
-    val key = jobConfig.get("key").get.asInstanceOf[String]
-    val outDir = filePath + key + "renamed/" + reportId + "/" + slug.head + "/"
 
   }
 
