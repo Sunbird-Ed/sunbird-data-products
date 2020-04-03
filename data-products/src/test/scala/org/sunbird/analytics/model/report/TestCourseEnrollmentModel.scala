@@ -106,6 +106,9 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
     val userDF = userdata.toDF("channel", "identifier", "courseName")
     (mockCourseReport.getCourse(_: Map[String, AnyRef])(_: SparkContext)).expects(jobConfig, *).returns(userDF).anyNumberOfTimes()
 
+    the[Exception] thrownBy {
+      CourseEnrollmentModel.execute(sc.emptyRDD, Option(jobConfig))
+    } should have message "Merge report script failed with exit code 127"
     val resultRDD = CourseEnrollmentModel.execute(sc.emptyRDD, Option(jobConfig))
     val result = resultRDD.collect()
 
@@ -123,6 +126,7 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
     val filePath = jobConfig.get("filePath").get.asInstanceOf[String]
     val key = jobConfig.get("key").get.asInstanceOf[String]
     val outDir = filePath + key + "renamed/" + reportId + "/" + slug.head + "/"
+
   }
 
   it should "give error if there is no data for output" in {

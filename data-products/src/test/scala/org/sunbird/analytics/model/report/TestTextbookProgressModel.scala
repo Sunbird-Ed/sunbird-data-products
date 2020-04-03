@@ -63,7 +63,9 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
       .returns(userdata).anyNumberOfTimes()
 
     //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
-    TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
+    the[Exception] thrownBy {
+      TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
+    } should have message "Merge report script failed with exit code 127"
   }
 
   it should "execute if the tenantId is given but slugName is not given with slug as Unknown" in {
