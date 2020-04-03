@@ -123,7 +123,7 @@ object CourseUtils {
     val mergeConfigStr = JSONUtils.serialize(mergeConfig)
     println("merge config: " + mergeConfigStr)
     val mergeReportCommand = Seq("bash", "-c",
-      s"source /Users/utkarshakapoor/Documents/workspace-stackroutelabs/adhoc-script/python-scripts/venv/bin/activate; " +
+      s"source ${virtualEnvDir.get}/bin/activate; " +
         s"dataproducts report_merger --report_config='$mergeConfigStr'")
     JobLogger.log(s"Merge report script command:: $mergeReportCommand", None, INFO)
     val mergeReportExitCode = ScriptDispatcher.dispatch(mergeReportCommand)
