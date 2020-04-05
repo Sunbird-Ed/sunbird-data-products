@@ -30,7 +30,47 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     val config = s"""{
                     |	"reportConfig": {
                     |		"id": "etb_metrics",
-                    |    "metrics" : [],
+                    |    "metrics" : [{
+                    |    "metric": "totalQRScans",
+                    |		 "label": "Total QR Scans",
+                    |    "druidQuery": {
+                    |      "queryType": "groupBy",
+                    |			 "dataSource": "telemetry-events",
+                    |			 "intervals": "Last7Days",
+                    |    "aggregations": [
+                    |            {
+                    |                "type": "count",
+                    |                "name": "scans"
+                    |            }
+                    |        ],
+                    |        "granularity": "all",
+                    |        "postAggregations": [],
+                    |        "filter": {
+                    |    "type": "and",
+                    |    "fields": [
+                    |      {
+                    |        "type": "not",
+                    |        "field": {
+                    |          "type": "selector",
+                    |          "dimension": "edata_filters_dialcodes",
+                    |          "value": null
+                    |        }
+                    |      },
+                    |      {
+                    |        "type": "selector",
+                    |        "dimension": "eid",
+                    |        "value": "SEARCH"
+                    |      }
+                    |    ]
+                    |  },
+                    |  "dimensions": [
+                    |            {
+                    |						"fieldName": "edata_filters_dialcodes",
+                    |						"aliasName": "dialcodes"
+                    |					}
+                    |        ]
+                    |   }
+                    |    }],
                     |		"labels": {
                     |			"date": "Date",
                     |				"identifier": "TextBook ID",
@@ -52,12 +92,27 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |       "leafNodesCount": "Total number of leaf nodes",
                     |       "leafNodeUnlinked": "Number of leaf nodes with no content"
                     |		},
+                    |  "dateRange": {
+                    |				"staticInterval": "Last7Days",
+                    |				"granularity": "all"
+                    |			},
                     |		"output": [{
                     |			"type": "csv",
                     |			"dims": ["identifier", "channel", "name"],
                     |			"fileParameters": ["id", "dims"]
                     |		}]
                     |	},
+                    | "etbFileConfig": {
+                    | "search": {
+                    |              "type": "azure",
+                    |              "queries": [
+                    |                {
+                    |                  "bucket": "test-container",
+                    |                  "prefix": "druid-reports/etb_metrics/dialcode_counts.csv"
+                    |                }
+                    |              ]
+                    |            }
+                    | },
                     | "esConfig": {
                     |"request": {
                     |   "filters": {

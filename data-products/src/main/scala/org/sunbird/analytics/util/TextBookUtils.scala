@@ -9,6 +9,8 @@ import org.ekstep.analytics.framework.Params
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
 import org.sunbird.analytics.model.report._
+import scala.util.control.Breaks._
+import scala.util.control._
 
 case class ETBTextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel: String,
                            subject: String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
@@ -16,6 +18,12 @@ case class ETBTextbookData(channel: String, identifier: String, name: String, me
 case class DCETextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
                            createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
                            withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer)
+case class DCEDialcodeData(channel: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
+                               l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String, dialcodes: String,
+                               noOfScans: Integer, term: String)
+case class ETBDialcodeData(channel: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
+                               status: String, nodeType: String, l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String,
+                               dialcode: String, noOfScans: Integer, noOfContent: Integer)
 case class ContentInformation(id: String, ver: String, ts: String, params: Params, responseCode: String,result: TextbookResult)
 case class TextbookResult(count: Int, content: List[TBContentResult])
 
@@ -39,18 +47,25 @@ object TextBookUtils {
       response = RestUtil.get[ContentDetails](finalUrl)
       tupleData = if(null != response && "successful".equals(response.params.status)) {
       val data = response.result.content
+        val dceDialcode = generateDCEDialCodeReport(data)
+        val etbDialcode = generateETBDialcodeReport(data)
         val etbReport = generateETBTextbookReport(data)
         val dceReport = generateDCETextbookReport(data)
-        (etbReport, dceReport)
+        (etbReport, dceReport, dceDialcode, etbDialcode)
        }
-       else (List(),List())
+       else (List(),List(),List(),List())
     } yield tupleData
     val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
     val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
-    generateTextBookReport(etbTextBookReport, dceTextBookReport, tenantInfo)
+    val dceDialCodeReport = reportTuple.collect().toList.map(f => f._3).filter(f => f.nonEmpty)
+    val dcereport = if(!dceDialCodeReport.isEmpty) dceDialCodeReport.head else List()
+    val etbDialCodeReport = reportTuple.collect().toList.map(f => f._4).filter(f => f.nonEmpty)
+    val etbreport = if(!etbDialCodeReport.isEmpty) etbDialCodeReport.head else List()
+
+    generateTextBookReport(etbTextBookReport, dceTextBookReport, sc.parallelize(dcereport), sc.parallelize(etbreport), tenantInfo)
   }
 
-  def generateTextBookReport(etbTextBookReport: RDD[ETBTextbookData], dceTextBookReport: RDD[DCETextbookData], tenantInfo: RDD[TenantInfo]): RDD[FinalOutput] = {
+  def generateTextBookReport(etbTextBookReport: RDD[ETBTextbookData], dceTextBookReport: RDD[DCETextbookData], dceDialCodeReport: RDD[DCEDialcodeData], etbDialCodeReport: RDD[ETBDialcodeData] ,tenantInfo: RDD[TenantInfo])(implicit sc: SparkContext): RDD[FinalOutput] = {
     val tenantRDD = tenantInfo.map(e => (e.id,e))
     val etbTextBook = etbTextBookReport.map(e => (e.channel,e))
     val etb=ETBTextbookData("","","","","","","","","",0,0,0,0,0)
@@ -72,7 +87,127 @@ object TextBookUtils {
     })
     val dceRDD = dceTextBookRDD.map(e => (e.identifier,e))
     val etbRDD = etbTextBookRDD.map(e => (e.identifier,e)).fullOuterJoin(dceRDD)
-    etbRDD.map(e => FinalOutput(e._1,e._2._1,e._2._2))
+
+    val dceDialcode = dceDialCodeReport.map(e => (e.channel,e))
+    val dialcode = DCEDialcodeData("","","","","","","","","","","","",0,"")
+    val dceDialcodeRDD = dceDialcode.fullOuterJoin(tenantRDD).map(textbook => {
+      DCEDialcodeReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dialcode).identifier,
+        textbook._2._1.getOrElse(dialcode).medium,textbook._2._1.getOrElse(dialcode).gradeLevel,textbook._2._1.getOrElse(dialcode).subject,
+        textbook._2._1.getOrElse(dialcode).name,textbook._2._1.getOrElse(dialcode).l1Name,textbook._2._1.getOrElse(dialcode).l2Name,textbook._2._1.getOrElse(dialcode).l3Name,
+        textbook._2._1.getOrElse(dialcode).l4Name,textbook._2._1.getOrElse(dialcode).l5Name,textbook._2._1.getOrElse(dialcode).dialcodes,textbook._2._1.getOrElse(dialcode).noOfScans,
+        textbook._2._1.getOrElse(dialcode).term,"DCE_dialcode_data")
+    })
+
+    val etbDialcode = etbDialCodeReport.map(e => (e.channel,e))
+    val tbdialcode = ETBDialcodeData("","","","","","","","","","","","","","",0,0)
+    val etbDialcodeRDD = etbDialcode.fullOuterJoin(tenantRDD).map(textbook => {
+      ETBDialcodeReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(tbdialcode).identifier,
+        textbook._2._1.getOrElse(tbdialcode).medium,textbook._2._1.getOrElse(tbdialcode).gradeLevel,textbook._2._1.getOrElse(tbdialcode).subject,
+        textbook._2._1.getOrElse(tbdialcode).name,textbook._2._1.getOrElse(tbdialcode).status,textbook._2._1.getOrElse(tbdialcode).nodeType,textbook._2._1.getOrElse(tbdialcode).l1Name,
+        textbook._2._1.getOrElse(tbdialcode).l2Name,textbook._2._1.getOrElse(tbdialcode).l3Name, textbook._2._1.getOrElse(tbdialcode).l4Name,textbook._2._1.getOrElse(tbdialcode).l5Name,
+        textbook._2._1.getOrElse(tbdialcode).dialcode,textbook._2._1.getOrElse(tbdialcode).noOfScans,
+        textbook._2._1.getOrElse(tbdialcode).noOfContent,"ETB_dialcode_data")
+    })
+    val reportRDD = dceDialcodeRDD.map(e => (e.identifier,e))
+    val dialcodeRDD = etbDialcodeRDD.map(e => (e.identifier,e)).fullOuterJoin(reportRDD)
+
+    val textbookReports = etbRDD.map(report => FinalOutput(report._1, report._2._1, report._2._2, null, null))
+    val dialcodeReports = dialcodeRDD.map(report => FinalOutput(report._1, null, null, report._2._2, report._2._1))
+
+    textbookReports.union(dialcodeReports)
+
+  }
+
+  def generateETBDialcodeReport(response: ContentInfo): List[ETBDialcodeData] = {
+    var index=0
+    var dialcodeReport = List[ETBDialcodeData]()
+    val report = ETBDialcodeData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel),getString(response.subject),response.name,response.status,"","","","","","","",0,response.leafNodesCount)
+    if(null != response && response.children.isDefined) {
+      val lengthOfChapters = response.children.get.length
+      response.children.get.map(chapters => {
+        val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
+        index = index+1
+        val report = parseETBDialcode(chapters.children.getOrElse(List[ContentInfo]()),chapters.leafNodesCount,chapters.dialcodes,response,term,chapters.name,List[ContentInfo]())
+        dialcodeReport = (report ++ dialcodeReport).reverse
+      })
+    }
+    report::dialcodeReport
+  }
+
+  def parseETBDialcode(data: List[ContentInfo], noOfContents: Integer,dialcodes: List[String],response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[ETBDialcodeData] = List()): List[ETBDialcodeData] = {
+    var textbook = List[ContentInfo]()
+    var dceTextbook = prevData
+
+    data.map(units => {
+      if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
+        textbook = units :: newData
+        if(null != units.leafNodesCount && units.leafNodesCount == 0) {
+          val textbookInfo = getTextBookInfo(textbook)
+          val levelNames = textbookInfo._1
+          val dialcodeInfo = textbookInfo._2
+          val nodeType = if(null != noOfContents && noOfContents==0) "Leaf Node" else if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else "QR Linked"
+          val report = ETBDialcodeData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel),getString(response.subject),response.name,response.status,nodeType,l1,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodeInfo.lift(0).getOrElse(""),0,noOfContents)
+          dceTextbook = report :: dceTextbook
+        }
+        else { dceTextbook = parseETBDialcode(units.children.getOrElse(List[ContentInfo]()),noOfContents,dialcodes,response,term,l1,textbook,dceTextbook) }
+      }
+    })
+    dceTextbook
+  }
+
+  def generateDCEDialCodeReport(response: ContentInfo): List[DCEDialcodeData] = {
+    var index=0
+    var dialcodeReport = List[DCEDialcodeData]()
+    if(null != response && response.children.isDefined && "Live".equals(response.status)) {
+      val lengthOfChapters = response.children.get.length
+      response.children.get.map(chapters => {
+        val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
+        index = index+1
+        val report = parseDCEDialcode(chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
+        dialcodeReport = (report ++ dialcodeReport).reverse
+      })
+    }
+    dialcodeReport
+  }
+
+  def parseDCEDialcode(data: List[ContentInfo], response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[DCEDialcodeData] = List()): List[DCEDialcodeData] = {
+    var textbook = List[ContentInfo]()
+    var dceTextbook = prevData
+
+    data.map(units => {
+      if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
+        textbook = units :: newData
+        if(null != units.leafNodesCount && units.leafNodesCount == 0) {
+          val textbookInfo = getTextBookInfo(textbook)
+          val levelNames = textbookInfo._1
+          val dialcodes = textbookInfo._2
+          val report = DCEDialcodeData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject),response.name, l1, levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes.lift(0).getOrElse(""),0,term)
+          dceTextbook = report :: dceTextbook
+        }
+        else { dceTextbook = parseDCEDialcode(units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceTextbook) }
+      }
+    })
+    dceTextbook
+  }
+
+  def getTextBookInfo(data: List[ContentInfo]): (List[String],List[String]) = {
+    var levelNames = List[String]()
+    var dialcodes = List[String]()
+    var levelCount = 5
+    var parsedData = data(data.size-1)
+
+    breakable {
+      while(levelCount > 1) {
+        if(TBConstants.textbookunit.equals(parsedData.contentType.getOrElse(""))) {
+          if(null != parsedData.dialcodes) { dialcodes = parsedData.dialcodes(0) :: dialcodes }
+          levelNames = parsedData.name :: levelNames
+        }
+        if(parsedData.children.size==0) { break }
+        else { parsedData = parsedData.children.get(parsedData.children.size-1) }
+        levelCount = levelCount-1
+      }
+    }
+    (levelNames.reverse,dialcodes)
   }
 
   def generateDCETextbookReport(response: ContentInfo): List[DCETextbookData] = {
