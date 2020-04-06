@@ -13,17 +13,17 @@ import scala.util.control.Breaks._
 import scala.util.control._
 
 case class ETBTextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel: String,
-                           subject: String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Integer,
-                           totalQRLinked: Integer, totalQRNotLinked: Integer, leafNodesCount: Integer, leafNodeUnlinked: Integer)
+                           subject: String, status: String, createdOn: String, lastUpdatedOn: String, totalContentLinked: Int,
+                           totalQRLinked: Int, totalQRNotLinked: Int, leafNodesCount: Int, leafNodeUnlinked: Int)
 case class DCETextbookData(channel: String, identifier: String, name: String, medium: String, gradeLevel:String, subject: String,
-                           createdOn: String, lastUpdatedOn: String, totalQRCodes: Integer, contentLinkedQR: Integer,
-                           withoutContentQR: Integer, withoutContentT1: Integer, withoutContentT2: Integer)
+                           createdOn: String, lastUpdatedOn: String, totalQRCodes: Int, contentLinkedQR: Int,
+                           withoutContentQR: Int, withoutContentT1: Int, withoutContentT2: Int)
 case class DCEDialcodeData(channel: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
                                l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String, dialcodes: String,
-                               noOfScans: Integer, term: String)
+                               noOfScans: Int, term: String)
 case class ETBDialcodeData(channel: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
                                status: String, nodeType: String, l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String,
-                               dialcode: String, noOfScans: Integer, noOfContent: Integer)
+                               dialcode: String, noOfScans: Int, noOfContent: Int)
 case class ContentInformation(id: String, ver: String, ts: String, params: Params, responseCode: String,result: TextbookResult)
 case class TextbookResult(count: Int, content: List[TBContentResult])
 
@@ -134,7 +134,7 @@ object TextBookUtils {
     report::dialcodeReport
   }
 
-  def parseETBDialcode(data: List[ContentInfo], noOfContents: Integer,dialcodes: List[String],response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[ETBDialcodeData] = List()): List[ETBDialcodeData] = {
+  def parseETBDialcode(data: List[ContentInfo], noOfContents: Int, dialcodes: List[String],response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[ETBDialcodeData] = List()): List[ETBDialcodeData] = {
     var textbook = List[ContentInfo]()
     var dceTextbook = prevData
 
@@ -234,7 +234,7 @@ object TextBookUtils {
     dceReport
   }
 
-  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Integer,linkedQr: Integer, qrNotLinked:Integer, counterT1:Integer, counterT2:Integer): (Integer,Integer,Integer,Integer,Integer,Integer) = {
+  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int): (Int, Int, Int, Int, Int, Int) = {
     var counterValue=counter
     var counterQrLinked = linkedQr
     var counterNotLinked = qrNotLinked
@@ -244,14 +244,14 @@ object TextBookUtils {
     data.map(units => {
       if(null != units.dialcodes){
         counterValue=counterValue+1
-        if(units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
+        if(null != units.leafNodesCount && units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
         else {
           counterNotLinked=counterNotLinked+1
           if("T1".equals(term)) { term1NotLinked=term1NotLinked+1 }
           else { term2NotLinked = term2NotLinked+1 }
         }
       }
-      if(TBConstants.textbookunit.equals(units.contentType.get)) {
+      if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),term,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
         tempValue = output._1
         counterQrLinked = output._3
@@ -282,7 +282,7 @@ object TextBookUtils {
     textBookReport
   }
 
-  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Integer, contentNotLinkedQR:Integer, leafNodesContent:Integer, leafNodesCount:Integer): (Integer,Integer,Integer,Integer) = {
+  def parseETBTextbook(data: List[ContentInfo], response: ContentInfo, contentLinked: Int, contentNotLinkedQR:Int, leafNodesContent:Int, leafNodesCount:Int): (Int, Int, Int, Int) = {
     var qrLinkedContent = contentLinked
     var contentNotLinked = contentNotLinkedQR
     var leafNodeswithoutContent = leafNodesContent
@@ -291,10 +291,10 @@ object TextBookUtils {
       if(units.children.isEmpty){ totalLeafNodes=totalLeafNodes+1 }
       if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
       if(null != units.dialcodes){
-        if(units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
+        if(null != units.leafNodesCount && units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
         else { contentNotLinked=contentNotLinked+1 }
       }
-      if(TBConstants.textbookunit.equals(units.contentType.get)) {
+      if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         val output = parseETBTextbook(units.children.getOrElse(List[ContentInfo]()),response,qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
         qrLinkedContent = output._1
         contentNotLinked = output._2
