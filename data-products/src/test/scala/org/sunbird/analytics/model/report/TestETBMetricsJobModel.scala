@@ -1,5 +1,11 @@
 package org.sunbird.analytics.model.report
 
+import java.time.{ZoneOffset, ZonedDateTime}
+import cats.syntax.either._
+import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResult, QueryType}
+import ing.wbaa.druid.client.DruidClient
+import io.circe.Json
+import io.circe.parser.parse
 import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.FrameworkContext
 import org.sunbird.analytics.util.SparkSpec
@@ -10,6 +16,7 @@ import org.sunbird.analytics.model.report.ETBMetricsModel
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
 import org.sunbird.cloud.storage.BaseStorageService
 
+import scala.concurrent.Future
 import scala.io.Source
 
 class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
@@ -66,7 +73,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |  "dimensions": [
                     |            {
                     |						"fieldName": "object_id",
-                    |						"aliasName": "dialcodes"
+                    |						"aliasName": "dialcode"
                     |					}
                     |        ]
                     |   }
@@ -126,7 +133,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |	"filePath": "druid-reports/",
                     |	"container": "test-container",
                     |	"folderPrefix": ["slug", "reportName"],
-                    | "store": "local"
+                    | "store": "azure"
                     |}""".stripMargin
     val jobConfig = JSONUtils.deserialize[Map[String, AnyRef]](config)
 
@@ -166,6 +173,26 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
 
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
+
+    //mocking for DruidDataFetcher
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val json: String =
+      """
+        |{
+        |    "date": "2020-03-25",
+        |    "dialcode": "BSD1AV",
+        |    "scans": 2.0
+        |  }
+      """.stripMargin
+
+    val doc: Json = parse(json).getOrElse(Json.Null)
+    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc))
+    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+
+    implicit val mockDruidConfig = DruidConfig.DefaultConfig
+    val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     val resultRDD = ETBMetricsModel.execute(sc.emptyRDD, Option(jobConfig))
 
