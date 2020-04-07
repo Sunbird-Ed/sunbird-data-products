@@ -52,7 +52,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |        "type": "not",
                     |        "field": {
                     |          "type": "selector",
-                    |          "dimension": "edata_filters_dialcodes",
+                    |          "dimension": "object_id",
                     |          "value": null
                     |        }
                     |      },
@@ -65,7 +65,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |  },
                     |  "dimensions": [
                     |            {
-                    |						"fieldName": "edata_filters_dialcodes",
+                    |						"fieldName": "object_id",
                     |						"aliasName": "dialcodes"
                     |					}
                     |        ]
@@ -103,15 +103,8 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |		}]
                     |	},
                     | "etbFileConfig": {
-                    | "search": {
-                    |              "type": "azure",
-                    |              "queries": [
-                    |                {
-                    |                  "bucket": "test-container",
-                    |                  "prefix": "druid-reports/etb_metrics/dialcode_counts.csv"
-                    |                }
-                    |              ]
-                    |            }
+                    | "bucket": "test-container",
+                    | "file": "druid-reports/etb_metrics/dialcode_counts.csv"
                     | },
                     | "esConfig": {
                     |"request": {

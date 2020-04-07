@@ -13,6 +13,7 @@ import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.sunbird.analytics.util.{CourseUtils, TextBookUtils}
+import org.sunbird.cloud.storage.conf.AppConf
 
 case class TenantInfo(id: String, slug: String)
 case class TenantResponse(result: TenantResult)
@@ -133,15 +134,17 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     }
 
     val conf = config.get("etbFileConfig").get.asInstanceOf[Map[String, AnyRef]]
-    val queryConfig = JSONUtils.deserialize[JobConfig](JSONUtils.serialize(conf))
-    val response = DataFetcher.fetchBatchData[String](queryConfig.search)
-    val header = response.first
-    val data = response.filter(line => line!=header).map(p=>{
-      val values = p.split(',')
-      DialcodeCounts(values(1),values(2).toDouble,values(0))
-    }).toDF()
+    val bucket = conf("bucket")
+    val key = AppConf.getConfig("azure_storage_key")
+    val file = conf("file")
+    val url = s"wasb://$bucket@$key.blob.core.windows.net/$file"
 
-    data.groupBy(data("dialcode")).sum("scans")
+    val scansCount = sqlContext.sparkSession.read
+      .option("header","true")
+      .csv(url)
+
+    val scansDF = scansCount.selectExpr("Date", "dialcodes", "cast(scans as int) scans")
+    scansDF.groupBy(scansDF("dialcodes")).sum("scans")
   }
 
   def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext): (RDD[FinalOutput]) = {
