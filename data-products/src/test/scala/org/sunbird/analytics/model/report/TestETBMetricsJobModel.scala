@@ -111,7 +111,8 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |	},
                     | "etbFileConfig": {
                     | "bucket": "test-container",
-                    | "file": "druid-reports/etb_metrics/dialcode_counts.csv"
+                    | "file": "druid-reports/etb_metrics/dialcode_counts.csv",
+                    | "filePath": "src/test/resources/reports/dialcode_counts.csv"
                     | },
                     | "esConfig": {
                     |"request": {
@@ -133,7 +134,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |	"filePath": "druid-reports/",
                     |	"container": "test-container",
                     |	"folderPrefix": ["slug", "reportName"],
-                    | "store": "azure"
+                    | "store": "local"
                     |}""".stripMargin
     val jobConfig = JSONUtils.deserialize[Map[String, AnyRef]](config)
 

@@ -138,10 +138,11 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     val key = AppConf.getConfig("azure_storage_key")
     val file = conf("file")
     val url = s"wasb://$bucket@$key.blob.core.windows.net/$file"
+    val finalUrl = if("local".equals(config("store"))) conf("filePath").asInstanceOf[String] else url
 
     val scansCount = sqlContext.sparkSession.read
       .option("header","true")
-      .csv(url)
+      .csv(finalUrl)
 
     val scansDF = scansCount.selectExpr("Date", "dialcodes", "cast(scans as int) scans")
     scansDF.groupBy(scansDF("dialcodes")).sum("scans")
