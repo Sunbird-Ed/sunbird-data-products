@@ -79,19 +79,13 @@ object CourseUtils {
   def saveReport(data: DataFrame, config: Map[String, AnyRef], reportConfig: ReportConfig)(implicit sc: SparkContext, fc: FrameworkContext): Unit = {
     val storageConfig = StorageConfig(config.getOrElse("store", "local").toString, config.getOrElse("container", "test-container").toString, config.getOrElse("filePath", "/tmp/druid-reports").toString, config.get("accountKey").asInstanceOf[Option[String]], config.get("accountSecret").asInstanceOf[Option[String]])
     val format = config.getOrElse("format", "csv").asInstanceOf[String]
-    val filePath = config.getOrElse("filePath", AppConf.getConfig("spark_output_temp_dir")).asInstanceOf[String]
     val key = config.getOrElse("key", null).asInstanceOf[String]
     val reportId = config.getOrElse("reportId", "").asInstanceOf[String]
     val fileParameters = config.getOrElse("fileParameters", List("")).asInstanceOf[List[String]]
     val dims = config.getOrElse("folderPrefix", List()).asInstanceOf[List[String]]
     val mergeConfig = reportConfig.mergeConfig
    val deltaFiles = if (dims.nonEmpty) {
-      val duplicateDims = dims.map(f => f.concat("Duplicate"))
-      var duplicateDimsDf = data
-      dims.foreach { f =>
-        duplicateDimsDf = duplicateDimsDf.withColumn(f.concat("Duplicate"), col(f))
-      }
-      duplicateDimsDf.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), Option(duplicateDims))
+      data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), Option(dims))
     } else {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), None)
     }
