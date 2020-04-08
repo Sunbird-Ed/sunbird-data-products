@@ -37,47 +37,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     val config = s"""{
                     |	"reportConfig": {
                     |		"id": "etb_metrics",
-                    |    "metrics" : [{
-                    |    "metric": "totalQRScans",
-                    |		 "label": "Total QR Scans",
-                    |    "druidQuery": {
-                    |      "queryType": "groupBy",
-                    |			 "dataSource": "telemetry-events",
-                    |			 "intervals": "Last7Days",
-                    |    "aggregations": [
-                    |            {
-                    |                "type": "count",
-                    |                "name": "scans"
-                    |            }
-                    |        ],
-                    |        "granularity": "all",
-                    |        "postAggregations": [],
-                    |        "filter": {
-                    |    "type": "and",
-                    |    "fields": [
-                    |      {
-                    |        "type": "not",
-                    |        "field": {
-                    |          "type": "selector",
-                    |          "dimension": "object_id",
-                    |          "value": null
-                    |        }
-                    |      },
-                    |      {
-                    |        "type": "selector",
-                    |        "dimension": "eid",
-                    |        "value": "SEARCH"
-                    |      }
-                    |    ]
-                    |  },
-                    |  "dimensions": [
-                    |            {
-                    |						"fieldName": "object_id",
-                    |						"aliasName": "dialcode"
-                    |					}
-                    |        ]
-                    |   }
-                    |    }],
+                    |    "metrics" : [],
                     |		"labels": {
                     |			"date": "Date",
                     |				"identifier": "TextBook ID",
