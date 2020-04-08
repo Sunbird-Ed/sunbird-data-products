@@ -118,7 +118,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |"request": {
                     |   "filters": {
                     |       "contentType": ["Textbook"],
-                    |       "identifier":["do_11298391390121984011","do_11298386993685299212","do_112976283013464064115","do_112984096876756992153","do_11298420612304896011"],
+                    |       "identifier":["do_112965420289744896148","KP_FT_1582141279539","do_11298391390121984011","do_11298386993685299212","do_112976283013464064115","do_112984096876756992153","do_11298420612304896011"],
                     |       "status": ["Live", "Review", "Draft"]
                     |   },
                     |   "sort_by": {"createdOn":"desc"},
@@ -141,7 +141,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     //Mock for composite search
     val textBookData = JSONUtils.deserialize[TextBookDetails](Source.fromInputStream
     (getClass.getResourceAsStream("/reports/textbookDetails.json")).getLines().mkString)
-    val request = s"""{"request":{"filters":{"contentType":["Textbook"],"identifier":["do_11298391390121984011","do_11298386993685299212","do_112976283013464064115","do_112984096876756992153","do_11298420612304896011"],"status":["Live","Review","Draft"]},"sort_by":{"createdOn":"desc"},"limit":10}}""".stripMargin
+    val request = s"""{"request":{"filters":{"contentType":["Textbook"],"identifier":["do_112965420289744896148","KP_FT_1582141279539","do_11298391390121984011","do_11298386993685299212","do_112976283013464064115","do_112984096876756992153","do_11298420612304896011"],"status":["Live","Review","Draft"]},"sort_by":{"createdOn":"desc"},"limit":10}}""".stripMargin
 
     (mockRestUtil.post[TextBookDetails](_: String, _: String, _: Option[Map[String,String]])(_: Manifest[TextBookDetails]))
       .expects("https://dev.sunbirded.org/action/composite/v3/search", v2 = request, None,*)
@@ -168,7 +168,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
 
     val resp = ETBMetricsModel.getTenantInfo(jobConfig,mockRestUtil)
     implicit val httpClient = RestUtil
-    val finalRes = TextBookUtils.getTextbookHierarchy(res,resp,httpClient)
+    val finalRes = TextBookUtils.getTextbookHierarchy(jobConfig,res,resp,httpClient)
     val etb = finalRes.map(k=>k.etb.get)
     val dce = finalRes.map(k=>k.dce.get)
 

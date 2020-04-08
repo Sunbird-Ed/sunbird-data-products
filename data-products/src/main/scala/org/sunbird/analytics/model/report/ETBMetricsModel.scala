@@ -52,7 +52,7 @@ case class ETBDialcodeReport(slug: String, identifier: String, medium: String, g
                            dialcode: String, noOfScans: Int, noOfContent: Int, reportName: String)
 
 case class FinalOutput(identifier: String, etb: Option[ETBTextbookReport], dce: Option[DCETextbookReport], dceDialcode: Option[DCEDialcodeReport], etbDialcode: Option[ETBDialcodeReport]) extends AlgoOutput with Output
-case class DialcodeScans(dialcodes: String, scans: Double, date: String)
+case class DialcodeScans(dialcode: String, scans: Double, date: String)
 case class WeeklyDialCodeScans(date: String, dialcodes: String, scans: Double, slug: String, reportName: String)
 case class DialcodeCounts(dialcode: String, scans: Double, date: String)
 
@@ -116,22 +116,6 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
   def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
-    val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
-    val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
-
-    val druidConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(config.get("reportConfig").get)).metrics.map(_.druidQuery)
-    val druidResponse = DruidDataFetcher.getDruidData(druidConfig(0))
-    val date = (new SimpleDateFormat("dd-MM-yyyy")).format(Calendar.getInstance().getTime)
-    val scans = druidResponse.map(f => {
-      val report = JSONUtils.deserialize[DialcodeScans](f)
-      WeeklyDialCodeScans(report.date,report.dialcodes,report.scans,date,"weekly_dialcode_counts")
-    })
-    val scansDf = sc.parallelize(scans).toDF()
-
-    reportConfig.output.map { f =>
-      CourseUtils.postDataToBlob(scansDf,f,config)
-    }
 
     val conf = config.get("etbFileConfig").get.asInstanceOf[Map[String, AnyRef]]
     val bucket = conf("bucket")
@@ -148,11 +132,11 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     scansDF.groupBy(scansDF("dialcodes")).sum("scans")
   }
 
-  def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext): (RDD[FinalOutput]) = {
+  def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
     val metrics = CommonUtil.time({
       val textBookInfo = TextBookUtils.getTextBooks(config, RestUtil)
       val tenantInfo = getTenantInfo(config, RestUtil)
-      TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, RestUtil)
+      TextBookUtils.getTextbookHierarchy(config, textBookInfo, tenantInfo, RestUtil)
     })
     JobLogger.log("ETBMetricsModel: ",Option(Map("recordCount" -> metrics._2.count(), "timeTaken" -> metrics._1)), Level.INFO)
     metrics._2

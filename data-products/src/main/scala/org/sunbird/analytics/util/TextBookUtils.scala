@@ -1,14 +1,19 @@
 package org.sunbird.analytics.util
 
+import java.text.SimpleDateFormat
 import java.util
+import java.util.Calendar
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.ekstep.analytics.framework.Params
+import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, Params}
 import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
+import org.ekstep.analytics.model.ReportConfig
 import org.sunbird.analytics.model.report._
+
 import scala.util.control.Breaks._
 import scala.util.control._
 
@@ -40,29 +45,47 @@ object TextBookUtils {
     if(null != response && "successful".equals(response.params.status) && response.result.count>0) response.result.content else List()
   }
 
-  def getTextbookHierarchy(textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext): (RDD[FinalOutput]) = {
-    val reportTuple = for {textbook <- sc.parallelize(textbookInfo)
+  def getTextbookHierarchy(config: Map[String, AnyRef], textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
+    val reportTuple = for {textbook <- textbookInfo
       baseUrl = s"${AppConf.getConfig("hierarchy.search.api.url")}${AppConf.getConfig("hierarchy.search.api.path")}${textbook.identifier}"
       finalUrl = if("Live".equals(textbook.status)) baseUrl else s"$baseUrl?mode=edit"
       response = RestUtil.get[ContentDetails](finalUrl)
       tupleData = if(null != response && "successful".equals(response.params.status)) {
       val data = response.result.content
         val dceDialcode = generateDCEDialCodeReport(data)
+        val dceDialcodeReport = dceDialcode._1
         val etbDialcode = generateETBDialcodeReport(data)
+        val etbDialcodeReport = etbDialcode._1
+        val dialcodeScans = dceDialcode._2 ++ etbDialcode._2
         val etbReport = generateETBTextbookReport(data)
         val dceReport = generateDCETextbookReport(data)
-        (etbReport, dceReport, dceDialcode, etbDialcode)
+        (etbReport, dceReport, dceDialcodeReport, etbDialcodeReport, dialcodeScans)
        }
-       else (List(),List(),List(),List())
+       else (List(),List(),List(),List(),List())
     } yield tupleData
     val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
     val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
-    val dceDialCodeReport = reportTuple.collect().toList.map(f => f._3).filter(f => f.nonEmpty)
+    val dceDialCodeReport = reportTuple.map(f => f._3).filter(f => f.nonEmpty)
     val dcereport = if(!dceDialCodeReport.isEmpty) dceDialCodeReport.head else List()
-    val etbDialCodeReport = reportTuple.collect().toList.map(f => f._4).filter(f => f.nonEmpty)
+    val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
     val etbreport = if(!etbDialCodeReport.isEmpty) etbDialCodeReport.head else List()
+    val dialcodeScans = reportTuple.map(f => f._5).head
 
-    generateTextBookReport(etbTextBookReport, dceTextBookReport, sc.parallelize(dcereport), sc.parallelize(etbreport), tenantInfo)
+    generateWeeklyScanReport(config, dialcodeScans)
+    generateTextBookReport(sc.parallelize(etbTextBookReport), sc.parallelize(dceTextBookReport), sc.parallelize(dcereport), sc.parallelize(etbreport), tenantInfo)
+  }
+
+  def generateWeeklyScanReport(config: Map[String, AnyRef], dialcodeScans: List[WeeklyDialCodeScans])(implicit sc: SparkContext, fc: FrameworkContext) {
+    implicit val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
+    val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
+    val scansDf = sc.parallelize(dialcodeScans).toDF()
+
+    reportConfig.output.map { f =>
+      CourseUtils.postDataToBlob(scansDf,f,config)
+    }
   }
 
   def generateTextBookReport(etbTextBookReport: RDD[ETBTextbookData], dceTextBookReport: RDD[DCETextbookData], dceDialCodeReport: RDD[DCEDialcodeData], etbDialCodeReport: RDD[ETBDialcodeData] ,tenantInfo: RDD[TenantInfo])(implicit sc: SparkContext): RDD[FinalOutput] = {
@@ -118,9 +141,10 @@ object TextBookUtils {
 
   }
 
-  def generateETBDialcodeReport(response: ContentInfo): List[ETBDialcodeData] = {
+  def generateETBDialcodeReport(response: ContentInfo)(implicit sc: SparkContext, fc: FrameworkContext): (List[ETBDialcodeData],List[WeeklyDialCodeScans]) = {
     var index=0
     var dialcodeReport = List[ETBDialcodeData]()
+    var weeklyDialcodes = List[WeeklyDialCodeScans]()
     val report = ETBDialcodeData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel),getString(response.subject),response.name,response.status,"","","","","","","",0,response.leafNodesCount)
     if(null != response && response.children.isDefined) {
       val lengthOfChapters = response.children.get.length
@@ -128,15 +152,17 @@ object TextBookUtils {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
         val report = parseETBDialcode(chapters.children.getOrElse(List[ContentInfo]()),chapters.leafNodesCount,chapters.dialcodes,response,term,chapters.name,List[ContentInfo]())
-        dialcodeReport = (report ++ dialcodeReport).reverse
+        dialcodeReport = (report._1 ++ dialcodeReport).reverse
+        if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
       })
     }
-    report::dialcodeReport
+    (report::dialcodeReport,weeklyDialcodes)
   }
 
-  def parseETBDialcode(data: List[ContentInfo], noOfContents: Int, dialcodes: List[String],response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[ETBDialcodeData] = List()): List[ETBDialcodeData] = {
+  def parseETBDialcode(data: List[ContentInfo], noOfContents: Int, dialcodes: List[String],response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[ETBDialcodeData] = List())(implicit sc: SparkContext, fc: FrameworkContext): (List[ETBDialcodeData],List[WeeklyDialCodeScans]) = {
     var textbook = List[ContentInfo]()
-    var dceTextbook = prevData
+    var etbDialcode = prevData
+    var dialcode = ""
 
     data.map(units => {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
@@ -144,35 +170,40 @@ object TextBookUtils {
         if(null != units.leafNodesCount && units.leafNodesCount == 0) {
           val textbookInfo = getTextBookInfo(textbook)
           val levelNames = textbookInfo._1
-          val dialcodeInfo = textbookInfo._2
+          val dialcodeInfo = textbookInfo._2.lift(0).getOrElse("")
+          dialcode = dialcodeInfo
           val nodeType = if(null != noOfContents && noOfContents==0) "Leaf Node" else if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else "QR Linked"
-          val report = ETBDialcodeData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel),getString(response.subject),response.name,response.status,nodeType,l1,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodeInfo.lift(0).getOrElse(""),0,noOfContents)
-          dceTextbook = report :: dceTextbook
+          val report = ETBDialcodeData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel),getString(response.subject),response.name,response.status,nodeType,l1,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodeInfo,0,noOfContents)
+          etbDialcode = report :: etbDialcode
         }
-        else { dceTextbook = parseETBDialcode(units.children.getOrElse(List[ContentInfo]()),noOfContents,dialcodes,response,term,l1,textbook,dceTextbook) }
+        else { etbDialcode = parseETBDialcode(units.children.getOrElse(List[ContentInfo]()),noOfContents,dialcodes,response,term,l1,textbook,etbDialcode)._1 }
       }
     })
-    dceTextbook
+    val scans = getDialcodeScans(dialcode)
+    (etbDialcode, scans)
   }
 
-  def generateDCEDialCodeReport(response: ContentInfo): List[DCEDialcodeData] = {
+  def generateDCEDialCodeReport(response: ContentInfo)(implicit sc: SparkContext, fc: FrameworkContext): (List[DCEDialcodeData],List[WeeklyDialCodeScans]) = {
     var index=0
     var dialcodeReport = List[DCEDialcodeData]()
+    var weeklyDialcodes = List[WeeklyDialCodeScans]()
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
       response.children.get.map(chapters => {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
         val report = parseDCEDialcode(chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
-        dialcodeReport = (report ++ dialcodeReport).reverse
+        dialcodeReport = (report._1 ++ dialcodeReport).reverse
+        if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
       })
     }
-    dialcodeReport
+    (dialcodeReport, weeklyDialcodes)
   }
 
-  def parseDCEDialcode(data: List[ContentInfo], response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[DCEDialcodeData] = List()): List[DCEDialcodeData] = {
+  def parseDCEDialcode(data: List[ContentInfo], response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[DCEDialcodeData] = List())(implicit sc: SparkContext, fc: FrameworkContext): (List[DCEDialcodeData],List[WeeklyDialCodeScans]) = {
     var textbook = List[ContentInfo]()
-    var dceTextbook = prevData
+    var dceDialcode= prevData
+    var dialcode = ""
 
     data.map(units => {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
@@ -180,14 +211,31 @@ object TextBookUtils {
         if(null != units.leafNodesCount && units.leafNodesCount == 0) {
           val textbookInfo = getTextBookInfo(textbook)
           val levelNames = textbookInfo._1
-          val dialcodes = textbookInfo._2
-          val report = DCEDialcodeData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject),response.name, l1, levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes.lift(0).getOrElse(""),0,term)
-          dceTextbook = report :: dceTextbook
+          val dialcodes = textbookInfo._2.lift(0).getOrElse("")
+          dialcode = dialcodes
+          val report = DCEDialcodeData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject),response.name, l1, levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,0,term)
+          dceDialcode = report :: dceDialcode
         }
-        else { dceTextbook = parseDCEDialcode(units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceTextbook) }
+        else { dceDialcode = parseDCEDialcode(units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceDialcode)._1 }
       }
     })
-    dceTextbook
+    val scans = getDialcodeScans(dialcode)
+    (dceDialcode, scans)
+  }
+
+  def getDialcodeScans(dialcode: String)(implicit sc: SparkContext, fc: FrameworkContext): List[WeeklyDialCodeScans] = {
+    val result= if(dialcode.nonEmpty) {
+      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-events","intervals": "Last7Days","aggregations": [{"type": "count","name": "scans"}],"granularity": "all","postAggregations": [],"filter": {"type": "and","fields": [{"type": "selector","dimension": "object_id","value": "$dialcode"},{"type": "selector","dimension": "eid","value": "SEARCH"}]},"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}]}""".stripMargin
+      val druidQuery = JSONUtils.deserialize[DruidQueryModel](query)
+      val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
+      val date = (new SimpleDateFormat("dd-MM-yyyy")).format(Calendar.getInstance().getTime)
+
+      druidResponse.map(f => {
+        val report = JSONUtils.deserialize[DialcodeScans](f)
+        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,date,"weekly_dialcode_counts")
+      })
+    } else List[WeeklyDialCodeScans]()
+    result
   }
 
   def getTextBookInfo(data: List[ContentInfo]): (List[String],List[String]) = {
