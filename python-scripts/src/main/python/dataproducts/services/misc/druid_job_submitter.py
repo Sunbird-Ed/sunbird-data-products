@@ -41,7 +41,9 @@ class DruidJobSubmitter:
 
 
     def submit_job(self, report_config):
-        kafka_utils.send(self.kafka_broker, self.kafka_topic, report_config)
+        submit_config = {"search":{"type":"none"},"model":"org.ekstep.analytics.model.DruidQueryProcessingModel","output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Druid Query Processor","deviceMapping":false}
+        submit_config['modelParams'] = report_config
+        kafka_utils.send(self.kafka_broker, self.kafka_topic, submit_config)
         print('Job submitted to the job manager with config - ', report_config)
         return
 
