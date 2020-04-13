@@ -127,10 +127,6 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
       .returns(tenantInfo)
 
     val resp = ETBMetricsModel.getTenantInfo(jobConfig,mockRestUtil)
-    implicit val httpClient = RestUtil
-    val finalRes = TextBookUtils.getTextbookHierarchy(jobConfig,res,resp,httpClient)
-    val etb = finalRes.map(k=>k.etb.get)
-    val dce = finalRes.map(k=>k.dce.get)
 
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
