@@ -181,6 +181,8 @@ if __name__ == '__main__':
                         help='Script to submit the druid jobs')
     parser_job_submitter.add_argument("--report_list_jobs_url", type=str,
                         help="The base API endpoint to list the active druid report jobs")
+    parser_job_submitter.add_argument("--auth_token", type=str,
+                        help="The base API endpoint token for authorization of api")
     parser_job_submitter.add_argument("--interpolation_config", type=str,
                         help="The interpolation config to replace the dynamic properties of the config", default="""[{"key":"__store__","value":"azure"},{"key":"__container__","value":"reports"}]""")                        
 
@@ -292,7 +294,7 @@ if __name__ == '__main__':
     elif args.cmd == "submit_druid_jobs":
         from dataproducts.services.misc.druid_job_submitter import DruidJobSubmitter
 
-        jobSubmitter = DruidJobSubmitter(args.report_list_jobs_url, args.interpolation_config)
+        jobSubmitter = DruidJobSubmitter(args.report_list_jobs_url,args.auth_token, args.interpolation_config)
         jobSubmitter.init()
 
     if args.version:

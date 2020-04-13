@@ -3,7 +3,7 @@ anytree
 requests
 findspark
 pyspark
-azure
+azure-storage-blob
 argparse
 elasticsearch
 cassandra-driver
