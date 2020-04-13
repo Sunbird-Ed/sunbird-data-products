@@ -86,7 +86,7 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
       .option("es.port", AppConf.getConfig("es.port"))
       .option("es.scroll.size", AppConf.getConfig("es.scroll.size"))
       .option("inferSchema", "true")
-      .load(AppConf.getConfig("course.metrics.es.index.cbatch")).select(
+      .load("course-batch").select(
         col("participantCount"), col("completedCount"), col("id").as("batchId")
       )
   }
