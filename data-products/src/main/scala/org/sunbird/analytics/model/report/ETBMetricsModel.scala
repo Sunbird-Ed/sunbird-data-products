@@ -42,16 +42,11 @@ case class DCETextbookReport(slug: String, identifier: String, name: String, med
                                createdOn: String, lastUpdatedOn: String, totalQRCodes: Int, contentLinkedQR: Int,
                                withoutContentQR: Int, withoutContentT1: Int, withoutContentT2: Int, reportName: String)
 
-// Textbook ID, Medium, Grade, Subject, Textbook Name, Level 1 Name, Level 2 Name, Level 3 Name, Level 4 Name, Level 5 Name, QR Code, Total Scans, Term
-case class DCEDialcodeReport(slug: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
-                               l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String, dialcode: String,
-                               noOfScans: Int, term: String, reportName: String)
-// Textbook ID, Medium, Grade, Subject, Textbook Name, Textbook Status, Type of Node, Level 1 Name, Level 2 Name, Level 3 Name, Level 4 Name, Level 5 Name, QR Code, Total Scans, Number of contents
-case class ETBDialcodeReport(slug: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
-                           status: String, nodeType: String, l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String,
-                           dialcode: String, noOfScans: Int, noOfContent: Int, reportName: String)
+case class DialcodeExceptionReport(slug: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
+                                   l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String, dialcode: String,
+                                   status: String, nodeType: String, noOfContent: Int, noOfScans: Int, term: String, reportName: String)
 
-case class FinalOutput(identifier: String, etb: Option[ETBTextbookReport], dce: Option[DCETextbookReport], dceDialcode: Option[DCEDialcodeReport], etbDialcode: Option[ETBDialcodeReport]) extends AlgoOutput with Output
+case class FinalOutput(identifier: String, etb: Option[ETBTextbookReport], dce: Option[DCETextbookReport], dialcode: Option[DialcodeExceptionReport]) extends AlgoOutput with Output
 case class DialcodeScans(dialcode: String, scans: Double, date: String)
 case class WeeklyDialCodeScans(date: String, dialcodes: String, scans: Double, slug: String, reportName: String)
 case class DialcodeCounts(dialcode: String, scans: Double, date: String)
@@ -86,11 +81,11 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
       }).filter(textbook=> !textbook.identifier.isEmpty)
 
       val etbDialcodeReport = events.map(report => {
-        if(null != report.etbDialcode && report.etbDialcode.size!=0) report.etbDialcode.get else ETBDialcodeReport("","","","","","","","","","","","","","",0,0,"")
+        if(null != report.dialcode && report.dialcode.size!=0 && "ETB_dialcode_data".equals(report.dialcode.get.reportName)) report.dialcode.get else DialcodeExceptionReport("","","","","","","","","","","","","","",0,0,"","")
       }).filter(textbook => !textbook.identifier.isEmpty)
 
       val dceDialcodeReport = events.map(report => {
-        if(null != report.dceDialcode && report.dceDialcode.isDefined) report.dceDialcode.get else DCEDialcodeReport("","","","","","","","","","","","",0,"","")
+        if(null != report.dialcode && report.dialcode.isDefined && "DCE_dialcode_data".equals(report.dialcode.get.reportName)) report.dialcode.get else DialcodeExceptionReport("","","","","","","","","","","","","","",0,0,"","")
       }).filter(textbook=> !textbook.identifier.isEmpty)
 
       val scansDF = getScanCounts(config)
@@ -103,11 +98,11 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
         CourseUtils.postDataToBlob(dceDf,f,config)
 
         val dialdceDF = dceDialcodeReport.toDF()
-        val dialcodeDCE= dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcode","noOfScans")
+        val dialcodeDCE= dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcode","noOfScans","status","nodeType","noOfContent")
         CourseUtils.postDataToBlob(dialcodeDCE,f,config)
 
         val dialetbDF = etbDialcodeReport.toDF()
-        val dialcodeETB= dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcode","noOfScans")
+        val dialcodeETB= dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcode","noOfScans","term")
         CourseUtils.postDataToBlob(dialcodeETB,f,config)
       }
     }
