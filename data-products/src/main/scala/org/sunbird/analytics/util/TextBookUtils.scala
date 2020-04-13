@@ -115,8 +115,8 @@ object TextBookUtils {
       DialcodeExceptionReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dialcode).identifier,
         textbook._2._1.getOrElse(dialcode).medium,textbook._2._1.getOrElse(dialcode).gradeLevel,textbook._2._1.getOrElse(dialcode).subject,
         textbook._2._1.getOrElse(dialcode).name,textbook._2._1.getOrElse(dialcode).l1Name,textbook._2._1.getOrElse(dialcode).l2Name,textbook._2._1.getOrElse(dialcode).l3Name,
-        textbook._2._1.getOrElse(dialcode).l4Name,textbook._2._1.getOrElse(dialcode).l5Name,textbook._2._1.getOrElse(dialcode).dialcode,"","",0,
-        textbook._2._1.getOrElse(dialcode).noOfScans,textbook._2._1.getOrElse(dialcode).term,textbook._2._1.getOrElse(dialcode).reportName)
+        textbook._2._1.getOrElse(dialcode).l4Name,textbook._2._1.getOrElse(dialcode).l5Name,textbook._2._1.getOrElse(dialcode).dialcode,textbook._2._1.getOrElse(dialcode).status,
+        textbook._2._1.getOrElse(dialcode).nodeType,textbook._2._1.getOrElse(dialcode).noOfContent, textbook._2._1.getOrElse(dialcode).noOfScans,textbook._2._1.getOrElse(dialcode).term,textbook._2._1.getOrElse(dialcode).reportName)
     })
 
     val textbookReports = etbRDD.map(report => FinalOutput(report._1, report._2._1, report._2._2, null))
@@ -127,24 +127,18 @@ object TextBookUtils {
   }
 
   def generateETBDialcodeReport(response: ContentInfo)(implicit sc: SparkContext, fc: FrameworkContext): (List[DialcodeExceptionData],List[WeeklyDialCodeScans]) = {
-    var index=0
     var dialcodeReport = List[DialcodeExceptionData]()
     var weeklyDialcodes = List[WeeklyDialCodeScans]()
     val report = DialcodeExceptionData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel),getString(response.subject),response.name,"","","","","","",response.status,"",response.leafNodesCount,0,"","ETB_dialcode_data")
     if(null != response && response.children.isDefined) {
-      val lengthOfChapters = response.children.get.length
-      response.children.get.map(chapters => {
-        val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
-        index = index+1
-        val report = parseETBDialcode(chapters.children.getOrElse(List[ContentInfo]()),chapters.leafNodesCount,chapters.dialcodes,response,term,chapters.name,List[ContentInfo]())
+      val report = parseETBDialcode(response.children.get, response, List[ContentInfo]())
         dialcodeReport = (report._1 ++ dialcodeReport).reverse
         if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
-      })
     }
     (report::dialcodeReport,weeklyDialcodes)
   }
 
-  def parseETBDialcode(data: List[ContentInfo], noOfContents: Int, dialcodes: List[String],response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[DialcodeExceptionData] = List())(implicit sc: SparkContext, fc: FrameworkContext): (List[DialcodeExceptionData],List[WeeklyDialCodeScans]) = {
+  def parseETBDialcode(data: List[ContentInfo], response: ContentInfo, newData: List[ContentInfo], prevData: List[DialcodeExceptionData] = List())(implicit sc: SparkContext, fc: FrameworkContext): (List[DialcodeExceptionData],List[WeeklyDialCodeScans]) = {
     var textbook = List[ContentInfo]()
     var etbDialcode = prevData
     var dialcode = ""
@@ -152,17 +146,17 @@ object TextBookUtils {
     data.map(units => {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         textbook = units :: newData
-        if(null != units.leafNodesCount && units.leafNodesCount == 0) {
           val textbookInfo = getTextBookInfo(textbook)
           val levelNames = textbookInfo._1
           val dialcodeInfo = textbookInfo._2.lift(0).getOrElse("")
           dialcode = dialcodeInfo
+          val noOfContents = units.leafNodesCount
+          val dialcodes = units.dialcodes
           val nodeType = if(null != noOfContents && noOfContents==0) "Leaf Node" else if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else "QR Linked"
-          val report = DialcodeExceptionData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel),getString(response.subject),response.name,l1,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodeInfo,response.status,nodeType,noOfContents,0,"","ETB_dialcode_data")
+          val report = DialcodeExceptionData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel), getString(response.subject),response.name,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),levelNames.lift(4).getOrElse(""), dialcodeInfo,response.status,nodeType,noOfContents,0,"","ETB_dialcode_data")
           etbDialcode = report :: etbDialcode
-        }
-        else { etbDialcode = parseETBDialcode(units.children.getOrElse(List[ContentInfo]()),noOfContents,dialcodes,response,term,l1,textbook,etbDialcode)._1 }
       }
+      else { etbDialcode = parseETBDialcode(units.children.getOrElse(List[ContentInfo]()),response,textbook,etbDialcode)._1 }
     })
     val scans = getDialcodeScans(dialcode)
     (etbDialcode, scans)

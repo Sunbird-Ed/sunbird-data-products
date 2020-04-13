@@ -98,11 +98,11 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
         CourseUtils.postDataToBlob(dceDf,f,config)
 
         val dialdceDF = dceDialcodeReport.toDF()
-        val dialcodeDCE= dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcode","noOfScans","status","nodeType","noOfContent")
+        val dialcodeDCE= dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcodes","noOfScans","status","nodeType","noOfContent")
         CourseUtils.postDataToBlob(dialcodeDCE,f,config)
 
         val dialetbDF = etbDialcodeReport.toDF()
-        val dialcodeETB= dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcode","noOfScans","term")
+        val dialcodeETB= dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcodes","noOfScans","term")
         CourseUtils.postDataToBlob(dialcodeETB,f,config)
       }
     }
