@@ -11,9 +11,10 @@ from dataproducts.util import kafka_utils
 
 class DruidJobSubmitter:
 
-    def __init__(self, report_search_base_url, replace_list = """[{"key":"__store__","value":"azure"},{"key":"__container__","value":"reports"}]"""):
+    def __init__(self, report_search_base_url, auth_token, replace_list = """[{"key":"__store__","value":"azure"},{"key":"__container__","value":"reports"}]"""):
         self.report_search_base_url = report_search_base_url
         self.replace_list = json.loads(replace_list)
+        self.auth_token = auth_token
         self.env = os.getenv("ENV", "dev")
         config = common_config.init()
         self.kafka_broker = os.getenv("KAFKA_BROKER_HOST", "localhost:9092")
@@ -25,7 +26,8 @@ class DruidJobSubmitter:
         payload = """{"request": {"filters": {"status": ["ACTIVE"]}}}"""
         headers = {
             'content-type': "application/json; charset=utf-8",
-            'cache-control': "no-cache"
+            'cache-control': "no-cache",
+            'Authorization': "Bearer " + self.auth_token
         }
         response = requests.request("POST", url, data=payload, headers=headers)
         print('Active report configurations fetched from the API')
@@ -41,9 +43,9 @@ class DruidJobSubmitter:
 
 
     def submit_job(self, report_config):
-        submit_config = {"search":{"type":"none"},"model":"org.ekstep.analytics.model.DruidQueryProcessingModel","output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Druid Query Processor","deviceMapping":false}
-        submit_config['modelParams'] = report_config
-        kafka_utils.send(self.kafka_broker, self.kafka_topic, submit_config)
+        submit_config = json.loads("""{"search":{"type":"none"},"model":"org.ekstep.analytics.model.DruidQueryProcessingModel","output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Druid Query Processor","deviceMapping":false}""")
+        submit_config['modelParams'] = json.loads(report_config)
+        kafka_utils.send(self.kafka_broker, self.kafka_topic, json.dumps(submit_config))
         print('Job submitted to the job manager with config - ', report_config)
         return
 
