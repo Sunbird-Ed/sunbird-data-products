@@ -177,6 +177,15 @@ if __name__ == '__main__':
                         default=date.today().strftime("%d/%m/%Y"),
                         help="DD/MM/YYYY, optional argument for backfill jobs")
 
+    parser_job_submitter = subparsers.add_parser('submit_druid_jobs',
+                        help='Script to submit the druid jobs')
+    parser_job_submitter.add_argument("--report_list_jobs_url", type=str,
+                        help="The base API endpoint to list the active druid report jobs")
+    parser_job_submitter.add_argument("--auth_token", type=str,
+                        help="The base API endpoint token for authorization of api")
+    parser_job_submitter.add_argument("--interpolation_config", type=str,
+                        help="The interpolation config to replace the dynamic properties of the config", default="""[{"key":"__store__","value":"azure"},{"key":"__container__","value":"reports"}]""")
+
     args = parser.parse_args()
 
     if args.cmd == "ecg_learning":
@@ -282,8 +291,11 @@ if __name__ == '__main__':
                             args.org_search, args.druid_hostname,
                             args.execution_date)
         content_creation_status.init()
+    elif args.cmd == "submit_druid_jobs":
+        from dataproducts.services.misc.druid_job_submitter import DruidJobSubmitter
 
-
+        jobSubmitter = DruidJobSubmitter(args.report_list_jobs_url,args.auth_token, args.interpolation_config)
+        jobSubmitter.init()
 
     if args.version:
         print("version - 1.0.0")
