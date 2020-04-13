@@ -181,8 +181,8 @@ class ContentConsumption:
         df['Average Play Time in mins on Portal'] = round(
             df['me_totalTimeSpentInPortal'] / (60 * df['me_totalPlaySessionCountInPortal']), 2)
         df['Average Play Time in mins (On App and Portal)'] = round(
-            (df['Average Play Time in mins on App'] + df['Average Play Time in mins on Portal']) / \
-            df['Total No of Plays (App and Portal)'], 2)
+            (df['me_totalTimeSpentInApp'] + df['me_totalTimeSpentInPortal']) / \
+            (60 * df['Total No of Plays (App and Portal)']), 2)
         df['Average Play Time in mins on App'] = df['Average Play Time in mins on App'].fillna(0)
         df['Average Play Time in mins on Portal'] = df['Average Play Time in mins on Portal'].fillna(0)
         df['Average Play Time in mins (On App and Portal)'] = df['Average Play Time in mins (On App and Portal)'].fillna(0)
