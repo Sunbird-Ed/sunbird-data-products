@@ -112,16 +112,22 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
   def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext = new SQLContext(sc)
 
+    val store = config("store")
     val conf = config.get("etbFileConfig").get.asInstanceOf[Map[String, AnyRef]]
-    val bucket = conf("bucket")
-    val key = AppConf.getConfig("azure_storage_key")
-    val file = conf("file")
-    val url = s"wasb://$bucket@$key.blob.core.windows.net/$file"
-    val finalUrl = if("local".equals(config("store"))) conf("filePath").asInstanceOf[String] else url
+
+    val url = store match {
+      case "local" =>
+        conf("filePath").asInstanceOf[String]
+      case "s3" | "azure" =>
+        val bucket = conf("bucket")
+        val key = AppConf.getConfig("azure_storage_key")
+        val file = conf("file")
+        s"wasb://$bucket@$key.blob.core.windows.net/$file"
+    }
 
     val scansCount = sqlContext.sparkSession.read
       .option("header","true")
-      .csv(finalUrl)
+      .csv(url)
 
     val scansDF = scansCount.selectExpr("Date", "dialcodes", "cast(scans as int) scans")
     scansDF.groupBy(scansDF("dialcodes")).sum("scans")
