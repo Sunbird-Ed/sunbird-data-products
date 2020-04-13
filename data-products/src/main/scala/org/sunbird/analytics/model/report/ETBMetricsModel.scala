@@ -1,14 +1,19 @@
 package org.sunbird.analytics.model.report
 
+import java.text.SimpleDateFormat
+import java.util.Calendar
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, RestUtil}
-import org.ekstep.analytics.framework.{AlgoOutput, Empty, FrameworkContext, IBatchModelTemplate, Level, Output}
+import org.ekstep.analytics.framework.{AlgoOutput, DataFetcher, Empty, FrameworkContext, IBatchModelTemplate, JobConfig, Level, Output}
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.sunbird.analytics.util.{CourseUtils, TextBookUtils}
+import org.sunbird.cloud.storage.conf.AppConf
 
 case class TenantInfo(id: String, slug: String)
 case class TenantResponse(result: TenantResult)
@@ -37,8 +42,14 @@ case class DCETextbookReport(slug: String, identifier: String, name: String, med
                                createdOn: String, lastUpdatedOn: String, totalQRCodes: Int, contentLinkedQR: Int,
                                withoutContentQR: Int, withoutContentT1: Int, withoutContentT2: Int, reportName: String)
 
-case class FinalOutput(identifier: String, etb: Option[ETBTextbookReport], dce: Option[DCETextbookReport]) extends AlgoOutput with Output
+case class DialcodeExceptionReport(slug: String, identifier: String, medium: String, gradeLevel: String, subject: String, name: String,
+                                   l1Name: String, l2Name: String, l3Name: String, l4Name: String, l5Name: String, dialcode: String,
+                                   status: String, nodeType: String, noOfContent: Int, noOfScans: Int, term: String, reportName: String)
 
+case class FinalOutput(identifier: String, etb: Option[ETBTextbookReport], dce: Option[DCETextbookReport], dialcode: Option[DialcodeExceptionReport]) extends AlgoOutput with Output
+case class DialcodeScans(dialcode: String, scans: Double, date: String)
+case class WeeklyDialCodeScans(date: String, dialcodes: String, scans: Double, slug: String, reportName: String)
+case class DialcodeCounts(dialcode: String, scans: Double, date: String)
 
 object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,FinalOutput] with Serializable {
   implicit val className: String = "org.sunbird.analytics.model.report.ETBMetricsModel"
@@ -62,12 +73,22 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
       val etbTextBookReport = events.map(report => {
-        if(report.etb.size!=0) report.etb.get else ETBTextbookReport("","","","","","","","","",0,0,0,0,0,"")
+        if(null != report.etb && report.etb.size!=0) report.etb.get else ETBTextbookReport("","","","","","","","","",0,0,0,0,0,"")
       }).filter(textbook=> !textbook.identifier.isEmpty)
 
       val dceTextBookReport = events.map(report => {
-        if(report.dce.size!=0) report.dce.get else DCETextbookReport("","","","","","","","",0,0,0,0,0,"")
+        if(null != report.dce && report.dce.size!=0) report.dce.get else DCETextbookReport("","","","","","","","",0,0,0,0,0,"")
       }).filter(textbook=> !textbook.identifier.isEmpty)
+
+      val etbDialcodeReport = events.map(report => {
+        if(null != report.dialcode && report.dialcode.size!=0 && "ETB_dialcode_data".equals(report.dialcode.get.reportName)) report.dialcode.get else DialcodeExceptionReport("","","","","","","","","","","","","","",0,0,"","")
+      }).filter(textbook => !textbook.identifier.isEmpty)
+
+      val dceDialcodeReport = events.map(report => {
+        if(null != report.dialcode && report.dialcode.isDefined && "DCE_dialcode_data".equals(report.dialcode.get.reportName)) report.dialcode.get else DialcodeExceptionReport("","","","","","","","","","","","","","",0,0,"","")
+      }).filter(textbook=> !textbook.identifier.isEmpty)
+
+      val scansDF = getScanCounts(config)
 
       reportConfig.output.map { f =>
         val etbDf = etbTextBookReport.toDF()
@@ -75,16 +96,48 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
         val dceDf = dceTextBookReport.toDF()
         CourseUtils.postDataToBlob(dceDf,f,config)
+
+        val dialdceDF = dceDialcodeReport.toDF()
+        val dialcodeDCE= dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcodes","noOfScans","status","nodeType","noOfContent")
+        CourseUtils.postDataToBlob(dialcodeDCE,f,config)
+
+        val dialetbDF = etbDialcodeReport.toDF()
+        val dialcodeETB= dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcodes","noOfScans","term")
+        CourseUtils.postDataToBlob(dialcodeETB,f,config)
       }
     }
     events
   }
 
-  def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext): (RDD[FinalOutput]) = {
+  def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
+    implicit val sqlContext = new SQLContext(sc)
+
+    val store = config("store")
+    val conf = config.get("etbFileConfig").get.asInstanceOf[Map[String, AnyRef]]
+
+    val url = store match {
+      case "local" =>
+        conf("filePath").asInstanceOf[String]
+      case "s3" | "azure" =>
+        val bucket = conf("bucket")
+        val key = AppConf.getConfig("azure_storage_key")
+        val file = conf("file")
+        s"wasb://$bucket@$key.blob.core.windows.net/$file"
+    }
+
+    val scansCount = sqlContext.sparkSession.read
+      .option("header","true")
+      .csv(url)
+
+    val scansDF = scansCount.selectExpr("Date", "dialcodes", "cast(scans as int) scans")
+    scansDF.groupBy(scansDF("dialcodes")).sum("scans")
+  }
+
+  def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
     val metrics = CommonUtil.time({
       val textBookInfo = TextBookUtils.getTextBooks(config, RestUtil)
       val tenantInfo = getTenantInfo(config, RestUtil)
-      TextBookUtils.getTextbookHierarchy(textBookInfo, tenantInfo, RestUtil)
+      TextBookUtils.getTextbookHierarchy(config, textBookInfo, tenantInfo, RestUtil)
     })
     JobLogger.log("ETBMetricsModel: ",Option(Map("recordCount" -> metrics._2.count(), "timeTaken" -> metrics._1)), Level.INFO)
     metrics._2
