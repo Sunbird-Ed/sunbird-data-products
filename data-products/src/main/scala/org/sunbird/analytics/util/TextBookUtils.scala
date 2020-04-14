@@ -210,7 +210,7 @@ object TextBookUtils {
 
       druidResponse.map(f => {
         val report = JSONUtils.deserialize[DialcodeScans](f)
-        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,date,"weekly_dialcode_counts")
+        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,date,"dialcode_counts")
       })
     } else List[WeeklyDialCodeScans]()
     result
