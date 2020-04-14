@@ -53,12 +53,11 @@ object TextBookUtils {
         val dceDialcodeReport = dceDialcode._1
         val etbDialcode = generateETBDialcodeReport(data)
         val etbDialcodeReport = etbDialcode._1
-        val dialcodeScans = dceDialcode._2 ++ etbDialcode._2
         val etbReport = generateETBTextbookReport(data)
         val dceReport = generateDCETextbookReport(data)
-        (etbReport, dceReport, dceDialcodeReport, etbDialcodeReport, dialcodeScans)
+        (etbReport, dceReport, dceDialcodeReport, etbDialcodeReport, dceDialcode._2,etbDialcode._2)
        }
-       else (List(),List(),List(),List(),List())
+       else (List(),List(),List(),List(),List(),List())
     } yield tupleData
     val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
     val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
@@ -66,10 +65,10 @@ object TextBookUtils {
     val dcereport = if(dceDialCodeReport.nonEmpty) dceDialCodeReport.head else List()
     val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
     val etbreport = if(etbDialCodeReport.nonEmpty) etbDialCodeReport.head else List()
-    val dialcodeScans = reportTuple.map(f => f._5).head
+    val dialcodeScans = reportTuple.map(f => f._5).filter(f=>f.nonEmpty) ++ reportTuple.map(f => f._6).filter(f=>f.nonEmpty)
     val dialcodeReport = dcereport ++ etbreport
 
-    generateWeeklyScanReport(config, dialcodeScans)
+    generateWeeklyScanReport(config, dialcodeScans.head)
     generateTextBookReport(sc.parallelize(etbTextBookReport), sc.parallelize(dceTextBookReport), sc.parallelize(dialcodeReport), tenantInfo)
   }
 
