@@ -203,7 +203,7 @@ object TextBookUtils {
 
   def getDialcodeScans(dialcode: String)(implicit sc: SparkContext, fc: FrameworkContext): List[WeeklyDialCodeScans] = {
     val result= if(dialcode.nonEmpty) {
-      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-events","intervals": "Last7Days","aggregations": [{"type": "count","name": "scans"}],"granularity": "all","postAggregations": [],"filter": {"type": "and","fields": [{"type": "selector","dimension": "object_id","value": "$dialcode"},{"type": "selector","dimension": "eid","value": "SEARCH"}]},"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}]}""".stripMargin
+      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-events","intervals": "Last7Days","aggregations": [{"type": "count","name": "scans"}],"granularity": "all","postAggregations": [],"filter": {"type": "and","fields": [{"type": "selector","dimension": "object_id","value": "$dialcode"},{"type": "and","fields": [{"type": "or","fields": [{"type": "selector","dimension": "object_type","value": "DialCode"},{"type": "selector","dimension": "object_type","value": "dialcode"},{"type": "selector","dimension": "object_type","value": "qr"},{"type": "selector","dimension": "object_type","value": "Qr"}]},{"type": "selector","dimension": "eid","value": "SEARCH"}]}]},"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}]}""".stripMargin
       val druidQuery = JSONUtils.deserialize[DruidQueryModel](query)
       val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
       val date = (new SimpleDateFormat("dd-MM-yyyy")).format(Calendar.getInstance().getTime)
