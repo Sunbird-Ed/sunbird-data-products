@@ -229,8 +229,16 @@ object TextBookUtils {
           if(null != parsedData.dialcodes) { dialcodes = parsedData.dialcodes(0) :: dialcodes }
           levelNames = parsedData.name :: levelNames
         }
-        if(parsedData.children.isEmpty) { break() }
-        else { parsedData = parsedData.children.get(parsedData.children.size-1) }
+        if(parsedData.children.nonEmpty) {
+          println(parsedData.children)
+          println(parsedData.children.size)
+          parsedData = parsedData.children.get(parsedData.children.size-1)
+
+          }
+        else {
+
+          println(parsedData.children,"empty")
+        break()}
         levelCount = levelCount-1
       }
     }
