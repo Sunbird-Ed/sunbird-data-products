@@ -44,7 +44,7 @@ class DruidJobSubmitter:
 
     def submit_job(self, report_config):
         report_config = json.loads(report_config)
-        submit_config = json.loads("""{"model":"druid_reports", "config":{"search":{"type":"none"},"model":"org.ekstep.analytics.model.DruidQueryProcessingModel","output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Druid Query Processor","deviceMapping":false,"modelParams": }}""")
+        submit_config = json.loads("""{"model":"druid_reports", "config":{"search":{"type":"none"},"model":"org.ekstep.analytics.model.DruidQueryProcessingModel","output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Druid Query Processor","deviceMapping":false}}""")
         submit_config['config']['modelParams'] = report_config
         submit_config['config']['modelParams']['modelName'] = report_config['reportConfig']['id'] + "_job"
         kafka_utils.send(self.kafka_broker, self.kafka_topic, json.dumps(submit_config))
