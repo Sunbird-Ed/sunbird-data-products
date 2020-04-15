@@ -69,6 +69,18 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"fileParameters": ["id", "dims"]
                     |		}]
                     |	},
+                    | "dialcodeConfig":{
+                    | "reportConfig": {
+                    | "id": "etb_metrics",
+                    |    "metrics" : [],
+                    |		"labels": {},
+                    |  "output": [{
+                    |			"type": "csv",
+                    |			"dims": ["identifier", "channel", "name"],
+                    |			"fileParameters": ["id", "dims"]
+                    |		}]
+                    | }
+                    | },
                     | "etbFileConfig": {
                     | "bucket": "test-container",
                     | "file": "druid-reports/etb_metrics/dialcode_counts.csv",

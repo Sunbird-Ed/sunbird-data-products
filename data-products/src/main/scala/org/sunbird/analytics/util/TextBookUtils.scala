@@ -79,11 +79,11 @@ object TextBookUtils {
 
     val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
-    val scansD = List(WeeklyDialCodeScans("2020-01-21","ETJBSB",10.0,"15-04-2020","dialcode_counts"),WeeklyDialCodeScans("2020-03-21","R8I4U3",9.0,"15-04-2020","dialcode_counts"))
+    val scansD = List(WeeklyDialCodeScans("2020-01-21","OPJFHJS",10.0,"15-04-2020","dialcode_counts"),WeeklyDialCodeScans("2020-03-21","BEEHGRW",9.0,"15-04-2020","dialcode_counts"))
     val scansDf = sc.parallelize(scansD).toDF()
 
     reportConfig.output.map { f =>
-      CourseUtils.postDataToBlob(scansDf,f,config)
+      CourseUtils.postDataToBlob(scansDf,f,config("dialcodeConfig").asInstanceOf[Map[String, AnyRef]])
     }
   }
 
