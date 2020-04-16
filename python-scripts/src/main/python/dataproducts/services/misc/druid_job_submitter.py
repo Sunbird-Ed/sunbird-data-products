@@ -8,6 +8,7 @@ import json
 import requests
 from dataproducts.resources.common import common_config
 from dataproducts.util import kafka_utils
+from datetime import date
 
 class DruidJobSubmitter:
 
@@ -33,6 +34,16 @@ class DruidJobSubmitter:
         print('Active report configurations fetched from the API')
         return response.json()['result']['reports']
 
+    def deactivate_job(self,report_id):
+        url = ("{}report/jobs/deactivate/"+report_id).format(self.report_search_base_url)
+        print(url)
+        headers = {
+            'cache-control': "no-cache",
+            'Authorization': "Bearer " + self.auth_token
+        }
+        response = requests.request("POST", url, headers=headers)
+        return response
+
 
     def interpolate_config(self, report_config):
         report_config_str = json.dumps(report_config)
@@ -41,12 +52,28 @@ class DruidJobSubmitter:
         print('String interpolation for the report config completed')
         return report_config_str
 
+    def check_schedule(self, reportSchedule,report_id):
+        if reportSchedule == 'DAILY' :
+          return True
+        elif reportSchedule == 'WEEKLY' :
+          if date.today().weekday() == 0:
+            return True
+        elif reportSchedule == 'MONTHLY' :
+          first_day = date.today().replace(day = 1)  
+          if date.today() == first_day :
+            return True
+        elif reportSchedule == 'ONCE' :
+            self.deactivate_job(report_id)
+            return True
+        else :
+            return False
 
     def submit_job(self, report_config):
         report_config = json.loads(report_config)
+        report_id = report_config['reportConfig']['id']
         submit_config = json.loads("""{"model":"druid_reports", "config":{"search":{"type":"none"},"model":"org.ekstep.analytics.model.DruidQueryProcessingModel","output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Druid Query Processor","deviceMapping":false}}""")
         submit_config['config']['modelParams'] = report_config
-        submit_config['config']['modelParams']['modelName'] = report_config['reportConfig']['id'] + "_job"
+        submit_config['config']['modelParams']['modelName'] = report_id + "_job"
         kafka_utils.send(self.kafka_broker, self.kafka_topic, json.dumps(submit_config))
         print('Job submitted to the job manager with config - ', submit_config)
         return
@@ -56,6 +83,7 @@ class DruidJobSubmitter:
         print('Starting the job submitter...')
         reports = self.get_active_jobs()
         for report in reports:
-            report_config = self.interpolate_config(report['config'])
-            self.submit_job(report_config)
+            if(self.check_schedule(report['reportSchedule'].upper(),report['reportId'])) :  
+              report_config = self.interpolate_config(report['config'])
+              self.submit_job(report_config)
         print('Job submission completed...')
