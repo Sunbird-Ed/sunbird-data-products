@@ -69,7 +69,9 @@ object TextBookUtils {
     val scans = if(dialcodeScans.nonEmpty) dialcodeScans.head else List()
     val dialcodeReport = dcereport ++ etbreport
 
-    generateWeeklyScanReport(config, scans)
+//    generateWeeklyScanReport(config, scans)
+val dialcodeTest = List(WeeklyDialCodeScans("2020-04-14","DGWBH",1.0,"dialcode_scans","dialcode_counts"))
+    generateWeeklyScanReport(config, dialcodeTest)
     generateTextBookReport(sc.parallelize(etbTextBookReport), sc.parallelize(dceTextBookReport), sc.parallelize(dialcodeReport), tenantInfo)
   }
 
