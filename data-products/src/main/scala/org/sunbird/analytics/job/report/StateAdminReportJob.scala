@@ -15,6 +15,8 @@ import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.JobContext
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.OutputDispatcher
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 case class ValidatedUserDistrictSummary(index: Int, districtName: String, blocks: Long, schools: Long, registered: Long)
 case class UserStatus(id: Long, status: String)
@@ -119,12 +121,14 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         col("Block name"), col("Block id").as("Block ext. ID"), col("School name"), col("externalid").as("School ext. ID"), col("name").as("Teacher name"),
         col("userextid").as("Teacher ext. ID"), col("userid").as("Teacher Diksha ID"), col("slug"))
       userDistrictDetailDF.saveToBlobStore(storageConfig, "csv", reportId, Option(Map("header" -> "true")), Option(Seq("slug")))
+        JobLogger.log(s"StateAdminReportJob: ${reportId} report records count = ${userDistrictDetailDF.count()}", None, INFO)
     }
 
     def saveUserDistrictSummary(resultDF: DataFrame, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext) = {
       val window = Window.partitionBy("slug").orderBy(asc("districtName"))
       val districtSummaryDF = resultDF.withColumn("index", row_number().over(window))
       dataFrameToJsonFile(districtSummaryDF, "validated-user-summary-district", storageConfig)
+        JobLogger.log(s"StateAdminReportJob: validated-user-summary-district report records count = ${districtSummaryDF.count()}", None, INFO)
     }
 
     private def getChannelSlugDF(organisationDF: DataFrame)(implicit sparkSession: SparkSession): DataFrame = {
@@ -157,12 +161,21 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
       * @param reportDF
       * @param url
       */
-    def saveUserDetailsReport(reportDF: DataFrame, channelSlugDF: DataFrame, storageConfig: StorageConfig): Unit = {
+    def saveUserDetailsReport(reportDF: DataFrame, channelSlugDF: DataFrame, storageConfig: StorageConfig) (implicit spark: SparkSession): Unit = {
+        import spark.implicits._
         // List of fields available
         //channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus
-
-        reportDF.join(channelSlugDF, reportDF.col("channel") === channelSlugDF.col("channel"), "left_outer").select(
+        val userDetailReport = reportDF.withColumn("shadow_user_status",
+            when($"claimstatus" === UnclaimedStatus.id, lit(UnclaimedStatus.status))
+            .when($"claimstatus" === ClaimedStatus.id, lit(ClaimedStatus.status))
+            .when($"claimstatus" === FailedStatus.id, lit(FailedStatus.status))
+            .when($"claimstatus" === RejectedStatus.id, lit(RejectedStatus.status))
+            .when($"claimstatus" === MultiMatchStatus.id, lit(MultiMatchStatus.status))
+            .when($"claimstatus" === OrgExtIdMismatch.id, lit(FailedStatus.status))
+            .when($"claimstatus" === Eligible.id, lit(Eligible.status)))
+        userDetailReport.join(channelSlugDF, reportDF.col("channel") === channelSlugDF.col("channel"), "left_outer").select(
               col("slug"),
+              col("shadow_user_status"),
               col("userextid").as("User external id"),
               col("userstatus").as("User account status"),
               col("userid").as("User id"),
@@ -171,15 +184,16 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
               col("orgextid").as("School external id"),
               col("claim_status").as("Claimed status"),
               col("createdon").as("Created on"),
-              col("updatedon").as("Last updated on")).filter(col(colName = "slug").isNotNull)
-          .saveToBlobStore(storageConfig, "csv", "user-detail", Option(Map("header" -> "true")), Option(Seq("slug")))
+              col("updatedon").as("Last updated on")).filter(col(colName ="shadow_user_status").
+            isin(lit(UnclaimedStatus.status),lit(ClaimedStatus.status),lit(RejectedStatus.status),lit(FailedStatus.status),lit(MultiMatchStatus.status))).filter(col(colName = "slug").isNotNull)
+          .saveToBlobStore(storageConfig, "csv", "user-detail", Option(Map("header" -> "true")), Option(Seq("shadow_user_status","slug")))
           
-        JobLogger.log(s"StateAdminReportJob: uploadedSuccess nRecords = ${reportDF.count()}")
+        JobLogger.log(s"StateAdminReportJob: user-details report records count = ${userDetailReport.count()}", None, INFO)
     }
 
     def saveUserValidatedSummaryReport(reportDF: DataFrame, storageConfig: StorageConfig): Unit = {
       reportDF.saveToBlobStore(storageConfig, "json", "validated-user-summary", None, Option(Seq("slug")))
-      JobLogger.log(s"StateAdminReportJob: uploadedSuccess nRecords = ${reportDF.count()}")
+      JobLogger.log(s"StateAdminReportJob: validated-user-summary report records count = ${reportDF.count()}", None, INFO)
     }
 
     def saveUserSummaryReport(reportDF: DataFrame, channelSlugDF: DataFrame, storageConfig: StorageConfig): Unit = {
@@ -210,8 +224,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 "accounts_failed",
                 col(FailedStatus.status) + col(MultiMatchStatus.status) + col(OrgExtIdMismatch.status)).filter(col(colName = "slug").isNotNull)
             .saveToBlobStore(storageConfig, "json", "user-summary", None, Option(Seq("slug")))
-        
-        JobLogger.log(s"StateAdminReportJob: uploadedSuccess nRecords = ${reportDF.count()}", None, INFO)
+        JobLogger.log(s"StateAdminReportJob: user-summary report records count = ${correctedReportDF.count()}", None, INFO)
     }
 
   def dataFrameToJsonFile(dataFrame: DataFrame, reportId: String, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
