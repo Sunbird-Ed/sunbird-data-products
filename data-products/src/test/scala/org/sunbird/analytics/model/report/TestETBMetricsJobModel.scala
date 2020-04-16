@@ -67,7 +67,8 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"type": "csv",
                     |			"dims": ["identifier", "channel", "name"],
                     |			"fileParameters": ["id", "dims"]
-                    |		}]
+                    |		}],
+                    |  "mergeConfig": {"frequency": "WEEK","basePath": "","rollup": 0,"reportPath": "dialcode_counts.csv"}
                     |	},
                     | "dialcodeConfig":{
                     | "reportConfig": {
@@ -78,11 +79,13 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"type": "csv",
                     |			"dims": ["identifier", "channel", "name"],
                     |			"fileParameters": ["id", "dims"]
-                    |		}]
-                    | }
+                    |		}],
+                    |  "mergeConfig": {"frequency": "WEEK","basePath": "","rollup": 1,"reportPath": "dialcode_counts.csv","rollupAge": "ACADEMIC_YEAR","rollupCol":"Date","rollupRange":1}
+                    | },
+                    |  "folderPrefix": ["slug","reportName"]
                     | },
                     | "etbFileConfig": {
-                    | "bucket": "test-container",
+                    | "bucket": "dev-data-store",
                     | "file": "druid-reports/etb_metrics/dialcode_counts.csv",
                     | "filePath": "src/test/resources/reports/dialcode_counts.csv"
                     | },
