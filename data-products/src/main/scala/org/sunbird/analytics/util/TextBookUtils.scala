@@ -66,7 +66,7 @@ object TextBookUtils {
     val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
     val etbreport = if(etbDialCodeReport.nonEmpty) etbDialCodeReport.head else List()
     val dialcodeScans = reportTuple.map(f => f._5).filter(f=>f.nonEmpty) ++ reportTuple.map(f => f._6).filter(f=>f.nonEmpty)
-    val scans = if(dialcodeScans.nonEmpty) dialcodeScans.head else List()
+    val scans = dialcodeScans.map(f => f.head)
     val dialcodeReport = dcereport ++ etbreport
 
     generateWeeklyScanReport(config, scans)
