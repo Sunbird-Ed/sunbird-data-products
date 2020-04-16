@@ -68,7 +68,6 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"dims": ["identifier", "channel", "name"],
                     |			"fileParameters": ["id", "dims"]
                     |		}],
-                    |  "mergeConfig": {"frequency": "WEEK","basePath": "","rollup": 0,"reportPath": "dialcode_counts.csv"}
                     |	},
                     | "dialcodeConfig":{
                     | "reportConfig": {
@@ -80,7 +79,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"dims": ["identifier", "channel", "name"],
                     |			"fileParameters": ["id", "dims"]
                     |		}],
-                    |  "mergeConfig": {"frequency": "WEEK","basePath": "","rollup": 1,"reportPath": "dialcode_counts.csv","rollupAge": "ACADEMIC_YEAR","rollupCol":"Date","rollupRange":1}
+                    |
                     | },
                     |  "folderPrefix": ["slug","reportName"]
                     | },
