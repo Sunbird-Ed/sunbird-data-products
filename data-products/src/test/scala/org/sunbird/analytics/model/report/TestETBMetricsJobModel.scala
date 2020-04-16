@@ -69,8 +69,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"fileParameters": ["id", "dims"]
                     |		}]
                     |	},
-                    | "dialcodeConfig":{
-                    | "reportConfig": {
+                    | "dialcodeReportConfig":{
                     | "id": "etb_metrics",
                     |    "metrics" : [],
                     |		"labels": {},
@@ -79,7 +78,6 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"dims": ["identifier", "channel", "name"],
                     |			"fileParameters": ["id", "dims"]
                     |		}]
-                    | }
                     | },
                     | "etbFileConfig": {
                     | "bucket": "test-container",
