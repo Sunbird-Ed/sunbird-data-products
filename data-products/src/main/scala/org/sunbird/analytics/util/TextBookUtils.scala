@@ -79,8 +79,7 @@ object TextBookUtils {
 
     val configMap = config("dialcodeConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap("reportConfig")))
-    val scansD = List(WeeklyDialCodeScans("2020-01-21","OPJFHJS",10.0,"15-04-2020","dialcode_counts"),WeeklyDialCodeScans("2020-03-21","BEEHGRW",9.0,"15-04-2020","dialcode_counts"))
-    val scansDf = sc.parallelize(scansD).toDF()
+    val scansDf = sc.parallelize(dialcodeScans).toDF()
 
     reportConfig.output.map { f =>
       CourseUtils.postDataToBlob(scansDf,f,configMap)
@@ -205,15 +204,13 @@ object TextBookUtils {
 
   def getDialcodeScans(dialcode: String)(implicit sc: SparkContext, fc: FrameworkContext): List[WeeklyDialCodeScans] = {
     val result= if(dialcode.nonEmpty) {
-      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-events","intervals": "2020-01-15T00:00:00+00:00/2020-04-15T00:00:00+00:00","aggregations": [{"name": "scans","type": "count"}],"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}],"filters": [{"type": "equals","dimension": "eid","value": "SEARCH"},{"type":"equals","dimension":"object_id","value":"$dialcode"},{"type":"in","dimension":"object_type","values":["DialCode","dialcode","qr","Qr"]}],"postAggregation": [],"descending": "false"}""".stripMargin
-//      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-rollup-syncts","intervals": "Last7Days","aggregations": [{"name": "scans","type": "count"}],"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}],"filters": [{"type": "equals","dimension": "eid","value": "SEARCH"},{"type":"equals","dimension":"object_id","value":"$dialcode"},{"type":"in","dimension":"object_type","values":["DialCode","dialcode","qr","Qr"]}],"postAggregation": [],"descending": "false"}""".stripMargin
+      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-rollup-syncts","intervals": "Last7Days","aggregations": [{"name": "scans","type": "count"}],"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}],"filters": [{"type": "equals","dimension": "eid","value": "SEARCH"},{"type":"equals","dimension":"object_id","value":"$dialcode"},{"type":"in","dimension":"object_type","values":["DialCode","dialcode","qr","Qr"]}],"postAggregation": [],"descending": "false"}""".stripMargin
       val druidQuery = JSONUtils.deserialize[DruidQueryModel](query)
       val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
-      val date = (new SimpleDateFormat("dd-MM-yyyy")).format(Calendar.getInstance().getTime)
 
       druidResponse.map(f => {
         val report = JSONUtils.deserialize[DialcodeScans](f)
-        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,date,"dialcode_counts")
+        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,"dialcode_scans","dialcode_counts")
       })
     } else List[WeeklyDialCodeScans]()
     result
