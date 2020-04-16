@@ -82,7 +82,7 @@ class ReportMerger:
             os.makedirs(self.base_path.joinpath(delta_path).parent, exist_ok=True)
 
             download_file_from_store(
-                container_name='telemetry-data-store',
+                container_name=self.report_config['container'],
                 blob_name=delta_path,
                 file_path=str(self.base_path.joinpath(delta_path))
                 )
