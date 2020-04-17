@@ -36,7 +36,6 @@ class DruidJobSubmitter:
 
     def deactivate_job(self,report_id):
         url = ("{}report/jobs/deactivate/"+report_id).format(self.report_search_base_url)
-        print(url)
         headers = {
             'cache-control': "no-cache",
             'Authorization': "Bearer " + self.auth_token
