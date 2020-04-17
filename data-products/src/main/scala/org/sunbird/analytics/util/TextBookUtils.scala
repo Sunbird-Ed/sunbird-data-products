@@ -83,7 +83,7 @@ object TextBookUtils {
     val scansDf = sc.parallelize(dialcodeScans).toDF()
 
     reportConfig.output.map { f =>
-      CourseUtils.postDataToBlob(scansDf,f,config)
+      CourseUtils.postDataToBlob(scansDf,f,conf)
     }
   }
 

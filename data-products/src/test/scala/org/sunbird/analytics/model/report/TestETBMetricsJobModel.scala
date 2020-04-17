@@ -161,6 +161,9 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
+    val dialcodeScans = TextBookUtils.getDialcodeScans("BSD1AV")
+    dialcodeScans.head should be(WeeklyDialCodeScans("2020-01-23","BSD1AV",2.0,"dialcode_scans","dialcode_counts"))
+
     val resultRDD = ETBMetricsModel.execute(sc.emptyRDD, Option(jobConfig))
 
   }
