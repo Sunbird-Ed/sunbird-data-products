@@ -57,9 +57,8 @@ class DruidJobSubmitter:
         elif reportSchedule == 'WEEKLY' :
           if date.today().weekday() == 0:
             return True
-        elif reportSchedule == 'MONTHLY' :
-          first_day = date.today().replace(day = 1)  
-          if date.today() == first_day :
+        elif reportSchedule == 'MONTHLY' : 
+          if date.today().day == 1 :
             return True
         elif reportSchedule == 'ONCE' :
             self.deactivate_job(report_id)
