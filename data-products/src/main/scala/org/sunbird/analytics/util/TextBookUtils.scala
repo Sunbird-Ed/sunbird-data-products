@@ -53,12 +53,11 @@ object TextBookUtils {
         val dceDialcodeReport = dceDialcode._1
         val etbDialcode = generateETBDialcodeReport(data)
         val etbDialcodeReport = etbDialcode._1
-        val dialcodeScans = dceDialcode._2 ++ etbDialcode._2
         val etbReport = generateETBTextbookReport(data)
         val dceReport = generateDCETextbookReport(data)
-        (etbReport, dceReport, dceDialcodeReport, etbDialcodeReport, dialcodeScans)
+        (etbReport, dceReport, dceDialcodeReport, etbDialcodeReport, dceDialcode._2,etbDialcode._2)
        }
-       else (List(),List(),List(),List(),List())
+       else (List(),List(),List(),List(),List(),List())
     } yield tupleData
     val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
     val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
@@ -66,10 +65,11 @@ object TextBookUtils {
     val dcereport = if(dceDialCodeReport.nonEmpty) dceDialCodeReport.head else List()
     val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
     val etbreport = if(etbDialCodeReport.nonEmpty) etbDialCodeReport.head else List()
-    val dialcodeScans = reportTuple.map(f => f._5).head
+    val dialcodeScans = reportTuple.map(f => f._5).filter(f=>f.nonEmpty) ++ reportTuple.map(f => f._6).filter(f=>f.nonEmpty)
+    val scans = dialcodeScans.map(f => f.head)
     val dialcodeReport = dcereport ++ etbreport
 
-    generateWeeklyScanReport(config, dialcodeScans)
+    generateWeeklyScanReport(config, scans)
     generateTextBookReport(sc.parallelize(etbTextBookReport), sc.parallelize(dceTextBookReport), sc.parallelize(dialcodeReport), tenantInfo)
   }
 
@@ -77,12 +77,13 @@ object TextBookUtils {
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
-    val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
+    val configMap = config("dialcodeReportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
+    val conf = Map("reportConfig"-> configMap,"store"->config("store"),"folderPrefix"->config("folderPrefix"),"filePath"->config("filePath"),"container"->config("container"),"format"->config("format"),"key"->config("key"))
     val scansDf = sc.parallelize(dialcodeScans).toDF()
 
     reportConfig.output.map { f =>
-      CourseUtils.postDataToBlob(scansDf,f,config)
+      CourseUtils.postDataToBlob(scansDf,f,conf)
     }
   }
 
@@ -204,14 +205,13 @@ object TextBookUtils {
 
   def getDialcodeScans(dialcode: String)(implicit sc: SparkContext, fc: FrameworkContext): List[WeeklyDialCodeScans] = {
     val result= if(dialcode.nonEmpty) {
-      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-events","intervals": "Last7Days","aggregations": [{"type": "count","name": "scans"}],"granularity": "all","postAggregations": [],"filter": {"type": "and","fields": [{"type": "selector","dimension": "object_id","value": "$dialcode"},{"type": "selector","dimension": "eid","value": "SEARCH"}]},"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}]}""".stripMargin
+      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-rollup-syncts","intervals": "Last7Days","aggregations": [{"name": "scans","type": "count"}],"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}],"filters": [{"type": "equals","dimension": "eid","value": "SEARCH"},{"type":"equals","dimension":"object_id","value":"$dialcode"},{"type":"in","dimension":"object_type","values":["DialCode","dialcode","qr","Qr"]}],"postAggregation": [],"descending": "false"}""".stripMargin
       val druidQuery = JSONUtils.deserialize[DruidQueryModel](query)
       val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
-      val date = (new SimpleDateFormat("dd-MM-yyyy")).format(Calendar.getInstance().getTime)
 
       druidResponse.map(f => {
         val report = JSONUtils.deserialize[DialcodeScans](f)
-        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,date,"weekly_dialcode_counts")
+        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,"dialcode_scans","dialcode_counts")
       })
     } else List[WeeklyDialCodeScans]()
     result
@@ -229,8 +229,8 @@ object TextBookUtils {
           if(null != parsedData.dialcodes) { dialcodes = parsedData.dialcodes(0) :: dialcodes }
           levelNames = parsedData.name :: levelNames
         }
-        if(parsedData.children.size==0) { break }
-        else { parsedData = parsedData.children.get(parsedData.children.size-1) }
+        if(parsedData.children.getOrElse(List()).nonEmpty) { parsedData = parsedData.children.get(parsedData.children.size-1) }
+        else { break() }
         levelCount = levelCount-1
       }
     }

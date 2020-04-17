@@ -69,6 +69,16 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |			"fileParameters": ["id", "dims"]
                     |		}]
                     |	},
+                    | "dialcodeReportConfig":{
+                    | "id": "etb_metrics",
+                    |    "metrics" : [],
+                    |		"labels": {},
+                    |  "output": [{
+                    |			"type": "csv",
+                    |			"dims": ["identifier", "channel", "name"],
+                    |			"fileParameters": ["id", "dims"]
+                    |		}]
+                    | },
                     | "etbFileConfig": {
                     | "bucket": "test-container",
                     | "file": "druid-reports/etb_metrics/dialcode_counts.csv",
@@ -150,6 +160,9 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     val mockDruidClient = mock[DruidClient]
     (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
+    val dialcodeScans = TextBookUtils.getDialcodeScans("BSD1AV")
+    dialcodeScans.head should be(WeeklyDialCodeScans("2020-01-23","BSD1AV",2.0,"dialcode_scans","dialcode_counts"))
 
     val resultRDD = ETBMetricsModel.execute(sc.emptyRDD, Option(jobConfig))
 
