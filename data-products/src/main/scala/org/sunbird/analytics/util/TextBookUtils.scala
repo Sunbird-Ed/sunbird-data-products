@@ -35,12 +35,13 @@ object TBConstants {
 
 trait TextBookReport {
   def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo]
+  def getContentDataList(tenantId: String, unirest: UnirestClient)(implicit sc: SparkContext): TextbookResult
 }
 
 object TextBookUtils {
 
   def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo] = {
-    val apiURL = Constants.COMPOSITE_SEARCH_PATH + AppConf.getConfig("service.search.path")
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(config.get("esConfig").get)
     val response = restUtil.post[TextBookDetails](apiURL, request)
     if(null != response && "successful".equals(response.params.status) && response.result.count>0) response.result.content else List()

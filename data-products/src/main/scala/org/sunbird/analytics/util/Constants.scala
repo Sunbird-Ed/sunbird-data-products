@@ -31,8 +31,7 @@ object Constants {
     val DEFAULT_APP_ID = "EkstepPortal";
 
     val LP_URL = AppConf.getConfig("lp.url")
-    val COMPOSITE_SEARCH_PATH = s"http://${AppConf.getConfig("private_ingressgateway_ip")}/search"
-    val SEARCH_SERVICE_URL = AppConf.getConfig("service.search.url")
+    val SEARCH_SERVICE_URL = s"http://${AppConf.getConfig("private_ingressgateway_ip")}/search"
     val COMPOSITE_SEARCH_URL = s"$SEARCH_SERVICE_URL" + AppConf.getConfig("service.search.path")
     val ORG_SEARCH_URL: String = AppConf.getConfig("org.search.api.url") + AppConf.getConfig("org.search.api.path")
     val ORG_SEARCH_API_KEY: String = AppConf.getConfig("org.search.api.key")

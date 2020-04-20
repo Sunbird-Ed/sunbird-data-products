@@ -2,6 +2,7 @@ package org.sunbird.analytics.model.report
 
 import java.util
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
@@ -12,6 +13,8 @@ import org.sunbird.cloud.storage.BaseStorageService
 import scala.io.Source
 
 class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
+
+  implicit val mockTextBookReport: TextBookReport = mock[TextBookReport]
 
   var spark: SparkSession = _
 
@@ -63,6 +66,11 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
       .returns(userdata).anyNumberOfTimes()
 
     //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
+    val textbookData = JSONUtils.deserialize[ContentInformation](Source.fromInputStream
+    (getClass.getResourceAsStream("/textbook-report/contentSearchResponse.json")).getLines().mkString)
+
+    (mockTextBookReport.getContentDataList(_: String,_: UnirestClient)(_: SparkContext)).expects(*,*,*).returns(textbookData.result).anyNumberOfTimes()
+
     the[Exception] thrownBy {
       TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
     } should have message "Merge report script failed with exit code 127"
