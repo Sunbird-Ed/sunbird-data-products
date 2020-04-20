@@ -1,6 +1,7 @@
 package org.sunbird.analytics.model.report
 
 import java.time.{ZoneOffset, ZonedDateTime}
+
 import cats.syntax.either._
 import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResult, QueryType}
 import ing.wbaa.druid.client.DruidClient
@@ -8,10 +9,9 @@ import io.circe.Json
 import io.circe.parser.parse
 import org.apache.spark.sql.SQLContext
 import org.ekstep.analytics.framework.FrameworkContext
-import org.sunbird.analytics.util.SparkSpec
+import org.sunbird.analytics.util.{SparkSpec, TextBookReport, TextBookUtils}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
-import org.sunbird.analytics.util.TextBookUtils
 import org.sunbird.analytics.model.report.ETBMetricsModel
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, RestUtil}
 import org.sunbird.cloud.storage.BaseStorageService
@@ -20,6 +20,8 @@ import scala.concurrent.Future
 import scala.io.Source
 
 class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
+
+  implicit val mockTextBookReport: TextBookReport = mock[TextBookReport]
 
   override def beforeAll() = {
     super.beforeAll()
@@ -111,13 +113,8 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     //Mock for composite search
     val textBookData = JSONUtils.deserialize[TextBookDetails](Source.fromInputStream
     (getClass.getResourceAsStream("/reports/textbookDetails.json")).getLines().mkString)
-    val request = s"""{"request":{"filters":{"contentType":["Textbook"],"identifier":["do_112965420289744896148","KP_FT_1582141279539","do_11298391390121984011","do_11298386993685299212","do_112976283013464064115","do_112984096876756992153","do_11298420612304896011"],"status":["Live","Review","Draft"]},"sort_by":{"createdOn":"desc"},"limit":10}}""".stripMargin
 
-    (mockRestUtil.post[TextBookDetails](_: String, _: String, _: Option[Map[String,String]])(_: Manifest[TextBookDetails]))
-      .expects("https://dev.sunbirded.org/action/composite/v3/search", v2 = request, None,*)
-      .returns(textBookData)
-
-    val res = TextBookUtils.getTextBooks(jobConfig,mockRestUtil)
+    (mockTextBookReport.getTextBooks(_: Map[String, AnyRef],_: HTTPClient)).expects(jobConfig, *).returns(textBookData.result.content).anyNumberOfTimes()
 
     //Mock for Tenant Info
     val tenantInfo = JSONUtils.deserialize[TenantResponse](Source.fromInputStream

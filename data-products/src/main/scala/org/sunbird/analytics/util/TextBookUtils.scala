@@ -33,10 +33,14 @@ object TBConstants {
   val textbookunit = "TextBookUnit"
 }
 
+trait TextBookReport {
+  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo]
+}
+
 object TextBookUtils {
 
   def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo] = {
-    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val apiURL = Constants.COMPOSITE_SEARCH_PATH + AppConf.getConfig("service.search.path")
     val request = JSONUtils.serialize(config.get("esConfig").get)
     val response = restUtil.post[TextBookDetails](apiURL, request)
     if(null != response && "successful".equals(response.params.status) && response.result.count>0) response.result.content else List()
