@@ -238,15 +238,12 @@ object TextBookUtils {
   }
 
   def generateDCETextbookReport(response: ContentInfo): List[DCETextbookData] = {
-    var index=0
     var dceReport = List[DCETextbookData]()
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
-      val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
-      index = index+1
-      val dceTextbook = parseDCETextbook(response.children.get,term,0,0,0,0,0)
-      val totalQRCodes = dceTextbook._2
-      val qrLinked = dceTextbook._3
+      val dceTextbook = parseDCETextbook(response.children.get,0,0,0,0,0,0,lengthOfChapters)
+      val totalQRCodes = dceTextbook._2+1
+      val qrLinked = dceTextbook._3+1
       val qrNotLinked = dceTextbook._4
       val term1NotLinked = dceTextbook._5
       val term2NotLinked = dceTextbook._6
@@ -261,25 +258,28 @@ object TextBookUtils {
     dceReport
   }
 
-  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int): (Int, Int, Int, Int, Int, Int) = {
+  def parseDCETextbook(data: List[ContentInfo], index: Int, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int,lengthOfChapters:Int): (Int, Int, Int, Int, Int, Int) = {
     var counterValue=counter
     var counterQrLinked = linkedQr
     var counterNotLinked = qrNotLinked
     var term1NotLinked = counterT1
     var term2NotLinked = counterT2
     var tempValue = 0
+    var indexValue = index
     data.map(units => {
       if(null != units.dialcodes){
         counterValue=counterValue+1
         if(null != units.leafNodesCount && units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
         else {
           counterNotLinked=counterNotLinked+1
+          val term = if(indexValue<=lengthOfChapters/2) "T1"  else "T2"
           if("T1".equals(term)) { term1NotLinked=term1NotLinked+1 }
           else { term2NotLinked = term2NotLinked+1 }
         }
       }
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
-        val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),term,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
+        val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),index,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked,lengthOfChapters)
+        indexValue = indexValue+1
         tempValue = output._1
         counterQrLinked = output._3
         counterNotLinked = output._4
@@ -294,7 +294,7 @@ object TextBookUtils {
     var textBookReport = List[ETBTextbookData]()
     if(null != response && response.children.isDefined) {
       val etbTextbook = parseETBTextbook(response.children.get,response,0,0,0,0)
-      val qrLinkedContent = etbTextbook._1
+      val qrLinkedContent = etbTextbook._1+1
       val qrNotLinked = etbTextbook._2
       val leafNodeswithoutContent = etbTextbook._3
       val totalLeafNodes = etbTextbook._4
@@ -315,13 +315,13 @@ object TextBookUtils {
     var leafNodeswithoutContent = leafNodesContent
     var totalLeafNodes = leafNodesCount
     data.map(units => {
-      if(units.children.isEmpty){ totalLeafNodes=totalLeafNodes+1 }
-      if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
       if(null != units.dialcodes){
         if(null != units.leafNodesCount && units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
         else { contentNotLinked=contentNotLinked+1 }
       }
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
+        if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
+        if(null != units.dialcodes){ totalLeafNodes=totalLeafNodes+1 }
         val output = parseETBTextbook(units.children.getOrElse(List[ContentInfo]()),response,qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
         qrLinkedContent = output._1
         contentNotLinked = output._2
