@@ -62,11 +62,11 @@ object TextBookUtils {
     val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
     val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
     val dceDialCodeReport = reportTuple.map(f => f._3).filter(f => f.nonEmpty)
-    val dcereport = if(dceDialCodeReport.nonEmpty) dceDialCodeReport.head else List()
+    val dcereport = dceDialCodeReport.flatten
     val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
     val etbreport = if(etbDialCodeReport.nonEmpty) etbDialCodeReport.head else List()
     val dialcodeScans = reportTuple.map(f => f._5).filter(f=>f.nonEmpty) ++ reportTuple.map(f => f._6).filter(f=>f.nonEmpty)
-    val scans = dialcodeScans.map(f => f.head)
+    val scans = dialcodeScans.flatten
     val dialcodeReport = dcereport ++ etbreport
 
     generateWeeklyScanReport(config, scans)
@@ -172,6 +172,15 @@ object TextBookUtils {
       response.children.get.map(chapters => {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
+        if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
+          val textbookInfo = getTextBookInfo(List(chapters))
+          val levelNames = textbookInfo._1
+          val dialcodes = textbookInfo._2.lift(0).getOrElse("")
+          val scans = getDialcodeScans(dialcodes)
+          weeklyDialcodes = scans ++ weeklyDialcodes
+          val chapterReport = DialcodeExceptionData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,"","",0,0,term,"DCE_dialcode_data")
+          dialcodeReport = chapterReport :: dialcodeReport
+        }
         val report = parseDCEDialcode(chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
         dialcodeReport = (report._1 ++ dialcodeReport).reverse
         if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
