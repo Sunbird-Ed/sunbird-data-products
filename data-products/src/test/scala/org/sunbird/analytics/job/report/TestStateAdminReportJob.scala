@@ -48,13 +48,13 @@ class TestStateAdminReportJob extends BaseReportSpec with MockFactory {
     val districtName = apslug.select("districtName").collect().map(_ (0)).toList
     assert(districtName(0) === "GULBARGA")
     //checking reports were created under slug folder
-    val userDetail = new File("src/test/resources/admin-user-reports/user-detail/ApSlug.csv")
+    val userClaimedDetail = new File("src/test/resources/admin-user-reports/user-detail/CLAIMED/ApSlug.csv")
     val stateUserDetail = new File("src/test/resources/admin-user-reports/validated-user-detail-state/ApSlug.csv");
     val userSummary = new File("src/test/resources/admin-user-reports/user-summary/ApSlug.json")
     val validateUserDetail = new File("src/test/resources/admin-user-reports/validated-user-detail/ApSlug.csv")
     val validateUserSummary = new File("src/test/resources/admin-user-reports/validated-user-summary/ApSlug.json")
     val validateUserDstSummary = new File("src/test/resources/admin-user-reports/validated-user-summary-district/ApSlug.json");
-    assert(userDetail.exists() === true)
+    assert(userClaimedDetail.exists() === true)
     assert(userSummary.exists() === true)
     assert(validateUserDetail.exists() === true)
     assert(validateUserSummary.exists() === true)
