@@ -64,7 +64,7 @@ object TextBookUtils {
     val dceDialCodeReport = reportTuple.map(f => f._3).filter(f => f.nonEmpty)
     val dcereport = dceDialCodeReport.flatten
     val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
-    val etbreport = if(etbDialCodeReport.nonEmpty) etbDialCodeReport.head else List()
+    val etbreport = etbDialCodeReport.flatten
     val dialcodeScans = reportTuple.map(f => f._5).filter(f=>f.nonEmpty) ++ reportTuple.map(f => f._6).filter(f=>f.nonEmpty)
     val scans = dialcodeScans.flatten
     val dialcodeReport = dcereport ++ etbreport
@@ -153,7 +153,7 @@ object TextBookUtils {
           dialcode = dialcodeInfo
           val noOfContents = units.leafNodesCount
           val dialcodes = units.dialcodes
-          val nodeType = if(null != noOfContents && noOfContents==0) "Leaf Node" else if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else "QR Linked"
+          val nodeType = if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else if(null != noOfContents && noOfContents!=0 && null != dialcodes && dialcodes.nonEmpty) "QR Linked" else "Leaf Node"
           val report = DialcodeExceptionData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel), getString(response.subject),response.name,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),levelNames.lift(4).getOrElse(""), dialcodeInfo,response.status,nodeType,noOfContents,0,"","ETB_dialcode_data")
           etbDialcode = report :: etbDialcode
       }
