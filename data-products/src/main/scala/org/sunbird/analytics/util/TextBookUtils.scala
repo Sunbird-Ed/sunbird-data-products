@@ -178,7 +178,7 @@ object TextBookUtils {
           val dialcodes = textbookInfo._2.lift(0).getOrElse("")
           val scans = getDialcodeScans(dialcodes)
           weeklyDialcodes = scans ++ weeklyDialcodes
-          val chapterReport = DialcodeExceptionData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,"","",0,0,term,"DCE_dialcode_data")
+          val chapterReport = DialcodeExceptionData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,"","","","",dialcodes,"","",0,0,term,"DCE_dialcode_data")
           dialcodeReport = chapterReport :: dialcodeReport
         }
         val report = parseDCEDialcode(chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
