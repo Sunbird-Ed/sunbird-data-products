@@ -81,7 +81,7 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
     sqlContext.sparkSession.read.format("org.elasticsearch.spark.sql")
       .option("query", request)
       .option("pushdown", "true")
-      .option("es.nodes", AppConf.getConfig("es.composite.host"))
+      .option("es.nodes", AppConf.getConfig("es.host"))
       .option("es.port", AppConf.getConfig("es.port"))
       .option("es.scroll.size", AppConf.getConfig("es.scroll.size"))
       .option("inferSchema", "true")
