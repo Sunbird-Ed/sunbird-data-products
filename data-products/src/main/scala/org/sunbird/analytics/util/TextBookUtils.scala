@@ -174,7 +174,6 @@ object TextBookUtils {
         index = index+1
         if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
           val textbookInfo = getTextBookInfo(List(chapters))
-          val levelNames = textbookInfo._1
           val dialcodes = textbookInfo._2.lift(0).getOrElse("")
           val scans = getDialcodeScans(dialcodes)
           weeklyDialcodes = scans ++ weeklyDialcodes
