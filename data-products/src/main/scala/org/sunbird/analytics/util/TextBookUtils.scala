@@ -62,11 +62,11 @@ object TextBookUtils {
     val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
     val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
     val dceDialCodeReport = reportTuple.map(f => f._3).filter(f => f.nonEmpty)
-    val dcereport = if(dceDialCodeReport.nonEmpty) dceDialCodeReport.head else List()
+    val dcereport = dceDialCodeReport.flatten
     val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
-    val etbreport = if(etbDialCodeReport.nonEmpty) etbDialCodeReport.head else List()
+    val etbreport = etbDialCodeReport.flatten
     val dialcodeScans = reportTuple.map(f => f._5).filter(f=>f.nonEmpty) ++ reportTuple.map(f => f._6).filter(f=>f.nonEmpty)
-    val scans = dialcodeScans.map(f => f.head)
+    val scans = dialcodeScans.flatten
     val dialcodeReport = dcereport ++ etbreport
 
     generateWeeklyScanReport(config, scans)
@@ -153,7 +153,7 @@ object TextBookUtils {
           dialcode = dialcodeInfo
           val noOfContents = units.leafNodesCount
           val dialcodes = units.dialcodes
-          val nodeType = if(null != noOfContents && noOfContents==0) "Leaf Node" else if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else "QR Linked"
+          val nodeType = if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else if(null != noOfContents && noOfContents!=0 && null != dialcodes && dialcodes.nonEmpty) "QR Linked" else "Leaf Node"
           val report = DialcodeExceptionData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel), getString(response.subject),response.name,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),levelNames.lift(4).getOrElse(""), dialcodeInfo,response.status,nodeType,noOfContents,0,"","ETB_dialcode_data")
           etbDialcode = report :: etbDialcode
       }
@@ -172,6 +172,15 @@ object TextBookUtils {
       response.children.get.map(chapters => {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
+        if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
+          val textbookInfo = getTextBookInfo(List(chapters))
+          val levelNames = textbookInfo._1
+          val dialcodes = textbookInfo._2.lift(0).getOrElse("")
+          val scans = getDialcodeScans(dialcodes)
+          weeklyDialcodes = scans ++ weeklyDialcodes
+          val chapterReport = DialcodeExceptionData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,"","",0,0,term,"DCE_dialcode_data")
+          dialcodeReport = chapterReport :: dialcodeReport
+        }
         val report = parseDCEDialcode(chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
         dialcodeReport = (report._1 ++ dialcodeReport).reverse
         if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
@@ -238,15 +247,12 @@ object TextBookUtils {
   }
 
   def generateDCETextbookReport(response: ContentInfo): List[DCETextbookData] = {
-    var index=0
     var dceReport = List[DCETextbookData]()
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
-      val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
-      index = index+1
-      val dceTextbook = parseDCETextbook(response.children.get,term,0,0,0,0,0)
-      val totalQRCodes = dceTextbook._2
-      val qrLinked = dceTextbook._3
+      val dceTextbook = parseDCETextbook(response.children.get,0,0,0,0,0,0,lengthOfChapters)
+      val totalQRCodes = dceTextbook._2+1
+      val qrLinked = dceTextbook._3+1
       val qrNotLinked = dceTextbook._4
       val term1NotLinked = dceTextbook._5
       val term2NotLinked = dceTextbook._6
@@ -261,25 +267,28 @@ object TextBookUtils {
     dceReport
   }
 
-  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int): (Int, Int, Int, Int, Int, Int) = {
+  def parseDCETextbook(data: List[ContentInfo], index: Int, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int,lengthOfChapters:Int): (Int, Int, Int, Int, Int, Int) = {
     var counterValue=counter
     var counterQrLinked = linkedQr
     var counterNotLinked = qrNotLinked
     var term1NotLinked = counterT1
     var term2NotLinked = counterT2
     var tempValue = 0
+    var indexValue = index
     data.map(units => {
       if(null != units.dialcodes){
         counterValue=counterValue+1
         if(null != units.leafNodesCount && units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
         else {
           counterNotLinked=counterNotLinked+1
+          val term = if(indexValue<=lengthOfChapters/2) "T1"  else "T2"
           if("T1".equals(term)) { term1NotLinked=term1NotLinked+1 }
           else { term2NotLinked = term2NotLinked+1 }
         }
       }
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
-        val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),term,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
+        val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),index,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked,lengthOfChapters)
+        indexValue = indexValue+1
         tempValue = output._1
         counterQrLinked = output._3
         counterNotLinked = output._4
@@ -294,7 +303,7 @@ object TextBookUtils {
     var textBookReport = List[ETBTextbookData]()
     if(null != response && response.children.isDefined) {
       val etbTextbook = parseETBTextbook(response.children.get,response,0,0,0,0)
-      val qrLinkedContent = etbTextbook._1
+      val qrLinkedContent = etbTextbook._1+1
       val qrNotLinked = etbTextbook._2
       val leafNodeswithoutContent = etbTextbook._3
       val totalLeafNodes = etbTextbook._4
@@ -315,13 +324,13 @@ object TextBookUtils {
     var leafNodeswithoutContent = leafNodesContent
     var totalLeafNodes = leafNodesCount
     data.map(units => {
-      if(units.children.isEmpty){ totalLeafNodes=totalLeafNodes+1 }
-      if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
       if(null != units.dialcodes){
         if(null != units.leafNodesCount && units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
         else { contentNotLinked=contentNotLinked+1 }
       }
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
+        if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
+        if(null != units.dialcodes){ totalLeafNodes=totalLeafNodes+1 }
         val output = parseETBTextbook(units.children.getOrElse(List[ContentInfo]()),response,qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
         qrLinkedContent = output._1
         contentNotLinked = output._2
