@@ -53,13 +53,13 @@ class DruidJobSubmitter:
 
     def check_schedule(self, reportSchedule,report_id):
         if reportSchedule == 'DAILY' :
-          return True
+            return True
         elif reportSchedule == 'WEEKLY' :
-          if date.today().weekday() == 0:
-            return True
-        elif reportSchedule == 'MONTHLY' : 
-          if date.today().day == 1 :
-            return True
+            if date.today().weekday() == 0:
+                return True
+        elif reportSchedule == 'MONTHLY' :
+            if date.today().day == 1 :
+                return True
         elif reportSchedule == 'ONCE' :
             self.deactivate_job(report_id)
             return True
@@ -81,7 +81,7 @@ class DruidJobSubmitter:
         print('Starting the job submitter...')
         reports = self.get_active_jobs()
         for report in reports:
-            if(self.check_schedule(report['reportSchedule'].upper(),report['reportId'])) :  
-              report_config = self.interpolate_config(report['config'])
-              self.submit_job(report_config)
+            if(self.check_schedule(report['reportSchedule'].upper(),report['reportId'])) :
+                report_config = self.interpolate_config(report['config'])
+                self.submit_job(report_config)
         print('Job submission completed...')

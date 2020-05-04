@@ -61,5 +61,4 @@ class TestStateAdminReportJob extends BaseReportSpec with MockFactory {
     assert(validateUserDstSummary.exists())
     assert(stateUserDetail.exists())
   }
-
 }
