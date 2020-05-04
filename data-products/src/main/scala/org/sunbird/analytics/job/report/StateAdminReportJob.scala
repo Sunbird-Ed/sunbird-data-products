@@ -185,7 +185,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
               col("claim_status").as("Claimed status"),
               col("createdon").as("Created on"),
               col("updatedon").as("Last updated on")).filter(col(colName ="shadow_user_status").
-            isin(lit(UnclaimedStatus.status),lit(ClaimedStatus.status),lit(RejectedStatus.status),lit(FailedStatus.status),lit(MultiMatchStatus.status))).filter(col(colName = "slug").isNotNull)
+            isin(lit(UnclaimedStatus.status),lit(ClaimedStatus.status),lit(Eligible.status),lit(RejectedStatus.status),lit(FailedStatus.status),lit(MultiMatchStatus.status))).filter(col(colName = "slug").isNotNull)
           .saveToBlobStore(storageConfig, "csv", "user-detail", Option(Map("header" -> "true")), Option(Seq("shadow_user_status","slug")))
           
         JobLogger.log(s"StateAdminReportJob: user-details report records count = ${userDetailReport.count()}", None, INFO)
@@ -211,18 +211,20 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             acc.withColumn(col, lit(0))
         })
         JobLogger.log(s"columns to add in this report $columns")
-
-        correctedReportDF.join(channelSlugDF, correctedReportDF.col("channel") === channelSlugDF.col("channel"), "left_outer").select(
+        val totalSummaryDF = correctedReportDF.join(channelSlugDF, correctedReportDF.col("channel") === channelSlugDF.col("channel"), "left_outer").select(
                 col("slug"),
                 when(col(UnclaimedStatus.status).isNull, 0).otherwise(col(UnclaimedStatus.status)).as("accounts_unclaimed"),
                 when(col(ClaimedStatus.status).isNull, 0).otherwise(col(ClaimedStatus.status)).as("accounts_validated"),
                 when(col(RejectedStatus.status).isNull, 0).otherwise(col(RejectedStatus.status)).as("accounts_rejected"),
+                when(col(Eligible.status).isNull, 0).otherwise(col(Eligible.status)).as("accounts_eligible"),
+                when(col(MultiMatchStatus.status).isNull, 0).otherwise(col(MultiMatchStatus.status)).as("accounts_duplicate"),
                 when(col(FailedStatus.status).isNull, 0).otherwise(col(FailedStatus.status)).as(FailedStatus.status),
-                when(col(MultiMatchStatus.status).isNull, 0).otherwise(col(MultiMatchStatus.status)).as(MultiMatchStatus.status),
                 when(col(OrgExtIdMismatch.status).isNull, 0).otherwise(col(OrgExtIdMismatch.status)).as(OrgExtIdMismatch.status))
-            .withColumn(
-                "accounts_failed",
-                col(FailedStatus.status) + col(MultiMatchStatus.status) + col(OrgExtIdMismatch.status)).filter(col(colName = "slug").isNotNull)
+        totalSummaryDF.withColumn(
+                "accounts_failed", col(FailedStatus.status) + col(OrgExtIdMismatch.status))
+            .withColumn("total", col("accounts_failed") + col("accounts_unclaimed") + col("accounts_validated") + col("accounts_rejected")
+            + col("accounts_eligible") + col("accounts_duplicate"))
+            .filter(col(colName = "slug").isNotNull)
             .saveToBlobStore(storageConfig, "json", "user-summary", None, Option(Seq("slug")))
         JobLogger.log(s"StateAdminReportJob: user-summary report records count = ${correctedReportDF.count()}", None, INFO)
     }
