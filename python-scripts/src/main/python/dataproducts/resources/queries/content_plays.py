@@ -2,7 +2,7 @@ def init():
     return """
     {
         "queryType": "groupBy",
-        "dataSource": "summary-rollup-syncts",
+        "dataSource": "summary-events",
         "granularity": "day",
         "intervals": "$start_date/$end_date",
         "dimensions": [
@@ -11,8 +11,11 @@ def init():
         ],
         "aggregations": [
             {
-                "fieldName": "total_count",
-                "type": "longSum",
+                "fieldName": "dimensions_sid",
+                "fieldNames": [
+                    "dimensions_sid"
+                ],
+                "type": "count",
                 "name": "Number of plays"
             },
             {

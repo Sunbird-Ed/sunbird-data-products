@@ -2,16 +2,15 @@ def init():
     return """
     {
         "queryType": "groupBy",
-        "dataSource": "telemetry-rollup-syncts",
+        "dataSource": "telemetry-events-syncts",
         "dimensions": [
             "dialcode_channel",
-            "object_id",
+            "edata_filters_dialcodes",
             "edata_size"
         ],
         "aggregations": [
             {
-                "type": "longSum",
-                "fieldName": "total_count",
+                "type": "count",
                 "name": "count"
             }
         ],
@@ -22,29 +21,12 @@ def init():
             "type": "and",
             "fields": [
                 {
-                    "type": "or",
-                    "fields": [
-                    {
+                    "type": "not",
+                    "field": {
                         "type": "selector",
-                        "dimension": "object_type",
-                        "value": "DialCode"
-                    },
-                    {
-                        "type": "selector",
-                        "dimension": "object_type",
-                        "value": "dialcode"
-                    },
-                    {
-                        "type": "selector",
-                        "dimension": "object_type",
-                        "value": "qr"
-                    },
-                    {
-                        "type": "selector",
-                        "dimension": "object_type",
-                        "value": "Qr"
+                        "dimension": "edata_filters_dialcodes",
+                        "value": null
                     }
-                    ]
                 },
                 {
                     "type": "selector",

@@ -4,7 +4,7 @@ def init():
         "queryType": "groupBy",
         "dataSource": {
             "type": "table",
-            "name": "summary-rollup-syncts"
+            "name": "summary-events"
         },
         "intervals": {
             "type": "intervals",
@@ -60,8 +60,7 @@ def init():
         ],
         "aggregations": [
             {
-                "type": "longSum",
-                "fieldName": "total_count",
+                "type": "count",
                 "name": "Number of Content Plays"
             }
         ],

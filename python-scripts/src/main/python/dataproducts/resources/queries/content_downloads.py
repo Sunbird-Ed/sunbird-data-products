@@ -8,8 +8,7 @@ def init():
         ],
         "aggregations": [
             {
-                "type": "longSum",
-                "fieldName": "total_count",
+                "type": "count",
                 "name": "count"
             }
         ],
@@ -34,8 +33,8 @@ def init():
                 },
                 {
                     "type": "selector",
-                    "dimension": "edata_type",
-                    "value": "download"
+                    "dimension": "edata_subtype",
+                    "value": "ContentDownload-Success"
                 },
                 {
                     "type": "selector",

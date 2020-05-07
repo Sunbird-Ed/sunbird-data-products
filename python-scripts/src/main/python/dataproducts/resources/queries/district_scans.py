@@ -4,7 +4,7 @@ def init():
         "queryType": "groupBy",
         "dataSource": {
             "type": "table",
-            "name": "telemetry-rollup-syncts"
+            "name": "telemetry-events-syncts"
         },
         "intervals": {
             "type": "intervals",
@@ -22,29 +22,12 @@ def init():
                     "extractionFn": null
                 },
                 {
-                    "type": "or",
-                    "fields": [
-                    {
+                    "type": "not",
+                    "field": {
                         "type": "selector",
-                        "dimension": "object_type",
-                        "value": "DialCode"
-                    },
-                    {
-                        "type": "selector",
-                        "dimension": "object_type",
-                        "value": "dialcode"
-                    },
-                    {
-                        "type": "selector",
-                        "dimension": "object_type",
-                        "value": "qr"
-                    },
-                    {
-                        "type": "selector",
-                        "dimension": "object_type",
-                        "value": "Qr"
+                        "dimension": "edata_filters_dialcodes",
+                        "value": null
                     }
-                    ]
                 },
                 {
                     "type": "in",
@@ -82,8 +65,7 @@ def init():
         ],
         "aggregations": [
             {
-                "type": "longSum",
-                "fieldName": "total_count",
+                "type": "count",
                 "name": "Number of QR Scans"
             }
         ],
