@@ -94,7 +94,7 @@ object TextBookUtils {
     val etbTextBookRDD = etbTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       ETBTextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug, textbook._2._1.getOrElse(etb).identifier,
         textbook._2._1.getOrElse(etb).name,textbook._2._1.getOrElse(etb).medium,textbook._2._1.getOrElse(etb).gradeLevel,
-        textbook._2._1.getOrElse(etb).subject,textbook._2._1.getOrElse(etb).status,textbook._2._1.getOrElse(etb).createdOn,textbook._2._1.getOrElse(etb).lastUpdatedOn,
+        textbook._2._1.getOrElse(etb).subject,textbook._2._1.getOrElse(etb).status,formatDate(textbook._2._1.getOrElse(etb).createdOn),formatDate(textbook._2._1.getOrElse(etb).lastUpdatedOn),
         textbook._2._1.getOrElse(etb).totalContentLinked,textbook._2._1.getOrElse(etb).totalQRLinked,textbook._2._1.getOrElse(etb).totalQRNotLinked,
         textbook._2._1.getOrElse(etb).leafNodesCount,textbook._2._1.getOrElse(etb).leafNodeUnlinked,"ETB_textbook_data")
     })
@@ -103,7 +103,7 @@ object TextBookUtils {
     val dceTextBookRDD = dceTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       DCETextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dce).identifier,
         textbook._2._1.getOrElse(dce).name,textbook._2._1.getOrElse(dce).medium,textbook._2._1.getOrElse(dce).gradeLevel,textbook._2._1.getOrElse(dce).subject,
-        textbook._2._1.getOrElse(dce).createdOn,textbook._2._1.getOrElse(dce).lastUpdatedOn,textbook._2._1.getOrElse(dce).totalQRCodes,
+        formatDate(textbook._2._1.getOrElse(dce).createdOn),formatDate(textbook._2._1.getOrElse(dce).lastUpdatedOn),textbook._2._1.getOrElse(dce).totalQRCodes,
         textbook._2._1.getOrElse(dce).contentLinkedQR,textbook._2._1.getOrElse(dce).withoutContentQR,textbook._2._1.getOrElse(dce).withoutContentT1,
         textbook._2._1.getOrElse(dce).withoutContentT2,"DCE_textbook_data")
     })
@@ -371,6 +371,14 @@ object TextBookUtils {
     if (null != data) {
       if (data.isInstanceOf[String]) data.asInstanceOf[String]
       else data.asInstanceOf[List[String]].mkString(",")
+    } else ""
+  }
+
+  def formatDate(date: String): String = {
+    if(date.nonEmpty) {
+      val simple = new SimpleDateFormat("yyyy-mm-dd")
+      val formatedDate = new SimpleDateFormat("dd/mm/yyyy")
+      formatedDate.format(simple.parse(date))
     } else ""
   }
 }
