@@ -30,7 +30,7 @@ def init():
                 {
                     "type": "selector",
                     "dimension": "eid",
-                    "value": "SHARE_ITEM"
+                    "value": "INTERACT"
                 },
                 {
                     "type": "selector",
