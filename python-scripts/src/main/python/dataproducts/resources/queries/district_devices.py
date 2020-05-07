@@ -4,7 +4,7 @@ def init():
         "queryType": "groupBy",
         "dataSource": {
             "type": "table",
-            "name": "telemetry-events"
+            "name": "telemetry-events-syncts"
         },
         "intervals": {
             "type": "intervals",
