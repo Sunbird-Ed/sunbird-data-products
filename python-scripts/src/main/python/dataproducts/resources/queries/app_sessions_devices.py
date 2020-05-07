@@ -2,15 +2,12 @@ def init():
     return """
     {
         "queryType": "groupBy",
-        "dataSource": "summary-events",
+        "dataSource": "summary-rollup-syncts",
         "aggregations": [
             {
-                "fieldName": "dimensions_sid",
-                "fieldNames": [
-                    "dimensions_sid"
-                ],
-                "type": "count",
-                "name": "Total App Sessions"
+                "type": "longSum",
+                "name": "Total App Sessions",
+                "fieldName": "total_count"
             },
             {
                 "fieldName": "dimensions_did",

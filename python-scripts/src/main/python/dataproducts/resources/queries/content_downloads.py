@@ -2,13 +2,14 @@ def init():
     return """
     {
         "queryType": "groupBy",
-        "dataSource": "telemetry-events",
+        "dataSource": "telemetry-events-syncts",
         "dimensions": [
             "object_id"
         ],
         "aggregations": [
             {
-                "type": "count",
+                "type": "longSum",
+                "fieldName": "total_count",
                 "name": "count"
             }
         ],
@@ -29,12 +30,12 @@ def init():
                 {
                     "type": "selector",
                     "dimension": "eid",
-                    "value": "INTERACT"
+                    "value": "SHARE_ITEM"
                 },
                 {
                     "type": "selector",
-                    "dimension": "edata_subtype",
-                    "value": "ContentDownload-Success"
+                    "dimension": "edata_type",
+                    "value": "download"
                 },
                 {
                     "type": "selector",

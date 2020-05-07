@@ -2,7 +2,7 @@ def init():
     return """
     {
         "queryType": "groupBy",
-        "dataSource": "summary-events",
+        "dataSource": "summary-rollup-syncts",
         "dimensions": [
             "dimensions_pdata_id",
             "dimensions_did",
@@ -10,12 +10,9 @@ def init():
         ],
         "aggregations": [
             {
-                "fieldName": "dimensions_sid",
-                "fieldNames": [
-                    "dimensions_sid"
-                ],
-                "type": "count",
-                "name": "Total Content Plays"
+                "type": "longSum",
+                "name": "Total Content Plays",
+                "fieldName": "total_count"
             },
             {
                 "fieldName": "edata_time_spent",

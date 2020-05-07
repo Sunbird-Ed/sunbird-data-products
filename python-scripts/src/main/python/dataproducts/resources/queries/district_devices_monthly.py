@@ -4,7 +4,7 @@ def init():
         "queryType": "groupBy",
         "dataSource": {
             "type": "table",
-            "name": "telemetry-events"
+            "name": "summary-distinct-counts"
         },
         "intervals": {
             "type": "intervals",
@@ -17,7 +17,7 @@ def init():
             "fields": [
                 {
                     "type": "in",
-                    "dimension": "context_pdata_id",
+                    "dimension": "dimensions_pdata_id",
                     "values": [
                         "$app",
                         "$portal"
@@ -45,12 +45,11 @@ def init():
         ],
         "aggregations": [
             {
-                "fieldName": "context_did",
-                "fieldNames": [
-                    "context_did"
-                ],
-                "type": "cardinality",
-                "name": "Unique Devices"
+            "type": "HLLSketchMerge",
+            "name": "Unique Devices",
+            "fieldName": "unique_devices",
+            "lgK": "12",
+            "tgtHllType": "HLL_4"
             }
         ],
         "postAggregations": [],
