@@ -5,20 +5,24 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework._
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.model.ReportConfig
+import org.ekstep.analytics.util.Constants
 import org.sunbird.analytics.util.CourseUtils.loadData
 import org.sunbird.analytics.util.{CourseUtils, TextBookUtils, UnirestUtil}
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Tenant Information from cassandra
+case class TenantsResponse(result: TenantResults)
+case class TenantResults(response: ContentResults)
+case class ContentResults(count: Int, content: List[TenantInformation])
 case class TenantInformation(id: String, slug: String) extends AlgoInput
 
 //Textbook information from composite-search
 case class TBContentResult(channel: String, identifier: String, board: String, gradeLevel: List[String], medium: Object, subject: Object, status: String, creator: String, lastPublishedOn: String, lastSubmittedOn: String, createdFor: List[String], createdOn: String, contentType: String, mimeType: String, resourceType: Object, pkgVersion: Integer)
 
 //Aggregated Report for each tenant
-case class AggregatedReport(board: String, medium: String, gradeLevel: String, subject: String, resourceType: String, live: Integer, review: Integer, draft: Integer, unlisted: Integer, application_ecml: Integer, video_youtube: Integer, video_mp4: Integer, application_pdf: Integer, application_html: Integer, slug: String, reportName: String = "Aggregated Report")
+case class AggregatedReport(board: String, medium: String, gradeLevel: String, subject: String, resourceType: String, totalContent: Integer, live: Integer, review: Integer, draft: Integer, unlisted: Integer, application_ecml: Integer, video_youtube: Integer, video_mp4: Integer, application_pdf: Integer, application_html: Integer, slug: String, reportName: String = "Aggregated Report")
 
 //Live Report for each tenant
 case class TBReport(board: String, medium: String, gradeLevel: String, subject: String, identifier: String , resourceType: String, createdOn: String, pkgVersion: Option[Integer] = None, creator: String, lastPublishedOn: Option[String],status: Option[String] = None,pendingInCurrentStatus: Option[String] = None ,lastPublishDate: Option[String] = None, slug: String, reportName: String)
@@ -31,14 +35,19 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
 
   override def preProcess(events: RDD[Empty], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[TenantInformation] = {
     CommonUtil.setStorageConf(config.getOrElse("store", "local").toString, config.get("accountKey").asInstanceOf[Option[String]], config.get("accountSecret").asInstanceOf[Option[String]])
-    val readConsistencyLevel: String = AppConf.getConfig("assessment.metrics.cassandra.input.consistency")
-
-    val sparkConf = sc.getConf
-      .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
-      .set("spark.sql.caseSensitive", AppConf.getConfig(key = "spark.sql.caseSensitive"))
-    implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
-    val tenantEncoder = Encoders.product[TenantInformation]
-    CourseUtils.getTenantInfo(spark, loadData).as[TenantInformation](tenantEncoder).rdd
+    val url = Constants.ORG_SEARCH_URL
+    val tenantRequest = s"""{
+                           |    "params": { },
+                           |    "request":{
+                           |        "filters": {"isRootOrg": true},
+                           |        "offset": 0,
+                           |        "limit": 1000,
+                           |        "fields": ["id", "channel", "slug", "orgName"]
+                           |    }
+                           |}""".stripMargin
+    val result=RestUtil.post[TenantsResponse](url, tenantRequest)
+    val response=sc.parallelize(result.result.response.content)
+    response
   }
 
   override def algorithm(data: RDD[TenantInformation], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[Empty] = {
@@ -108,9 +117,10 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       }
       .filter(f => null != f.getOrElse("board", null) || null != f.getOrElse("medium", null)  || null != f.getOrElse("gradeLevel", null) || null != f.getOrElse("subject", null))
       .map { f =>
+        val totalContent = f.getOrElse("Live", 0).asInstanceOf[Integer]+f.getOrElse("Review", 0).asInstanceOf[Integer]+f.getOrElse("Draft", 0).asInstanceOf[Integer]
         AggregatedReport(f.getOrElse("board", "").asInstanceOf[String], getFieldList(f.getOrElse("medium", "").asInstanceOf[Object]),
           getFieldList(f.getOrElse("gradeLevel", List()).asInstanceOf[List[String]]), getFieldList(f.getOrElse("subject", "").asInstanceOf[Object]),
-          getFieldList(f.getOrElse("resourceType", "").asInstanceOf[Object]), f.getOrElse("Live", 0).asInstanceOf[Integer],
+          getFieldList(f.getOrElse("resourceType", "").asInstanceOf[Object]), totalContent, f.getOrElse("Live", 0).asInstanceOf[Integer],
           f.getOrElse("Review", 0).asInstanceOf[Integer], f.getOrElse("Draft", 0).asInstanceOf[Integer], f.getOrElse("Unlisted", 0).asInstanceOf[Integer],
           f.getOrElse("application/vnd.ekstep.ecml-archive", 0).asInstanceOf[Integer], f.getOrElse("video/x-youtube", 0).asInstanceOf[Integer],
           f.getOrElse("video/mp4", 0).asInstanceOf[Integer] + f.getOrElse("video/webm", 0).asInstanceOf[Integer],
