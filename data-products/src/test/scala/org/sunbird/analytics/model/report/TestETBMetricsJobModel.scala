@@ -29,11 +29,6 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     implicit val mockFc = mock[FrameworkContext]
     val mockRestUtil = mock[HTTPClient]
 
-    val mockStorageService = mock[BaseStorageService]
-    (mockFc.getStorageService(_: String)).expects("azure").returns(mockStorageService).anyNumberOfTimes();
-    (mockStorageService.upload (_: String, _: String, _: String, _: Option[Boolean], _: Option[Int], _: Option[Int], _: Option[Int])).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
-    (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
-
     val config = s"""{
                     |	"reportConfig": {
                     |		"id": "etb_metrics",
