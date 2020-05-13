@@ -93,25 +93,6 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
                     |}""".stripMargin
     val jobConfig = JSONUtils.deserialize[Map[String, AnyRef]](config)
 
-//    Mock for Tenant Info
-    val tenantInfo = JSONUtils.deserialize[TenantResponse](Source.fromInputStream
-    (getClass.getResourceAsStream("/reports/tenantInfo.json")).getLines().mkString)
-
-    val tenantRequest = """{
-                          |    "params": { },
-                          |    "request":{
-                          |        "filters": {"isRootOrg":"true"},
-                          |        "offset": 0,
-                          |        "limit": 1000,
-                          |        "fields": ["id", "channel", "slug", "orgName"]
-                          |    }
-                          |}""".stripMargin
-    (mockRestUtil.post[TenantResponse](_: String, _: String, _: Option[Map[String,String]])(_: Manifest[TenantResponse]))
-      .expects("https://dev.sunbirded.org/api/org/v1/search", v2 = tenantRequest, None,*)
-      .returns(tenantInfo)
-
-    val resp = ETBMetricsModel.getTenantInfo(jobConfig,mockRestUtil)
-
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
@@ -138,9 +119,6 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     val mockDruidClient = mock[DruidClient]
     (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
-
-    val dialcodeScans = TextBookUtils.getDialcodeScans("BSD1AV")
-    dialcodeScans.head should be(WeeklyDialCodeScans("2020-01-23","BSD1AV",2.0,"dialcode_scans","dialcode_counts"))
 
     val resultRDD = ETBMetricsModel.execute(sc.emptyRDD, Option(jobConfig))
 
