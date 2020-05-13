@@ -125,6 +125,10 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     val json: String =
       """
         |{
+        |    "identifier": "do_11298391390121984011",
+        |    "channel": "0124698765480987654",
+        |    "status": "Live",
+        |    "name": "Kayal_Book",
         |    "date": "2020-03-25",
         |    "dialcode": "BSD1AV",
         |    "scans": 2.0
