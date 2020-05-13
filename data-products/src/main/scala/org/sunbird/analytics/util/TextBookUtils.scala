@@ -39,7 +39,6 @@ object TextBookUtils {
     val request = JSONUtils.serialize(config.get("druidConfig").get)
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
     val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
-
     val result = druidResponse.map(f => {
       JSONUtils.deserialize[TextbookData](f)
     })
