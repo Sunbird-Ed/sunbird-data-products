@@ -42,7 +42,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     JobLogger.init("CourseMetricsJob")
     JobLogger.start("CourseMetrics Job Started executing", Option(Map("config" -> config, "model" -> name)))
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
-    JobContext.parallelization = 10
+    JobContext.parallelization = CommonUtil.getParallelization(jobConfig);
 
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig);
     implicit val frameworkContext = getReportingFrameworkContext();
@@ -76,11 +76,11 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): Array[Row] = {
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
     val timestamp = DateTime.now().minusDays(1).withTimeAtStartOfDay()
-    JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
+    //JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
     val activeBatches = courseBatchDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
     val activeBatchList = activeBatches.select("batchId", "startDate", "endDate").collect();
-    JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
+    //JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
     activeBatchList;
   }
 
@@ -101,11 +101,11 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userData = CommonUtil.time({
       getUserData(loadData)
     });
-    val activeBatchesCount = activeBatches.size;
+    //val activeBatchesCount = activeBatches.size;
 
-    metrics.put("userDFLoadTime", userData._1)
-    metrics.put("userDFRecordsCount", userData._2.count())
-    metrics.put("activeBatchesCount", activeBatchesCount)
+//    metrics.put("userDFLoadTime", userData._1)
+//    metrics.put("userDFRecordsCount", userData._2.count())
+//    metrics.put("activeBatchesCount", activeBatchesCount)
     for (index <- activeBatches.indices) {
       val row = activeBatches(index);
       val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2));
@@ -115,7 +115,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         recordTime(saveReportToES(batch, reportDF, newIndex), s"Time taken to save report in ES for batch ${batch.batchid} - ");
         reportDF.unpersist(true);
       });
-      JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
+      //JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
       createESIndex(newIndex)
     }
     userData._2.unpersist(true);
@@ -279,7 +279,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("block_name"))
       .cache()
 
-    reportDF.count();
+    //reportDF.count();
     reportDF;
 
   }
@@ -344,10 +344,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     try {
       batchStatsDF.saveToEs(s"$newIndex/_doc", Map("es.mapping.id" -> "id"))
-      JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
+      //JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
       // upsert batch details to cbatch index
       batchDetailsDF.saveToEs(s"$cBatchIndex/_doc", Map("es.mapping.id" -> "id", "es.write.operation" -> "upsert"))
-      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: ${batchStatsDF.count()} }}", None, INFO)
+      //JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: ${batchStatsDF.count()} }}", None, INFO)
 
     } catch {
       case ex: Exception => {
@@ -380,8 +380,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("certificate_status").as("Certificate Status"))
       .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
 
-    val noOfRecords = reportDF.count()
-    JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $noOfRecords } ", None, INFO)
+    //val noOfRecords = reportDF.count()
+    //JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $noOfRecords } ", None, INFO)
   }
 
 }
