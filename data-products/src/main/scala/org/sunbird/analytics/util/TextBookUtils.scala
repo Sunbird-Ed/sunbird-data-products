@@ -35,14 +35,18 @@ object TBConstants {
 
 object TextBookUtils {
 
-  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo] = {
-    val apiURL = Constants.COMPOSITE_SEARCH_URL
-    val request = JSONUtils.serialize(config.get("esConfig").get)
-    val response = restUtil.post[TextBookDetails](apiURL, request)
-    if(null != response && "successful".equals(response.params.status) && response.result.count>0) response.result.content else List()
+  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient)(implicit fc: FrameworkContext): List[TextbookData] = {
+    val request = JSONUtils.serialize(config.get("druidConfig").get)
+    val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
+    val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
+
+    val result = druidResponse.map(f => {
+      JSONUtils.deserialize[TextbookData](f)
+    })
+    result
   }
 
-  def getTextbookHierarchy(config: Map[String, AnyRef], textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
+  def getTextbookHierarchy(config: Map[String, AnyRef], textbookInfo: List[TextbookData],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
     val reportTuple = for {textbook <- textbookInfo
       baseUrl = s"${AppConf.getConfig("hierarchy.search.api.url")}${AppConf.getConfig("hierarchy.search.api.path")}${textbook.identifier}"
       finalUrl = if("Live".equals(textbook.status)) baseUrl else s"$baseUrl?mode=edit"
