@@ -93,7 +93,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .options(settings)
       .load()
   }
-
   /**
     * Loading the specific tables from the cassandra db.
     */
@@ -107,7 +106,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator3", "keyspace" -> sunbirdCoursesKeyspace))
 
     /*
     * courseBatchDF has details about the course and batch details for which we have to prepare the report
