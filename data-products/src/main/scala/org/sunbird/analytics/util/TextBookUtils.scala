@@ -349,10 +349,7 @@ object TextBookUtils {
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
     val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
     
-    val result = druidResponse.map(f => {
-      println(f)
-      JSONUtils.deserialize[TBContentResult](f)
-    })
+    val result = druidResponse.map(f => JSONUtils.deserialize[TBContentResult](f))
     result
   }
 
