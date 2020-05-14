@@ -220,7 +220,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     * @return - Assessment denormalised dataframe
     */
   def denormAssessment(report: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    val contentIds:List[String] = report.select(col("content_id")).rdd.map(r => r.getString(0)).collect.toList.distinct.filter(_ != null)
+    val contentIds:List[String] = report.select(col("content_id")).distinct().collect().map(_(0)).toList.asInstanceOf[List[String]]
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
     report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
@@ -341,9 +341,10 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val aliasName = AppConf.getConfig("assessment.metrics.es.alias")
     val indexToEs = AppConf.getConfig("course.es.index.enabled")
     courseBatchList.foreach(item => {
-      JobLogger.log("Course batch mappings: " + item, None, INFO)
+      
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
+      JobLogger.log(s"Course batch mappings- courseId: $courseId and batchIdList is $batchList " + item, None, INFO)
       batchList.foreach(batchId => {
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
