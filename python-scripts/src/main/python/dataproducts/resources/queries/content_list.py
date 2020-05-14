@@ -19,9 +19,7 @@ def init():
                 {
                     "type": "in",
                     "dimension": "status",
-                    "values": [
-                        "Live"
-                    ],
+                    "values": ["Live"],
                     "extractionFn": null
                 }
             ]
