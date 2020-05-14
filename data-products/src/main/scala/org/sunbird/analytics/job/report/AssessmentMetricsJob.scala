@@ -47,7 +47,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     JobLogger.init("Assessment Metrics")
     JobLogger.start("Assessment Job Started executing", Option(Map("config" -> config, "model" -> name)))
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
-    JobContext.parallelization = jobConfig.parallelization.getOrElse(10) // Default to 10
+    JobContext.parallelization = CommonUtil.getParallelization(jobConfig);
+     JobLogger.log("parallelization" +  JobContext.parallelization, None, INFO)
 
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig);
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext();
