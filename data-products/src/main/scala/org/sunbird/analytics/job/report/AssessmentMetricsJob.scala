@@ -343,6 +343,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
           val reportData = recordTime(transposeDF(filteredDF), s"Time take to transpose the $batchId DF -")
+           JobLogger.log("Total report Data is" + reportData.count(), None, INFO)
           try {
             val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId),s"Time taken to save the $batchId into azure -")
             val resolvedDF = filteredDF.withColumn("reportUrl", lit(urlBatch))
