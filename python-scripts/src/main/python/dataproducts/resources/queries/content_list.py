@@ -12,16 +12,14 @@ def init():
                     "value": "Content"
                 },
                 {
-                    "type": "selector",
+                    "type": "in",
                     "dimension": "contentType",
-                    "value": "Resource"
+                    "values": ["Resource", "ExplanationResource", "FocusSpot", "PracticeQuestionSet", "eTextBook", "LearningOutcomeDefinition", "PracticeResource", "ExperientialResource", "SelfAssess", "CuriosityQuestionSet"]
                 },
                 {
                     "type": "in",
                     "dimension": "status",
-                    "values": [
-                        "Live"
-                    ],
+                    "values": ["Live"],
                     "extractionFn": null
                 }
             ]
