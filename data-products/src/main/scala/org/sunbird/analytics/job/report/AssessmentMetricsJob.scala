@@ -53,6 +53,14 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext();
     execute(jobConfig)
   }
+  def recordTime[R](block: => R, msg: String): (R) = {
+    val t0 = System.currentTimeMillis()
+    val result = block
+    val t1 = System.currentTimeMillis()
+    JobLogger.log(msg + (t1 - t0), None, INFO)
+    result;
+  }
+  
 
   private def execute(config: JobConfig)(implicit sc: SparkContext, fc: FrameworkContext) = {
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
@@ -61,9 +69,9 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
       .set("spark.sql.caseSensitive", AppConf.getConfig(key = "spark.sql.caseSensitive"))
     implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
-    val reportDF = prepareReport(spark, loadData).cache()
-    val denormalizedDF = denormAssessment(reportDF)
-    saveReport(denormalizedDF, tempDir)
+    val reportDF = recordTime(prepareReport(spark, loadData).cache(), s"Time take generate the dataframe} - ")
+    val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment -")
+    recordTime(saveReport(denormalizedDF, tempDir), s"Time take to save the all the reports into both blob and es -")
     reportDF.unpersist(true)
     JobLogger.end("AssessmentReport Generation Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
     spark.stop()
@@ -217,6 +225,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       col("grand_total"), report.col("maskedemail"), report.col("district_name"), report.col("maskedphone"),
       report.col("orgname_resolved"), report.col("externalid"), report.col("schoolname_resolved"), report.col("username"))
   }
+  
+  
 
   /**
     * This method is used to upload the report the azure cloud service and
@@ -320,7 +330,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val indexList = ESUtil.getIndexName(alias)
     if (!indexList.contains(index)) ESUtil.rolloverIndex(index, alias)
   }
-
+  
 
   def save(courseBatchList: Array[Map[String, Any]], reportDF: DataFrame, url: String, spark: SparkSession)(implicit fc: FrameworkContext): Unit = {
     val aliasName = AppConf.getConfig("assessment.metrics.es.alias")
@@ -332,12 +342,12 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       batchList.foreach(batchId => {
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
-          val reportData = transposeDF(filteredDF)
+          val reportData = recordTime(transposeDF(filteredDF), s"Time take to transpose the $batchId DF -")
           try {
-            val urlBatch: String = saveToAzure(reportData, url, batchId)
+            val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId),s"Time taken to save the $batchId into azure -")
             val resolvedDF = filteredDF.withColumn("reportUrl", lit(urlBatch))
             if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
-              saveToElastic(this.getIndexName, resolvedDF)
+              recordTime(saveToElastic(this.getIndexName, resolvedDF), s"Time taken to save the $batchId into to es -")
               JobLogger.log("Indexing of assessment report data is success: " + this.getIndexName, None, INFO)
             } else {
               JobLogger.log("Skipping Indexing assessment report into ES", None, INFO)
