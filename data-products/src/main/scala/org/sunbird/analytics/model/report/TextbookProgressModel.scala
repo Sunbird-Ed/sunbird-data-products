@@ -40,7 +40,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
                            |    "request":{
                            |        "filters": {"isRootOrg": true},
                            |        "offset": 0,
-                           |        "limit": 10,
+                           |        "limit": 1000,
                            |        "fields": ["id", "channel", "slug", "orgName"]
                            |    }
                            |}""".stripMargin
