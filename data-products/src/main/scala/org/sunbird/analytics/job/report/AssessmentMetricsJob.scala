@@ -173,6 +173,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
     val assessmentDF = getAssessmentData(assessmentProfileDF)
+    JobLogger.log("Total Assessment Data Count is" + assessmentDF.count(), None, INFO)
+    
     /**
       * Compute the sum of all the worksheet contents score.
       */
@@ -218,7 +220,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     * @return - Assessment denormalised dataframe
     */
   def denormAssessment(report: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    val contentIds = report.select(col("content_id")).rdd.map(r => r.getString(0)).collect.toList.distinct.filter(_ != null)
+    val contentIds:List[String] = report.select(col("content_id")).rdd.map(r => r.getString(0)).collect.toList.distinct.filter(_ != null)
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
     report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
@@ -297,6 +299,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
     val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
+    
     reportDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
   }
 
