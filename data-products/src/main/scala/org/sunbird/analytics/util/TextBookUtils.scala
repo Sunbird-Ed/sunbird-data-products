@@ -344,31 +344,13 @@ object TextBookUtils {
     (qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
   }
 
-    def getContentDataList(tenantId: String, unirest: UnirestClient)(implicit sc: SparkContext): TextbookResult = {
-    implicit val sqlContext = new SQLContext(sc)
-    val url = Constants.COMPOSITE_SEARCH_URL
-    val request = s"""{
-                     |      "request": {
-                     |        "filters": {
-                     |           "status": ["Live","Draft","Review","Unlisted"],
-                     |          "contentType": ["Resource"],
-                     |          "createdFor": "$tenantId"
-                     |        },
-                     |        "fields": ["channel","identifier","board","gradeLevel",
-                     |          "medium","subject","status","creator","lastPublishedOn","createdFor",
-                     |          "createdOn","pkgVersion","contentType",
-                     |          "mimeType","resourceType", "lastSubmittedOn"
-                     |        ],
-                     |        "limit": 10000,
-                     |        "facets": [
-                     |          "status"
-                     |        ]
-                     |      }
-                     |    }""".stripMargin
-    val header = new util.HashMap[String, String]()
-    header.put("Content-Type", "application/json")
-    val response = unirest.post(url, request, Option(header))
-    JSONUtils.deserialize[ContentInformation](response).result
+  def getContentDataList(tenantId: String)(implicit fc: FrameworkContext): List[TBContentResult] = {
+    val request = s"""{"queryType": "groupBy","dataSource": "content-model-snapshot","intervals": "LastDay","aggregations": [{"name": "count","type": "count"}],"dimensions": [{"fieldName": "channel","aliasName": "channel"}, {"fieldName": "identifier","aliasName": "identifier"}, {"fieldName": "name","aliasName": "name"},{"fieldName": "pkgVersion","aliasName": "pkgVersion"},{"fieldName": "contentType","aliasName": "contentType"},{"fieldName": "lastSubmittedOn","aliasName": "lastSubmittedOn"},{"fieldName": "mimeType","aliasName": "mimeType"},{"fieldName": "resourceType","aliasName": "resourceType"},{"fieldName": "createdFor","aliasName": "createdFor"}, {"fieldName": "createdOn","aliasName": "createdOn"}, {"fieldName": "lastPublishedOn","aliasName": "lastPublishedOn"}, {"fieldName": "creator","aliasName": "creator"}, {"fieldName": "board","aliasName": "board"}, {"fieldName": "medium","aliasName": "medium"}, {"fieldName": "gradeLevel","aliasName": "gradeLevel"}, {"fieldName": "subject","aliasName": "subject"}, {"fieldName": "status","aliasName": "status"}],"filters": [{"type": "equals","dimension": "contentType","value": "Resource"},{"type": "in","dimension": "status","values": ["Live","Draft","Review","Unlisted"]},{"type": "equals","dimension": "createdFor","value": "$tenantId"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}}""".stripMargin
+    val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
+    val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
+    
+    val result = druidResponse.map(f => JSONUtils.deserialize[TBContentResult](f))
+    result
   }
 
   def getString(data: Object): String = {

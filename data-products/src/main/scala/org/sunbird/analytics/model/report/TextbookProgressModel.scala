@@ -18,14 +18,13 @@ case class TenantResults(response: ContentResults)
 case class ContentResults(count: Int, content: List[TenantInformation])
 case class TenantInformation(id: String, slug: String) extends AlgoInput
 
-//Textbook information from composite-search
-case class TBContentResult(channel: String, identifier: String, board: String, gradeLevel: List[String], medium: Object, subject: Object, status: String, creator: String, lastPublishedOn: String, lastSubmittedOn: String, createdFor: List[String], createdOn: String, contentType: String, mimeType: String, resourceType: Object, pkgVersion: Integer)
+case class TBContentResult(channel: String, identifier: String, board: String, gradeLevel: String, medium: String, subject: String, status: String, creator: String, lastPublishedOn: String, lastSubmittedOn: String, createdFor: String, createdOn: String, contentType: String, mimeType: String, resourceType: String, pkgVersion: String)
 
 //Aggregated Report for each tenant
 case class AggregatedReport(board: String, medium: String, gradeLevel: String, subject: String, resourceType: String, totalContent: Integer, live: Integer, review: Integer, draft: Integer, unlisted: Integer, application_ecml: Integer, video_youtube: Integer, video_mp4: Integer, application_pdf: Integer, application_html: Integer, slug: String, reportName: String = "Aggregated Report")
 
 //Live Report for each tenant
-case class TBReport(board: String, medium: String, gradeLevel: String, subject: String, identifier: String , resourceType: String, createdOn: String, pkgVersion: Option[Integer] = None, creator: String, lastPublishedOn: Option[String],status: Option[String] = None,pendingInCurrentStatus: Option[String] = None ,lastPublishDate: Option[String] = None, slug: String, reportName: String)
+case class TBReport(board: String, medium: String, gradeLevel: String, subject: String, identifier: String , resourceType: String, createdOn: String, pkgVersion: Option[String] = None, creator: String, lastPublishedOn: Option[String],status: Option[String] = None,pendingInCurrentStatus: Option[String] = None ,lastPublishDate: Option[String] = None, slug: String, reportName: String)
 
 object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformation, Empty, Empty] with Serializable {
 
@@ -67,11 +66,11 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
     implicit val sqlContext = new SQLContext(sc)
     val metrics = CommonUtil.time({
       val unitrestUtil = UnirestUtil
-      val contentResponse = TextBookUtils.getContentDataList(tenantId, unitrestUtil)
+      val contentResponse = TextBookUtils.getContentDataList(tenantId)
 
-      if (contentResponse.count > 0) {
+      if (contentResponse.nonEmpty) {
         val slug = if (slugName == null || slugName.isEmpty) "Unknown" else slugName
-        val contentData = sc.parallelize(contentResponse.content)
+        val contentData = sc.parallelize(contentResponse)
 
         val aggregatedReportDf = getAggregatedReport(contentData, slug)
           .sort(desc("board"), asc("medium"), asc("gradeLevel"), asc("subject"), asc("resourceType"))
@@ -119,7 +118,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       .map { f =>
         val totalContent = f.getOrElse("Live", 0).asInstanceOf[Integer]+f.getOrElse("Review", 0).asInstanceOf[Integer]+f.getOrElse("Draft", 0).asInstanceOf[Integer]
         AggregatedReport(f.getOrElse("board", "").asInstanceOf[String], getFieldList(f.getOrElse("medium", "").asInstanceOf[Object]),
-          getFieldList(f.getOrElse("gradeLevel", List()).asInstanceOf[List[String]]), getFieldList(f.getOrElse("subject", "").asInstanceOf[Object]),
+          f.getOrElse("gradeLevel", "").asInstanceOf[String], getFieldList(f.getOrElse("subject", "").asInstanceOf[Object]),
           getFieldList(f.getOrElse("resourceType", "").asInstanceOf[Object]), totalContent, f.getOrElse("Live", 0).asInstanceOf[Integer],
           f.getOrElse("Review", 0).asInstanceOf[Integer], f.getOrElse("Draft", 0).asInstanceOf[Integer], f.getOrElse("Unlisted", 0).asInstanceOf[Integer],
           f.getOrElse("application/vnd.ekstep.ecml-archive", 0).asInstanceOf[Integer], f.getOrElse("video/x-youtube", 0).asInstanceOf[Integer],
