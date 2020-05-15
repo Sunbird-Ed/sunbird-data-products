@@ -20,12 +20,13 @@ from dataproducts.util.utils import create_json, get_tenant_info, get_data_from_
     get_data_batch_from_blob
 
 class ContentConsumption:
-    def __init__(self, data_store_location, org_search, druid_hostname,
+    def __init__(self, data_store_location, org_search, druid_hostname, druid_rollup_hostname,
                 cassandra_host, keyspace_prefix, content_search,
                 execution_date=date.today().strftime("%d/%m/%Y")):
         self.data_store_location = data_store_location
         self.org_search = org_search
         self.druid_hostname = druid_hostname
+        self.druid_rollup_hostname = druid_rollup_hostname
         self.cassandra_host = cassandra_host
         self.keyspace_prefix = keyspace_prefix
         self.content_search = content_search
@@ -375,6 +376,7 @@ class ContentConsumption:
         self.data_store_location = Path(self.data_store_location)
         org_search = self.org_search
         druid = self.druid_hostname
+        druid_rollup = self.druid_rollup_hostname
         cassandra = self.cassandra_host
         keyspace = self.keyspace_prefix + 'content_db'
         execution_date = datetime.strptime(self.execution_date, "%d/%m/%Y")
@@ -396,7 +398,7 @@ class ContentConsumption:
         self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         for i in range(7):
             analysis_date = execution_date - timedelta(days=i)
-            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid, config_=self.config)
+            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid_rollup, config_=self.config)
             self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
 
         # Content Consumption for last week
