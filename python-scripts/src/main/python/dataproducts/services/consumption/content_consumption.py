@@ -2,36 +2,35 @@
 content level plays, timespent and ratings by week
 """
 import json
-import sys, time
-import pdb
 import os
+import pandas as pd
+import pdb
 import requests
 import shutil
-import pandas as pd
-
-from datetime import datetime, timedelta, date
-from pathlib import Path
-from string import Template
+import sys
+import time
 from azure.common import AzureMissingResourceHttpError
 from cassandra.cluster import Cluster
-
 from dataproducts.util.utils import create_json, get_tenant_info, get_data_from_blob, \
     post_data_to_blob, get_content_model, get_content_plays, push_metric_event, \
     get_data_batch_from_blob
+from datetime import datetime, timedelta, date
+from pathlib import Path
+from string import Template
+
 
 class ContentConsumption:
-    def __init__(self, data_store_location, org_search, druid_hostname,
-                cassandra_host, keyspace_prefix, content_search,
-                execution_date=date.today().strftime("%d/%m/%Y")):
+    def __init__(self, data_store_location, org_search, druid_hostname, druid_rollup_hostname, cassandra_host,
+                 keyspace_prefix, content_search, execution_date=date.today().strftime("%d/%m/%Y")):
         self.data_store_location = data_store_location
         self.org_search = org_search
         self.druid_hostname = druid_hostname
+        self.druid_rollup_hostname = druid_rollup_hostname
         self.cassandra_host = cassandra_host
         self.keyspace_prefix = keyspace_prefix
         self.content_search = content_search
         self.execution_date = execution_date
         self.config = {}
-
 
     def mime_type(self, series):
         """
@@ -51,7 +50,6 @@ class ContentConsumption:
             return 'Uploaded Interactive Content'
         else:
             return None
-
 
     def define_keyspace(self, cassandra_, keyspace_, replication_factor_=1):
         """
@@ -76,7 +74,6 @@ class ContentConsumption:
             PRIMARY KEY (content_id, period, pdata_id)
         )""")
         session.execute(table_query.substitute(keyspace=keyspace_))
-
 
     def insert_data_to_cassandra(self, result_loc_, date_, cassandra_, keyspace_):
         """
@@ -104,16 +101,14 @@ class ContentConsumption:
         session.shutdown()
         cluster.shutdown()
 
-
     def append_tb_mapping(self, result_loc_, df_):
         textbooks = pd.read_csv(result_loc_.joinpath('tb_content_mapping.csv')) \
-                      .set_index("identifier")
+            .set_index("identifier")
         df_.set_index("identifier", inplace=True)
         merged_df = df_.join(textbooks, how="left", on="identifier")
         merged_df["tb_id"] = merged_df["tb_id"].fillna("")
         merged_df["tb_name"] = merged_df["tb_name"].fillna("")
         return merged_df.reset_index()
-
 
     def get_tb_content_mapping(self, result_loc_, content_search_):
         """
@@ -143,11 +138,11 @@ class ContentConsumption:
             try:
                 response = requests.request("POST", tb_url, data=payload, headers=tb_headers)
                 textbooks = pd.DataFrame(response.json()['result']['content'])[
-                ["childNodes", "identifier", "name"]]
+                    ["childNodes", "identifier", "name"]]
                 textbooks.columns = ["identifier", "tb_id", "tb_name"]
                 textbooks = textbooks.explode('identifier')
                 textbooks = textbooks.groupby("identifier").agg({"tb_id": ", ".join, "tb_name": ", ".join}) \
-                                                           .reset_index()
+                    .reset_index()
                 textbooks.to_csv(result_loc_.joinpath('tb_content_mapping.csv'), index=False)
                 break
             except requests.exceptions.ConnectionError:
@@ -155,7 +150,6 @@ class ContentConsumption:
                 time.sleep(10)
         else:
             print("Max retries reached...")
-
 
     def get_overall_report(self, result_loc_, date_):
         tenant_info = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'tenant_info.csv'))[['id', 'slug']]
@@ -185,22 +179,24 @@ class ContentConsumption:
             (60 * df['Total No of Plays (App and Portal)']), 2)
         df['Average Play Time in mins on App'] = df['Average Play Time in mins on App'].fillna(0)
         df['Average Play Time in mins on Portal'] = df['Average Play Time in mins on Portal'].fillna(0)
-        df['Average Play Time in mins (On App and Portal)'] = df['Average Play Time in mins (On App and Portal)'].fillna(0)
+        df['Average Play Time in mins (On App and Portal)'] = df[
+            'Average Play Time in mins (On App and Portal)'].fillna(0)
 
         df = df[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
-             'name', 'mimeType', 'createdOn', 'creator','lastPublishedOn',
-             'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
-             'me_totalDownloads', 'me_totalPlaySessionCountInApp', 'me_totalPlaySessionCountInPortal',
-             'Total No of Plays (App and Portal)', 'Average Play Time in mins on App', 'Average Play Time in mins on Portal',
-             'Average Play Time in mins (On App and Portal)']]
+                 'name', 'mimeType', 'createdOn', 'creator', 'lastPublishedOn',
+                 'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
+                 'me_totalDownloads', 'me_totalPlaySessionCountInApp', 'me_totalPlaySessionCountInPortal',
+                 'Total No of Plays (App and Portal)', 'Average Play Time in mins on App',
+                 'Average Play Time in mins on Portal',
+                 'Average Play Time in mins (On App and Portal)']]
 
         df.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
-                     'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
-                     'Linked Textbook Id(s)', 'Linked Textbook Name(s)',
-                     'Average Rating(out of 5)', 'Total No of Ratings', 'No of Downloads',
-                     'Number of Plays on App', 'Number of Plays on Portal', 'Total No of Plays (App and Portal)',
-                     'Average Play Time in mins on App','Average Play Time in mins on Portal',
-                     'Average Play Time in mins (On App and Portal)']
+                      'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
+                      'Linked Textbook Id(s)', 'Linked Textbook Name(s)',
+                      'Average Rating(out of 5)', 'Total No of Ratings', 'No of Downloads',
+                      'Number of Plays on App', 'Number of Plays on Portal', 'Total No of Plays (App and Portal)',
+                      'Average Play Time in mins on App', 'Average Play Time in mins on Portal',
+                      'Average Play Time in mins (On App and Portal)']
         df['Content ID'] = df['Content ID'].str.replace('.img', '')
         df['Created On'] = df['Created On'].fillna('T').apply(
             lambda x: '-'.join(x.split('T')[0].split('-')[::-1]))
@@ -224,7 +220,6 @@ class ContentConsumption:
                                       index=False, encoding='utf-8-sig')
             create_json(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
             post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
-
 
     def get_weekly_plays(self, result_loc_, date_, cassandra_, keyspace_, week_count_):
         """
@@ -276,10 +271,11 @@ class ContentConsumption:
             df['Timespent on Portal'] / (60 * df['Number of Plays on Portal']), 2)
         df['Average Play Time in mins (On App and Portal)'] = round(
             (df['Timespent on App'] + df['Timespent on Portal']) / (60 * df['Total No of Plays (App and Portal)']), 2)
-        df = df[['identifier', 'Total No of Plays (App and Portal)', 'Number of Plays on App', 'Number of Plays on Portal',
-                 'Average Play Time in mins (On App and Portal)',
-                 'Average Play Time in mins on App',
-                 'Average Play Time in mins on Portal']]
+        df = df[
+            ['identifier', 'Total No of Plays (App and Portal)', 'Number of Plays on App', 'Number of Plays on Portal',
+             'Average Play Time in mins (On App and Portal)',
+             'Average Play Time in mins on App',
+             'Average Play Time in mins on Portal']]
         content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
 
         content_model["creator"] = content_model["creator"].str.replace("null", "")
@@ -287,7 +283,8 @@ class ContentConsumption:
         content_model['mimeType'] = content_model['mimeType'].apply(self.mime_type)
         content_model = self.append_tb_mapping(result_loc_, content_model)
         content_model = content_model[
-            ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier', 'name', 'mimeType', 'createdOn', 'creator',
+            ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier', 'name', 'mimeType', 'createdOn',
+             'creator',
              'lastPublishedOn', 'me_averageRating', 'tb_id', 'tb_name']]
         content_model.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
                                  'Mime Type', 'Created On', 'Creator (User Name)', 'Last Published On',
@@ -341,9 +338,10 @@ class ContentConsumption:
                  'Last Date of the week']]
 
             week_dates = list(content_aggregates[["Last Date of the week"]]
-                            .sort_values(by="Last Date of the week")['Last Date of the week']
-                            .unique())
-            content_aggregates = content_aggregates[content_aggregates['Last Date of the week'].isin(week_dates[-week_count_:])]
+                              .sort_values(by="Last Date of the week")['Last Date of the week']
+                              .unique())
+            content_aggregates = content_aggregates[
+                content_aggregates['Last Date of the week'].isin(week_dates[-week_count_:])]
             result_loc_.parent.joinpath('portal_dashboards', slug).mkdir(exist_ok=True)
             content_aggregates.to_csv(result_loc_.parent.joinpath('portal_dashboards', slug, result_file_name),
                                       index=False, encoding='utf-8-sig')
@@ -351,14 +349,15 @@ class ContentConsumption:
             post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, result_file_name))
 
             os.makedirs(result_loc_.joinpath('content_aggregates', slug), exist_ok=True)
-            content_aggregates.to_csv(result_loc_.joinpath('content_aggregates', slug, date_.strftime('%Y-%m-%d')+".csv"),
-                                      index=False, encoding='utf-8-sig')
-            post_data_to_blob(result_loc_.joinpath('content_aggregates', slug, date_.strftime('%Y-%m-%d')+".csv"), True)
+            content_aggregates.to_csv(
+                result_loc_.joinpath('content_aggregates', slug, date_.strftime('%Y-%m-%d') + ".csv"),
+                index=False, encoding='utf-8-sig')
+            post_data_to_blob(result_loc_.joinpath('content_aggregates', slug, date_.strftime('%Y-%m-%d') + ".csv"),
+                              True)
             self.compress_weekly_reports(result_loc_, slug)
 
-
     def compress_weekly_reports(self, result_loc_, slug):
-        get_data_batch_from_blob(result_loc_, 'content_aggregates/'+slug, True)
+        get_data_batch_from_blob(result_loc_, 'content_aggregates/' + slug, True)
 
         os.makedirs(result_loc_.joinpath('content_aggregates_compressed', slug), exist_ok=True)
 
@@ -368,13 +367,13 @@ class ContentConsumption:
 
         post_data_to_blob(result_loc_.joinpath("content_aggregates_compressed", slug, 'content_consumption.zip'))
 
-
     def init(self):
         start_time_sec = int(round(time.time()))
         print("Content Consumption Report::Start")
         self.data_store_location = Path(self.data_store_location)
         org_search = self.org_search
         druid = self.druid_hostname
+        druid_rollup = self.druid_rollup_hostname
         cassandra = self.cassandra_host
         keyspace = self.keyspace_prefix + 'content_db'
         execution_date = datetime.strptime(self.execution_date, "%d/%m/%Y")
@@ -396,11 +395,13 @@ class ContentConsumption:
         self.define_keyspace(cassandra_=cassandra, keyspace_=keyspace)
         for i in range(7):
             analysis_date = execution_date - timedelta(days=i)
-            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid, config_=self.config)
-            self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra, keyspace_=keyspace)
+            get_content_plays(result_loc_=result_loc, date_=analysis_date, druid_=druid_rollup, config_=self.config)
+            self.insert_data_to_cassandra(result_loc_=result_loc, date_=analysis_date, cassandra_=cassandra,
+                                          keyspace_=keyspace)
 
         # Content Consumption for last week
-        self.get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace, week_count_=1)
+        self.get_weekly_plays(result_loc_=result_loc, date_=execution_date, cassandra_=cassandra, keyspace_=keyspace,
+                              week_count_=1)
 
         shutil.rmtree(result_loc)
 

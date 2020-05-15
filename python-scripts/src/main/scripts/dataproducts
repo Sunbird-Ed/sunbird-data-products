@@ -61,6 +61,8 @@ if __name__ == '__main__':
                         help="host address for Org API")
     parser_cc.add_argument("--druid_hostname", type=str,
                         help="Host address for Druid")
+    parser_cc.add_argument("--druid_rollup_hostname", type=str,
+                        help="Host address for Druid Rollup")
     parser_cc.add_argument("--cassandra_host", type=str,
                         help="Host address for Cassandra")
     parser_cc.add_argument("--keyspace_prefix", type=str,
