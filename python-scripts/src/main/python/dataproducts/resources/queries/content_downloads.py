@@ -2,7 +2,7 @@ def init():
     return """
     {
         "queryType": "groupBy",
-        "dataSource": "telemetry-events",
+        "dataSource": "telemetry-events-syncts",
         "dimensions": [
             "object_id"
         ],

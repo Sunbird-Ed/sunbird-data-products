@@ -35,14 +35,18 @@ object TBConstants {
 
 object TextBookUtils {
 
-  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient): List[TextBookInfo] = {
-    val apiURL = Constants.COMPOSITE_SEARCH_URL
-    val request = JSONUtils.serialize(config.get("esConfig").get)
-    val response = restUtil.post[TextBookDetails](apiURL, request)
-    if(null != response && "successful".equals(response.params.status) && response.result.count>0) response.result.content else List()
+  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient)(implicit fc: FrameworkContext): List[TextbookData] = {
+    val request = JSONUtils.serialize(config.get("druidConfig").get)
+    val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
+    val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
+
+    val result = druidResponse.map(f => {
+      JSONUtils.deserialize[TextbookData](f)
+    })
+    result
   }
 
-  def getTextbookHierarchy(config: Map[String, AnyRef], textbookInfo: List[TextBookInfo],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
+  def getTextbookHierarchy(config: Map[String, AnyRef], textbookInfo: List[TextbookData],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
     val reportTuple = for {textbook <- textbookInfo
       baseUrl = s"${AppConf.getConfig("hierarchy.search.api.url")}${AppConf.getConfig("hierarchy.search.api.path")}${textbook.identifier}"
       finalUrl = if("Live".equals(textbook.status)) baseUrl else s"$baseUrl?mode=edit"
@@ -53,23 +57,23 @@ object TextBookUtils {
         val dceDialcodeReport = dceDialcode._1
         val etbDialcode = generateETBDialcodeReport(data)
         val etbDialcodeReport = etbDialcode._1
-        val dialcodeScans = dceDialcode._2 ++ etbDialcode._2
         val etbReport = generateETBTextbookReport(data)
         val dceReport = generateDCETextbookReport(data)
-        (etbReport, dceReport, dceDialcodeReport, etbDialcodeReport, dialcodeScans)
+        (etbReport, dceReport, dceDialcodeReport, etbDialcodeReport, dceDialcode._2,etbDialcode._2)
        }
-       else (List(),List(),List(),List(),List())
+       else (List(),List(),List(),List(),List(),List())
     } yield tupleData
     val etbTextBookReport = reportTuple.filter(f => f._1.nonEmpty).map(f => f._1.head)
     val dceTextBookReport = reportTuple.filter(f => f._2.nonEmpty).map(f => f._2.head)
     val dceDialCodeReport = reportTuple.map(f => f._3).filter(f => f.nonEmpty)
-    val dcereport = if(dceDialCodeReport.nonEmpty) dceDialCodeReport.head else List()
+    val dcereport = dceDialCodeReport.flatten
     val etbDialCodeReport = reportTuple.map(f => f._4).filter(f => f.nonEmpty)
-    val etbreport = if(etbDialCodeReport.nonEmpty) etbDialCodeReport.head else List()
-    val dialcodeScans = reportTuple.map(f => f._5).head
+    val etbreport = etbDialCodeReport.flatten
+    val dialcodeScans = reportTuple.map(f => f._5).filter(f=>f.nonEmpty) ++ reportTuple.map(f => f._6).filter(f=>f.nonEmpty)
+    val scans = dialcodeScans.flatten
     val dialcodeReport = dcereport ++ etbreport
 
-    generateWeeklyScanReport(config, dialcodeScans)
+    generateWeeklyScanReport(config, scans)
     generateTextBookReport(sc.parallelize(etbTextBookReport), sc.parallelize(dceTextBookReport), sc.parallelize(dialcodeReport), tenantInfo)
   }
 
@@ -77,12 +81,13 @@ object TextBookUtils {
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
-    val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
+    val configMap = config("dialcodeReportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
+    val conf = Map("reportConfig"-> configMap,"store"->config("store"),"folderPrefix"->config("folderPrefix"),"filePath"->config("filePath"),"container"->config("container"),"format"->config("format"),"key"->config("key"))
     val scansDf = sc.parallelize(dialcodeScans).toDF()
 
     reportConfig.output.map { f =>
-      CourseUtils.postDataToBlob(scansDf,f,config)
+      CourseUtils.postDataToBlob(scansDf,f,conf)
     }
   }
 
@@ -93,7 +98,7 @@ object TextBookUtils {
     val etbTextBookRDD = etbTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       ETBTextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug, textbook._2._1.getOrElse(etb).identifier,
         textbook._2._1.getOrElse(etb).name,textbook._2._1.getOrElse(etb).medium,textbook._2._1.getOrElse(etb).gradeLevel,
-        textbook._2._1.getOrElse(etb).subject,textbook._2._1.getOrElse(etb).status,textbook._2._1.getOrElse(etb).createdOn,textbook._2._1.getOrElse(etb).lastUpdatedOn,
+        textbook._2._1.getOrElse(etb).subject,textbook._2._1.getOrElse(etb).status,formatDate(textbook._2._1.getOrElse(etb).createdOn),formatDate(textbook._2._1.getOrElse(etb).lastUpdatedOn),
         textbook._2._1.getOrElse(etb).totalContentLinked,textbook._2._1.getOrElse(etb).totalQRLinked,textbook._2._1.getOrElse(etb).totalQRNotLinked,
         textbook._2._1.getOrElse(etb).leafNodesCount,textbook._2._1.getOrElse(etb).leafNodeUnlinked,"ETB_textbook_data")
     })
@@ -102,7 +107,7 @@ object TextBookUtils {
     val dceTextBookRDD = dceTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       DCETextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dce).identifier,
         textbook._2._1.getOrElse(dce).name,textbook._2._1.getOrElse(dce).medium,textbook._2._1.getOrElse(dce).gradeLevel,textbook._2._1.getOrElse(dce).subject,
-        textbook._2._1.getOrElse(dce).createdOn,textbook._2._1.getOrElse(dce).lastUpdatedOn,textbook._2._1.getOrElse(dce).totalQRCodes,
+        formatDate(textbook._2._1.getOrElse(dce).createdOn),formatDate(textbook._2._1.getOrElse(dce).lastUpdatedOn),textbook._2._1.getOrElse(dce).totalQRCodes,
         textbook._2._1.getOrElse(dce).contentLinkedQR,textbook._2._1.getOrElse(dce).withoutContentQR,textbook._2._1.getOrElse(dce).withoutContentT1,
         textbook._2._1.getOrElse(dce).withoutContentT2,"DCE_textbook_data")
     })
@@ -152,7 +157,7 @@ object TextBookUtils {
           dialcode = dialcodeInfo
           val noOfContents = units.leafNodesCount
           val dialcodes = units.dialcodes
-          val nodeType = if(null != noOfContents && noOfContents==0) "Leaf Node" else if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else "QR Linked"
+          val nodeType = if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else if(null != noOfContents && noOfContents!=0 && null != dialcodes && dialcodes.nonEmpty) "QR Linked" else "Leaf Node"
           val report = DialcodeExceptionData(response.channel,response.identifier,getString(response.medium),getString(response.gradeLevel), getString(response.subject),response.name,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),levelNames.lift(4).getOrElse(""), dialcodeInfo,response.status,nodeType,noOfContents,0,"","ETB_dialcode_data")
           etbDialcode = report :: etbDialcode
       }
@@ -171,6 +176,14 @@ object TextBookUtils {
       response.children.get.map(chapters => {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
+        if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
+          val textbookInfo = getTextBookInfo(List(chapters))
+          val dialcodes = textbookInfo._2.lift(0).getOrElse("")
+          val scans = getDialcodeScans(dialcodes)
+          weeklyDialcodes = scans ++ weeklyDialcodes
+          val chapterReport = DialcodeExceptionData(response.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,"","","","",dialcodes,"","",0,0,term,"DCE_dialcode_data")
+          dialcodeReport = chapterReport :: dialcodeReport
+        }
         val report = parseDCEDialcode(chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
         dialcodeReport = (report._1 ++ dialcodeReport).reverse
         if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
@@ -204,14 +217,13 @@ object TextBookUtils {
 
   def getDialcodeScans(dialcode: String)(implicit sc: SparkContext, fc: FrameworkContext): List[WeeklyDialCodeScans] = {
     val result= if(dialcode.nonEmpty) {
-      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-events","intervals": "Last7Days","aggregations": [{"type": "count","name": "scans"}],"granularity": "all","postAggregations": [],"filter": {"type": "and","fields": [{"type": "selector","dimension": "object_id","value": "$dialcode"},{"type": "selector","dimension": "eid","value": "SEARCH"}]},"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}]}""".stripMargin
+      val query = s"""{"queryType": "groupBy","dataSource": "telemetry-rollup-syncts","intervals": "Last7Days","aggregations": [{"name": "scans","type": "count"}],"dimensions": [{"fieldName": "object_id","aliasName": "dialcode"}],"filters": [{"type": "equals","dimension": "eid","value": "SEARCH"},{"type":"equals","dimension":"object_id","value":"$dialcode"},{"type":"in","dimension":"object_type","values":["DialCode","dialcode","qr","Qr"]}],"postAggregation": [],"descending": "false"}""".stripMargin
       val druidQuery = JSONUtils.deserialize[DruidQueryModel](query)
       val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
-      val date = (new SimpleDateFormat("dd-MM-yyyy")).format(Calendar.getInstance().getTime)
 
       druidResponse.map(f => {
         val report = JSONUtils.deserialize[DialcodeScans](f)
-        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,date,"weekly_dialcode_counts")
+        WeeklyDialCodeScans(report.date,report.dialcode,report.scans,"dialcode_scans","dialcode_counts")
       })
     } else List[WeeklyDialCodeScans]()
     result
@@ -229,8 +241,8 @@ object TextBookUtils {
           if(null != parsedData.dialcodes) { dialcodes = parsedData.dialcodes(0) :: dialcodes }
           levelNames = parsedData.name :: levelNames
         }
-        if(parsedData.children.size==0) { break }
-        else { parsedData = parsedData.children.get(parsedData.children.size-1) }
+        if(parsedData.children.getOrElse(List()).nonEmpty) { parsedData = parsedData.children.get(parsedData.children.size-1) }
+        else { break() }
         levelCount = levelCount-1
       }
     }
@@ -238,15 +250,12 @@ object TextBookUtils {
   }
 
   def generateDCETextbookReport(response: ContentInfo): List[DCETextbookData] = {
-    var index=0
     var dceReport = List[DCETextbookData]()
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
-      val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
-      index = index+1
-      val dceTextbook = parseDCETextbook(response.children.get,term,0,0,0,0,0)
-      val totalQRCodes = dceTextbook._2
-      val qrLinked = dceTextbook._3
+      val dceTextbook = parseDCETextbook(response.children.get,0,0,0,0,0,0,lengthOfChapters)
+      val totalQRCodes = dceTextbook._2+1
+      val qrLinked = dceTextbook._3+1
       val qrNotLinked = dceTextbook._4
       val term1NotLinked = dceTextbook._5
       val term2NotLinked = dceTextbook._6
@@ -261,25 +270,28 @@ object TextBookUtils {
     dceReport
   }
 
-  def parseDCETextbook(data: List[ContentInfo], term: String, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int): (Int, Int, Int, Int, Int, Int) = {
+  def parseDCETextbook(data: List[ContentInfo], index: Int, counter: Int,linkedQr: Int, qrNotLinked:Int, counterT1:Int, counterT2:Int,lengthOfChapters:Int): (Int, Int, Int, Int, Int, Int) = {
     var counterValue=counter
     var counterQrLinked = linkedQr
     var counterNotLinked = qrNotLinked
     var term1NotLinked = counterT1
     var term2NotLinked = counterT2
     var tempValue = 0
+    var indexValue = index
     data.map(units => {
       if(null != units.dialcodes){
         counterValue=counterValue+1
         if(null != units.leafNodesCount && units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
         else {
           counterNotLinked=counterNotLinked+1
+          val term = if(indexValue<=lengthOfChapters/2) "T1"  else "T2"
           if("T1".equals(term)) { term1NotLinked=term1NotLinked+1 }
           else { term2NotLinked = term2NotLinked+1 }
         }
       }
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
-        val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),term,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked)
+        val output = parseDCETextbook(units.children.getOrElse(List[ContentInfo]()),index,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked,lengthOfChapters)
+        indexValue = indexValue+1
         tempValue = output._1
         counterQrLinked = output._3
         counterNotLinked = output._4
@@ -294,7 +306,7 @@ object TextBookUtils {
     var textBookReport = List[ETBTextbookData]()
     if(null != response && response.children.isDefined) {
       val etbTextbook = parseETBTextbook(response.children.get,response,0,0,0,0)
-      val qrLinkedContent = etbTextbook._1
+      val qrLinkedContent = etbTextbook._1+1
       val qrNotLinked = etbTextbook._2
       val leafNodeswithoutContent = etbTextbook._3
       val totalLeafNodes = etbTextbook._4
@@ -315,13 +327,13 @@ object TextBookUtils {
     var leafNodeswithoutContent = leafNodesContent
     var totalLeafNodes = leafNodesCount
     data.map(units => {
-      if(units.children.isEmpty){ totalLeafNodes=totalLeafNodes+1 }
-      if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
       if(null != units.dialcodes){
         if(null != units.leafNodesCount && units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
         else { contentNotLinked=contentNotLinked+1 }
       }
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
+        if(units.children.isEmpty && units.leafNodesCount==0) { leafNodeswithoutContent=leafNodeswithoutContent+1 }
+        if(null != units.dialcodes){ totalLeafNodes=totalLeafNodes+1 }
         val output = parseETBTextbook(units.children.getOrElse(List[ContentInfo]()),response,qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
         qrLinkedContent = output._1
         contentNotLinked = output._2
@@ -332,37 +344,27 @@ object TextBookUtils {
     (qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
   }
 
-    def getContentDataList(tenantId: String, unirest: UnirestClient)(implicit sc: SparkContext): TextbookResult = {
-    implicit val sqlContext = new SQLContext(sc)
-    val url = Constants.COMPOSITE_SEARCH_URL
-    val request = s"""{
-                     |      "request": {
-                     |        "filters": {
-                     |           "status": ["Live","Draft","Review","Unlisted"],
-                     |          "contentType": ["Resource"],
-                     |          "createdFor": "$tenantId"
-                     |        },
-                     |        "fields": ["channel","identifier","board","gradeLevel",
-                     |          "medium","subject","status","creator","lastPublishedOn","createdFor",
-                     |          "createdOn","pkgVersion","contentType",
-                     |          "mimeType","resourceType", "lastSubmittedOn"
-                     |        ],
-                     |        "limit": 10000,
-                     |        "facets": [
-                     |          "status"
-                     |        ]
-                     |      }
-                     |    }""".stripMargin
-    val header = new util.HashMap[String, String]()
-    header.put("Content-Type", "application/json")
-    val response = unirest.post(url, request, Option(header))
-    JSONUtils.deserialize[ContentInformation](response).result
+  def getContentDataList(tenantId: String)(implicit fc: FrameworkContext): List[TBContentResult] = {
+    val request = s"""{"queryType": "groupBy","dataSource": "content-model-snapshot","intervals": "LastDay","aggregations": [{"name": "count","type": "count"}],"dimensions": [{"fieldName": "channel","aliasName": "channel"}, {"fieldName": "identifier","aliasName": "identifier"}, {"fieldName": "name","aliasName": "name"},{"fieldName": "pkgVersion","aliasName": "pkgVersion"},{"fieldName": "contentType","aliasName": "contentType"},{"fieldName": "lastSubmittedOn","aliasName": "lastSubmittedOn"},{"fieldName": "mimeType","aliasName": "mimeType"},{"fieldName": "resourceType","aliasName": "resourceType"},{"fieldName": "createdFor","aliasName": "createdFor"}, {"fieldName": "createdOn","aliasName": "createdOn"}, {"fieldName": "lastPublishedOn","aliasName": "lastPublishedOn"}, {"fieldName": "creator","aliasName": "creator"}, {"fieldName": "board","aliasName": "board"}, {"fieldName": "medium","aliasName": "medium"}, {"fieldName": "gradeLevel","aliasName": "gradeLevel"}, {"fieldName": "subject","aliasName": "subject"}, {"fieldName": "status","aliasName": "status"}],"filters": [{"type": "equals","dimension": "contentType","value": "Resource"},{"type": "in","dimension": "status","values": ["Live","Draft","Review","Unlisted"]},{"type": "equals","dimension": "createdFor","value": "$tenantId"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}}""".stripMargin
+    val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
+    val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
+    
+    val result = druidResponse.map(f => JSONUtils.deserialize[TBContentResult](f))
+    result
   }
 
   def getString(data: Object): String = {
     if (null != data) {
       if (data.isInstanceOf[String]) data.asInstanceOf[String]
       else data.asInstanceOf[List[String]].mkString(",")
+    } else ""
+  }
+
+  def formatDate(date: String): String = {
+    if(date.nonEmpty) {
+      val simple = new SimpleDateFormat("yyyy-mm-dd")
+      val formatedDate = new SimpleDateFormat("dd/mm/yyyy")
+      formatedDate.format(simple.parse(date))
     } else ""
   }
 }

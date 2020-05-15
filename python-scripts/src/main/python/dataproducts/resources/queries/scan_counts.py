@@ -2,7 +2,7 @@ def init():
     return """
     {
         "queryType": "groupBy",
-        "dataSource": "telemetry-events",
+        "dataSource": "telemetry-events-syncts",
         "dimensions": [
             "edata_filters_dialcodes"
         ],

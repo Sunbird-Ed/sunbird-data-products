@@ -184,7 +184,7 @@ if __name__ == '__main__':
     parser_job_submitter.add_argument("--auth_token", type=str,
                         help="The base API endpoint token for authorization of api")
     parser_job_submitter.add_argument("--interpolation_config", type=str,
-                        help="The interpolation config to replace the dynamic properties of the config", default="""[{"key":"__store__","value":"azure"},{"key":"__container__","value":"reports"}]""")                        
+                        help="The interpolation config to replace the dynamic properties of the config", default="""[{"key":"__store__","value":"azure"},{"key":"__container__","value":"reports"}]""")
 
     args = parser.parse_args()
 
