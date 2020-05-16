@@ -219,9 +219,9 @@ if __name__ == '__main__':
         from dataproducts.services.consumption.content_consumption import ContentConsumption
 
         cont_consumption = ContentConsumption(args.data_store_location, args.org_search,
-                                              args.druid_hostname, args.cassandra_host,
-                                              args.keyspace_prefix, args.content_search,
-                                              args.execution_date)
+                                              args.druid_hostname, args.druid_rollup_hostname,
+                                              args.cassandra_host, args.keyspace_prefix,
+                                              args.content_search, args.execution_date)
         cont_consumption.init()
 
     elif args.cmd == "daily_metrics":
