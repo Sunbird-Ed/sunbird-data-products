@@ -254,11 +254,11 @@ object TextBookUtils {
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
       val dceTextbook = parseDCETextbook(response.children.get,0,0,0,0,0,0,lengthOfChapters)
-      val totalQRCodes = dceTextbook._2+1
-      val qrLinked = dceTextbook._3+1
+      val qrLinked = dceTextbook._3
       val qrNotLinked = dceTextbook._4
-      val term1NotLinked = dceTextbook._5
-      val term2NotLinked = dceTextbook._6
+      val totalQRCodes = qrLinked+qrNotLinked
+      val term1NotLinked = dceTextbook._6
+      val term2NotLinked = dceTextbook._5
       val medium = getString(response.medium)
       val subject = getString(response.subject)
       val gradeLevel = getString(response.gradeLevel)
@@ -306,7 +306,7 @@ object TextBookUtils {
     var textBookReport = List[ETBTextbookData]()
     if(null != response && response.children.isDefined) {
       val etbTextbook = parseETBTextbook(response.children.get,response,0,0,0,0)
-      val qrLinkedContent = etbTextbook._1+1
+      val qrLinkedContent = etbTextbook._1
       val qrNotLinked = etbTextbook._2
       val leafNodeswithoutContent = etbTextbook._3
       val totalLeafNodes = etbTextbook._4
