@@ -108,7 +108,7 @@ class ReportMerger:
 
             report_df = self.rollup_report(report_df)
 
-            report_df = report_df.sort_values(by=self.report_config['rollupCol'], ascending=False)
+            report_df = report_df.sort_values(by=self.report_config['rollupCol'])
         else:
             report_df = delta_df
 
