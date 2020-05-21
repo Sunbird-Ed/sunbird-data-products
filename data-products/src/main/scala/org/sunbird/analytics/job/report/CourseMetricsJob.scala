@@ -9,10 +9,9 @@ import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.sunbird.analytics.util.ESUtil
-import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
-import org.sunbird.analytics.job.report.BaseReportsJob
+import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.util.ESUtil
 import org.sunbird.cloud.storage.conf.AppConf
 
 case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boolean)
@@ -100,13 +99,13 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val newIndexPrefix = AppConf.getConfig("course.metrics.es.index.cbatchstats.prefix")
     val newIndex = suffixDate(newIndexPrefix)
     val userData = CommonUtil.time({
-      recordTime(getUserData(loadData),"user data time: ")
+      recordTime(getUserData(loadData), "user data time: ")
     });
     //val activeBatchesCount = activeBatches.size;
 
-//    metrics.put("userDFLoadTime", userData._1)
-//    metrics.put("userDFRecordsCount", userData._2.count())
-//    metrics.put("activeBatchesCount", activeBatchesCount)
+    //    metrics.put("userDFLoadTime", userData._1)
+    //    metrics.put("userDFRecordsCount", userData._2.count())
+    //    metrics.put("activeBatchesCount", activeBatchesCount)
     for (index <- activeBatches.indices) {
       val row = activeBatches(index);
       val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2));
@@ -126,7 +125,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   def getUserData(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
-      .select( col("userid"),
+      .select(col("userid"),
         col("maskedemail"),
         col("firstname"),
         col("lastname"),
@@ -137,7 +136,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       ).cache()
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
       .filter(lower(col("isdeleted")) === "false")
-      .select(col("userid"),col("organisationid"))
+      .select(col("userid"), col("organisationid"))
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
       .select(col("id"), col("orgname")).cache()
 
@@ -196,7 +195,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedOrgNameDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
-      //.dropDuplicates(Seq("userid"))
+    //.dropDuplicates(Seq("userid"))
 
     /*
     * Resolve school name from `orgid`
@@ -237,22 +236,21 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
       .cache();
-//    resolvedData.count()
-//    resolvedData
+    //    resolvedData.count()
+    //    resolvedData
     resolvedData
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
-
-    /*
-     * courseBatchDF has details about the course and batch details for which we have to prepare the report
-     * courseBatchDF is the primary source for the report
-     * userCourseDF has details about the user details enrolled for a particular course/batch
-     */
-    val userCourseDenormDF = userCoursesDF.where(col("batchid") === batch.batchid && lower(userCoursesDF.col("active")).equalTo("true"))
+    val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
+      /*
+       * courseBatchDF has details about the course and batch details for which we have to prepare the report
+       * courseBatchDF is the primary source for the report
+       * userCourseDF has details about the user details enrolled for a particular course/batch
+       */
+      .where(col("batchid") === batch.batchid && lower(col("active")).equalTo("true"))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
       .withColumn(
@@ -344,7 +342,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("block_name").as("blockName"),
         col("externalid").as("externalId"),
         from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
-          col("certificate_status").as("certificateStatus"))
+        col("certificate_status").as("certificateStatus"))
 
     import spark.implicits._
     val batchDetails = Seq(BatchDetails(batch.batchid, courseCompletionCount, participantsCount)).toDF
