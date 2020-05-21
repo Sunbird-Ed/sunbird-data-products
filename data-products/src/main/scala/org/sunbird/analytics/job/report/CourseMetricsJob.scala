@@ -79,7 +79,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val activeBatches = courseBatchDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
     val activeBatchList = activeBatches.select("batchId", "startDate", "endDate").collect();
-    //JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
+    JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
     activeBatchList;
   }
 
