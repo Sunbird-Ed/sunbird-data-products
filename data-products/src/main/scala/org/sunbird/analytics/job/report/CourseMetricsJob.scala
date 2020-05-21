@@ -88,6 +88,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val t0 = System.currentTimeMillis()
     val result = block
     val t1 = System.currentTimeMillis()
+    println(msg + (t1 - t0))
     JobLogger.log(msg + (t1 - t0), None, INFO)
     result;
   }
@@ -99,7 +100,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val newIndexPrefix = AppConf.getConfig("course.metrics.es.index.cbatchstats.prefix")
     val newIndex = suffixDate(newIndexPrefix)
     val userData = CommonUtil.time({
-      getUserData(loadData)
+      recordTime(getUserData(loadData),"user data time: ")
     });
     //val activeBatchesCount = activeBatches.size;
 
@@ -124,12 +125,26 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
   def getUserData(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
 
-    val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace)).cache()
-    val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace)).filter(lower(col("isdeleted")) === "false").cache()
+    val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
+      .select( col("userid"),
+        col("email"),
+        col("firstname"),
+        col("lastname"),
+        col("phone"),
+        col("rootorgid"),
+        col("channel")
+      ).cache()
+    val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
+      .filter(lower(col("isdeleted")) === "false")
+      .select(col("userid"),col("organisationid"))
+      .cache()
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
-    val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-    val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
+      .select(col("id"), col("orgname")).cache()
 
+    val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
+
+    val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
+      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
     /**
      * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
      */
@@ -217,11 +232,13 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
-    resolvedExternalIdDF
+    val resolvedData = resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
       .cache();
+    resolvedData.count()
+    resolvedData
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
