@@ -156,7 +156,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val locationDenormDF = userOrgDenormDF
       .withColumn("exploded_location", explode(col("locationids")))
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
-      .dropDuplicates(Seq("userid"))
+      //.dropDuplicates(Seq("userid"))
       .select(col("name").as("district_name"), col("userid"))
 
     /**
@@ -165,7 +165,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val blockDenormDF = userOrgDenormDF
       .withColumn("exploded_location", explode(col("locationids")))
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
-      .dropDuplicates(Seq("userid"))
+      //.dropDuplicates(Seq("userid"))
       .select(col("name").as("block_name"), col("userid"))
 
     val userLocationResolvedDF = userOrgDenormDF
@@ -181,7 +181,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedOrgNameDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
-      .dropDuplicates(Seq("userid"))
+      //.dropDuplicates(Seq("userid"))
 
     /*
     * Resolve school name from `orgid`
