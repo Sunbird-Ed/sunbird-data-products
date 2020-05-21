@@ -124,8 +124,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
   def getUserData(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
 
-    val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
-    val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace)).filter(lower(col("isdeleted")) === "false")
+    val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace)).cache()
+    val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace)).filter(lower(col("isdeleted")) === "false").cache()
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
