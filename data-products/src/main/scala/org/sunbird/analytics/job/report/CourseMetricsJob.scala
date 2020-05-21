@@ -237,7 +237,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
       .cache();
-    resolvedData.count()
+//    resolvedData.count()
+//    resolvedData
     resolvedData
   }
 
