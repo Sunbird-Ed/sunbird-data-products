@@ -127,10 +127,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
       .select( col("userid"),
-        col("email"),
+        col("maskedemail"),
         col("firstname"),
         col("lastname"),
-        col("phone"),
+        col("maskedphone"),
         col("rootorgid"),
         col("channel")
       ).cache()
