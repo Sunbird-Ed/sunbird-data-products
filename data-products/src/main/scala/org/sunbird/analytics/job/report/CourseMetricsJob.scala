@@ -132,12 +132,12 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("lastname"),
         col("maskedphone"),
         col("rootorgid"),
+        col("locationids"),
         col("channel")
       ).cache()
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
       .filter(lower(col("isdeleted")) === "false")
       .select(col("userid"),col("organisationid"))
-      .cache()
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
       .select(col("id"), col("orgname")).cache()
 
