@@ -255,11 +255,11 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .where(col("batchid") === batch.batchid && lower(col("active")).equalTo("true"))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
-      .withColumn(
-        "course_completion",
-        when(col("completionpercentage").isNull, 0)
-          .when(col("completionpercentage") > 100, 100)
-          .otherwise(col("completionpercentage")).cast("int"))
+//      .withColumn(
+//        "course_completion",
+//        when(col("completionpercentage").isNull, 0)
+//          .when(col("completionpercentage") > 100, 100)
+//          .otherwise(col("completionpercentage")).cast("int"))
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
       .withColumn("certificate_status", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
       .select(
@@ -272,7 +272,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("completedon"),
         col("active"),
         col("courseid"),
-        col("course_completion"),
+        //col("course_completion"),
         col("generatedOn"),
         col("certificate_status")
       )
@@ -322,7 +322,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     import org.elasticsearch.spark.sql._
     val participantsCount = reportDF.count()
-    val courseCompletionCount = reportDF.filter(col("course_completion").equalTo(100)).count()
+  //  val courseCompletionCount = reportDF.filter(col("course_completion").equalTo(100)).count()
 
     val batchStatsDF = reportDF
       .select(
@@ -339,7 +339,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("courseid").as("courseId"),
         col("generatedOn").as("lastUpdatedOn"),
         col("batchid").as("batchId"),
-        col("course_completion").cast("long").as("completedPercent"),
+       // col("course_completion").cast("long").as("completedPercent"),
         col("district_name").as("districtName"),
         col("block_name").as("blockName"),
         col("externalid").as("externalId"),
@@ -347,16 +347,17 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("certificate_status").as("certificateStatus"))
 
     import spark.implicits._
-    val batchDetails = Seq(BatchDetails(batch.batchid, courseCompletionCount, participantsCount)).toDF
+    val batchDetails = Seq(BatchDetails(batch.batchid, 1, participantsCount)).toDF
 
     //.withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
     val batchDetailsDF = batchDetails
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
       .select(
         col("batchid").as("id"),
-        col("generatedOn").as("reportUpdatedOn"),
-        when(col("courseCompletionCountPerBatch").isNull, 0).otherwise(col("courseCompletionCountPerBatch")).as("completedCount"),
-        when(col("participantsCountPerBatch").isNull, 0).otherwise(col("participantsCountPerBatch")).as("participantCount"))
+        col("generatedOn").as("reportUpdatedOn")
+      )
+       // when(col("courseCompletionCountPerBatch").isNull, 0).otherwise(col("courseCompletionCountPerBatch")).as("completedCount"),
+        //when(col("participantsCountPerBatch").isNull, 0).otherwise(col("participantsCountPerBatch")).as("participantCount"))
 
     val cBatchIndex = AppConf.getConfig("course.metrics.es.index.cbatch")
 
@@ -392,8 +393,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("schoolname_resolved").as("School Name"),
         col("block_name").as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
-        concat(col("course_completion").cast("string"), lit("%"))
-          .as("Course Progress"),
+       // concat(col("course_completion").cast("string"), lit("%"))
+         // .as("Course Progress"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
       .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
