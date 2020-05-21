@@ -19,9 +19,9 @@ def init():
                 "name": "Number of plays"
             },
             {
-                "fieldName": "edata_time_spent",
+                "fieldName": "total_time_spent",
                 "fieldNames": [
-                    "edata_time_spent"
+                    "total_time_spent"
                 ],
                 "type": "doubleSum",
                 "name": "Total time spent"

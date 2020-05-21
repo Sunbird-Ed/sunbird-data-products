@@ -61,10 +61,6 @@ if __name__ == '__main__':
                            help="Host address for Druid")
     parser_cc.add_argument("--druid_rollup_hostname", type=str,
                            help="Host address for Druid Rollup")
-    parser_cc.add_argument("--cassandra_host", type=str,
-                           help="Host address for Cassandra")
-    parser_cc.add_argument("--keyspace_prefix", type=str,
-                           help="Environment for keyspace in Cassandra")
     parser_cc.add_argument("--content_search", type=str,
                            help="Host address for Content Search API")
     parser_cc.add_argument("--execution_date", type=str,
@@ -220,7 +216,6 @@ if __name__ == '__main__':
 
         cont_consumption = ContentConsumption(args.data_store_location, args.org_search,
                                               args.druid_hostname, args.druid_rollup_hostname,
-                                              args.cassandra_host, args.keyspace_prefix,
                                               args.content_search, args.execution_date)
         cont_consumption.init()
 
