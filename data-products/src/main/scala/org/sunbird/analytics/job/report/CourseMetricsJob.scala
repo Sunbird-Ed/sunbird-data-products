@@ -101,7 +101,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val newIndexPrefix = AppConf.getConfig("course.metrics.es.index.cbatchstats.prefix")
     val newIndex = suffixDate(newIndexPrefix)
     val userData = CommonUtil.time({
-      recordTime(getUserData(loadData), "user data time: ")
+      recordTime(getUserData(loadData), "Time taken to get generate the userData- ")
     });
     //val activeBatchesCount = activeBatches.size;
 
