@@ -61,6 +61,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val result = block
     val t1 = System.currentTimeMillis()
     JobLogger.log(msg + (t1 - t0), None, INFO)
+    println(msg + (t1 - t0))
     result;
   }
 
@@ -102,7 +103,9 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace)).select("courseid", "batchid", "enddate", "startdate")
-    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace)).filter(lower(col("active")).equalTo("true")).select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
+    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
+      .filter(lower(col("active")).equalTo("true"))
+      .select(col("batchid"), col("userid"), col("courseid"), col("active")
       , col("completionpercentage"), col("enrolleddate"), col("completedon"))
     val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace)).select(col("userid"),
       col("maskedemail"),
@@ -119,7 +122,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .select(col("id"), col("name"), col("type"))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace)).select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator4", "keyspace" -> sunbirdCoursesKeyspace))
-      .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score")
+      .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
     /*
     * courseBatchDF has details about the course and batch details for which we have to prepare the report
@@ -185,7 +188,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
     val assessmentDF = getAssessmentData(assessmentProfileDF)
-    JobLogger.log("Total Assessment Data Count is" + assessmentDF.count(), None, INFO)
+    //JobLogger.log("Total Assessment Data Count is" + assessmentDF.count(), None, INFO)
 
     /**
      * Compute the sum of all the worksheet contents score.
@@ -232,7 +235,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
    * @return - Assessment denormalised dataframe
    */
   def denormAssessment(report: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    val contentIds: List[String] = report.cache().select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
+    val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
     report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
