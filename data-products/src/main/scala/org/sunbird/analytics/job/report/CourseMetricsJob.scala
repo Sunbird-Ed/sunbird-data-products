@@ -143,13 +143,18 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(col("id"), col("orgname")).cache()
 
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
+      .filter(col("type") === "district" || col("type") === "block")
+      .select(col("id"),col("name"),col("type"))
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
       .select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
     /**
      * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
      */
-    val externalIdMapDF = userDF.join(externalIdentityDF, externalIdentityDF.col("idtype") === userDF.col("channel") && externalIdentityDF.col("provider") === userDF.col("channel") && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
+    val externalIdMapDF = userDF
+      .join(externalIdentityDF, externalIdentityDF.col("idtype") === userDF.col("channel")
+        && externalIdentityDF.col("provider") === userDF.col("channel")
+        && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
       .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"))
 
     /*
@@ -172,7 +177,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val locationDenormDF = userOrgDenormDF
       .withColumn("exploded_location", explode(col("locationids")))
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
-      //.dropDuplicates(Seq("userid"))
       .select(col("name").as("district_name"), col("userid"))
 
     /**
@@ -181,7 +185,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val blockDenormDF = userOrgDenormDF
       .withColumn("exploded_location", explode(col("locationids")))
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
-      //.dropDuplicates(Seq("userid"))
       .select(col("name").as("block_name"), col("userid"))
 
     val userLocationResolvedDF = userOrgDenormDF
