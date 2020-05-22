@@ -250,7 +250,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
     val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
-      .select(col("batchid"),col("userid"), col("active"), col("certificates")
+      .select(col("batchid"),col("userid"), col("courseid"), col("active"), col("certificates")
           , col("completionpercentage"), col("enrolleddate"), col("completedon")
       )
       /*
