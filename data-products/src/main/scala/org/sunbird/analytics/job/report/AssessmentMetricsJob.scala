@@ -113,8 +113,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       col("locationids"),
       col("channel")
     ).cache()
-    val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace)).filter(lower(col("isdeleted")) === "false")
-    val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace)).select(col("userid"), col("organisationid")).cache()
+    val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace)).filter(lower(col("isdeleted")) === "false").select(col("userid"), col("organisationid")).cache()
+    val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace)).select(col("id"), col("orgname")).cache()
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace)).filter(col("type") === "district" || col("type") === "block")
       .select(col("id"), col("name"), col("type"))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace)).select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
