@@ -140,6 +140,7 @@ object ESUtil extends ESService {
          |  }
          |}
        """.stripMargin
+    spark.sqlContext.sql("set spark.sql.caseSensitive=true")
     spark.read.format("org.elasticsearch.spark.sql")
       .option("query", request)
       .option("pushdown", "true")
