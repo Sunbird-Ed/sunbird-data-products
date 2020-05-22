@@ -131,24 +131,17 @@ object ESUtil extends ESService {
          |      "must": [
          |        {
          |          "terms": {
-         |            "identifier.raw": $contentList
+         |            "identifier.raw": ["do_31296982713786368012","do_31302079352361779219"]
          |          }
          |        },
-         |        { "match": { "contentType":  "$contentType" }}
+         |        { "match": { "contentType":  "SelfAssess" }}
          |      ]
          |    }
          |  }
          |}
        """.stripMargin
     spark.sqlContext.sql("set spark.sql.caseSensitive=true")
-    spark.read.format("org.elasticsearch.spark.sql")
-      .option("query", request)
-      .option("pushdown", "true")
-      .option("es.nodes", AppConf.getConfig("es.composite.host"))
-      .option("es.port", AppConf.getConfig("es.port"))
-      .option("es.scroll.size", AppConf.getConfig("es.scroll.size"))
-      .load(esIndex + "/cs")
-      .select("name", "identifier") // Fields need to capture from the elastic search
+    spark.read.format("org.elasticsearch.spark.sql").option("query", request).option("pushdown", "true").option("es.nodes", "28.0.2.16").option("es.port", "9200").option("es.scroll.size", 1000).load("compositesearch" + "/cs").select("name", "identifier") // Fields need to capture from the elastic search
 
   }
 
