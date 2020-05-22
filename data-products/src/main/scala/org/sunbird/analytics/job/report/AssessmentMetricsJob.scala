@@ -237,7 +237,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   def denormAssessment(report: DataFrame)(implicit spark: SparkSession): DataFrame = {
     val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
-    report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
+    report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
         col("name").as("content_name"),
         col("total_sum_score"), report.col("userid"), report.col("courseid"), report.col("batchid"),
