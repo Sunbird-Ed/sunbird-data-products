@@ -121,7 +121,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace)).filter(col("type") === "district" || col("type") === "block")
       .select(col("id"), col("name"), col("type"))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace)).select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator4", "keyspace" -> sunbirdCoursesKeyspace))
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
     /*
@@ -188,6 +188,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
     val assessmentDF = getAssessmentData(assessmentProfileDF)
+    println("assessmentDF" + assessmentDF.show(false))
     //JobLogger.log("Total Assessment Data Count is" + assessmentDF.count(), None, INFO)
 
     /**
@@ -202,6 +203,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
      * Filter only valid enrolled userid for the specific courseid
      */
     val userAssessmentResolvedDF = userLocationResolvedDF.join(resDF, userLocationResolvedDF.col("userid") === resDF.col("user_id") && userLocationResolvedDF.col("batchid") === resDF.col("batch_id") && userLocationResolvedDF.col("courseid") === resDF.col("course_id"), "right_outer")
+    println("userAssessmentResolvedDF" + userAssessmentResolvedDF.show(false))
     val resolvedExternalIdDF = userAssessmentResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
