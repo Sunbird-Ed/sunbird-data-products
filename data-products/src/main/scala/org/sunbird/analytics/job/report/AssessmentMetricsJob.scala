@@ -239,7 +239,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     JobLogger.log("ContentIds are" + contentIds, None, INFO)
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
     println("contentMetaDataDF" + contentMetaDataDF.show(false))
-    report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
+    //report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
+      report.join(contentMetaDataDF)
       .select(
         col("name").as("content_name"),
         col("total_sum_score"), report.col("userid"), report.col("courseid"), report.col("batchid"),
@@ -356,7 +357,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val aliasName = AppConf.getConfig("assessment.metrics.es.alias")
     val indexToEs = AppConf.getConfig("course.es.index.enabled")
     courseBatchList.foreach(item => {
-
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
       JobLogger.log(s"Course batch mappings- courseId: $courseId and batchIdList is $batchList " + item, None, INFO)
