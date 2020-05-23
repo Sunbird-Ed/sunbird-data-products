@@ -196,7 +196,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .dropDuplicates(Seq("userid"))
       .select(col("name").as("district_name"), col("userid"))
 
-    println("locationDenormDF" + locationDenormDF.show(false))
+   // println("locationDenormDF" + locationDenormDF.show(false))
 
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
@@ -213,12 +213,12 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .withColumn("agg_score", sum("total_score") over assessmentAggDf)
       .withColumn("agg_max_score", sum("total_max_score") over assessmentAggDf)
       .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
-    println("resdf" +resDF.show(false))
+  //  println("resdf" +resDF.show(false))
     /**
      * Filter only valid enrolled userid for the specific courseid
      */
     val userAssessmentResolvedDF = userLocationResolvedDF.join(resDF, userLocationResolvedDF.col("userid") === resDF.col("user_id") && userLocationResolvedDF.col("batchid") === resDF.col("batch_id") && userLocationResolvedDF.col("courseid") === resDF.col("course_id"), "right_outer")
-    println("userAssessmentResolvedDF" + userAssessmentResolvedDF.show(false))
+    //println("userAssessmentResolvedDF" + userAssessmentResolvedDF.show(false))
     val resolvedExternalIdDF = userAssessmentResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
@@ -257,7 +257,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     //val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
     //JobLogger.log("ContentIds are" + contentIds, None, INFO)
     val testDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
-    println("ES-API" +testDF.show(false))
+   // println("ES-API" +testDF.show(false))
     // println("contentMetaDataDF" + contentMetaDataDF.show(false))
     //report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
     import spark.implicits._
