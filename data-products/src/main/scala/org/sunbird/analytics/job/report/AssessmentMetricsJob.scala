@@ -136,6 +136,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         col("active"),
         courseBatchDF.col("courseid"))
 
+    println("userCourseDenormDF"+ userCourseDenormDF.show(false))
+
     /*
     *userCourseDenormDF lacks some of the user information that need to be part of the report
     *here, it will add some more user details
@@ -152,11 +154,16 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         col("userid"),
         col("locationids"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
+    println("userDenormDF" + userDenormDF.show(false))
     /**
      * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
      */
-    val externalIdMapDF = userDF.join(externalIdentityDF, externalIdentityDF.col("idtype") === userDF.col("channel") && externalIdentityDF.col("provider") === userDF.col("channel") && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
+    val externalIdMapDF = userDF.join(externalIdentityDF,
+      externalIdentityDF.col("idtype") === userDF.col("channel")
+      && externalIdentityDF.col("provider") === userDF.col("channel")
+      && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
       .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"))
+    println("externalIdMapDF" + externalIdMapDF.show(false))
 
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
@@ -165,13 +172,18 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(userOrgDF, userOrgDF.col("userid") === userDenormDF.col("userid") && userOrgDF.col("organisationid") === userDenormDF.col("rootorgid"))
       .select(userDenormDF.col("*"), col("organisationid"))
 
+    println("userRootOrgDF" + userRootOrgDF.show(false))
+
     val userSubOrgDF = userDenormDF
       .join(userOrgDF, userOrgDF.col("userid") === userDenormDF.col("userid") && userOrgDF.col("organisationid") =!= userDenormDF.col("rootorgid"))
       .select(userDenormDF.col("*"), col("organisationid"))
 
+    println("userSubOrgDF" + userSubOrgDF.show(false))
+
     val rootOnlyOrgDF = userRootOrgDF
       .join(userSubOrgDF, Seq("userid"), "leftanti")
       .select(userRootOrgDF.col("*"))
+    println("rootOnlyOrgDF" + rootOnlyOrgDF.show(false))
 
     val userOrgDenormDF = rootOnlyOrgDF.union(userSubOrgDF)
 
@@ -183,6 +195,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
       .dropDuplicates(Seq("userid"))
       .select(col("name").as("district_name"), col("userid"))
+
+    println("locationDenormDF" + locationDenormDF.show(false))
 
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
