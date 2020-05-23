@@ -385,7 +385,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     courseBatchList.foreach(item => {
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
-      JobLogger.log(s"Course batch mappings- courseId: $courseId and batchIdList is $batchList " + item, None, INFO)
+      JobLogger.log(s"Course batch mappings- courseId: $courseId and batchIdList is $batchList ", None, INFO)
       batchList.foreach(batchId => {
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
