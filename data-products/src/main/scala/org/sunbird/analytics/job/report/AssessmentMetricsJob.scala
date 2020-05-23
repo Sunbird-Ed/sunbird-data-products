@@ -383,7 +383,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val aliasName = AppConf.getConfig("assessment.metrics.es.alias")
     val indexToEs = AppConf.getConfig("course.es.index.enabled")
     courseBatchList.foreach(item => {
-      JobLogger.log("Course batch mappings: " + item, None, INFO)
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
       JobLogger.log(s"Course batch mappings- courseId: $courseId and batchIdList is $batchList " + item, None, INFO)
