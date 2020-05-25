@@ -9,6 +9,11 @@ object BatchStatus extends Enumeration {
     val Expired = Value(2)
 }
 
+object UserFlagValidation extends Enumeration {
+type UserFlagValidation = Value
+    val STATE_VALIDATED = Value(4, "STATE_VALIDATED")
+}
+
 object Constants {
 
     val env = AppConf.getConfig("cassandra.keyspace_prefix");

@@ -9,10 +9,9 @@ import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.sunbird.analytics.util.ESUtil
-import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
-import org.sunbird.analytics.job.report.BaseReportsJob
+import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.util.{ESUtil, UserFlagValidation}
 import org.sunbird.cloud.storage.conf.AppConf
 
 case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boolean)
@@ -123,29 +122,46 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   }
 
   def getUserData(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-
+    val udfFunc = udf(assignUserFlagValues _)
     val userDF = loadData(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace)).filter(lower(col("isdeleted")) === "false")
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
+    /**
+      * stateValidationUserDF - Added a new column state_validated
+      * If state_validated is true then the user is a state user else its a self signed up user
+      */
+    val stateValidationUserDF = userDF.withColumn("state_validated", udfFunc(col("flagsvalue")))
 
     /**
      * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
      */
-    val externalIdMapDF = userDF.join(externalIdentityDF, externalIdentityDF.col("idtype") === userDF.col("channel") && externalIdentityDF.col("provider") === userDF.col("channel") && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
-      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"))
+
+    val externalIDMapNew1 = externalIdentityDF.join(stateValidationUserDF, externalIdentityDF.col("provider") === stateValidationUserDF.col("channel") && externalIdentityDF.col("userid") === stateValidationUserDF.col("userid"), "inner")
+        .withColumn("new_external_id",
+          when(stateValidationUserDF.col("state_validated").equalTo(true) && externalIdentityDF.col("idtype").equalTo("declared-ext-id"),externalIdentityDF.col("id"))
+            .when(stateValidationUserDF.col("state_validated").equalTo(false) && externalIdentityDF.col("idtype") === stateValidationUserDF.col("channel"), externalIdentityDF.col("id"))
+            .otherwise("")
+        )
+        .select(stateValidationUserDF.col("state_validated"),
+          externalIdentityDF.col("externalid"),
+          externalIdentityDF.col("userid"),
+          col("new_external_id"),
+          externalIdentityDF.col("id").as("external_identity"),
+          externalIdentityDF.col("idtype"),
+          externalIdentityDF.col("provider"))
 
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
     * */
-    val userRootOrgDF = userDF
-      .join(userOrgDF, userOrgDF.col("userid") === userDF.col("userid") && userOrgDF.col("organisationid") === userDF.col("rootorgid"))
-      .select(userDF.col("*"), col("organisationid"))
+    val userRootOrgDF = stateValidationUserDF
+      .join(userOrgDF, userOrgDF.col("userid") === stateValidationUserDF.col("userid") && userOrgDF.col("organisationid") === stateValidationUserDF.col("rootorgid"))
+      .select(stateValidationUserDF.col("*"), col("organisationid"))
 
-    val userSubOrgDF = userDF
-      .join(userOrgDF, userOrgDF.col("userid") === userDF.col("userid") && userOrgDF.col("organisationid") =!= userDF.col("rootorgid"))
-      .select(userDF.col("*"), col("organisationid"))
+    val userSubOrgDF = stateValidationUserDF
+      .join(userOrgDF, userOrgDF.col("userid") === stateValidationUserDF.col("userid") && userOrgDF.col("organisationid") =!= stateValidationUserDF.col("rootorgid"))
+      .select(stateValidationUserDF.col("*"), col("organisationid"))
 
     val rootOnlyOrgDF = userRootOrgDF
       .join(userSubOrgDF, Seq("userid"), "leftanti")
@@ -172,8 +188,26 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
-    val resolvedExternalIdDF = userBlockResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
+    val resolvedExternalIdDF = userBlockResolvedDF.join(externalIDMapNew1, Seq("userid"), "left_outer")
+        .select(userBlockResolvedDF.col("*"),
+          externalIDMapNew1.col("new_external_id"),
+          externalIDMapNew1.col("external_identity"),
+          externalIDMapNew1.col("idtype"),
+          externalIDMapNew1.col("provider"))
 
+    /*
+    * Resolve state name from `channel`
+    * */
+    val resolvedStateNameDF = resolvedExternalIdDF.join(organisationDF,organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
+      .withColumn("resolved_state_name",
+        when(resolvedExternalIdDF.col("state_validated").equalTo(false) &&
+          resolvedExternalIdDF.col("provider").equalTo("declared-ext-id") &&
+          resolvedExternalIdDF.col("channel") === organisationDF.col("id") &&
+          organisationDF.col("isrootorg").equalTo(false),
+          organisationDF.col("channel"))
+          .when(resolvedExternalIdDF.col("state_validated").equalTo(true) && organisationDF.col("isrootorg").equalTo(true), organisationDF.col("channel"))
+      )
+      .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("resolved_state_name"))
     /*
     * Resolve organisation name from `rootorgid`
     * */
@@ -183,12 +217,25 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
       .dropDuplicates(Seq("userid"))
 
+    val resolvedOrgStateDF = resolvedStateNameDF.join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
+
     /*
-    * Resolve school name from `orgid`
+    * Resolve
+    * 1. school name from `orgid`
+    * 2. school UDISE code from
+    *   2.1 org.orgcode if user is a state user
+    *   2.2 externalID.id if user is a self signed up user
     * */
+
     val schoolNameDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("organisationid"), col("orgname").as("schoolname_resolved"))
+
+    val schoolUDISECode = resolvedExternalIdDF.join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
+      .withColumn("school_UDISE_code",
+      when(resolvedExternalIdDF.col("state_validated").equalTo(false) && resolvedExternalIdDF.col("idtype").equalTo("declared-school-udise-code") ,resolvedExternalIdDF.col("external_identity"))
+        .when(resolvedExternalIdDF.col("state_validated").equalTo(true) && organisationDF.col("isrootorg").equalTo(false), organisationDF.col("orgcode")))
+      .select(resolvedExternalIdDF.col("userid"), col("school_UDISE_code"))
 
     /**
      * If the user present in the multiple organisation, then zip all the org names.
@@ -217,9 +264,11 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
+    val resolvedSchoolInfoDF = resolvedSchoolNameDF.join(schoolUDISECode, Seq("userid"), "left_outer")
+
     resolvedExternalIdDF
-      .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
-      .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
+      .join(resolvedSchoolInfoDF, Seq("userid"), "left_outer")
+      .join(resolvedOrgStateDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
       .cache();
   }
@@ -258,10 +307,13 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("generatedOn"),
         col("certificate_status")
       )
-
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
+      .withColumn("resolved_external_id", when(userDF.col("resolved_state_name") === userDF.col("orgname_resolved"), col("new_external_id")).otherwise(""))
+      .withColumn("resolved_school_UDISE_code", when(userDF.col("resolved_state_name") === userDF.col("orgname_resolved"), col("school_UDISE_code")).otherwise(""))
+      .withColumn("resolved_schoolname", when(userDF.col("resolved_state_name") === userDF.col("orgname_resolved"), col("schoolname_resolved")).otherwise(""))
+      .withColumn("resolved_block_name", when(userDF.col("resolved_state_name") === userDF.col("orgname_resolved"), col("block_name")).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("firstname"),
@@ -272,13 +324,14 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("rootorgid"),
         col("userid"),
         col("locationids"),
-        col("externalid"),
+        col("resolved_external_id"),
         col("orgname_resolved"),
-        col("schoolname_resolved"),
+        col("resolved_school_UDISE_code"),
+        col("resolved_schoolname"),
         col("district_name"),
-        col("block_name"))
+        col("resolved_block_name"),
+        col("resolved_state_name"))
       .cache()
-
     reportDF.count();
     reportDF;
 
@@ -315,7 +368,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("maskedemail").as("maskedEmail"),
         col("maskedphone").as("maskedPhone"),
         col("orgname_resolved").as("rootOrgName"),
-        col("schoolname_resolved").as("subOrgName"),
+        col("resolved_schoolname").as("subOrgName"),
         col("startdate").as("startDate"),
         col("enddate").as("endDate"),
         col("courseid").as("courseId"),
@@ -323,8 +376,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("batchid").as("batchId"),
         col("course_completion").cast("long").as("completedPercent"),
         col("district_name").as("districtName"),
-        col("block_name").as("blockName"),
-        col("externalid").as("externalId"),
+        col("resolved_block_name").as("blockName"),
+        col("resolved_external_id").as("externalId"),
+        col("resolved_school_UDISE_code").as("schoolUDISECode"),
+        col("resolved_state_name").as("schoolName"),
         from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
           col("certificate_status").as("certificateStatus"))
 
@@ -364,15 +419,17 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig): Unit = {
     reportDF
       .select(
-        col("externalid").as("External ID"),
+        col("resolved_external_id").as("External ID"),
         col("userid").as("User ID"),
         concat_ws(" ", col("firstname"), col("lastname")).as("User Name"),
         col("maskedemail").as("Email ID"),
         col("maskedphone").as("Mobile Number"),
         col("orgname_resolved").as("Organisation Name"),
+        col("resolved_state_name").as("State Name"),
         col("district_name").as("District Name"),
-        col("schoolname_resolved").as("School Name"),
-        col("block_name").as("Block Name"),
+        col("resolved_school_UDISE_code").as("School UDISE Code"),
+        col("resolved_schoolname").as("School Name"),
+        col("resolved_block_name").as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
@@ -384,4 +441,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $noOfRecords } ", None, INFO)
   }
 
+  def assignUserFlagValues(flagvalue: Int): Boolean = {
+     if((flagvalue & UserFlagValidation.STATE_VALIDATED.id) == UserFlagValidation.STATE_VALIDATED.id) true
+      else false
+  }
 }
