@@ -126,7 +126,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace)).select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
-
     /*
     * courseBatchDF has details about the course and batch details for which we have to prepare the report
     * courseBatchDF is the primary source for the report
@@ -208,7 +207,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
      * Filter only valid enrolled userid for the specific courseid
      */
     val userAssessmentResolvedDF = userLocationResolvedDF.join(resDF, userLocationResolvedDF.col("userid") === resDF.col("user_id") && userLocationResolvedDF.col("batchid") === resDF.col("batch_id") && userLocationResolvedDF.col("courseid") === resDF.col("course_id"), "right_outer")
-    //println("userAssessmentResolvedDF" + userAssessmentResolvedDF.show(false))
     val resolvedExternalIdDF = userAssessmentResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
@@ -231,12 +229,9 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     * merge orgName and schoolName based on `userid` and calculate the course progress percentage from `progress` column which is no of content visited/read
     * */
 
-    val res = resolvedExternalIdDF
+     resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid"), "left_outer")
-    //res.count()
-    res
-
   }
 
   /**
@@ -245,19 +240,18 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
    * @return - Assessment denormalised dataframe
    */
   def denormAssessment(report: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    //println("reportDFSHow" + report.show(false))
-    val contentIds = List("do_31296982713786368012", "do_31302079352361779219")
-    //val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
-    //JobLogger.log("ContentIds are" + contentIds, None, INFO)
-    val testDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
+    //val contentIds = List("do_31296982713786368012", "do_31302079352361779219")
+    val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
+    JobLogger.log("ContentIds are" + contentIds, None, INFO)
+    val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
     // println("ES-API" +testDF.show(false))
     // println("contentMetaDataDF" + contentMetaDataDF.show(false))
     //report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
     import spark.implicits._
-    val contentMetaDataDF = Seq(
-      ("do_31296982713786368012", "bat"),
-      ("do_31302079352361779219", "mouse")
-    ).toDF("identifier", "name")
+//    val contentMetaDataDF = Seq(
+//      ("do_31296982713786368012", "bat"),
+//      ("do_31302079352361779219", "mouse")
+//    ).toDF("identifier", "name")
 
     report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
@@ -371,11 +365,9 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     if (!indexList.contains(index)) ESUtil.rolloverIndex(index, alias)
   }
 
-
   def save(courseBatchList: Array[Map[String, Any]], reportDF: DataFrame, url: String, spark: SparkSession)(implicit fc: FrameworkContext): Unit = {
     val aliasName = AppConf.getConfig("assessment.metrics.es.alias")
     val indexToEs = AppConf.getConfig("course.es.index.enabled")
-   // JobLogger.log("item is" + courseBatchList, None, INFO)
     courseBatchList.foreach(item => {
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
@@ -383,15 +375,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       batchList.foreach(batchId => {
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
-          val reportData = recordTime(transposeDF(filteredDF), s"Time take to transpose the $batchId DF -")
+          val reportData = transposeDF(filteredDF)
           try {
-
             val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId), s"Time taken to save the $batchId into azure -")
             val resolvedDF = reportData.withColumn("reportUrl", lit(urlBatch))
             if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
-             // JobLogger.log("resolvedDF" + resolvedDF.show(false), None, INFO)
-              println("resolvedDF==" + resolvedDF.show(false))
-              JobLogger.log("resolvedDF" + resolvedDF.count, None, INFO)
               recordTime(saveToElastic(this.getIndexName, resolvedDF), s"Time taken to save the $batchId into to es -")
               JobLogger.log("Indexing of assessment report data is success: " + this.getIndexName, None, INFO)
             } else {
