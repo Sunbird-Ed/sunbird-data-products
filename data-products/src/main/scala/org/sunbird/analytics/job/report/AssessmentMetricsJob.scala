@@ -324,7 +324,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val renamedDir = s"$tempDir/renamed"
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("assessment.metrics.cloud.objectKey"))
-     reportDF.select(
+    reportDF.select(
       reportDF.col("externalid").as("External ID"),
       reportDF.col("userid").as("User ID"),
       reportDF.col("username").as("User Name"),
@@ -340,23 +340,24 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   def saveToElastic(index: String, reportDF: DataFrame): Unit = {
-    //    val assessmentReportDF = reportDF.select(
-    //      col("userid").as("userId"),
-    //      col("username").as("userName"),
-    //      col("courseid").as("courseId"),
-    //      col("batchid").as("batchId"),
-    //      col("grand_total").as("score"),
-    //      col("maskedemail").as("maskedEmail"),
-    //      col("maskedphone").as("maskedPhone"),
-    //      col("district_name").as("districtName"),
-    //      col("orgname_resolved").as("rootOrgName"),
-    //      col("externalid").as("externalId"),
-    //      col("schoolname_resolved").as("subOrgName"),
-    //      col("total_sum_score").as("totalScore"),
-    //      col("content_name").as("contentName"),
-    //      col("reportUrl").as("reportUrl")
-    //    )
-    ESUtil.saveToIndex(reportDF, index)
+    val assessmentReportDF = reportDF.select(
+      col("userid").as("userId"),
+      col("username").as("userName"),
+      col("courseid").as("courseId"),
+      col("batchid").as("batchId"),
+      col("grand_total").as("score"),
+      col("maskedemail").as("maskedEmail"),
+      col("maskedphone").as("maskedPhone"),
+      col("district_name").as("districtName"),
+      col("orgname_resolved").as("rootOrgName"),
+      col("externalid").as("externalId"),
+      col("schoolname_resolved").as("subOrgName"),
+      col("total_sum_score").as("totalScore"),
+      col("content_name").as("contentName"),
+      col("reportUrl").as("reportUrl"),
+      reportDF.col("*")
+    )
+    ESUtil.saveToIndex(assessmentReportDF, index)
   }
 
   def rollOverIndex(index: String, alias: String): Unit = {
