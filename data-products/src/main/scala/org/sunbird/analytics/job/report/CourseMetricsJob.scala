@@ -332,27 +332,27 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val participantsCount = reportDF.count()
     val courseCompletionCount = reportDF.filter(col("course_completion").equalTo(100)).count()
 
-//    val batchStatsDF = reportDF
-//      .select(
-//        concat_ws(" ", col("firstname"), col("lastname")).as("name"),
-//        concat_ws(":", col("userid"), col("batchid")).as("id"),
-//        col("userid").as("userId"),
-//        col("completedon").as("completedOn"),
-//        col("maskedemail").as("maskedEmail"),
-//        col("maskedphone").as("maskedPhone"),
-//        col("orgname_resolved").as("rootOrgName"),
-//        col("schoolname_resolved").as("subOrgName"),
-//        col("startdate").as("startDate"),
-//        col("enddate").as("endDate"),
-//        col("courseid").as("courseId"),
-//        col("generatedOn").as("lastUpdatedOn"),
-//        col("batchid").as("batchId"),
-//        col("course_completion").cast("long").as("completedPercent"),
-//        col("district_name").as("districtName"),
-//        col("block_name").as("blockName"),
-//        col("externalid").as("externalId"),
-//        from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
-//        col("certificate_status").as("certificateStatus"))
+    val batchStatsDF = reportDF
+      .select(
+        concat_ws(" ", col("firstname"), col("lastname")).as("name"),
+        concat_ws(":", col("userid"), col("batchid")).as("id"),
+        col("userid").as("userId"),
+        col("completedon").as("completedOn"),
+        col("maskedemail").as("maskedEmail"),
+        col("maskedphone").as("maskedPhone"),
+        col("orgname_resolved").as("rootOrgName"),
+        col("schoolname_resolved").as("subOrgName"),
+        col("startdate").as("startDate"),
+        col("enddate").as("endDate"),
+        col("courseid").as("courseId"),
+        col("generatedOn").as("lastUpdatedOn"),
+        col("batchid").as("batchId"),
+        col("course_completion").cast("long").as("completedPercent"),
+        col("district_name").as("districtName"),
+        col("block_name").as("blockName"),
+        col("externalid").as("externalId"),
+        from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
+        col("certificate_status").as("certificateStatus"))
 
     import spark.implicits._
     val batchDetails = Seq(BatchDetails(batch.batchid, courseCompletionCount, participantsCount)).toDF
@@ -369,8 +369,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val cBatchIndex = AppConf.getConfig("course.metrics.es.index.cbatch")
 
     try {
-      reportDF.saveToEs(s"$newIndex/_doc", Map("es.mapping.id" -> "id"))
-      //JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
+      batchStatsDF.saveToEs(s"$newIndex/_doc", Map("es.mapping.id" -> "id"))
+     // JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
       // upsert batch details to cbatch index
       batchDetailsDF.saveToEs(s"$cBatchIndex/_doc", Map("es.mapping.id" -> "id", "es.write.operation" -> "upsert"))
       //JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: ${batchStatsDF.count()} }}", None, INFO)
