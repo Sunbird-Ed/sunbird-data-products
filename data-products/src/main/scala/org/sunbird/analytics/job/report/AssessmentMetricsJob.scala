@@ -231,9 +231,12 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     * merge orgName and schoolName based on `userid` and calculate the course progress percentage from `progress` column which is no of content visited/read
     * */
 
-    resolvedExternalIdDF
+    val res = resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid"), "left_outer")
+    res.count()
+    res
+
   }
 
   /**
