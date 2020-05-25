@@ -124,7 +124,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace)).filter(col("type") === "district" || col("type") === "block")
       .select(col("id"), col("name"), col("type"))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace)).select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator4", "keyspace" -> sunbirdCoursesKeyspace))
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
     /*
