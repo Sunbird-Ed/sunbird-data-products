@@ -240,7 +240,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
    * @return - Assessment denormalised dataframe
    */
   def denormAssessment(report: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    //val contentIds = List("do_31296982713786368012", "do_31302079352361779219")
     val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
     JobLogger.log("ContentIds are" + contentIds, None, INFO)
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
@@ -302,7 +301,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
    */
   def transposeDF(reportDF: DataFrame): DataFrame = {
     // Re-shape the dataFrame (Convert the content name from the row to column)
-
     val reshapedDF = reportDF.groupBy("courseid", "batchid", "userid").pivot("content_name").agg(concat(ceil((split(first("grand_total"), "\\/").getItem(0) * 100) / (split(first("grand_total"), "\\/").getItem(1))), lit("%")))
     reshapedDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
   }
@@ -330,23 +328,23 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   def saveToElastic(index: String, reportDF: DataFrame): Unit = {
-    val assessmentReportDF = reportDF.select(
-      col("userid").as("userId"),
-      col("username").as("userName"),
-      col("courseid").as("courseId"),
-      col("batchid").as("batchId"),
-      col("grand_total").as("score"),
-      col("maskedemail").as("maskedEmail"),
-      col("maskedphone").as("maskedPhone"),
-      col("district_name").as("districtName"),
-      col("orgname_resolved").as("rootOrgName"),
-      col("externalid").as("externalId"),
-      col("schoolname_resolved").as("subOrgName"),
-      col("total_sum_score").as("totalScore"),
-      col("content_name").as("contentName"),
-      col("reportUrl").as("reportUrl")
-    )
-    ESUtil.saveToIndex(assessmentReportDF, index)
+//    val assessmentReportDF = reportDF.select(
+//      col("userid").as("userId"),
+//      col("username").as("userName"),
+//      col("courseid").as("courseId"),
+//      col("batchid").as("batchId"),
+//      col("grand_total").as("score"),
+//      col("maskedemail").as("maskedEmail"),
+//      col("maskedphone").as("maskedPhone"),
+//      col("district_name").as("districtName"),
+//      col("orgname_resolved").as("rootOrgName"),
+//      col("externalid").as("externalId"),
+//      col("schoolname_resolved").as("subOrgName"),
+//      col("total_sum_score").as("totalScore"),
+//      col("content_name").as("contentName"),
+//      col("reportUrl").as("reportUrl")
+//    )
+    ESUtil.saveToIndex(reportDF, index)
   }
 
   def rollOverIndex(index: String, alias: String): Unit = {
