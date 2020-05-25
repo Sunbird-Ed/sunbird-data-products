@@ -268,7 +268,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
    * Index name: cbatch-assessment-24-08-1993-09-30 (dd-mm-yyyy-hh-mm)
    */
   def saveReport(reportDF: DataFrame, url: String)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
-    // Save the report to azure cloud storage
     val result = reportDF.groupBy("courseid").agg(collect_list("batchid").as("batchid"))
     val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
     if (StringUtils.isNotBlank(uploadToAzure) && StringUtils.equalsIgnoreCase("true", uploadToAzure)) {
@@ -303,6 +302,17 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     // Re-shape the dataFrame (Convert the content name from the row to column)
     val reshapedDF = reportDF.groupBy("courseid", "batchid", "userid").pivot("content_name").agg(concat(ceil((split(first("grand_total"), "\\/").getItem(0) * 100) / (split(first("grand_total"), "\\/").getItem(1))), lit("%")))
     reshapedDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
+    .select(
+      reportDF.col("externalid").as("External ID"),
+      reportDF.col("userid").as("User ID"),
+      reportDF.col("username").as("User Name"),
+      reportDF.col("maskedemail").as("Email ID"),
+      reportDF.col("maskedphone").as("Mobile Number"),
+      reportDF.col("orgname_resolved").as("Organisation Name"),
+      reportDF.col("district_name").as("District Name"),
+      reportDF.col("schoolname_resolved").as("School Name"),
+      reshapedDF.col("*"), // Since we don't know the content name column so we are using col("*")
+      reportDF.col("total_sum_score").as("Total Score")).dropDuplicates("userid", "courseid", "batchid").drop("userid", "courseid", "batchid")
   }
 
   /**
@@ -363,19 +373,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
           val reportData = transposeDF(filteredDF)
-          val transposedDF = reportData.select(
-            reportDF.col("externalid").as("External ID"),
-            reportDF.col("userid").as("User ID"),
-            reportDF.col("username").as("User Name"),
-            reportDF.col("maskedemail").as("Email ID"),
-            reportDF.col("maskedphone").as("Mobile Number"),
-            reportDF.col("orgname_resolved").as("Organisation Name"),
-            reportDF.col("district_name").as("District Name"),
-            reportDF.col("schoolname_resolved").as("School Name"),
-            reportData.col("*"), // Since we don't know the content name column so we are using col("*")
-            reportDF.col("total_sum_score").as("Total Score")).dropDuplicates("userid", "courseid", "batchid").drop("userid", "courseid", "batchid")
           try {
-            val urlBatch: String = recordTime(saveToAzure(transposedDF, url, batchId), s"Time taken to save the $batchId into azure -")
+            val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId), s"Time taken to save the $batchId into azure -")
             val resolvedDF = reportData.withColumn("reportUrl", lit(urlBatch))
             if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
               recordTime(saveToElastic(this.getIndexName, resolvedDF), s"Time taken to save the $batchId into to es -")
