@@ -385,9 +385,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
           val reportData = recordTime(transposeDF(filteredDF), s"Time take to transpose the $batchId DF -")
           try {
+
             val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId), s"Time taken to save the $batchId into azure -")
             val resolvedDF = filteredDF.withColumn("reportUrl", lit(urlBatch))
             if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
+              JobLogger.log("reportDta" + resolvedDF.count(), None, INFO)
               recordTime(saveToElastic(this.getIndexName, resolvedDF), s"Time taken to save the $batchId into to es -")
               JobLogger.log("Indexing of assessment report data is success: " + this.getIndexName, None, INFO)
             } else {
