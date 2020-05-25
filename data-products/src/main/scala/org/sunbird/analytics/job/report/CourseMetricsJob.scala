@@ -11,7 +11,7 @@ import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
-import org.sunbird.analytics.util.{ESUtil, UserFlagValidation}
+import org.sunbird.analytics.util.ESUtil
 import org.sunbird.cloud.storage.conf.AppConf
 
 case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boolean)
@@ -439,10 +439,5 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val noOfRecords = reportDF.count()
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $noOfRecords } ", None, INFO)
-  }
-
-  def assignUserFlagValues(flagvalue: Int): Boolean = {
-     if((flagvalue & UserFlagValidation.STATE_VALIDATED.id) == UserFlagValidation.STATE_VALIDATED.id) true
-      else false
   }
 }

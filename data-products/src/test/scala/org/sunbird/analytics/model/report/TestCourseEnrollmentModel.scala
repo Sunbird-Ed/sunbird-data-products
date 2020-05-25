@@ -1,23 +1,17 @@
 package org.sunbird.analytics.model.report
 
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.ekstep.analytics.framework.{FrameworkContext, _}
 import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.{FrameworkContext, _}
 import org.ekstep.analytics.model.ReportConfig
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
+import org.sunbird.analytics.util._
 import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.collection.mutable.Buffer
 import scala.io.Source
-import org.sunbird.analytics.util.CourseDetails
-import org.sunbird.analytics.util.CourseReport
-import org.sunbird.analytics.util.SparkSpec
-import org.sunbird.analytics.util.EmbeddedES
-import org.sunbird.analytics.util.EsIndex
-import org.sunbird.analytics.util.EmbeddedCassandra
 
 class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory {
 
@@ -63,8 +57,9 @@ class TestCourseEnrollmentModel extends SparkSpec with Matchers with MockFactory
     import sqlContext.implicits._
     val userDF = userdata.toDF("channel", "identifier", "courseName")
     (mockCourseReport.getCourse(_: Map[String, AnyRef])(_: SparkContext)).expects(jobConfig, *).returns(userDF).anyNumberOfTimes()
+    the[Exception] thrownBy {
       CourseEnrollmentModel.execute(sc.emptyRDD, Option(jobConfig))
-
+    } should have message "Merge report script failed with exit code 127"
   }
 
   it should "give error if there is no data for output" in {

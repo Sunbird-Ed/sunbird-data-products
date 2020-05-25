@@ -5,6 +5,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
 import org.ekstep.analytics.framework.util.CommonUtil
+import org.sunbird.analytics.util.UserFlagValidation
 import org.sunbird.cloud.storage.conf.AppConf
 
 trait BaseReportsJob {
@@ -82,6 +83,11 @@ trait BaseReportsJob {
       org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(provider), Option(provider));
     }
 
+  }
+
+  def assignUserFlagValues(flagvalue: Int): Boolean = {
+    if((flagvalue & UserFlagValidation.STATE_VALIDATED.id) == UserFlagValidation.STATE_VALIDATED.id) true
+    else false
   }
 
 }
