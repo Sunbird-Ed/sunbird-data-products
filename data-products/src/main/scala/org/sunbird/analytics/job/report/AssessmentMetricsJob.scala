@@ -251,6 +251,20 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         report.col("orgname_resolved"), report.col("externalid"), report.col("schoolname_resolved"), report.col("username"))
   }
 
+  /**
+   * Get the Either last updated assessment question or Best attempt assessment
+   *
+   * @param bestAttemptScore - Boolean, To get the best attempt score
+   * @param reportDF         - Dataframe, Report df.
+   * @return DataFrame
+   */
+  def getAssessmentData(reportDF: DataFrame): DataFrame = {
+    val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
+    val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
+    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
+    reportDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
+  }
+
 
   /**
    * This method is used to upload the report the azure cloud service and
@@ -291,61 +305,56 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
    */
   def transposeDF(reportDF: DataFrame): DataFrame = {
     // Re-shape the dataFrame (Convert the content name from the row to column)
-    val reshapedDF = reportDF.groupBy("courseid", "batchid", "userid").pivot("content_name").agg(concat(ceil((split(first("grand_total"), "\\/").getItem(0) * 100) / (split(first("grand_total"), "\\/").getItem(1))), lit("%")))
-    reshapedDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner").
-      select(
-        reportDF.col("externalid").as("External ID"),
-        reportDF.col("userid").as("User ID"),
-        reportDF.col("username").as("User Name"),
-        reportDF.col("maskedemail").as("Email ID"),
-        reportDF.col("maskedphone").as("Mobile Number"),
-        reportDF.col("orgname_resolved").as("Organisation Name"),
-        reportDF.col("district_name").as("District Name"),
-        reportDF.col("schoolname_resolved").as("School Name"),
-        reshapedDF.col("*"), // Since we don't know the content name column so we are using col("*")
-        reportDF.col("total_sum_score").as("Total Score")).dropDuplicates("userid", "courseid", "batchid").drop("userid", "courseid", "batchid")
+    reportDF.groupBy("courseid", "batchid", "userid")
+      .pivot("content_name").agg(concat(ceil((split(first("grand_total"), "\\/")
+      .getItem(0) * 100) / (split(first("grand_total"), "\\/")
+      .getItem(1))), lit("%")))
   }
 
-  /**
-   * Get the Either last updated assessment question or Best attempt assessment
-   *
-   * @param bestAttemptScore - Boolean, To get the best attempt score
-   * @param reportDF         - Dataframe, Report df.
-   * @return DataFrame
-   */
-  def getAssessmentData(reportDF: DataFrame): DataFrame = {
-    val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
-    val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
-    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
-    reportDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
-  }
+  def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame): String = {
 
-  def saveToAzure(reportDF: DataFrame, url: String, batchId: String): String = {
+    //    println(reportDF.show(false))
+    //    println(transposedData.show(false))
+
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val renamedDir = s"$tempDir/renamed"
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("assessment.metrics.cloud.objectKey"))
-    reportDF.saveToBlobStore(storageConfig, "csv", "report-" + batchId, Option(Map("header" -> "true")), None);
+    val azureData = reportDF.select(
+      reportDF.col("externalid").as("External ID"),
+      reportDF.col("userid").as("User ID"),
+      reportDF.col("username").as("User Name"),
+      reportDF.col("maskedemail").as("Email ID"),
+      reportDF.col("maskedphone").as("Mobile Number"),
+      reportDF.col("orgname_resolved").as("Organisation Name"),
+      reportDF.col("district_name").as("District Name"),
+      reportDF.col("schoolname_resolved").as("School Name"),
+      transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
+      reportDF.col("total_sum_score").as("Total Score"))
+      .drop("userid", "courseid", "batchid")
+    println(azureData.show(false))
+    azureData.saveToBlobStore(storageConfig, "csv", "report-" + batchId, Option(Map("header" -> "true")), None);
     s"${AppConf.getConfig("cloud.container.reports")}/${AppConf.getConfig("assessment.metrics.cloud.objectKey")}/report-$batchId.csv"
+
   }
 
-  def saveToElastic(index: String, reportDF: DataFrame): Unit = {
-//    val assessmentReportDF = reportDF.select(
-//      col("userid").as("userId"),
-//      col("username").as("userName"),
-//      col("courseid").as("courseId"),
-//      col("batchid").as("batchId"),
-//      col("grand_total").as("score"),
-//      col("maskedemail").as("maskedEmail"),
-//      col("maskedphone").as("maskedPhone"),
-//      col("district_name").as("districtName"),
-//      col("orgname_resolved").as("rootOrgName"),
-//      col("externalid").as("externalId"),
-//      col("schoolname_resolved").as("subOrgName"),
-//      col("total_sum_score").as("totalScore"),
-//      col("content_name").as("contentName"),
-//      col("reportUrl").as("reportUrl")
-//    )
-    ESUtil.saveToIndex(reportDF, index)
+  def saveToElastic(index: String, reportDF: DataFrame, transposedData: DataFrame): Unit = {
+    val assessmentReportDF = reportDF.select(
+      col("userid").as("userId"),
+      col("username").as("userName"),
+      col("courseid").as("courseId"),
+      col("batchid").as("batchId"),
+      col("grand_total").as("score"),
+      col("maskedemail").as("maskedEmail"),
+      col("maskedphone").as("maskedPhone"),
+      col("district_name").as("districtName"),
+      col("orgname_resolved").as("rootOrgName"),
+      col("externalid").as("externalId"),
+      col("schoolname_resolved").as("subOrgName"),
+      col("total_sum_score").as("totalScore"),
+      transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
+      col("reportUrl").as("reportUrl")
+    ).drop("userid", "courseid", "batchid")
+    ESUtil.saveToIndex(assessmentReportDF, index)
   }
 
   def rollOverIndex(index: String, alias: String): Unit = {
@@ -363,12 +372,14 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       batchList.foreach(batchId => {
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
-          val reportData = transposeDF(filteredDF)
+          val transposedData = transposeDF(filteredDF)
+          val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
+            .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
           try {
-            val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId), s"Time taken to save the $batchId into azure -")
+            val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId, transposedData), s"Time taken to save the $batchId into azure -")
             val resolvedDF = reportData.withColumn("reportUrl", lit(urlBatch))
             if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
-              recordTime(saveToElastic(this.getIndexName, resolvedDF), s"Time taken to save the $batchId into to es -")
+              recordTime(saveToElastic(this.getIndexName, resolvedDF, transposedData), s"Time taken to save the $batchId into to es -")
               JobLogger.log("Indexing of assessment report data is success: " + this.getIndexName, None, INFO)
             } else {
               JobLogger.log("Skipping Indexing assessment report into ES", None, INFO)

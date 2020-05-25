@@ -390,7 +390,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     )).toDF("userid", "username", "courseid", "batchid", "grand_total", "maskedemail", "maskedphone", "district_name", "orgname_resolved", "externalid", "schoolname_resolved", "total_sum_score", "content_name", "reportUrl")
     try {
       val indexName = AssessmentMetricsJob.getIndexName
-      AssessmentMetricsJob.saveToElastic(indexName, df);
+      AssessmentMetricsJob.saveToElastic(indexName, df, df);
       val requestURL = ESUtil.elasticSearchURL + "/" + indexName + "/_count?q=courseId:do_534985557934"
       val response = RestUtil.get[String](requestURL)
       assert(response !== null)
