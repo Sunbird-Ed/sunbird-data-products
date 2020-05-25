@@ -229,7 +229,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     * merge orgName and schoolName based on `userid` and calculate the course progress percentage from `progress` column which is no of content visited/read
     * */
 
-     resolvedExternalIdDF
+    resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid"), "left_outer")
   }
@@ -248,10 +248,10 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     // println("contentMetaDataDF" + contentMetaDataDF.show(false))
     //report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
     import spark.implicits._
-//    val contentMetaDataDF = Seq(
-//      ("do_31296982713786368012", "bat"),
-//      ("do_31302079352361779219", "mouse")
-//    ).toDF("identifier", "name")
+    //    val contentMetaDataDF = Seq(
+    //      ("do_31296982713786368012", "bat"),
+    //      ("do_31302079352361779219", "mouse")
+    //    ).toDF("identifier", "name")
 
     report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
@@ -304,18 +304,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     // Re-shape the dataFrame (Convert the content name from the row to column)
 
     val reshapedDF = reportDF.groupBy("courseid", "batchid", "userid").pivot("content_name").agg(concat(ceil((split(first("grand_total"), "\\/").getItem(0) * 100) / (split(first("grand_total"), "\\/").getItem(1))), lit("%")))
-    reshapedDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner").
-      select(
-        reportDF.col("externalid").as("External ID"),
-        reportDF.col("userid").as("User ID"),
-        reportDF.col("username").as("User Name"),
-        reportDF.col("maskedemail").as("Email ID"),
-        reportDF.col("maskedphone").as("Mobile Number"),
-        reportDF.col("orgname_resolved").as("Organisation Name"),
-        reportDF.col("district_name").as("District Name"),
-        reportDF.col("schoolname_resolved").as("School Name"),
-        reshapedDF.col("*"), // Since we don't know the content name column so we are using col("*")
-        reportDF.col("total_sum_score").as("Total Score")).dropDuplicates("userid", "courseid", "batchid").drop("userid", "courseid", "batchid")
+    reshapedDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
   }
 
   /**
@@ -341,23 +330,23 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   def saveToElastic(index: String, reportDF: DataFrame): Unit = {
-//    val assessmentReportDF = reportDF.select(
-//      col("userid").as("userId"),
-//      col("username").as("userName"),
-//      col("courseid").as("courseId"),
-//      col("batchid").as("batchId"),
-//      col("grand_total").as("score"),
-//      col("maskedemail").as("maskedEmail"),
-//      col("maskedphone").as("maskedPhone"),
-//      col("district_name").as("districtName"),
-//      col("orgname_resolved").as("rootOrgName"),
-//      col("externalid").as("externalId"),
-//      col("schoolname_resolved").as("subOrgName"),
-//      col("total_sum_score").as("totalScore"),
-//      col("content_name").as("contentName"),
-//      col("reportUrl").as("reportUrl")
-//    )
-    ESUtil.saveToIndex(reportDF, index)
+    val assessmentReportDF = reportDF.select(
+      col("userid").as("userId"),
+      col("username").as("userName"),
+      col("courseid").as("courseId"),
+      col("batchid").as("batchId"),
+      col("grand_total").as("score"),
+      col("maskedemail").as("maskedEmail"),
+      col("maskedphone").as("maskedPhone"),
+      col("district_name").as("districtName"),
+      col("orgname_resolved").as("rootOrgName"),
+      col("externalid").as("externalId"),
+      col("schoolname_resolved").as("subOrgName"),
+      col("total_sum_score").as("totalScore"),
+      col("content_name").as("contentName"),
+      col("reportUrl").as("reportUrl")
+    )
+    ESUtil.saveToIndex(assessmentReportDF, index)
   }
 
   def rollOverIndex(index: String, alias: String): Unit = {
@@ -376,8 +365,19 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         if (!courseId.isEmpty && !batchId.isEmpty) {
           val filteredDF = reportDF.filter(col("courseid") === courseId && col("batchid") === batchId)
           val reportData = transposeDF(filteredDF)
+          val transposedDF = reportData.select(
+            reportDF.col("externalid").as("External ID"),
+            reportDF.col("userid").as("User ID"),
+            reportDF.col("username").as("User Name"),
+            reportDF.col("maskedemail").as("Email ID"),
+            reportDF.col("maskedphone").as("Mobile Number"),
+            reportDF.col("orgname_resolved").as("Organisation Name"),
+            reportDF.col("district_name").as("District Name"),
+            reportDF.col("schoolname_resolved").as("School Name"),
+            reportData.col("*"), // Since we don't know the content name column so we are using col("*")
+            reportDF.col("total_sum_score").as("Total Score")).dropDuplicates("userid", "courseid", "batchid").drop("userid", "courseid", "batchid")
           try {
-            val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId), s"Time taken to save the $batchId into azure -")
+            val urlBatch: String = recordTime(saveToAzure(transposedDF, url, batchId), s"Time taken to save the $batchId into azure -")
             val resolvedDF = reportData.withColumn("reportUrl", lit(urlBatch))
             if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
               recordTime(saveToElastic(this.getIndexName, resolvedDF), s"Time taken to save the $batchId into to es -")
