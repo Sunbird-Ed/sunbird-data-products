@@ -124,7 +124,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace)).filter(col("type") === "district" || col("type") === "block")
       .select(col("id"), col("name"), col("type"))
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace)).select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator4", "keyspace" -> sunbirdCoursesKeyspace))
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
     /*
@@ -375,7 +375,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   def save(courseBatchList: Array[Map[String, Any]], reportDF: DataFrame, url: String, spark: SparkSession)(implicit fc: FrameworkContext): Unit = {
     val aliasName = AppConf.getConfig("assessment.metrics.es.alias")
     val indexToEs = AppConf.getConfig("course.es.index.enabled")
-    JobLogger.log("item is" + courseBatchList, None, INFO)
+   // JobLogger.log("item is" + courseBatchList, None, INFO)
     courseBatchList.foreach(item => {
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
@@ -386,7 +386,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
           val reportData = recordTime(transposeDF(filteredDF), s"Time take to transpose the $batchId DF -")
           try {
             val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId), s"Time taken to save the $batchId into azure -")
-            val resolvedDF = reportData.withColumn("reportUrl", lit(urlBatch))
+            val resolvedDF = filteredDF.withColumn("reportUrl", lit(urlBatch))
             if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
               recordTime(saveToElastic(this.getIndexName, resolvedDF), s"Time taken to save the $batchId into to es -")
               JobLogger.log("Indexing of assessment report data is success: " + this.getIndexName, None, INFO)
