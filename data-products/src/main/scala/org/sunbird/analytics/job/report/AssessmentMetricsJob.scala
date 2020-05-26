@@ -53,8 +53,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
       val reportDF = recordTime(prepareReport(spark, loadData).cache(), s"Time take generate the dataframe} - ")
-      val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment -")
-      recordTime(saveReport(denormalizedDF, tempDir), s"Time take to save the all the reports into both blob and es -")
+      val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
+      recordTime(saveReport(denormalizedDF, tempDir), s"Time take to save the all the reports into both azure and es -")
       reportDF.unpersist(true)
     });
     metrics.put("totalExecutionTime", time._1);
@@ -326,7 +326,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
       col("reportUrl").as("reportUrl")
     ).drop("userid", "courseid", "batchid")
-    println(assessmentReportDF.show(false))
     ESUtil.saveToIndex(assessmentReportDF, index)
   }
 
