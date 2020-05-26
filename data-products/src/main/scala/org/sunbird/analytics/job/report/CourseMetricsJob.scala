@@ -104,7 +104,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     });
     val activeBatchesCount = activeBatches.size;
     metrics.put("userDFLoadTime", userData._1)
-    metrics.put("userDFRecordsCount", userData._2.count())
     metrics.put("activeBatchesCount", activeBatchesCount)
     for (index <- activeBatches.indices) {
       val row = activeBatches(index);
