@@ -2,35 +2,16 @@ package org.sunbird.analytics.job.report
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.ceil
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.functions.collect_list
-import org.apache.spark.sql.functions.concat
-import org.apache.spark.sql.functions.concat_ws
-import org.apache.spark.sql.functions.desc
-import org.apache.spark.sql.functions.explode
-import org.apache.spark.sql.functions.first
-import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.functions.lower
-import org.apache.spark.sql.functions.row_number
-import org.apache.spark.sql.functions.split
-import org.apache.spark.sql.functions.sum
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.IJob
-import org.ekstep.analytics.framework.JobConfig
-import org.ekstep.analytics.framework.JobContext
-import org.ekstep.analytics.framework.Level.ERROR
-import org.ekstep.analytics.framework.Level.INFO
+import org.apache.spark.sql.functions._
+import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, JobContext}
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.JSONUtils
-import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.sunbird.analytics.util.ESUtil
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
+import org.sunbird.analytics.util.ESUtil
 import org.sunbird.cloud.storage.conf.AppConf
 
 object AssessmentMetricsJob extends optional.Application with IJob with BaseReportsJob {
@@ -49,8 +30,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     JobLogger.start("Assessment Job Started executing", Option(Map("config" -> config, "model" -> name)))
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig);
-    JobLogger.log("parallelization" + JobContext.parallelization, None, INFO)
-
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig);
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext();
     execute(jobConfig)
@@ -61,7 +40,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val result = block
     val t1 = System.currentTimeMillis()
     JobLogger.log(msg + (t1 - t0), None, INFO)
-    println(msg + (t1 - t0))
     result;
   }
 
@@ -243,7 +221,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
     JobLogger.log("ContentIds are" + contentIds, None, INFO)
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
-    report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "left_outer") // Doing right join since to generate report only for the "SelfAssess" content types
+    report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
         col("name").as("content_name"),
         col("total_sum_score"), report.col("userid"), report.col("courseid"), report.col("batchid"),
@@ -254,8 +232,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   /**
    * Get the Either last updated assessment question or Best attempt assessment
    *
-   * @param bestAttemptScore - Boolean, To get the best attempt score
-   * @param reportDF         - Dataframe, Report df.
+   * @param reportDF - Dataframe, Report df.
    * @return DataFrame
    */
   def getAssessmentData(reportDF: DataFrame): DataFrame = {
@@ -312,10 +289,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame): String = {
-
-    //    println(reportDF.show(false))
-    //    println(transposedData.show(false))
-
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val renamedDir = s"$tempDir/renamed"
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("assessment.metrics.cloud.objectKey"))
@@ -331,7 +304,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
       reportDF.col("total_sum_score").as("Total Score"))
       .drop("userid", "courseid", "batchid")
-    println(azureData.show(false))
     azureData.saveToBlobStore(storageConfig, "csv", "report-" + batchId, Option(Map("header" -> "true")), None);
     s"${AppConf.getConfig("cloud.container.reports")}/${AppConf.getConfig("assessment.metrics.cloud.objectKey")}/report-$batchId.csv"
 
@@ -354,6 +326,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
       col("reportUrl").as("reportUrl")
     ).drop("userid", "courseid", "batchid")
+    println(assessmentReportDF.show(false))
     ESUtil.saveToIndex(assessmentReportDF, index)
   }
 

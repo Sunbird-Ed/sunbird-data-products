@@ -239,16 +239,9 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     val denormedDF = AssessmentMetricsJob.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJob.transposeDF(denormedDF)
     val column_names = finalReport.columns
-    // Validate the column names are proper or not.
-    assert(column_names.contains("External ID") === true)
-    assert(column_names.contains("User ID") === true)
-    assert(column_names.contains("User Name") === true)
-    assert(column_names.contains("Email ID") === true)
-    assert(column_names.contains("Mobile Number") === true)
-    assert(column_names.contains("Organisation Name") === true)
-    assert(column_names.contains("District Name") === true)
-    assert(column_names.contains("School Name") === true)
-    assert(column_names.contains("Total Score") === true)
+    assert(column_names.contains("courseid") === true)
+    assert(column_names.contains("userid") === true)
+    assert(column_names.contains("batchid") === true)
   }
 
   it should "generate reports" in {
