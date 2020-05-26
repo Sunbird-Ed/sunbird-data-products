@@ -1,26 +1,24 @@
 """
 Store all utility and reusable functions.
 """
+import hashlib
 import json
 import os
-import time
-import hashlib
+import pandas as pd
 import pdb
 import requests
-import pandas as pd
-
-from time import sleep
+import time
+from azure.common import AzureMissingResourceHttpError
+from azure.storage.blob import BlockBlobService
+from dataproducts.resources.common import common_config
+from dataproducts.resources.queries import content_list, scan_counts, \
+    course_list, content_plays
+from dataproducts.util import azure_utils
+from dataproducts.util.kafka_utils import push_metrics
 from datetime import datetime, timedelta
 from pathlib import Path
 from pytz import timezone
-from azure.common import AzureMissingResourceHttpError
-from azure.storage.blob import BlockBlobService
-
-from dataproducts.util.kafka_utils import push_metrics
-from dataproducts.util import azure_utils
-from dataproducts.resources.common import common_config
-from dataproducts.resources.queries import content_list, scan_counts, \
-                    course_list, content_plays
+from time import sleep
 
 
 def parse_tb(tb, returnable, row_):
@@ -222,19 +220,19 @@ def get_location_info(result_loc_, location_search_, date_, iteration=0):
         response = requests.request("POST", url, data=payload, headers=headers)
         result = response.json()['result']['response']
         states = pd.DataFrame(
-                list(filter(lambda x: x['type'] == "state", result))
-            )
+            list(filter(lambda x: x['type'] == "state", result))
+        )
         states.rename(columns={"name": "state"}, inplace=True)
         districts = pd.DataFrame(
-                list(filter(lambda x: x['type'] == "district", result))
-            )
+            list(filter(lambda x: x['type'] == "district", result))
+        )
         districts.rename(columns={"name": "district"}, inplace=True)
         state_district_df = pd.merge(districts, states, left_on=['parentId'], right_on=['id'], how="inner")
         state_district_df = state_district_df[['state', 'district']]
         result_loc_.mkdir(exist_ok=True)
         result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
         state_district_df.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'), index=False,
-                    encoding='utf-8')
+                                 encoding='utf-8')
         post_data_to_blob(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'state_district.csv'),
                           backup=True)
     except requests.exceptions.ConnectionError:
@@ -254,9 +252,9 @@ def verify_state_district(loc_map_path_, state_, df_):
     loc_df = pd.read_csv(loc_map_path_.joinpath('state_district.csv'))
     state_districts = loc_df[loc_df['state'] == state_].district.to_list()
     df_['District'] = pd.np.where(
-                        df_['District'].isin(loc_df[loc_df['state'] == state_].district.to_list()),
-                        df_['District'],
-                        None)
+        df_['District'].isin(loc_df[loc_df['state'] == state_].district.to_list()),
+        df_['District'],
+        None)
     return df_
 
 
@@ -372,11 +370,12 @@ def create_json(read_loc_, last_update=False):
     except Exception:
         raise Exception('Failed to create JSON!')
 
+
 def file_missing_exception(raise_except=False):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
-        return AzureMissingResourceHttpError("Missing resource!", 404) if raise_except else \
-               AzureMissingResourceHttpError
+        return AzureMissingResourceHttpError("Missing resource!",
+                                             404) if raise_except else AzureMissingResourceHttpError
     elif storage_provider == "S3":
         return Exception
     elif storage_provider == "GCP":
@@ -419,9 +418,9 @@ def get_data_batch_from_blob(result_loc_, prefix=None, backup=False):
                 blob_name=blob.name,
                 file_path=str(result_loc_) + "/" + blob.name
             )
-  
+
     except AzureMissingResourceHttpError:
-        raise AzureMissingResourceHttpError("Missing resource!", 404)    
+        raise AzureMissingResourceHttpError("Missing resource!", 404)
 
 
 def get_data_from_blob(result_loc_, backup=False):
@@ -433,13 +432,11 @@ def get_data_from_blob(result_loc_, backup=False):
     """
     try:
         result_loc_.parent.mkdir(exist_ok=True)
-
         if backup:
             container_name = 'portal-reports-backup'
             file_name = result_loc_.name
             date_name = result_loc_.parent.name
             report_name = result_loc_.parent.parent.name
-
             download_file_from_store(
                 blob_name=report_name + '/' + date_name + '/' + file_name,
                 file_path=str(result_loc_),
@@ -455,7 +452,7 @@ def get_data_from_blob(result_loc_, backup=False):
     except file_missing_exception():
         raise file_missing_exception(raise_except=True)
     except Exception as e:
-        raise Exception('Could not read from blob!'+str(e))
+        raise Exception('Could not read from blob!' + str(e))
 
 
 def get_dqp_data_from_blob(file_path, result_loc_):
@@ -475,11 +472,11 @@ def get_dqp_data_from_blob(file_path, result_loc_):
             container_name=container_name,
             blob_name=str(file_path),
             file_path=local_file_path
-            )
+        )
     except file_missing_exception():
         raise file_missing_exception(raise_except=True)
     except Exception as e:
-        raise Exception('Could not read from blob!'+str(e))
+        raise Exception('Could not read from blob!' + str(e))
 
 
 def post_data_to_blob(result_loc_, backup=False):
@@ -535,11 +532,12 @@ def get_courses(result_loc_, druid_, date_):
     post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'courses.csv'), backup=True)
 
 
-def get_content_plays(result_loc_, date_, druid_, config_):
+def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_):
     """
     Get content plays and timespent by content id.
     :param result_loc_: local path to store resultant csv
-    :param date_: datetime object used for druid query
+    :param start_date_: datetime object used for druid query
+    :param end_date_: datetime object used for druid query
     :param druid_: druid broker ip and port in http://ip:port/ format
     :param config_: Platform cofigs for druid query
     :return: None
@@ -548,19 +546,16 @@ def get_content_plays(result_loc_, date_, druid_, config_):
         'Content-Type': "application/json"
     }
     url = "{}druid/v2/".format(druid_)
-    start_date = date_ - timedelta(days=1)
     query = content_plays.init()
-    query = query.replace('$start_date', start_date.strftime('%Y-%m-%dT00:00:00+00:00'))
-    query = query.replace('$end_date', date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query = query.replace('$start_date', start_date_.strftime('%Y-%m-%dT00:00:00+00:00'))
+    query = query.replace('$end_date', end_date_.strftime('%Y-%m-%dT00:00:00+00:00'))
     query = query.replace('$app', config_['context']['pdata']['id']['app'])
     query = query.replace('$portal', config_['context']['pdata']['id']['portal'])
     response = requests.post(url, data=query, headers=headers)
     result = response.json()
     data = pd.DataFrame([x['event'] for x in result])
-    data['Date'] = date_.strftime('%Y%m%d')
-    result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
-    data.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_plays.csv'), index=False)
-    post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_plays.csv'), backup=True)
+    data.to_csv(result_loc_.joinpath(end_date_.strftime('content_plays_%Y-%m-%d.csv')), index=False)
+    post_data_to_blob(result_loc_.joinpath(end_date_.strftime('content_plays_%Y-%m-%d.csv')), backup=True)
 
 
 def write_data_to_blob(read_loc, file_name):
@@ -580,13 +575,14 @@ def write_data_to_blob(read_loc, file_name):
 def generate_metrics_summary(result_loc_, metrics):
     pass
 
+
 def push_metric_event(metrics_list, subsystem):
     env = os.environ['ENV']
     kafka_broker = os.environ['KAFKA_BROKER_HOST']
     config = common_config.init()
     kafka_topic = config['kafka_metrics_topic']
     eid = "METRIC"
-    ets = int(round(time.time()*1000))
+    ets = int(round(time.time() * 1000))
     midStr = eid + str(ets) + subsystem
     actor = {
         "id": "analytics",
@@ -616,5 +612,96 @@ def push_metric_event(metrics_list, subsystem):
         "context": context,
         "edata": metrics
     }
-    topic = env+"."+kafka_topic
+    topic = env + "." + kafka_topic
     push_metrics(kafka_broker, topic, metric)
+
+
+def mime_type(series):
+    """
+    map the content format into preset buckets
+    :param series: pandas series
+    :return: pandas series
+    """
+    if series == 'video/x-youtube':
+        return 'YouTube Content'
+    elif series == 'application/vnd.ekstep.ecml-archive':
+        return 'Created on Diksha'
+    elif series == 'video/mp4' or series == 'video/webm':
+        return 'Uploaded Videos'
+    elif series == 'application/pdf' or series == 'application/epub':
+        return 'Text Content'
+    elif series == 'application/vnd.ekstep.html-archive' or series == 'application/vnd.ekstep.h5p-archive':
+        return 'Uploaded Interactive Content'
+    else:
+        return None
+
+
+def get_tb_content_mapping(result_loc_, date_, content_search_):
+    """
+     get a list of textbook from LP API and iterate over the textbook hierarchy to create CSV
+    :param result_loc_: pathlib.Path object to store resultant CSV at
+    :param date_: execution date for function
+    :param content_search_: ip and port of the server hosting LP content search API
+    """
+    content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
+    tb_url = "{}v3/search".format(content_search_)
+    payload = """{
+                "request": {
+                    "filters": {
+                        "contentType": ["Textbook"],
+                        "status": ["Live"]
+                    },
+                    "fields": ["childNodes", "identifier", "name"],
+                    "sort_by": {"createdOn":"desc"},
+                    "limit": 10000
+                }
+            }"""
+    tb_headers = {
+        'content-type': "application/json; charset=utf-8",
+        'cache-control': "no-cache"
+    }
+    retry_count = 0
+    while retry_count < 5:
+        retry_count += 1
+        try:
+            response = requests.request("POST", tb_url, data=payload, headers=tb_headers)
+            textbooks = pd.DataFrame(response.json()['result']['content'])[
+                ["childNodes", "identifier", "name"]]
+            textbooks.columns = ["identifier", "tb_id", "tb_name"]
+            textbooks = textbooks.explode('identifier')
+            textbooks = textbooks.groupby("identifier").agg(
+                {"tb_id": ", ".join, "tb_name": ", ".join}).reset_index()
+            content_model = content_model.join(textbooks.set_index('identifier'), how="left", on="identifier")
+            content_model.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'),
+                                 index=False, encoding='utf-8-sig')
+            post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'),
+                              backup=True)
+            break
+        except requests.exceptions.ConnectionError:
+            print("Retry {} for textbook list".format(retry_count))
+            time.sleep(10)
+    else:
+        print("Max retries reached...")
+
+
+def get_batch_data_from_blob(result_loc_, prefix_, backup=False):
+    try:
+        account_name = os.environ['AZURE_STORAGE_ACCOUNT']
+        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+        block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
+        if backup:
+            container_name = 'portal-reports-backup'
+            blob_list = block_blob_service.list_blobs(container_name, prefix=prefix_)
+            for blob in blob_list:
+                report_name, date_name, file_name = blob.name.split('/')
+                if file_name.startswith('content_consumption_lastweek'):
+                    slug = file_name.split('_')[-1].split('.')[0]
+                    result_loc_.joinpath(slug).mkdir(exist_ok=True)
+                    file_path_ = result_loc_.joinpath(slug, 'content_consumption_lastweek_{}.csv'.format(date_name))
+                    block_blob_service.get_blob_to_path(
+                        container_name=container_name,
+                        blob_name=blob.name,
+                        file_path=str(file_path_)
+                    )
+    except AzureMissingResourceHttpError:
+        raise AzureMissingResourceHttpError("Missing resource!", 404)
