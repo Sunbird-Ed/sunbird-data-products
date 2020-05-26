@@ -74,9 +74,9 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
   def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): Array[Row] = {
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
-      .select("courseid","batchid","enddate","startdate")
+      .select("courseid", "batchid", "enddate", "startdate")
     val timestamp = DateTime.now().minusDays(1).withTimeAtStartOfDay()
-    //JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
+    JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
     val activeBatches = courseBatchDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
     val activeBatchList = activeBatches.select("batchId", "startDate", "endDate").collect();
@@ -89,7 +89,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val t0 = System.currentTimeMillis()
     val result = block
     val t1 = System.currentTimeMillis()
-    println(msg + (t1 - t0))
     JobLogger.log(msg + (t1 - t0), None, INFO)
     result;
   }
@@ -103,21 +102,21 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userData = CommonUtil.time({
       recordTime(getUserData(loadData), "Time taken to get generate the userData- ")
     });
-    //val activeBatchesCount = activeBatches.size;
-
-    //    metrics.put("userDFLoadTime", userData._1)
-    //    metrics.put("userDFRecordsCount", userData._2.count())
-    //    metrics.put("activeBatchesCount", activeBatchesCount)
+    val activeBatchesCount = activeBatches.size;
+    metrics.put("userDFLoadTime", userData._1)
+    metrics.put("userDFRecordsCount", userData._2.count())
+    metrics.put("activeBatchesCount", activeBatchesCount)
     for (index <- activeBatches.indices) {
       val row = activeBatches(index);
       val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2));
       val result = CommonUtil.time({
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ");
-        recordTime(saveReportToBlobStore(batch, reportDF, storageConfig), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
-        recordTime(saveReportToES(batch, reportDF, newIndex), s"Time taken to save report in ES for batch ${batch.batchid} - ");
+        val total_records = reportDF.count()
+        recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, total_records), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
+        recordTime(saveReportToES(batch, reportDF, newIndex, total_records), s"Time taken to save report in ES for batch ${batch.batchid} - ");
         reportDF.unpersist(true);
       });
-      //JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
+      JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
       createESIndex(newIndex)
     }
     userData._2.unpersist(true);
@@ -146,7 +145,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
       .filter(col("type") === "district" || col("type") === "block")
-      .select(col("id"),col("name"),col("type"))
+      .select(col("id"), col("name"), col("type"))
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
       .select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
@@ -202,7 +201,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedOrgNameDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
-    //.dropDuplicates(Seq("userid"))
 
     /*
     * Resolve school name from `orgid`
@@ -238,22 +236,19 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
-    val resolvedData = resolvedExternalIdDF
+    resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
       .cache();
-    //resolvedData.count()
-    //    resolvedData
-    resolvedData
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
     val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
-      .select(col("batchid"),col("userid"), col("courseid"), col("active"), col("certificates")
-          , col("completionpercentage"), col("enrolleddate"), col("completedon")
+      .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
+        , col("completionpercentage"), col("enrolleddate"), col("completedon")
       )
       /*
        * courseBatchDF has details about the course and batch details for which we have to prepare the report
@@ -304,10 +299,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("district_name"),
         col("block_name"))
       .cache()
-
-    //reportDF.count();
     reportDF;
-
   }
 
   def createESIndex(newIndex: String): String = {
@@ -326,7 +318,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     newIndex;
   }
 
-  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String)(implicit spark: SparkSession): Unit = {
+  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, total_records:Long)(implicit spark: SparkSession): Unit = {
 
     import org.elasticsearch.spark.sql._
     val participantsCount = reportDF.count()
@@ -356,8 +348,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     import spark.implicits._
     val batchDetails = Seq(BatchDetails(batch.batchid, courseCompletionCount, participantsCount)).toDF
-
-    //.withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
     val batchDetailsDF = batchDetails
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
       .select(
@@ -370,10 +360,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     try {
       batchStatsDF.saveToEs(s"$newIndex/_doc", Map("es.mapping.id" -> "id"))
-     // JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
+      JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
       // upsert batch details to cbatch index
       batchDetailsDF.saveToEs(s"$cBatchIndex/_doc", Map("es.mapping.id" -> "id", "es.write.operation" -> "upsert"))
-      //JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: ${batchStatsDF.count()} }}", None, INFO)
+      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: $total_records }}", None, INFO)
 
     } catch {
       case ex: Exception => {
@@ -387,7 +377,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     index + DateTimeFormat.forPattern("dd-MM-yyyy-HH-mm").print(DateTime.now(DateTimeZone.forID("+05:30")))
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, total_records:Long): Unit = {
     reportDF
       .select(
         col("externalid").as("External ID"),
@@ -405,9 +395,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
       .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
-
-    //val noOfRecords = reportDF.count()
-    //JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $noOfRecords } ", None, INFO)
+    JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $total_records } ", None, INFO)
   }
 
 }
