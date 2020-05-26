@@ -110,9 +110,9 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2));
       val result = CommonUtil.time({
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ");
-        val total_records = reportDF.count()
-        recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, total_records), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
-        recordTime(saveReportToES(batch, reportDF, newIndex, total_records), s"Time taken to save report in ES for batch ${batch.batchid} - ");
+        val totalRecords = reportDF.count()
+        recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
+        recordTime(saveReportToES(batch, reportDF, newIndex, totalRecords), s"Time taken to save report in ES for batch ${batch.batchid} - ");
         reportDF.unpersist(true);
       });
       JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
@@ -317,7 +317,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     newIndex;
   }
 
-  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, total_records:Long)(implicit spark: SparkSession): Unit = {
+  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, totalRecords:Long)(implicit spark: SparkSession): Unit = {
 
     import org.elasticsearch.spark.sql._
     val participantsCount = reportDF.count()
@@ -362,7 +362,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
       // upsert batch details to cbatch index
       batchDetailsDF.saveToEs(s"$cBatchIndex/_doc", Map("es.mapping.id" -> "id", "es.write.operation" -> "upsert"))
-      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: $total_records }}", None, INFO)
+      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }}", None, INFO)
 
     } catch {
       case ex: Exception => {
@@ -376,7 +376,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     index + DateTimeFormat.forPattern("dd-MM-yyyy-HH-mm").print(DateTime.now(DateTimeZone.forID("+05:30")))
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, total_records:Long): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {
     reportDF
       .select(
         col("externalid").as("External ID"),
@@ -394,7 +394,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
       .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
-    JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $total_records } ", None, INFO)
+    JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords } ", None, INFO)
   }
 
 }
