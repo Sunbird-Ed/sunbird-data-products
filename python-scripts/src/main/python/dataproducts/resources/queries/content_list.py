@@ -1,8 +1,9 @@
 def init():
     return """
     {
-        "queryType": "select",
+        "queryType": "scan",
         "dataSource": "content-model-snapshot",
+        "intervals": "1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00",
         "filter": {
             "type": "and",
             "fields": [
@@ -24,11 +25,7 @@ def init():
                 }
             ]
         },
-        "aggregations": [],
-        "granularity": "all",
-        "postAggregations": [],
-        "intervals": "1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00",
-        "dimensions": [
+        "columns": [
             "identifier",
             "board",
             "medium",
@@ -57,13 +54,6 @@ def init():
             "me_totalPlaySessionCountInApp",
             "me_totalPlaySessionCountInPortal",
             "me_totalPlaySessionCountInDesktop"
-        ],
-        "metrics": [
-            ""
-        ],
-        "pagingSpec": {
-            "pagingIdentifiers": {},
-            "threshold": 5000
-        }
+        ]
     }
     """

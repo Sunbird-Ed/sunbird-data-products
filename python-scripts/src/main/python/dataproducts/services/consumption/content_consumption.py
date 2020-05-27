@@ -16,6 +16,8 @@ from dataproducts.util.utils import create_json, get_batch_data_from_blob, get_c
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from string import Template
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as fn
 
 
 class ContentConsumption:
@@ -59,9 +61,17 @@ class ContentConsumption:
             get_content_plays(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d')), start_date_=start_date,
                               end_date_=end_date, druid_=druid_rollup_, config_=config)
             start_date = end_date
-        content_plays = dd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_plays_*.csv'))
-        content_plays = content_plays.groupby(['object_id', 'dimensions_pdata_id'])[
-            ['Number of plays', 'Total time spent']].sum().reset_index().compute()
+        spark = SparkSession.builder.appName('content_consumption').master("local[*]").getOrCreate()
+        content_plays = spark.read.csv(str(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_plays_*.csv')),
+                                       header=True)
+        content_plays = content_plays.groupby(
+            fn.col('object_id'),
+            fn.col('dimensions_pdata_id')
+        ).agg(
+            fn.sum('Number of plays').alias('Number of plays'),
+            fn.sum('Total time spent').alias('Total time spent')
+        ).toPandas()
+        spark.stop()
         content_plays = content_plays.pivot(index='object_id', columns='dimensions_pdata_id',
                                             values=['Number of plays', 'Total time spent'])
         col_list = []

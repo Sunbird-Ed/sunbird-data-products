@@ -278,13 +278,9 @@ def get_content_model(result_loc_, druid_, date_, status_=["Live"]):
         response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
         result = response.json()
         response_list = []
-        while result[0]['result']['events']:
-            data = [event['event'] for segment in result for event in segment['result']['events']]
-            response_list.append(pd.DataFrame(data))
-            qr['pagingSpec']['pagingIdentifiers'] = result[0]['result']['pagingIdentifiers']
-            response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
-            result = response.json()
-        content_model = pd.concat(response_list).drop(['', 'timestamp'], axis=1)
+        for segment in result:
+            response_list.append(pd.DataFrame(segment['events']))
+        content_model = pd.concat(response_list)
         content_model.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'),
                              index=False, encoding='utf-8-sig')
         post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'), backup=True)
