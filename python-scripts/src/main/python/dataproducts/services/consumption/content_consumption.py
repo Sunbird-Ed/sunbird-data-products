@@ -71,6 +71,7 @@ class ContentConsumption:
             fn.sum('Number of plays').alias('Number of plays'),
             fn.sum('Total time spent').alias('Total time spent')
         ).toPandas()
+        spark.stop()
         content_plays = content_plays.pivot(index='object_id', columns='dimensions_pdata_id',
                                             values=['Number of plays', 'Total time spent'])
         col_list = []
