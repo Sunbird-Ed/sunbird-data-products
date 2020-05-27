@@ -9,4 +9,3 @@ natsort
 pandas>0.25.0
 pyspark
 requests
-dask[complete]
