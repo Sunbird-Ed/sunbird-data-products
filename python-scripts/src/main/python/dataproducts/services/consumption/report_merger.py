@@ -118,7 +118,7 @@ class ReportMerger:
             report_df = delta_df
 
         report_df.to_csv(self.base_path.joinpath(report_path), index=False)
-        create_json(self.base_path.joinpath(report_path), last_update=True)
+        create_json(self.base_path.joinpath(report_path))
         file_path = self.base_path.joinpath(report_path)
         upload_file_to_store(
                 container_name=report_container,
