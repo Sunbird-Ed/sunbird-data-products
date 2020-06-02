@@ -227,7 +227,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         && organisationDF.col("isrootorg").equalTo(true))
         .select(organisationDF.col("locationids"), userDenormDF.col("userid"), userDenormDF.col("channel"), userDenormDF.col("course_channel"))
 
-      val stateInforByStateDF = locationidDF.withColumn("exploded_location", explode(array(col("locationids"))))
+      val stateInforByStateDF = locationidDF.withColumn("exploded_location", explode(col("locationids")))
         .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
         .withColumn("statename_resolved",
           when(locationidDF.col("course_channel") === locationidDF.col("channel"), col("name")).otherwise(""))

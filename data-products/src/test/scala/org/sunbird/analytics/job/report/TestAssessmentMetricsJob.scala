@@ -100,9 +100,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
      * */
     orgDF = spark
       .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/orgTable.csv")
+      .json("src/test/resources/assessment-metrics-updater/orgTable.json")
       .cache()
 
     /*
