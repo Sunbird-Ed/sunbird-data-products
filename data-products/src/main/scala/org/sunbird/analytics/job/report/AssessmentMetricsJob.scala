@@ -384,13 +384,15 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val renamedDir = s"$tempDir/renamed"
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("assessment.metrics.cloud.objectKey"))
     val azureData = reportDF.select(
-      reportDF.col("externalid").as("External ID"),
+      reportDF.col("externalid_resolved").as("External ID"),
       reportDF.col("userid").as("User ID"),
       reportDF.col("username").as("User Name"),
       reportDF.col("maskedemail").as("Email ID"),
       reportDF.col("maskedphone").as("Mobile Number"),
       reportDF.col("orgname_resolved").as("Organisation Name"),
+      reportDF.col("statename_resolved").as("State Name"),
       reportDF.col("district_name").as("District Name"),
+      reportDF.col("schoolUDISE_resolved").as("School UDISE Code"),
       reportDF.col("schoolname_resolved").as("School Name"),
       transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
       reportDF.col("total_sum_score").as("Total Score"))
@@ -411,8 +413,10 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       col("maskedphone").as("maskedPhone"),
       col("district_name").as("districtName"),
       col("orgname_resolved").as("rootOrgName"),
-      col("externalid").as("externalId"),
+      col("externalid_resolved").as("externalId"),
       col("schoolname_resolved").as("subOrgName"),
+      col("schoolUDISE_resolved").as("schoolUDISECode"),
+      col("statename_resolved").as("stateName"),
       col("total_sum_score").as("totalScore"),
       transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
       col("reportUrl").as("reportUrl")
