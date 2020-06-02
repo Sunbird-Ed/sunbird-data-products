@@ -1,14 +1,22 @@
 package org.sunbird.analytics.job.report
 
-import org.apache.spark.sql.{Column, DataFrame, SparkSession}
-import org.ekstep.analytics.framework.StorageConfig
+import java.time.{ZoneOffset, ZonedDateTime}
+
+import cats.syntax.either._
+import io.circe._
+import io.circe.parser._
+import ing.wbaa.druid.client.DruidClient
+import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResult, QueryType}
+import org.apache.spark.sql.functions.{split, udf}
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
+import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.EmbeddedES
-import org.apache.spark.sql.functions.{col, split, udf}
-import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
 
 import scala.collection.mutable
+import scala.concurrent.Future
 
 
 class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
@@ -82,9 +90,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
      * */
     orgDF = spark
       .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/course-metrics-updater/orgTable.csv")
+      .json("src/test/resources/course-metrics-updater/orgTable.json")
       .cache()
 
     /*
@@ -143,7 +149,31 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .returning(externalIdentityDF)
 
     val storageConfig = StorageConfig("local", "", "src/test/resources/course-metrics")
-    CourseMetricsJob.prepareReport(spark, storageConfig, reporterMock.loadData)
+
+    implicit val mockFc = mock[FrameworkContext];
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val config = JSONUtils.deserialize[JobConfig](strConfig)
+    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
+    //mocking for DruidDataFetcher
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val json: String =
+      """
+        |{
+        |    "identifier": "do_1127102863240151041169",
+        |    "channel": "apekx"
+        |  }
+      """.stripMargin
+
+    val doc: Json = parse(json).getOrElse(Json.Null);
+    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
+    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+
+    implicit val mockDruidConfig = DruidConfig.DefaultConfig
+    val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
+    CourseMetricsJob.prepareReport(spark, storageConfig, reporterMock.loadData,config)
 
 
     // TODO: Add assertions here
