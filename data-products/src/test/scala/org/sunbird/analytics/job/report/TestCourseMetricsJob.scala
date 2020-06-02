@@ -1,12 +1,12 @@
 package org.sunbird.analytics.job.report
 
-import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.functions.{split, udf}
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.EmbeddedES
-import org.apache.spark.sql.functions.{col, split, udf}
-import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
 
 import scala.collection.mutable
 
@@ -82,9 +82,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
      * */
     orgDF = spark
       .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/course-metrics-updater/orgTable.csv")
+      .json("src/test/resources/course-metrics-updater/orgTable.json")
       .cache()
 
     /*

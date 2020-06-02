@@ -4,9 +4,10 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
 import org.apache.spark.sql.types.DataTypes
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
+import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.joda.time.format.DateTimeFormat
@@ -73,13 +74,24 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   }
 
   def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): Array[Row] = {
+    implicit val fc = new FrameworkContext
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
       .select("courseid", "batchid", "enddate", "startdate")
     val timestamp = DateTime.now().minusDays(1).withTimeAtStartOfDay()
-    
+
+    val druidStrConfig = """{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"},{"type":"isnotnull","dimension":"identifier","value":""},{"type":"isnotnull","dimension":"channel","value":""}],"descending":"false"}"""
+    val druidQuery = JSONUtils.deserialize[DruidQueryModel](druidStrConfig)
+    val druidResult = DruidDataFetcher.getDruidData(druidQuery)
+    val finalResult = druidResult.map{f => JSONUtils.deserialize[druidOutput](f)}
+    val finalDF = finalResult.toDF()
+    val courseBatchDenormDF = courseBatchDF.join(finalDF, courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
+        .select(courseBatchDF.col("*"), finalDF.col("channel"))
     JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
-    val activeBatches = courseBatchDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
+    val activeBatches = courseBatchDenormDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
     val activeBatchList = activeBatches.select("batchId", "startDate", "endDate").collect();
 
     JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
@@ -133,7 +145,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("maskedphone"),
         col("rootorgid"),
         col("locationids"),
-        col("channel")
+        col("channel"),
+        col("locationids")
       ).cache()
 
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
@@ -141,23 +154,37 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(col("userid"), col("organisationid")).cache()
 
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
-      .select(col("id"), col("orgname")).cache()
-
+      .select(col("id"), col("orgname"),
+        col("channel"), col("orgcode"),
+        col("locationids"), col("isrootorg")).cache()
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-      .filter(col("type") === "district" || col("type") === "block")
-      .select(col("id"), col("name"), col("type"))
+        .select(col("id"), col("name"), col("type"))
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
       .select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
     /**
-     * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
-     */
-    val externalIdMapDF = userDF
+      * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
+      *
+      * For state user
+      * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.id
+      *
+      * For Cust User
+      * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
+      * fetch USR_EXTERNAL_IDENTITY.id and map with USER.userid
+      * For cust- How to map provider with ORG.channel
+      */
+    val externalIdByStateDF = userDF
       .join(externalIdentityDF, externalIdentityDF.col("idtype") === userDF.col("channel")
         && externalIdentityDF.col("provider") === userDF.col("channel")
         && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
-      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"))
-
+      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
+        externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
+    val externalIdByUserDF = externalIdentityDF
+      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
+      && externalIdentityDF.col("idtype").equalTo("declared-ext-id"), "inner")
+      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
+        externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
+    val externalIdMapDF = externalIdByStateDF.union(externalIdByUserDF)
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
     * */
@@ -191,8 +218,38 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
+    /**
+      * Resolve the state name:
+      * 1. State-Users:
+      * ORGANISATION.locationids=LOCATION.id and LOCATION.type='state'
+      * TO-DO: How to map it to the user table to get the respective user
+      *
+      * 2. Custodian User
+      * USER.locationids=LOCATION.id and LOCATION.type='state' and fetch the name,userid
+      */
+
+      val stateInfoByUser = userDF.withColumn("explode_location", explode(col("locationids")))
+        .join(locationDF, col("explode_location") === locationDF.col("id")
+        && locationDF.col("type") === "state")
+        .select(col("name").as("state_name"), col("userid"))
+
+    val locationInfoByOrg = organisationDF.withColumn("explode_location", explode(col("locationids")))
+      .join(locationDF, col("explode_location") === locationDF.col("id")
+        && locationDF.col("type") === "state")
+      .select(organisationDF.col("id"), locationDF.col("name").as("state_name"),
+        organisationDF.col("isrootorg"))
+
+    val stateInfoByOrg = locationInfoByOrg.join(userDF,
+      locationInfoByOrg.col("id") === userDF.col("rootorgid") &&
+        locationInfoByOrg.col("isrootorg").equalTo(true))
+      .select(col("state_name"),
+        userDF.col("userid"))
+
+    val resolvedStateDenormDF = stateInfoByUser.union(stateInfoByOrg)
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
-    val resolvedExternalIdDF = userBlockResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
+    val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
+    val resolvedExternalIdDF = userStateResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
+    resolvedExternalIdDF.show()
 
     /*
     * Resolve organisation name from `rootorgid`
@@ -203,11 +260,23 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
 
     /*
-    * Resolve school name from `orgid`
+      * Resolve
+      * 1. school name from `orgid`
+      * 2. school UDISE code from
+      *   2.1 org.orgcode if user is a state user
+      *   2.2 externalID.id if user is a self signed up user
     * */
+
+    val schoolUDISECode = resolvedExternalIdDF
+      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
+      .select(resolvedExternalIdDF.col("userid"),
+        resolvedExternalIdDF.col("organisationid"), col("orgcode").as("schoolUDISE_resolved"))
+
     val schoolNameDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
-      .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("organisationid"), col("orgname").as("schoolname_resolved"))
+      .select(resolvedExternalIdDF.col("userid"),
+        resolvedExternalIdDF.col("organisationid"), col("orgname").as("schoolname_resolved"))
+
 
     /**
      * If the user present in the multiple organisation, then zip all the org names.
@@ -236,8 +305,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
+    val resolvedSchoolInfoDF = resolvedSchoolNameDF.join(schoolUDISECode, Seq("userid"), "left_outer")
+
     resolvedExternalIdDF
-      .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
+      .join(resolvedSchoolInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
       .cache();
