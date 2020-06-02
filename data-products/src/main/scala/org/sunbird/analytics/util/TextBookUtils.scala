@@ -102,7 +102,7 @@ object TextBookUtils {
         textbook._2._1.getOrElse(etb).totalContentLinked,textbook._2._1.getOrElse(etb).totalQRLinked,textbook._2._1.getOrElse(etb).totalQRNotLinked,
         textbook._2._1.getOrElse(etb).leafNodesCount,textbook._2._1.getOrElse(etb).leafNodeUnlinked,"ETB_textbook_data")
     })
-    val dceTextBook = dceTextBookReport.filter(e => (e.totalQRCodes!=0)).map(e => (e.channel,e))
+    val dceTextBook = dceTextBookReport.map(e => (e.channel,e))
     val dce = DCETextbookData("","","","","","","","",0,0,0,0,0)
     val dceTextBookRDD = dceTextBook.fullOuterJoin(tenantRDD).map(textbook => {
       DCETextbookReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dce).identifier,
@@ -119,9 +119,10 @@ object TextBookUtils {
     val dceDialcodeRDD = dceDialcode.fullOuterJoin(tenantRDD).map(textbook => {
       DialcodeExceptionReport(textbook._2._2.getOrElse(TenantInfo("","unknown")).slug,textbook._2._1.getOrElse(dialcode).identifier,
         textbook._2._1.getOrElse(dialcode).medium,textbook._2._1.getOrElse(dialcode).gradeLevel,textbook._2._1.getOrElse(dialcode).subject,
-        textbook._2._1.getOrElse(dialcode).name,textbook._2._1.getOrElse(dialcode).l1Name,textbook._2._1.getOrElse(dialcode).l2Name,textbook._2._1.getOrElse(dialcode).l3Name,
-        textbook._2._1.getOrElse(dialcode).l4Name,textbook._2._1.getOrElse(dialcode).l5Name,textbook._2._1.getOrElse(dialcode).dialcode,textbook._2._1.getOrElse(dialcode).status,
-        textbook._2._1.getOrElse(dialcode).nodeType,textbook._2._1.getOrElse(dialcode).noOfContent, textbook._2._1.getOrElse(dialcode).noOfScans,textbook._2._1.getOrElse(dialcode).term,textbook._2._1.getOrElse(dialcode).reportName)
+        textbook._2._1.getOrElse(dialcode).name,textbook._2._1.getOrElse(dialcode).status,textbook._2._1.getOrElse(dialcode).nodeType,
+        textbook._2._1.getOrElse(dialcode).l1Name,textbook._2._1.getOrElse(dialcode).l2Name,textbook._2._1.getOrElse(dialcode).l3Name,
+        textbook._2._1.getOrElse(dialcode).l4Name,textbook._2._1.getOrElse(dialcode).l5Name,textbook._2._1.getOrElse(dialcode).dialcode,
+        textbook._2._1.getOrElse(dialcode).noOfContent, textbook._2._1.getOrElse(dialcode).noOfScans,textbook._2._1.getOrElse(dialcode).term,textbook._2._1.getOrElse(dialcode).reportName)
     })
 
     val textbookReports = etbRDD.map(report => FinalOutput(report._1, report._2._1, report._2._2, null))
