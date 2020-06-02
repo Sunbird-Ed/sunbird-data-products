@@ -19,13 +19,13 @@ case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boo
 
 case class BatchDetails(batchid: String, courseCompletionCountPerBatch: Long, participantsCountPerBatch: Long)
 
-case class CourseBatch(batchid: String, startDate: String, endDate: String);
+case class CourseBatch(batchid: String, startDate: String, endDate: String, courseChannel: String);
 
 trait ReportGenerator {
 
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String]) => DataFrame): Unit
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String]) => DataFrame, config: JobConfig): Unit
 }
 
 object CourseMetricsJob extends optional.Application with IJob with ReportGenerator with BaseReportsJob {
@@ -62,7 +62,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val storageConfig = getStorageConfig(container, objectKey)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, storageConfig, loadData)
+      prepareReport(spark, storageConfig, loadData,config)
     });
     metrics.put("totalExecutionTime", time._1);
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
@@ -73,7 +73,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     spark.read.format("org.apache.spark.sql.cassandra").options(settings).load()
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): Array[Row] = {
+  def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame, druidQuery: DruidQueryModel)(implicit spark: SparkSession): Array[Row] = {
     implicit val fc = new FrameworkContext
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
@@ -81,9 +81,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
       .select("courseid", "batchid", "enddate", "startdate")
     val timestamp = DateTime.now().minusDays(1).withTimeAtStartOfDay()
-
-    val druidStrConfig = """{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"},{"type":"isnotnull","dimension":"identifier","value":""},{"type":"isnotnull","dimension":"channel","value":""}],"descending":"false"}"""
-    val druidQuery = JSONUtils.deserialize[DruidQueryModel](druidStrConfig)
     val druidResult = DruidDataFetcher.getDruidData(druidQuery)
     val finalResult = druidResult.map{f => JSONUtils.deserialize[druidOutput](f)}
     val finalDF = finalResult.toDF()
@@ -92,7 +89,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
     val activeBatches = courseBatchDenormDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
-    val activeBatchList = activeBatches.select("batchId", "startDate", "endDate").collect();
+    val activeBatchList = activeBatches.select("batchId", "startDate", "endDate", "channel").collect();
 
     JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
     activeBatchList;
@@ -106,10 +103,11 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     result;
   }
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String]) => DataFrame): Unit = {
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String]) => DataFrame, config: JobConfig): Unit = {
 
     implicit val sparkSession = spark;
-    val activeBatches = getActiveBatches(loadData);
+    val druidQuery = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
+    val activeBatches = getActiveBatches(loadData, druidQuery);
     val newIndexPrefix = AppConf.getConfig("course.metrics.es.index.cbatchstats.prefix")
     val newIndex = suffixDate(newIndexPrefix)
     val userData = CommonUtil.time({
@@ -120,7 +118,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     metrics.put("activeBatchesCount", activeBatchesCount)
     for (index <- activeBatches.indices) {
       val row = activeBatches(index);
-      val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2));
+      val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2), row.getString(3));
       val result = CommonUtil.time({
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ");
         val totalRecords = reportDF.count()
@@ -249,7 +247,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
     val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
     val resolvedExternalIdDF = userStateResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
-    resolvedExternalIdDF.show()
 
     /*
     * Resolve organisation name from `rootorgid`
@@ -329,6 +326,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .where(col("batchid") === batch.batchid && lower(col("active")).equalTo("true"))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
+      .withColumn("course_channel", lit(batch.courseChannel))
       .withColumn(
         "course_completion",
         when(col("completionpercentage").isNull, 0)
@@ -348,12 +346,16 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("courseid"),
         col("course_completion"),
         col("generatedOn"),
-        col("certificate_status")
+        col("certificate_status"),
+        col("course_channel")
       )
-
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
+      .withColumn("resolved_externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("externalid")).otherwise(""))
+      .withColumn("resolved_schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("schoolname_resolved")).otherwise(""))
+      .withColumn("resolved_blockname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("block_name")).otherwise(""))
+      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("schoolUDISE_resolved")).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("firstname"),
@@ -364,11 +366,13 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("rootorgid"),
         col("userid"),
         col("locationids"),
-        col("externalid"),
+        col("resolved_externalid"),
         col("orgname_resolved"),
-        col("schoolname_resolved"),
+        col("resolved_schoolname"),
         col("district_name"),
-        col("block_name"))
+        col("resolved_blockname"),
+        col("resolved_udisecode"),
+        col("state_name"))
       .cache()
     reportDF;
   }
@@ -404,7 +408,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("maskedemail").as("maskedEmail"),
         col("maskedphone").as("maskedPhone"),
         col("orgname_resolved").as("rootOrgName"),
-        col("schoolname_resolved").as("subOrgName"),
+        col("resolved_schoolname").as("subOrgName"),
         col("startdate").as("startDate"),
         col("enddate").as("endDate"),
         col("courseid").as("courseId"),
@@ -412,8 +416,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("batchid").as("batchId"),
         col("course_completion").cast("long").as("completedPercent"),
         col("district_name").as("districtName"),
-        col("block_name").as("blockName"),
-        col("externalid").as("externalId"),
+        col("resolved_blockname").as("blockName"),
+        col("resolved_externalid").as("externalId"),
+        col("resolved_udisecode").as("subOrgUDISECode"),
+        col("state_name").as("StateName"),
         from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
         col("certificate_status").as("certificateStatus"))
 
@@ -451,15 +457,17 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {
     reportDF
       .select(
-        col("externalid").as("External ID"),
+        col("resolved_externalid").as("External ID"),
         col("userid").as("User ID"),
         concat_ws(" ", col("firstname"), col("lastname")).as("User Name"),
         col("maskedemail").as("Email ID"),
         col("maskedphone").as("Mobile Number"),
         col("orgname_resolved").as("Organisation Name"),
+        col("state_name").as("State Name"),
         col("district_name").as("District Name"),
-        col("schoolname_resolved").as("School Name"),
-        col("block_name").as("Block Name"),
+        col("resolved_udisecode").as("School UDISE Code"),
+        col("resolved_schoolname").as("School Name"),
+        col("resolved_blockname").as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
