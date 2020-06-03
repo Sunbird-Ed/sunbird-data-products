@@ -318,9 +318,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(resolvedSchoolInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
+    println("report count: " + finalReportDF.count())
     println("finalReportDF")
       finalReportDF.show()
-    println("report count: " + finalReportDF.count())
+
       finalReportDF.cache();
   }
 
