@@ -88,6 +88,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val druidResult = DruidDataFetcher.getDruidData(druidQuery)
     val finalResult = druidResult.map { f => JSONUtils.deserialize[druidOutput](f) }
     val finalDF = finalResult.toDF()
+    println("finalDF")
+    finalDF.show()
 
     val courseBatchDenormDF = courseBatchDF.join(finalDF, courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
       .select(courseBatchDF.col("*"), finalDF.col("channel"))
@@ -119,6 +121,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userData = CommonUtil.time({
       recordTime(getUserData(loadData), "Time taken to get generate the userData- ")
     });
+    println("userdata")
+    userData._2.show()
     val activeBatchesCount = activeBatches.size;
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount)
@@ -254,6 +258,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
     val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
     val resolvedExternalIdDF = userStateResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
+    resolvedExternalIdDF.show()
+    resolvedExternalIdDF.where(col("userid") === "user030").show()
 
     /*
     * Resolve organisation name from `rootorgid`
