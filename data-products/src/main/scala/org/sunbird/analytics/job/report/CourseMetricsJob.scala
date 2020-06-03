@@ -62,7 +62,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val storageConfig = getStorageConfig(container, objectKey)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, storageConfig, loadData,config)
+      prepareReport(spark, storageConfig, loadData, config)
     });
     metrics.put("totalExecutionTime", time._1);
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
@@ -86,7 +86,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       * 2. Mapping it with course_batch details
       */
     val druidResult = DruidDataFetcher.getDruidData(druidQuery)
-    val finalResult = druidResult.map{f => JSONUtils.deserialize[druidOutput](f)}
+    val finalResult = druidResult.map { f => JSONUtils.deserialize[druidOutput](f) }
     val finalDF = finalResult.toDF()
 
     val courseBatchDenormDF = courseBatchDF.join(finalDF, courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
@@ -189,6 +189,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
         externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
     val externalIdMapDF = externalIdByStateDF.union(externalIdByUserDF)
+
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
     * */
@@ -399,7 +400,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     newIndex;
   }
 
-  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, totalRecords:Long)(implicit spark: SparkSession): Unit = {
+  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, totalRecords: Long)(implicit spark: SparkSession): Unit = {
 
     import org.elasticsearch.spark.sql._
     val participantsCount = reportDF.count()
@@ -460,7 +461,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     index + DateTimeFormat.forPattern("dd-MM-yyyy-HH-mm").print(DateTime.now(DateTimeZone.forID("+05:30")))
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long): Unit = {
     reportDF
       .select(
         col("resolved_externalid").as("External ID"),

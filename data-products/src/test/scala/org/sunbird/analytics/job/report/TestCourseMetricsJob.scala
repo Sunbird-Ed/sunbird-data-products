@@ -3,11 +3,11 @@ package org.sunbird.analytics.job.report
 import java.time.{ZoneOffset, ZonedDateTime}
 
 import cats.syntax.either._
+import ing.wbaa.druid._
+import ing.wbaa.druid.client.DruidClient
 import io.circe._
 import io.circe.parser._
-import ing.wbaa.druid.client.DruidClient
-import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResult, QueryType}
-import org.apache.spark.sql.functions.{split, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
@@ -18,6 +18,8 @@ import org.sunbird.analytics.util.EmbeddedES
 import scala.collection.mutable
 import scala.concurrent.Future
 
+case class ESOutput(name: String, id: String, userId: String, completedOn: String, maskedEmail: String, maskedPhone: String, rootOrgName: String, subOrgName: String, startDate: String, courseId: String, lastUpdatedOn: String, batchId: String, completedPercent: String, districtName: String, blockName: String, externalId: String, subOrgUDISECode: String,StateName: String, enrolledOn: String, certificateStatus: String)
+case class ESOutputCBatch(id: String, reportUpdatedOn: String, completedCount: String, participantCount: String)
 
 class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
   var spark: SparkSession = _
@@ -175,15 +177,31 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
 
     CourseMetricsJob.prepareReport(spark, storageConfig, reporterMock.loadData,config)
 
-
     // TODO: Add assertions here
     EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").foreach(f => {
+      f.contains("lastUpdatedOn") should be (true)
       //Console.println(f)
     })
-    EmbeddedES.getAllDocuments("cbatch").foreach(f => {
+  EmbeddedES.getAllDocuments("cbatch").foreach(f => {
+    f.contains("reportUpdatedOn") should be (true)
       //Console.println(f)
     })
-    
+
+    val esOutput = JSONUtils.deserialize[ESOutput](EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").head)
+    esOutput.name should be ("Rajesh Kapoor")
+    esOutput.id should be ("user012:1002")
+    esOutput.batchId should be ("1002")
+    esOutput.courseId should be ("do_112726725832507392141")
+    esOutput.rootOrgName should be ("MPPS BAYYARAM")
+    esOutput.subOrgUDISECode should be ("")
+    esOutput.blockName should be ("")
+    esOutput.maskedEmail should be ("*****@gmail.com")
+
+  val esOutput_cbatch = JSONUtils.deserialize[ESOutputCBatch](EmbeddedES.getAllDocuments("cbatch").head)
+    esOutput_cbatch.id should be ("1004")
+    esOutput_cbatch.participantCount should be ("4")
+    esOutput_cbatch.completedCount should be ("0")
+
     (new HadoopFileUtil()).delete(spark.sparkContext.hadoopConfiguration, "src/test/resources/course-metrics")
   }
 
