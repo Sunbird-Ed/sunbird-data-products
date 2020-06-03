@@ -121,6 +121,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userData = CommonUtil.time({
       recordTime(getUserData(loadData), "Time taken to get generate the userData- ")
     });
+    println("user-size: " + userData._2.count())
     println("userdata")
     userData._2.show()
     val activeBatchesCount = activeBatches.size;
