@@ -259,8 +259,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
     val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
     val resolvedExternalIdDF = userStateResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
-    resolvedExternalIdDF.show()
-    resolvedExternalIdDF.where(col("userid") === "user030").show()
 
     /*
     * Resolve organisation name from `rootorgid`
