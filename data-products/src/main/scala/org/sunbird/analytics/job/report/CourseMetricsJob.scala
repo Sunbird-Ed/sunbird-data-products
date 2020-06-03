@@ -121,9 +121,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userData = CommonUtil.time({
       recordTime(getUserData(loadData), "Time taken to get generate the userData- ")
     });
-    println("user-size: " + userData._2.count())
-    println("userdata")
-    userData._2.show()
     val activeBatchesCount = activeBatches.size;
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount)
@@ -259,7 +256,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
     val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
     val resolvedExternalIdDF = userStateResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
-
+    println("resolvedExternalIdDF")
+    resolvedExternalIdDF.show()
     /*
     * Resolve organisation name from `rootorgid`
     * */
@@ -316,11 +314,14 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val resolvedSchoolInfoDF = resolvedSchoolNameDF.join(schoolUDISECode, Seq("userid"), "left_outer")
 
-    resolvedExternalIdDF
+    val finalReportDF = resolvedExternalIdDF
       .join(resolvedSchoolInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
-      .cache();
+    println("finalReportDF")
+      finalReportDF.show()
+    println("report count: " + finalReportDF.count())
+      finalReportDF.cache();
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
