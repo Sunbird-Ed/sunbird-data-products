@@ -274,7 +274,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val schoolUDISECode = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
       .select(resolvedExternalIdDF.col("userid"),
-        resolvedExternalIdDF.col("organisationid"), col("orgcode").as("schoolUDISE_resolved"))
+        resolvedExternalIdDF.col("organisationid"), col("orgcode").as("schoolcode_resolved"))
 
     val schoolNameDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
@@ -362,7 +362,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .withColumn("resolved_externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("externalid")).otherwise(""))
       .withColumn("resolved_schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("schoolname_resolved")).otherwise(""))
       .withColumn("resolved_blockname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("block_name")).otherwise(""))
-      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("schoolUDISE_resolved")).otherwise(""))
+      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("schoolcode_resolved")).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("firstname"),
