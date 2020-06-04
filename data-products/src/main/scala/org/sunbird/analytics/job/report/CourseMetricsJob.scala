@@ -265,7 +265,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedOrgNameDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
-
+  println("resolvedOrgNameDF")
+    resolvedOrgNameDF.show()
     /*
       * Resolve
       * 1. school name from `orgid`
@@ -313,7 +314,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
     val resolvedSchoolInfoDF = resolvedSchoolNameDF.join(schoolUDISECode, Seq("userid"), "left_outer")
-
+    println("resolvedSchoolInfoDF")
+    resolvedSchoolInfoDF.show()
     val finalReportDF = resolvedExternalIdDF
       .join(resolvedSchoolInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
