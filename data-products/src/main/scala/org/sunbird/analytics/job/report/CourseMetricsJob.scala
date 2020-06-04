@@ -85,9 +85,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       * 1. Fetching course_id and channel from content-model-snapshot
       * 2. Mapping it with course_batch details
       */
-    val druidResult = DruidDataFetcher.getDruidData(druidQuery)
+
+    val druidResult = recordTime(DruidDataFetcher.getDruidData(druidQuery), "Total time taken to fetch from druid: ")
     val finalResult = druidResult.map { f => JSONUtils.deserialize[druidOutput](f) }
-    val finalDF = finalResult.toDF()
+    val finalDF = recordTime(finalResult.toDF(),"Time taken to convert to DF: ")
 
     val courseBatchDenormDF = courseBatchDF.join(finalDF, courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
       .select(courseBatchDF.col("*"), finalDF.col("channel"))
@@ -183,11 +184,13 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
       .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
         externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
+
     val externalIdByUserDF = externalIdentityDF
       .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
         && externalIdentityDF.col("idtype").equalTo("declared-ext-id"), "inner")
       .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
         externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
+
     val externalIdMapDF = externalIdByStateDF.union(externalIdByUserDF)
 
     /*
@@ -314,8 +317,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(resolvedSchoolInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
-    println("report count: " + finalReportDF.count())
-
 
       finalReportDF.cache();
   }
