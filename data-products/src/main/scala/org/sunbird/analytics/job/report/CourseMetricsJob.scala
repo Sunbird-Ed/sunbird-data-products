@@ -90,7 +90,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val finalResult = druidResult.map { f => JSONUtils.deserialize[druidOutput](f) }
     val finalDF = recordTime(finalResult.toDF(),"Time taken to convert to DF: ")
 
-    val courseBatchDenormDF = courseBatchDF.join(finalDF, courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
+    val courseBatchDenormDF = courseBatchDF.join(finalDF,
+      courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
       .select(courseBatchDF.col("*"), finalDF.col("channel"))
     JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
@@ -152,22 +153,22 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("locationids"),
         col("channel"),
         col("locationids")
-      ).cache()
+      ).persist()
 
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
       .filter(lower(col("isdeleted")) === "false")
-      .select(col("userid"), col("organisationid")).cache()
+      .select(col("userid"), col("organisationid")).persist()
 
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
       .select(col("id"), col("orgname"),
         col("channel"), col("orgcode"),
-        col("locationids"), col("isrootorg")).cache()
+        col("locationids"), col("isrootorg")).persist()
 
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
       .select(col("id"), col("name"), col("type"))
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
+      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
     /**
       * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
       *
