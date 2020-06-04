@@ -152,22 +152,22 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("locationids"),
         col("channel"),
         col("locationids")
-      ).cache()
+      )
 
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
       .filter(lower(col("isdeleted")) === "false")
-      .select(col("userid"), col("organisationid")).cache()
+      .select(col("userid"), col("organisationid"))
 
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
       .select(col("id"), col("orgname"),
         col("channel"), col("orgcode"),
-        col("locationids"), col("isrootorg")).cache()
+        col("locationids"), col("isrootorg"))
 
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
       .select(col("id"), col("name"), col("type"))
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
+      .select(col("provider"), col("idtype"), col("externalid"), col("userid"))
     /**
       * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
       *
