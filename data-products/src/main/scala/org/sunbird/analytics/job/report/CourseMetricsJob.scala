@@ -129,9 +129,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2), row.getString(3));
       val result = CommonUtil.time({
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ");
-//        val totalRecords = reportDF.count()
+        val totalRecords = reportDF.count()
+        println("totalRecords: " + totalRecords)
         recordTime(saveReportToBlobStore(batch, reportDF, storageConfig), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
-        recordTime(saveReportToES(batch, reportDF, newIndex), s"Time taken to save report in ES for batch ${batch.batchid} - ");
+//        recordTime(saveReportToES(batch, reportDF, newIndex), s"Time taken to save report in ES for batch ${batch.batchid} - ");
         reportDF.unpersist(true);
       });
       JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
@@ -187,13 +188,13 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
         externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
 
-    val externalIdByUserDF = externalIdentityDF
-      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
-        && externalIdentityDF.col("idtype").equalTo("declared-ext-id"), "inner")
-      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
-        externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
-
-    val externalIdMapDF = externalIdByStateDF.union(externalIdByUserDF)
+//    val externalIdByUserDF = externalIdentityDF
+//      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
+//        && externalIdentityDF.col("idtype").equalTo("declared-ext-id"), "inner")
+//      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
+//        externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
+//
+//    val externalIdMapDF = externalIdByStateDF.union(externalIdByUserDF)
 
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
@@ -237,28 +238,28 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       * 2. Custodian User
       * USER.locationids=LOCATION.id and LOCATION.type='state' and fetch the name,userid
       */
-
-    val stateInfoByUser = userDF.withColumn("explode_location", explode(col("locationids")))
-      .join(locationDF, col("explode_location") === locationDF.col("id")
-        && locationDF.col("type") === "state")
-      .select(col("name").as("state_name"), col("userid"))
-
-    val locationInfoByOrg = organisationDF.withColumn("explode_location", explode(col("locationids")))
-      .join(locationDF, col("explode_location") === locationDF.col("id")
-        && locationDF.col("type") === "state")
-      .select(organisationDF.col("id"), locationDF.col("name").as("state_name"),
-        organisationDF.col("isrootorg"))
-
-    val stateInfoByOrg = locationInfoByOrg.join(userDF,
-      locationInfoByOrg.col("id") === userDF.col("rootorgid") &&
-        locationInfoByOrg.col("isrootorg").equalTo(true))
-      .select(col("state_name"),
-        userDF.col("userid"))
-
-    val resolvedStateDenormDF = stateInfoByUser.union(stateInfoByOrg)
+//
+//    val stateInfoByUser = userDF.withColumn("explode_location", explode(col("locationids")))
+//      .join(locationDF, col("explode_location") === locationDF.col("id")
+//        && locationDF.col("type") === "state")
+//      .select(col("name").as("state_name"), col("userid"))
+//
+//    val locationInfoByOrg = organisationDF.withColumn("explode_location", explode(col("locationids")))
+//      .join(locationDF, col("explode_location") === locationDF.col("id")
+//        && locationDF.col("type") === "state")
+//      .select(organisationDF.col("id"), locationDF.col("name").as("state_name"),
+//        organisationDF.col("isrootorg"))
+//
+//    val stateInfoByOrg = locationInfoByOrg.join(userDF,
+//      locationInfoByOrg.col("id") === userDF.col("rootorgid") &&
+//        locationInfoByOrg.col("isrootorg").equalTo(true))
+//      .select(col("state_name"),
+//        userDF.col("userid"))
+//
+//    val resolvedStateDenormDF = stateInfoByUser.union(stateInfoByOrg)
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
-    val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
-    val resolvedExternalIdDF = userStateResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
+//    val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
+    val resolvedExternalIdDF = userBlockResolvedDF.join(externalIdByStateDF, Seq("userid"), "left_outer")
 
     /*
     * Resolve organisation name from `rootorgid`
@@ -383,8 +384,9 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("resolved_schoolname"),
         col("district_name"),
         col("resolved_blockname"),
-        col("resolved_udisecode"),
-        col("state_name"))
+        col("resolved_udisecode")
+//        col("state_name")
+      )
       .cache()
     reportDF;
   }
@@ -431,7 +433,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("resolved_blockname").as("blockName"),
         col("resolved_externalid").as("externalId"),
         col("resolved_udisecode").as("subOrgUDISECode"),
-        col("state_name").as("StateName"),
+//        col("state_name").as("StateName"),
         from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
         col("certificate_status").as("certificateStatus"))
 
@@ -475,7 +477,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("maskedemail").as("Email ID"),
         col("maskedphone").as("Mobile Number"),
         col("orgname_resolved").as("Organisation Name"),
-        col("state_name").as("State Name"),
+//        col("state_name").as("State Name"),
         col("district_name").as("District Name"),
         col("resolved_udisecode").as("School UDISE Code"),
         col("resolved_schoolname").as("School Name"),
