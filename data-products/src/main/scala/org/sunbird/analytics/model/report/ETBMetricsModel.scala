@@ -85,23 +85,32 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
       val dceDialcodeReport = events.map(report => {
         if(null != report.dialcode && report.dialcode.isDefined && "DCE_dialcode_data".equals(report.dialcode.get.reportName)) report.dialcode.get else DialcodeExceptionReport("","","","","","","","","","","","","","",0,0,"","")
-      }).filter(textbook=> !textbook.identifier.isEmpty)
+      }).filter(textbook=> !textbook.identifier.isEmpty && !textbook.dialcode.isEmpty)
 
       val scansDF = getScanCounts(config)
 
       reportConfig.output.map { f =>
-        val etbDf = etbTextBookReport.toDF().dropDuplicates("identifier","status").orderBy("gradeLevel","medium","subject")
+        val etbDf = etbTextBookReport.toDF().dropDuplicates("identifier","status")
+          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject,'identifier,'status)
         CourseUtils.postDataToBlob(etbDf,f,config)
 
-        val dceDf = dceTextBookReport.toDF().dropDuplicates().orderBy("gradeLevel","medium","subject")
+        val dceDf = dceTextBookReport.toDF().dropDuplicates()
+          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject)
         CourseUtils.postDataToBlob(dceDf,f,config)
 
         val dialdceDF = dceDialcodeReport.toDF()
-        val dialcodeDCE= dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcodes","noOfScans","status","nodeType","noOfContent").orderBy("identifier","medium","subject").dropDuplicates()
+        val dialcodeDCE = dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
+          .drop("dialcodes","noOfScans","status","nodeType","noOfContent")
+          .coalesce(1)
+          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject)
         CourseUtils.postDataToBlob(dialcodeDCE,f,config)
 
         val dialetbDF = etbDialcodeReport.toDF()
-        val dialcodeETB= dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer").drop("dialcodes","noOfScans","term").orderBy("identifier","medium","subject")
+        val dialcodeETB = dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
+          .drop("dialcodes","noOfScans","term")
+          .coalesce(1)
+          .dropDuplicates()
+          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject)
         CourseUtils.postDataToBlob(dialcodeETB,f,config)
       }
     }
