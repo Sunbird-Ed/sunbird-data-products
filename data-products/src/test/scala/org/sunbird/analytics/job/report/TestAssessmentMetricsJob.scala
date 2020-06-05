@@ -239,16 +239,9 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     val denormedDF = AssessmentMetricsJob.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJob.transposeDF(denormedDF)
     val column_names = finalReport.columns
-    // Validate the column names are proper or not.
-    assert(column_names.contains("External ID") === true)
-    assert(column_names.contains("User ID") === true)
-    assert(column_names.contains("User Name") === true)
-    assert(column_names.contains("Email ID") === true)
-    assert(column_names.contains("Mobile Number") === true)
-    assert(column_names.contains("Organisation Name") === true)
-    assert(column_names.contains("District Name") === true)
-    assert(column_names.contains("School Name") === true)
-    assert(column_names.contains("Total Score") === true)
+    assert(column_names.contains("courseid") === true)
+    assert(column_names.contains("userid") === true)
+    assert(column_names.contains("batchid") === true)
   }
 
   it should "generate reports" in {
@@ -390,7 +383,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     )).toDF("userid", "username", "courseid", "batchid", "grand_total", "maskedemail", "maskedphone", "district_name", "orgname_resolved", "externalid", "schoolname_resolved", "total_sum_score", "content_name", "reportUrl")
     try {
       val indexName = AssessmentMetricsJob.getIndexName
-      AssessmentMetricsJob.saveToElastic(indexName, df);
+      AssessmentMetricsJob.saveToElastic(indexName, df, df);
       val requestURL = ESUtil.elasticSearchURL + "/" + indexName + "/_count?q=courseId:do_534985557934"
       val response = RestUtil.get[String](requestURL)
       assert(response !== null)
