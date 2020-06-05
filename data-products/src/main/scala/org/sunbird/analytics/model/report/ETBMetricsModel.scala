@@ -167,7 +167,6 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
             |        "fields": ["id", "channel", "slug", "orgName"]
             |    }
             |}""".stripMargin
-    
     sc.parallelize(restUtil.post[TenantResponse](url, tenantRequest).result.response.content)
   }
 
