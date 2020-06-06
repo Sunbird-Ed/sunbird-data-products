@@ -194,15 +194,21 @@ object TextBookUtils {
           val chapterReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,"","","","",dialcodes,"","",0,0,term,"DCE_dialcode_data")
           chapterDialcodeReport = chapterReport :: chapterDialcodeReport
         }
-        if(report._1.isEmpty && chapterDialcodeReport.nonEmpty) { dialcodeReport = chapterDialcodeReport ++ dialcodeReport }
-        else { dialcodeReport = (report._1 ++ dialcodeReport).reverse
-          if(chapterDialcodeReport.nonEmpty && chapterDialcodeReport.head.dialcode.nonEmpty && report._1.head.dialcode.isEmpty) { dialcodeReport = chapterDialcodeReport ++ dialcodeReport }
-        }
+        dialcodeReport = getchapterDialcodeReport(report._1,chapterDialcodeReport,dialcodeReport)
         chapterDialcodeReport = List[DialcodeExceptionData]()
         if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
       })
     }
     (dialcodeReport, weeklyDialcodes)
+  }
+
+  def getchapterDialcodeReport(unitReport: List[DialcodeExceptionData], chapterReport: List[DialcodeExceptionData],dialcodeReport: List[DialcodeExceptionData]): List[DialcodeExceptionData] = {
+    var report = dialcodeReport
+    if(unitReport.isEmpty && chapterReport.nonEmpty) { report = chapterReport ++ report }
+    else { report = (unitReport ++ report).reverse
+      if(chapterReport.nonEmpty && chapterReport.head.dialcode.nonEmpty && unitReport.head.dialcode.isEmpty) { report = chapterReport ++ report }
+    }
+    report
   }
 
   def parseDCEDialcode(textbookData: TextbookData, data: List[ContentInfo], response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[DialcodeExceptionData] = List())(implicit sc: SparkContext, fc: FrameworkContext): (List[DialcodeExceptionData],List[WeeklyDialCodeScans]) =  {
