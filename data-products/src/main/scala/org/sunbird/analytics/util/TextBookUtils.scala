@@ -195,7 +195,9 @@ object TextBookUtils {
           chapterDialcodeReport = chapterReport :: chapterDialcodeReport
         }
         if(report._1.isEmpty && chapterDialcodeReport.nonEmpty) { dialcodeReport = chapterDialcodeReport ++ dialcodeReport }
-        else { dialcodeReport = (report._1 ++ dialcodeReport).reverse }
+        else { dialcodeReport = (report._1 ++ dialcodeReport).reverse
+          if(chapterDialcodeReport.nonEmpty && chapterDialcodeReport.head.dialcode.nonEmpty && report._1.head.dialcode.isEmpty) { dialcodeReport = chapterDialcodeReport ++ dialcodeReport }
+        }
         chapterDialcodeReport = List[DialcodeExceptionData]()
         if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
       })
