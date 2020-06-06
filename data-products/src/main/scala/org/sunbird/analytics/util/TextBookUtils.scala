@@ -86,7 +86,7 @@ object TextBookUtils {
     val configMap = config("dialcodeReportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
     val conf = Map("reportConfig"-> configMap,"store"->config("store"),"folderPrefix"->config("folderPrefix"),"filePath"->config("filePath"),"container"->config("container"),"format"->config("format"),"key"->config("key"))
-    val scansDf = sc.parallelize(dialcodeScans).toDF()
+    val scansDf = sc.parallelize(dialcodeScans).toDF().dropDuplicates("dialcodes")
 
     reportConfig.output.map { f =>
       CourseUtils.postDataToBlob(scansDf,f,conf)

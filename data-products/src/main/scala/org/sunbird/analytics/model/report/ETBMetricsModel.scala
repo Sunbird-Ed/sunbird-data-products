@@ -108,7 +108,6 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
         val dialetbDF = etbDialcodeReport.toDF()
         val dialcodeETB = dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
           .drop("dialcodes","noOfScans","term")
-          .coalesce(1)
           .dropDuplicates()
           .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject)
         CourseUtils.postDataToBlob(dialcodeETB,f,config)
