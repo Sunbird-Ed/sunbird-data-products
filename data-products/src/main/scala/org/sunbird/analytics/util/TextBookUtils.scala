@@ -182,6 +182,11 @@ object TextBookUtils {
     var weeklyDialcodes = List[WeeklyDialCodeScans]()
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
+      if(null != response.dialcodes && null != response.leafNodesCount && response.leafNodesCount==0) {
+        dialcodeReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, "","","","","",response.dialcodes(0),"","",0,0,"T1","DCE_dialcode_data") :: dialcodeReport
+        val scans = getDialcodeScans(response.dialcodes(0))
+        weeklyDialcodes = scans ++ weeklyDialcodes
+      }
       response.children.get.map(chapters => {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
