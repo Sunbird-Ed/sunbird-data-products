@@ -162,7 +162,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
     (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     val report = TextBookUtils.generateDCEDialCodeReport(hierarchyData,textBookData)
-    report._1.length should be(5)
+    report._1.length should be(6)
   }
 
 }
