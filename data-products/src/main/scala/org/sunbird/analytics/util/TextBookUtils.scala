@@ -86,7 +86,7 @@ object TextBookUtils {
     val configMap = config("dialcodeReportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
     val conf = Map("reportConfig"-> configMap,"store"->config("store"),"folderPrefix"->config("folderPrefix"),"filePath"->config("filePath"),"container"->config("container"),"format"->config("format"),"key"->config("key"))
-    val scansDf = sc.parallelize(dialcodeScans).toDF()
+    val scansDf = sc.parallelize(dialcodeScans).toDF().dropDuplicates("dialcodes")
 
     reportConfig.output.map { f =>
       CourseUtils.postDataToBlob(scansDf,f,conf)
@@ -182,6 +182,11 @@ object TextBookUtils {
     var weeklyDialcodes = List[WeeklyDialCodeScans]()
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
+      if(null != response.dialcodes && null != response.leafNodesCount && response.leafNodesCount==0) {
+        dialcodeReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, "","","","","",response.dialcodes(0),"","",0,0,"T1","DCE_dialcode_data") :: dialcodeReport
+        val scans = getDialcodeScans(response.dialcodes(0))
+        weeklyDialcodes = scans ++ weeklyDialcodes
+      }
       response.children.get.map(chapters => {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
@@ -194,13 +199,21 @@ object TextBookUtils {
           val chapterReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,"","","","",dialcodes,"","",0,0,term,"DCE_dialcode_data")
           chapterDialcodeReport = chapterReport :: chapterDialcodeReport
         }
-        if(report._1.isEmpty && chapterDialcodeReport.nonEmpty) { dialcodeReport = chapterDialcodeReport ++ dialcodeReport }
-        else { dialcodeReport = (report._1 ++ dialcodeReport).reverse }
+        dialcodeReport = getchapterDialcodeReport(report._1,chapterDialcodeReport,dialcodeReport)
         chapterDialcodeReport = List[DialcodeExceptionData]()
         if(report._2.nonEmpty) { weeklyDialcodes = weeklyDialcodes ++ report._2 }
       })
     }
     (dialcodeReport, weeklyDialcodes)
+  }
+
+  def getchapterDialcodeReport(unitReport: List[DialcodeExceptionData], chapterReport: List[DialcodeExceptionData],dialcodeReport: List[DialcodeExceptionData]): List[DialcodeExceptionData] = {
+    var report = dialcodeReport
+    if(unitReport.isEmpty && chapterReport.nonEmpty) { report = chapterReport ++ report }
+    else { report = (unitReport ++ report).reverse
+      if(chapterReport.nonEmpty && chapterReport.head.dialcode.nonEmpty && unitReport.head.dialcode.isEmpty) { report = chapterReport ++ report }
+    }
+    report
   }
 
   def parseDCEDialcode(textbookData: TextbookData, data: List[ContentInfo], response: ContentInfo, term: String, l1: String, newData: List[ContentInfo], prevData: List[DialcodeExceptionData] = List())(implicit sc: SparkContext, fc: FrameworkContext): (List[DialcodeExceptionData],List[WeeklyDialCodeScans]) =  {
