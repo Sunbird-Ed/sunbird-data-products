@@ -95,7 +95,7 @@ object CourseUtils {
       val reportPath = mergeConf.reportPath
       val fileList = getDeltaFileList(deltaFiles,reportId,reportPath,storageConfig)
       val mergeScriptConfig = MergeScriptConfig(reportId, mergeConf.frequency, mergeConf.basePath, mergeConf.rollup,
-        mergeConf.rollupAge, mergeConf.rollupCol, mergeConf.rollupRange, MergeFiles(fileList, List("Date")), container)
+        mergeConf.rollupAge, mergeConf.rollupCol, mergeConf.rollupRange, MergeFiles(fileList, List("Date")), container, mergeConf.postContainer)
       mergeReport(mergeScriptConfig)
     } else {
       JobLogger.log(s"Merge report is not configured, hence skipping that step", None, INFO)
