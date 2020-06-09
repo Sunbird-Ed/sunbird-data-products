@@ -250,10 +250,33 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       */
 
     val resolvedUserLocDF = userLocationResolvedDF.join(stateDenormDF, Seq("userid"), "left_outer")
-    val userAssessmentResolvedDF = resolvedUserLocDF.join(resDF,
-      resolvedUserLocDF.col("userid") === resDF.col("user_id")
-        && resolvedUserLocDF.col("batchid") === resDF.col("batch_id")
-        && resolvedUserLocDF.col("courseid") === resDF.col("course_id"), "right_outer")
+//    val userAssessmentResolvedDF = resolvedUserLocDF.join(resDF,
+//      resolvedUserLocDF.col("userid") === resDF.col("user_id")
+//        && resolvedUserLocDF.col("batchid") === resDF.col("batch_id")
+//        && resolvedUserLocDF.col("courseid") === resDF.col("course_id"), "right_outer")
+    val userAssessmentResolvedDF = userLocationResolvedDF.join(resDF,
+      userLocationResolvedDF.col("userid") === resDF.col("user_id")
+        && userLocationResolvedDF.col("batchid") === resDF.col("batch_id")
+        && userLocationResolvedDF.col("courseid") === resDF.col("course_id"), "inner")
+    .select(userLocationResolvedDF.col("userid"),
+    userLocationResolvedDF.col("batchid"),
+    userLocationResolvedDF.col("courseid"),
+    userLocationResolvedDF.col("firstname"),
+    userLocationResolvedDF.col("lastname"),
+    userLocationResolvedDF.col("maskedemail"),
+    userLocationResolvedDF.col("maskedphone"),
+    userLocationResolvedDF.col("rootorgid"),
+    userLocationResolvedDF.col("locationids"),
+    userLocationResolvedDF.col("username"),
+    userLocationResolvedDF.col("organisationid"),
+    userLocationResolvedDF.col("district_name"),
+    resDF.col("content_id"),
+    resDF.col("total_max_score"),
+    resDF.col("total_score"),
+    resDF.col("grand_total"),
+    resDF.col("agg_score"),
+    resDF.col("agg_max_score"),
+    resDF.col("total_sum_score"))
     val resolvedExternalIdDF = userAssessmentResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
