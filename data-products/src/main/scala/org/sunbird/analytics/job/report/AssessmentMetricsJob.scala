@@ -64,6 +64,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     metrics.put("totalExecutionTime", time._1);
     JobLogger.end("AssessmentReport Generation Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
     spark.stop()
+    fc.closeContext()
   }
 
   /**
