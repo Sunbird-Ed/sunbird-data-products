@@ -56,7 +56,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
     val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
     val time = CommonUtil.time({
-      val reportDF = recordTime(prepareReport(spark, loadData,druidConfig).cache(), s"Time take generate the dataframe} - ")
+      val reportDF = recordTime(prepareReport(spark, loadData, druidConfig).cache(), s"Time take generate the dataframe} - ")
       val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
       recordTime(saveReport(denormalizedDF, tempDir), s"Time take to save the all the reports into both azure and es -")
       reportDF.unpersist(true)
@@ -115,7 +115,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     import sqlContext.implicits._
 
     val druidResult = DruidDataFetcher.getDruidData(druidQuery)
-    val finalResult = druidResult.map{f => JSONUtils.deserialize[druidOutput](f)}
+    val finalResult = druidResult.map { f => JSONUtils.deserialize[druidOutput](f) }
     val finalDF = finalResult.toDF()
     /*
    * courseBatchDF has details about the course and batch details for which we have to prepare the report
@@ -254,31 +254,27 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
     val resolvedUserLocDF = userLocationResolvedDF.join(stateDenormDF, Seq("userid"), "left_outer")
     val userAssessmentResolvedDF = resolvedUserLocDF.join(resDF,
-  resolvedUserLocDF.col("userid") === resDF.col("user_id")
+      resolvedUserLocDF.col("userid") === resDF.col("user_id")
         && resolvedUserLocDF.col("batchid") === resDF.col("batch_id")
         && resolvedUserLocDF.col("courseid") === resDF.col("course_id"), "inner")
-    .select(resolvedUserLocDF.col("userid"),
-      resolvedUserLocDF.col("batchid"),
-      resolvedUserLocDF.col("courseid"),
-      resolvedUserLocDF.col("firstname"),
-      resolvedUserLocDF.col("lastname"),
-      resolvedUserLocDF.col("maskedemail"),
-      resolvedUserLocDF.col("maskedphone"),
-      resolvedUserLocDF.col("rootorgid"),
-      resolvedUserLocDF.col("locationids"),
-      resolvedUserLocDF.col("username"),
-      resolvedUserLocDF.col("organisationid"),
-      resolvedUserLocDF.col("district_name"),
-      resolvedUserLocDF.col("statename_resolved"),
-      resolvedUserLocDF.col("course_channel"),
-      resolvedUserLocDF.col("channel"),
-    resDF.col("content_id"),
-    resDF.col("total_max_score"),
-    resDF.col("total_score"),
-    resDF.col("grand_total"),
-    resDF.col("agg_score"),
-    resDF.col("agg_max_score"),
-    resDF.col("total_sum_score"))
+      .select(resolvedUserLocDF.col("userid"),
+        resolvedUserLocDF.col("batchid"),
+        resolvedUserLocDF.col("courseid"),
+        resolvedUserLocDF.col("firstname"),
+        resolvedUserLocDF.col("lastname"),
+        resolvedUserLocDF.col("maskedemail"),
+        resolvedUserLocDF.col("maskedphone"),
+        resolvedUserLocDF.col("rootorgid"),
+        resolvedUserLocDF.col("username"),
+        resolvedUserLocDF.col("organisationid"),
+        resolvedUserLocDF.col("district_name"),
+        resolvedUserLocDF.col("statename_resolved"),
+        resolvedUserLocDF.col("course_channel"),
+        resolvedUserLocDF.col("channel"),
+        resDF.col("content_id"),
+        resDF.col("total_score"),
+        resDF.col("grand_total"),
+        resDF.col("total_sum_score"))
     val resolvedExternalIdDF = userAssessmentResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
