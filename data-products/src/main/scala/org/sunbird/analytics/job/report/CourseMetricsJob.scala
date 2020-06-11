@@ -280,10 +280,21 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       *   2.2 externalID.id if user is a self signed up user
     * */
 
-    val schoolNameDF = resolvedExternalIdDF
+    val schoolInfoByUser = externalIdentityDF.join(organisationDF,
+      externalIdentityDF.col("provider") === organisationDF.col("channel"), "inner")
+      .withColumn("schoolcode_resolved", when(externalIdentityDF.col("idtype").equalTo("declared-school-udise-code"), col("externalid")).otherwise(""))
+      .withColumn("schoolname_resolved", when(externalIdentityDF.col("idtype").equalTo("declared-school-name")
+        && externalIdentityDF.col("externalid") === organisationDF.col("orgcode"), col("orgname")).otherwise(""))
+      .dropDuplicates(Seq("userid"))
+      .select(externalIdentityDF.col("userid"), organisationDF.col("id").as("organisationid"), col("schoolname_resolved"), col("schoolcode_resolved"))
+
+    val schoolInfoByStateDF = resolvedExternalIdDF
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
       .select(resolvedExternalIdDF.col("userid"),
         resolvedExternalIdDF.col("organisationid"), col("orgname").as("schoolname_resolved"), col("orgcode").as("schoolcode_resolved"))
+
+    val schoolInfoDF = schoolInfoByUser.union(schoolInfoByStateDF)
+      .dropDuplicates(Seq("userid"))
 
 
     /**
@@ -308,7 +319,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       *
       *
       */
-    val schoolNameIndexDF = schoolNameDF.withColumn("index", count("userid").over(Window.partitionBy("userid").orderBy("userid")).cast("int"))
+    val schoolNameIndexDF = schoolInfoDF.withColumn("index", count("userid").over(Window.partitionBy("userid").orderBy("userid")).cast("int"))
 
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved"), collect_list("schoolcode_resolved").cast("string").as("schoolcode_resolved")))

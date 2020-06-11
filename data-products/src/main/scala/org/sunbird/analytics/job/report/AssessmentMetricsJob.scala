@@ -253,10 +253,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       */
 
     val resolvedUserLocDF = userLocationResolvedDF.join(stateDenormDF, Seq("userid"), "left_outer")
-//    val userAssessmentResolvedDF = resolvedUserLocDF.join(resDF,
-//      resolvedUserLocDF.col("userid") === resDF.col("user_id")
-//        && resolvedUserLocDF.col("batchid") === resDF.col("batch_id")
-//        && resolvedUserLocDF.col("courseid") === resDF.col("course_id"), "right_outer")
     val userAssessmentResolvedDF = resolvedUserLocDF.join(resDF,
   resolvedUserLocDF.col("userid") === resDF.col("user_id")
         && resolvedUserLocDF.col("batchid") === resDF.col("batch_id")
