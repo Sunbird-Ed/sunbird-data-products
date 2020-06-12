@@ -66,7 +66,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     });
     metrics.put("totalExecutionTime", time._1);
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
-
+    fc.closeContext()
   }
 
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame = {
