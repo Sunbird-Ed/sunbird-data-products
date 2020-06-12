@@ -144,7 +144,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(col("id"), col("orgname")).cache()
 
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-      //.filter(col("type") === "district" || col("type") === "block")
       .select(col("id"), col("name"), col("type"))
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
