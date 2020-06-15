@@ -297,7 +297,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(userDenormDF, Seq("userid"), "inner")
       .withColumn("schoolUDISE_resolved",
         when(userDenormDF.col("channel") === userDenormDF.col("course_channel") &&
-          externalIdentityDF.col("idtype").equalTo("declared-school-udise-code"), col("orgname")).otherwise(""))
+          externalIdentityDF.col("idtype").equalTo("declared-school-udise-code"), externalIdentityDF.col("externalid")).otherwise(""))
       .withColumn("schoolname_resolved",
         when(userDenormDF.col("channel") === userDenormDF.col("course_channel") &&
           externalIdentityDF.col("idtype").equalTo("declared-school-name"), col("orgname")).otherwise(""))
