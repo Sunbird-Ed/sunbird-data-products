@@ -178,7 +178,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val locationDenormDF = distinctLocationIdDF
       .join(locationDF.filter(col("type") ==="district"), Seq("id") )
-      .select(col("name").as("district_name"), col("userid")).distinct()
+      .select(col("name").as("district_name"), col("userid"))
 
     /**
      * Resolve the block name by filtering location type = "BLOCK" for the locationids
@@ -186,7 +186,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val blockDenormDF = distinctLocationIdDF
       .join(locationDF.filter(col("type") === "block"), Seq("id") )
-      .select(col("name").as("block_name"), col("userid")).distinct()
+      .select(col("name").as("block_name"), col("userid"))
 
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
