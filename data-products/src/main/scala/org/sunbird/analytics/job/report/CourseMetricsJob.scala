@@ -174,35 +174,52 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val userOrgDenormDF = rootOnlyOrgDF.union(userSubOrgDF)
 
-    val locationDenormDF = userOrgDenormDF
-      .withColumn("exploded_location", explode(col("locationids")))
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
-      .dropDuplicates(Seq("userid"))
-      .select(col("name").as("district_name"), col("userid"))
+    println("userOrgDenormDF" + userOrgDenormDF.show(300,false)) // distinct
+    println("locationDF" + locationDF.show(300,false)) // distinct
+
+    val distinctLocationIdDF = userOrgDenormDF.withColumn("id", explode(col("locationids"))).distinct()
+
+    val locationDenormDF = distinctLocationIdDF
+      .join(locationDF.filter(col("type") ==="district"), Seq("id") )
+      .select(col("name").as("district_name"), col("userid")).distinct()
+
+     println("locationDenormDF" + locationDenormDF.show(300, false)) // distinct
 
     /**
      * Resolve the block name by filtering location type = "BLOCK" for the locationids
      */
-    val blockDenormDF = userOrgDenormDF
-      .withColumn("exploded_location", explode(col("locationids")))
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
-      .dropDuplicates(Seq("userid"))
-      .select(col("name").as("block_name"), col("userid"))
+
+    val blockDenormDF = distinctLocationIdDF
+      .join(locationDF.filter(col("type") === "block"), Seq("id") )
+      .select(col("name").as("block_name"), col("userid")).distinct()
 
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
-    val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
+    println("userLocationResolvedDF" + userLocationResolvedDF.show(300, false))
+    println("blockDenormDF" + blockDenormDF.show(300, false))
+
+
+    val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "inner")
+
+    println("userBlockResolvedDF" + userBlockResolvedDF.show(300, false))
+    println("externalIdMapDF" + externalIdMapDF.show(300, false))
+
     val resolvedExternalIdDF = userBlockResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
     * Resolve organisation name from `rootorgid`
     * */
+    println("resolvedExternalIdDF" + resolvedExternalIdDF.show(300, false))
+    println("organisationDF" + organisationDF.show(300, false))
 
     val resolvedOrgNameDF = resolvedExternalIdDF
-      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
+      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "inner")
       .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
-      .dropDuplicates(Seq("userid"))
+
+
+    println("resolvedOrgNameDF" + resolvedOrgNameDF.show(100, false))
+
     /*
     * Resolve school name from `orgid`
     * */
@@ -237,7 +254,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
-    resolvedExternalIdDF
+     resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
