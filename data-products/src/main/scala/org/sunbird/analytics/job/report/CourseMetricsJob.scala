@@ -237,11 +237,11 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
-     resolvedExternalIdDF
+    resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
-      .cache()
+      .cache();
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
