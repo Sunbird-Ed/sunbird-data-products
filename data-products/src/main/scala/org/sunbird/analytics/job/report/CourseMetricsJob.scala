@@ -177,8 +177,9 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val distinctLocationIdDF = userOrgDenormDF.withColumn("id", explode(col("locationids"))).distinct()
 
     val locationDenormDF = distinctLocationIdDF
-      .join(locationDF.filter(col("type") ==="district"), Seq("id") )
-      .select(col("name").as("district_name"), col("userid"))
+      .join(locationDF.filter(col("type") ==="district"), Seq("id"))
+      .select(col("name").as("district_name"), col("userid")).distinct()
+//    println("locationDenormDF" + locationDenormDF.count())
 
     /**
      * Resolve the block name by filtering location type = "BLOCK" for the locationids
@@ -186,15 +187,21 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val blockDenormDF = distinctLocationIdDF
       .join(locationDF.filter(col("type") === "block"), Seq("id") )
-      .select(col("name").as("block_name"), col("userid"))
+      .select(col("name").as("block_name"), col("userid")).distinct()
+
+    //println("blockDenormDF" + blockDenormDF.count())
 
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
+    //println("userLocationResolvedDF" + userLocationResolvedDF.show(200, false))
+
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
+    //println("userLocationResolvedDF" + userLocationResolvedDF.show(200, false))
 
     val resolvedExternalIdDF = userBlockResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
+    //println("resolvedExternalIdDF" + resolvedExternalIdDF.show(200, false))
     /*
     * Resolve organisation name from `rootorgid`
     * */
@@ -237,11 +244,14 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
-    resolvedExternalIdDF
+   val finalDF = resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
-      .dropDuplicates("userid")
+     //.distinct()
+      //.dropDuplicates("userid")
       .cache();
+    println("finalDF.count" + finalDF.count())
+    finalDF
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
