@@ -19,14 +19,14 @@ jobs:
             fi
       - restore_cache:
           keys:
-            - dp-dependency-cache-{{ data-products/pom.xml }}
+            - dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
       - run: cd sunbird-analytics-core && mvn install -DskipTests
       - run: cd sunbird-core-dataproducts && mvn install -DskipTests
       - run:
           name: Ed-data-products-build
           command: cd data-products && mvn scoverage:report
       - save_cache:
-          key: dp-dependency-cache-{{ data-products/pom.xml }}
+          key: dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
           paths: ~/.m2
       - run:
           name: sonar
