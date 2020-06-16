@@ -124,4 +124,45 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
 
   }
 
+  it should "generate chapter reports for dce dialcode" in {
+    implicit val mockFc = mock[FrameworkContext]
+    val mockRestUtil = mock[HTTPClient]
+
+    val hierarchyData = JSONUtils.deserialize[ContentDetails](Source.fromInputStream
+    (getClass.getResourceAsStream("/reports/hierarchyData.json")).getLines().mkString).result.content
+
+    val textBookData = JSONUtils.deserialize[TextbookData](Source.fromInputStream
+    (getClass.getResourceAsStream("/reports/textbookDetails.json")).getLines().mkString)
+
+    implicit val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    //mocking for DruidDataFetcher
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val json: String =
+      """
+        |{
+        |    "identifier": "do_113031279120924672120",
+        |    "channel": "0124698765480987654",
+        |    "status": "Live",
+        |    "name": "Kayal_Book",
+        |    "date": "2020-03-25",
+        |    "dialcode": "BSD1AV",
+        |    "scans": 2.0
+        |  }
+      """.stripMargin
+
+    val doc: Json = parse(json).getOrElse(Json.Null)
+    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc))
+    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+
+    implicit val mockDruidConfig = DruidConfig.DefaultConfig
+    val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
+    val report = TextBookUtils.generateDCEDialCodeReport(hierarchyData,textBookData)
+    report._1.length should be(6)
+  }
+
 }
