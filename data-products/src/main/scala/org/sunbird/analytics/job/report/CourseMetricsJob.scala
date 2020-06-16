@@ -76,7 +76,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
       .select("courseid", "batchid", "enddate", "startdate")
     val timestamp = DateTime.now().minusDays(1).withTimeAtStartOfDay()
-    
+
     JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
     val activeBatches = courseBatchDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
@@ -177,31 +177,26 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val distinctLocationIdDF = userOrgDenormDF.withColumn("id", explode(col("locationids"))).distinct()
 
     val locationDenormDF = distinctLocationIdDF
-      .join(locationDF.filter(col("type") ==="district"), Seq("id"))
-      .select(col("name").as("district_name"), col("userid")).distinct()
-//    println("locationDenormDF" + locationDenormDF.count())
+      .join(locationDF.filter(col("type") === "district"), Seq("id"))
+      .select(col("name").as("district_name"), col("userid"))
 
     /**
      * Resolve the block name by filtering location type = "BLOCK" for the locationids
      */
 
     val blockDenormDF = distinctLocationIdDF
-      .join(locationDF.filter(col("type") === "block"), Seq("id") )
-      .select(col("name").as("block_name"), col("userid")).distinct()
+      .join(locationDF.filter(col("type") === "block"), Seq("id"))
+      .select(col("name").as("block_name"), col("userid"))
 
-    //println("blockDenormDF" + blockDenormDF.count())
 
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
-    //println("userLocationResolvedDF" + userLocationResolvedDF.show(200, false))
 
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
-    //println("userLocationResolvedDF" + userLocationResolvedDF.show(200, false))
 
     val resolvedExternalIdDF = userBlockResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
-    //println("resolvedExternalIdDF" + resolvedExternalIdDF.show(200, false))
     /*
     * Resolve organisation name from `rootorgid`
     * */
@@ -244,14 +239,12 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
 
-   val finalDF = resolvedExternalIdDF
+
+    resolvedExternalIdDF
       .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
-     //.distinct()
-      //.dropDuplicates("userid")
-      .cache();
-    println("finalDF.count" + finalDF.count())
-    finalDF
+      .distinct()
+      .cache()
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
@@ -329,7 +322,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     newIndex;
   }
 
-  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, totalRecords:Long)(implicit spark: SparkSession): Unit = {
+  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, totalRecords: Long)(implicit spark: SparkSession): Unit = {
 
     import org.elasticsearch.spark.sql._
     val participantsCount = reportDF.count()
@@ -388,7 +381,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     index + DateTimeFormat.forPattern("dd-MM-yyyy-HH-mm").print(DateTime.now(DateTimeZone.forID("+05:30")))
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long): Unit = {
     reportDF
       .select(
         col("externalid").as("External ID"),
