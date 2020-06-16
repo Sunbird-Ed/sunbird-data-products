@@ -18,11 +18,11 @@ class BaseReportSpec extends BaseSpec with BeforeAndAfterAll {
     val cbatchAliasMapping = spark.sparkContext.textFile("src/test/resources/reports/cbatch_alias_mapping.json", 1).collect().head;
     val cbatchAssessmentAliasMapping = spark.sparkContext.textFile("src/test/resources/reports/cbatch_assessment_alias_mapping.json", 1).collect().head;
     
-//    EmbeddedES.start(
-//      Array(
-//        EsIndex("compositesearch", Option("cs"), Option(csMapping), None),
-//        EsIndex("cbatch", None, None, Option(cbatchAliasMapping)),
-//        EsIndex("cbatch-assessment-08-07-2018-11-00", None, None, Option(cbatchAssessmentAliasMapping))))
+    EmbeddedES.start(
+      Array(
+        EsIndex("compositesearch", Option("cs"), Option(csMapping), None),
+        EsIndex("cbatch", None, None, Option(cbatchAliasMapping)),
+        EsIndex("cbatch-assessment-08-07-2018-11-00", None, None, Option(cbatchAssessmentAliasMapping))))
   }
 
   override def afterAll() {
