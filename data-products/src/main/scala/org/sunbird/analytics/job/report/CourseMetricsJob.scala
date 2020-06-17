@@ -5,7 +5,6 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
-import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -153,7 +152,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("rootorgid"),
         col("locationids"),
         col("channel")
-      ).persist(StorageLevel.MEMORY_AND_DISK)
+      ).persist()
 
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
       .filter(lower(col("isdeleted")) === "false")
@@ -170,14 +169,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
       .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
 
-    val systemSettingDF = loadData(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
-      .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
-      .select(col("value")).persist()
-
-    val custRootOrgId = getCustodianOrgId(systemSettingDF)
-    val detailsByUser = getUserSelfDeclaredDetails(userDF, custRootOrgId, externalIdentityDF)
-    val detailsByState = getStateDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF)
-
+    val custRootOrgId = getCustodianOrgId(loadData)
+    val detailsByUser = getUserSelfDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, locationDF)
+    val detailsByState = getStateDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF, locationDF)
+    
     val userInfoDF = detailsByUser.union(detailsByState)
 
     /*
@@ -213,52 +208,21 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
-    /**
-      * Resolve the state name:
-      * 1. State-Users:
-      * ORGANISATION.locationids=LOCATION.id and LOCATION.type='state'
-      * TO-DO: How to map it to the user table to get the respective user
-      *
-      * 2. Custodian User
-      * USER.locationids=LOCATION.id and LOCATION.type='state' and fetch the name,userid
-      */
-
-    val stateInfoByUser = userDF.withColumn("explode_location", explode(col("locationids")))
-      .join(locationDF, col("explode_location") === locationDF.col("id")
-        && locationDF.col("type") === "state")
-      .select(col("name").as("state_name"), col("userid"))
-
-    val locationInfoByOrg = organisationDF.withColumn("explode_location", explode(col("locationids")))
-      .join(locationDF, col("explode_location") === locationDF.col("id")
-        && locationDF.col("type") === "state")
-      .select(organisationDF.col("id"), locationDF.col("name").as("state_name"),
-        organisationDF.col("isrootorg"))
-
-    val stateInfoByOrg = locationInfoByOrg.join(userDF,
-      locationInfoByOrg.col("id") === userDF.col("rootorgid") &&
-        locationInfoByOrg.col("isrootorg").equalTo(true))
-      .select(col("state_name"),
-        userDF.col("userid"))
-
-    val resolvedStateDenormDF = stateInfoByUser.union(stateInfoByOrg)
-        .dropDuplicates(Seq("userid"))
-
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
-    val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
 
     /*
     * Resolve organisation name from `rootorgid`
     * */
 
-    val resolvedOrgNameDF = userStateResolvedDF
-      .join(organisationDF, organisationDF.col("id") === userStateResolvedDF.col("rootorgid"), "left_outer")
-      .select(userStateResolvedDF.col("userid"), userStateResolvedDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
+    val resolvedOrgNameDF = userBlockResolvedDF
+      .join(organisationDF, organisationDF.col("id") === userBlockResolvedDF.col("rootorgid"), "left_outer")
+      .select(userBlockResolvedDF.col("userid"), userBlockResolvedDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
 
-    userStateResolvedDF
+    userBlockResolvedDF
       .join(userInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist()
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
@@ -447,20 +411,38 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   *   2.2 externalID.id if user is a self signed up user
 * */
 
-  def getUserSelfDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame): DataFrame = {
+  /**
+    * Resolve the state name:
+    * 1. State-Users:
+    * ORGANISATION.locationids=LOCATION.id and LOCATION.type='state'
+    * TO-DO: How to map it to the user table to get the respective user
+    *
+    * 2. Custodian User
+    * USER.locationids=LOCATION.id and LOCATION.type='state' and fetch the name,userid
+    */
+
+  def getUserSelfDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, locationDF: DataFrame): DataFrame = {
 
     val filterUserIdDF = userDf.filter(col("rootorgid") === lit(custRootOrgId))
-      .select("userid")
-    val denormUserDF = externalIdentityDF
+      .select("userid", "locationids")
+    val userIdDF = externalIdentityDF
         .join(filterUserIdDF, Seq("userid"), "inner")
         .groupBy("userid")
         .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
         .agg(first(col("externalid")))
         .na.drop("all", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+
+    val stateInfoDF = filterUserIdDF.withColumn("explode_location", explode(col("locationids")))
+      .join(locationDF, col("explode_location") === locationDF.col("id")
+        && locationDF.col("type") === "state")
+      .select(col("name").as("state_name"), col("userid"))
+
+    val denormUserDF = userIdDF
+      .join(stateInfoDF, Seq("userid"), "left_outer")
     denormUserDF
   }
 
-  def getStateDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, orgDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
+  def getStateDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, orgDF: DataFrame, userOrgDF: DataFrame, locationDF: DataFrame): DataFrame = {
 
     val stateExternalIdDF = externalIdentityDF
       .join(userDf,
@@ -473,12 +455,26 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       orgDF.col("id") === userOrgDF.col("organisationid"), "left_outer")
       .select(col("userid"), col("orgname").as("declared-school-name"), col("orgcode").as("declared-school-udise-code"))
 
+    val locationInfoDF = orgDF.withColumn("explode_location", explode(col("locationids")))
+      .join(locationDF, col("explode_location") === locationDF.col("id")
+        && locationDF.col("type") === "state")
+      .select(orgDF.col("id"), locationDF.col("name").as("state_name"),
+        orgDF.col("isrootorg"))
+
+    val stateInfoByOrg = locationInfoDF.join(userDf,
+      locationInfoDF.col("id") === userDf.col("rootorgid") &&
+        locationInfoDF.col("isrootorg").equalTo(true))
+      .select(col("state_name"),
+        userDf.col("userid"))
+
     val denormStateDetailDF = getResolvedSchoolInfo(schoolInfoByState)
       .join(stateExternalIdDF, Seq("userid"), "left_outer")
+      .join(stateInfoByOrg, Seq("userid"), "left_outer")
         .select(schoolInfoByState.col("userid"),
           col("declared-ext-id"),
           col("declared-school-name"),
-          col("declared-school-udise-code"))
+          col("declared-school-udise-code"),
+          col("state_name"))
     denormStateDetailDF
   }
 
@@ -513,7 +509,11 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     resolvedSchoolNameDF
   }
 
-  def getCustodianOrgId(systemSettingDF: DataFrame): String = {
+  def getCustodianOrgId(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): String = {
+    val systemSettingDF = loadData(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+      .select(col("value")).persist()
+
     systemSettingDF.select("value").first().getString(0)
   }
  }
