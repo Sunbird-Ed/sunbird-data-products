@@ -88,7 +88,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       */
 
     val druidResult = recordTime(DruidDataFetcher.getDruidData(druidQuery), "Total time taken to fetch from druid: ")
-    val finalResult = druidResult.map { f => JSONUtils.deserialize[druidOutput](f) }
+    val finalResult = druidResult.map { f => JSONUtils.deserialize[DruidOutput](f) }
     val finalDF = recordTime(finalResult.toDF(),"Time taken to convert to DF: ")
 
     val courseBatchDenormDF = courseBatchDF.join(finalDF,

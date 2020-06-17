@@ -118,11 +118,13 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val druidResult = DruidDataFetcher.getDruidData(druidQuery)
     val finalResult = druidResult.map { f => JSONUtils.deserialize[DruidOutput](f) }
     val finalDF = finalResult.toDF()
+
     /*
    * courseBatchDF has details about the course and batch details for which we have to prepare the report
    * courseBatchDF is the primary source for the report
    * userCourseDF has details about the user details enrolled for a particular course/batch
    * */
+
     val courseChannelDenormDF = courseBatchDF.join(finalDF, courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
       .select(courseBatchDF.col("*"), finalDF("channel"))
     val userCourseDenormDF = courseChannelDenormDF.join(userCoursesDF, userCoursesDF.col("batchid") === courseChannelDenormDF.col("batchid"), "inner")
