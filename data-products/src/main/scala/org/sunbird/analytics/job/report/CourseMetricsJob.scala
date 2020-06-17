@@ -113,11 +113,9 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ");
         val totalRecords = reportDF.count()
         recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
-        recordTime(saveReportToES(batch, reportDF, newIndex, totalRecords), s"Time taken to save report in ES for batch ${batch.batchid} - ");
         reportDF.unpersist(true);
       });
       JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
-      createESIndex(newIndex)
     }
     userData._2.unpersist(true);
 
@@ -300,77 +298,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("block_name"))
       .cache()
     reportDF;
-  }
-
-  def createESIndex(newIndex: String): String = {
-    val cBatchIndex = AppConf.getConfig("course.metrics.es.index.cbatch")
-    val aliasName = AppConf.getConfig("course.metrics.es.alias")
-    try {
-      val indexList = ESUtil.getIndexName(aliasName)
-      val oldIndex = indexList.mkString("")
-      if (!oldIndex.equals(newIndex)) ESUtil.rolloverIndex(newIndex, aliasName)
-    } catch {
-      case ex: Exception => {
-        JobLogger.log(ex.getMessage, None, ERROR)
-        ex.printStackTrace()
-      }
-    }
-    newIndex;
-  }
-
-  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, totalRecords:Long)(implicit spark: SparkSession): Unit = {
-
-    import org.elasticsearch.spark.sql._
-    val participantsCount = reportDF.count()
-    val courseCompletionCount = reportDF.filter(col("course_completion").equalTo(100)).count()
-
-    val batchStatsDF = reportDF
-      .select(
-        concat_ws(" ", col("firstname"), col("lastname")).as("name"),
-        concat_ws(":", col("userid"), col("batchid")).as("id"),
-        col("userid").as("userId"),
-        col("completedon").as("completedOn"),
-        col("maskedemail").as("maskedEmail"),
-        col("maskedphone").as("maskedPhone"),
-        col("orgname_resolved").as("rootOrgName"),
-        col("schoolname_resolved").as("subOrgName"),
-        col("startdate").as("startDate"),
-        col("enddate").as("endDate"),
-        col("courseid").as("courseId"),
-        col("generatedOn").as("lastUpdatedOn"),
-        col("batchid").as("batchId"),
-        col("course_completion").cast("long").as("completedPercent"),
-        col("district_name").as("districtName"),
-        col("block_name").as("blockName"),
-        col("externalid").as("externalId"),
-        from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
-        col("certificate_status").as("certificateStatus"))
-
-    import spark.implicits._
-    val batchDetails = Seq(BatchDetails(batch.batchid, courseCompletionCount, participantsCount)).toDF
-    val batchDetailsDF = batchDetails
-      .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
-      .select(
-        col("batchid").as("id"),
-        col("generatedOn").as("reportUpdatedOn"),
-        when(col("courseCompletionCountPerBatch").isNull, 0).otherwise(col("courseCompletionCountPerBatch")).as("completedCount"),
-        when(col("participantsCountPerBatch").isNull, 0).otherwise(col("participantsCountPerBatch")).as("participantCount"))
-
-    val cBatchIndex = AppConf.getConfig("course.metrics.es.index.cbatch")
-
-    try {
-      batchStatsDF.saveToEs(s"$newIndex/_doc", Map("es.mapping.id" -> "id"))
-      JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
-      // upsert batch details to cbatch index
-      batchDetailsDF.saveToEs(s"$cBatchIndex/_doc", Map("es.mapping.id" -> "id", "es.write.operation" -> "upsert"))
-      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }}", None, INFO)
-
-    } catch {
-      case ex: Exception => {
-        JobLogger.log(ex.getMessage, None, ERROR)
-        ex.printStackTrace()
-      }
-    }
   }
 
   def suffixDate(index: String): String = {
