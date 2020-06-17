@@ -149,34 +149,16 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         col("locationids"),
         col("channel"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
-    /**
-      * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
-      *
-      * For state user
-      * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.externalid
-      *
-      * For Cust User
-      * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
-      * fetch USR_EXTERNAL_IDENTITY.id and map with USR_EXTERNAL_IDENTITY.userid
-      */
 
-    val externalIdByStateDF = userDenormDF.join(externalIdentityDF,
-      externalIdentityDF.col("idtype") === userDenormDF.col("channel")
-        && externalIdentityDF.col("provider") === userDenormDF.col("channel")
-        && externalIdentityDF.col("userid") === userDenormDF.col("userid"), "inner")
-      .withColumn("externalid_resolved",
-        when(userDenormDF.col("course_channel") === userDenormDF.col("channel"), externalIdentityDF.col("externalid")).otherwise(""))
-      .select(col("externalid_resolved"), externalIdentityDF.col("userid"))
+    val systemSettingDF = loadData(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+      .select(col("value")).persist()
 
-    val externalIDByUserDF = externalIdentityDF.join(organisationDF,
-      externalIdentityDF.col("provider") === organisationDF.col("channel") &&
-        externalIdentityDF.col("idtype").equalTo("declared-ext-id"), "inner")
-      .join(userDenormDF, Seq("userid"), "inner")
-      .withColumn("externalid_resolved", when(userDenormDF.col("course_channel") === userDenormDF.col("channel"), externalIdentityDF.col("externalid")).otherwise(""))
-      .select(col("externalid_resolved"), externalIdentityDF.col("userid"))
+    val custRootOrgId = systemSettingDF.select("value").first().getString(0)
+    val detailsByUser = getUserSelfDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF)
+    val detailsByState = getStateDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF)
 
-    val externalIdMapDF = externalIdByStateDF.union(externalIDByUserDF)
-      .dropDuplicates(Seq("userid"))
+    val externalIdMapDF = detailsByUser.union(detailsByState)
 
     /*
   * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
@@ -285,42 +267,13 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
       .dropDuplicates(Seq("userid"))
       .select(resolvedExternalIdDF.col("userid"), col("orgname").as("orgname_resolved"))
-    /*
-      * Resolve school Information
-      * 1. school name from `orgid`
-      * 2. school UDISE code from
-      *   2.1 org.orgcode if user is a state user
-      *   2.2 externalID.id if user is a self signed up user
-      * */
-    val schoolInfoByUserDF = externalIdentityDF.join(organisationDF,
-      externalIdentityDF.col("provider") === organisationDF.col("channel"), "inner")
-      .join(userDenormDF, Seq("userid"), "inner")
-      .withColumn("schoolUDISE_resolved",
-        when(userDenormDF.col("channel") === userDenormDF.col("course_channel") &&
-          externalIdentityDF.col("idtype").equalTo("declared-school-udise-code"), externalIdentityDF.col("externalid")).otherwise(""))
-      .withColumn("schoolname_resolved",
-        when(userDenormDF.col("channel") === userDenormDF.col("course_channel") &&
-          externalIdentityDF.col("idtype").equalTo("declared-school-name"), col("orgname")).otherwise(""))
-      .select(col("schoolUDISE_resolved"), col("schoolname_resolved"), externalIdentityDF.col("userid"))
-
-    val schoolInfoBystateDF = resolvedExternalIdDF
-      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
-      .dropDuplicates(Seq("userid"))
-      .withColumn("schoolname_resolved",
-        when(resolvedExternalIdDF.col("channel") === resolvedExternalIdDF.col("course_channel"), col("orgname")).otherwise(""))
-      .withColumn("schoolUDISE_resolved",
-        when(resolvedExternalIdDF.col("channel") === resolvedExternalIdDF.col("course_channel"), col("orgcode")).otherwise(""))
-      .select(resolvedExternalIdDF.col("userid"), col("schoolname_resolved"), col("schoolUDISE_resolved"))
-
-    val resolvedSchoolInfoDF = schoolInfoByUserDF.union(schoolInfoBystateDF)
 
     /*
   * merge orgName and schoolName based on `userid` and calculate the course progress percentage from `progress` column which is no of content visited/read
   * */
 
-    resolvedExternalIdDF
-      .join(resolvedSchoolInfoDF, Seq("userid"), "left_outer")
-      .join(resolvedOrgNameDF, Seq("userid"), "left_outer")
+   resolvedExternalIdDF
+     .join(resolvedOrgNameDF, Seq("userid"), "left_outer")
   }
 
   /**
@@ -485,5 +438,75 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
   def getIndexName: String = {
     this.indexName
+  }
+
+  /**
+    * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
+    *
+    * For state user
+    * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.externalid
+    *
+    * For Cust User
+    * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
+    * fetch USR_EXTERNAL_IDENTITY.id and map with USR_EXTERNAL_IDENTITY.userid
+    */
+  /*
+  * Resolve school Information
+  * 1. school name from `orgid`
+  * 2. school UDISE code from
+  *   2.1 org.orgcode if user is a state user
+  *   2.2 externalID.id if user is a self signed up user
+  * */
+
+
+  def getUserSelfDeclaredDetails(userDF: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame): DataFrame = {
+
+    val filterUserIdDF = userDF.filter(col("rootorgid") === lit(custRootOrgId))
+      .select("userid", "course_channel", "channel")
+
+    val denormUserDF = externalIdentityDF
+      .join(filterUserIdDF, Seq("userid"), "inner")
+      .groupBy("userid", "course_channel", "channel")
+      .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+      .agg(first(col("externalid")))
+      .na.drop("all", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+
+    val resolvedUserDetails = denormUserDF
+      .withColumn("externalid_resolved",
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-ext-id")).otherwise(""))
+      .withColumn("schoolname_resolved",
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-school-name")).otherwise(""))
+      .withColumn("schoolUDISE_resolved",
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-school-udise-code")).otherwise(""))
+      .select(col("userid"), col("externalid_resolved"), col("schoolname_resolved"), col("schoolUDISE_resolved"))
+    resolvedUserDetails
+  }
+
+  def getStateDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, orgDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
+
+    val stateExternalIdDF = externalIdentityDF
+      .join(userDf,
+        externalIdentityDF.col("idtype") === userDf.col("channel")
+          && externalIdentityDF.col("provider") === userDf.col("channel")
+          && externalIdentityDF.col("userid") === userDf.col("userid"), "inner")
+      .select(externalIdentityDF.col("userid"), col("externalid") , col("channel"), col("course_channel"))
+
+    val schoolInfoByState = userOrgDF.join(orgDF,
+      orgDF.col("id") === userOrgDF.col("organisationid"), "left_outer")
+      .select(col("userid"), col("orgname"), col("orgcode"))
+
+    val denormStateDetailDF = schoolInfoByState
+      .join(stateExternalIdDF, Seq("userid"), "left_outer")
+      .withColumn("externalid_resolved",
+        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("channel"), stateExternalIdDF.col("externalid")).otherwise(""))
+      .withColumn("schoolname_resolved",
+        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("channel"), schoolInfoByState.col("orgname")).otherwise(""))
+      .withColumn("schoolUDISE_resolved",
+        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("channel"), schoolInfoByState.col("orgcode")).otherwise(""))
+      .select(schoolInfoByState.col("userid"),
+        col("externalid_resolved"),
+        col("schoolname_resolved"),
+        col("schoolUDISE_resolved"))
+    denormStateDetailDF
   }
 }

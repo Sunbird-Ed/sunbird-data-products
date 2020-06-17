@@ -29,6 +29,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
   var orgDF: DataFrame = _
   var userOrgDF: DataFrame = _
   var externalIdentityDF: DataFrame = _
+  var systemSettingDF: DataFrame = _
   var assessmentProfileDF: DataFrame = _
   var reporterMock: ReportGenerator = mock[ReportGenerator]
   val sunbirdCoursesKeyspace = "sunbird_courses"
@@ -113,6 +114,13 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       .load("src/test/resources/assessment-metrics-updater/userOrgtable.csv")
       .cache()
 
+    systemSettingDF = spark
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "true")
+      .load("src/test/resources/course-metrics-updater/systemSettingTable.csv")
+      .cache()
+
     EmbeddedES.loadData("compositesearch", "cs", Buffer(
       """{"contentType":"SelfAssess","name":"My content 1","identifier":"do_112835335135993856149"}""",
       """{"contentType":"SelfAssess","name":"My content 2","identifier":"do_112835336280596480151"}""",
@@ -186,6 +194,11 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .returning(assessmentProfileDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .anyNumberOfTimes()
+      .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJob
       .prepareReport(spark, reporterMock.loadData,druidConfig)
@@ -278,6 +291,11 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .returning(assessmentProfileDF)
 
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .anyNumberOfTimes()
+      .returning(systemSettingDF)
+
     val reportDF = AssessmentMetricsJob
       .prepareReport(spark, reporterMock.loadData, druidConfig)
       .cache()
@@ -347,6 +365,11 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .returning(assessmentProfileDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .anyNumberOfTimes()
+      .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJob
       .prepareReport(spark, reporterMock.loadData, druidConfig)
@@ -433,6 +456,11 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .returning(assessmentProfileDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .anyNumberOfTimes()
+      .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJob
       .prepareReport(spark, reporterMock.loadData,druidConfig)

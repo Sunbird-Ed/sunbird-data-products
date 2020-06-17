@@ -461,14 +461,12 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   }
 
   def getStateDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, orgDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
-    val filterStateUserIdDF = userDf.filter(col("rootorgid") =!= lit(custRootOrgId))
-      .select("userid", "channel", "rootorgid")
 
     val stateExternalIdDF = externalIdentityDF
       .join(userDf,
-        externalIdentityDF.col("idtype") === filterStateUserIdDF.col("channel")
-          && externalIdentityDF.col("provider") === filterStateUserIdDF.col("channel")
-          && externalIdentityDF.col("userid") === filterStateUserIdDF.col("userid"), "inner")
+        externalIdentityDF.col("idtype") === userDf.col("channel")
+          && externalIdentityDF.col("provider") === userDf.col("channel")
+          && externalIdentityDF.col("userid") === userDf.col("userid"), "inner")
         .select(externalIdentityDF.col("userid"), col("externalid").as("declared-ext-id"))
 
     val schoolInfoByState = userOrgDF.join(orgDF,
