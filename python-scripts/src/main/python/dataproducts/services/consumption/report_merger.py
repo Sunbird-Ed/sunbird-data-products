@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 from pathlib import Path
 
 from dataproducts.util.utils import create_json, download_file_from_store, \
-    post_data_to_blob, push_metric_event, get_data_from_blob
+    upload_file_to_store, post_data_to_blob, push_metric_event, get_data_from_blob
 
 class ReportMerger:
     def __init__(self, report_config):
@@ -77,6 +77,8 @@ class ReportMerger:
         delta_path = file_paths['deltaPath']
         report_path = report_path[1:] if report_path[0] == '/' else report_path
         delta_path = delta_path[1:] if delta_path[0] == '/' else delta_path
+        file_path = self.base_path.joinpath(report_path)
+        report_container = self.report_config.get('postContainer') if self.report_config.get('postContainer') else 'report-verification'
 
         try:
             os.makedirs(self.base_path.joinpath(delta_path).parent, exist_ok=True)
@@ -92,9 +94,13 @@ class ReportMerger:
             return True
 
         try:
-            os.makedirs(self.base_path.joinpath(report_path).parent, exist_ok=True)
-            get_data_from_blob(self.base_path.joinpath(report_path))
-            report_df = pd.read_csv(self.base_path.joinpath(report_path))
+            os.makedirs(file_path.parent, exist_ok=True)
+            download_file_from_store(
+                container_name=report_container,
+                blob_name=report_path,
+                file_path=str(file_path)
+            )
+            report_df = pd.read_csv(file_path)
         except Exception as e:
             print('INFO::report file is not available', report_path)
             report_df = pd.DataFrame()
@@ -112,9 +118,19 @@ class ReportMerger:
         else:
             report_df = delta_df
 
-        report_df.to_csv(self.base_path.joinpath(report_path), index=False)
-        create_json(self.base_path.joinpath(report_path))
-        post_data_to_blob(self.base_path.joinpath(report_path))
+        
+        report_df.to_csv(file_path, index=False)
+        create_json(file_path)
+        upload_file_to_store(
+                container_name=report_container,
+                blob_name=file_path.parent.name + '/' + file_path.name,
+                file_path=str(file_path)
+                )
+        upload_file_to_store(
+                container_name=report_container,
+                blob_name=file_path.parent.name + '/' + file_path.name.replace('.csv', '.json'),
+                file_path=str(file_path).replace('.csv', '.json')
+                )
 
 
     def init(self):
