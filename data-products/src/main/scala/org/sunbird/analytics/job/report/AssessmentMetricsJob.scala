@@ -23,6 +23,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
   private val indexName: String = AppConf.getConfig("assessment.metrics.es.index.prefix") + DateTimeFormat.forPattern("dd-MM-yyyy-HH-mm").print(DateTime.now())
   val metrics = scala.collection.mutable.Map[String, BigInt]();
+  val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
 
   def name(): String = "AssessmentMetricsJob"
 
@@ -86,7 +87,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     * Loading the specific tables from the cassandra db.
     */
   def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String]) => DataFrame, druidQuery: DruidQueryModel)(implicit fc: FrameworkContext): DataFrame = {
-    val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace)).select("courseid", "batchid", "enddate", "startdate")
     val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
@@ -152,13 +152,9 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         col("channel"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
 
-    val systemSettingDF = loadData(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
-      .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
-      .select(col("value")).persist()
-
-    val custRootOrgId = getCustodianOrgId(systemSettingDF)
-    val detailsByUser = getUserSelfDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF)
-    val detailsByState = getStateDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF)
+    val custRootOrgId = getCustodianOrgId(spark, loadData)
+    val detailsByUser = getUserSelfDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF, locationDF)
+    val detailsByState = getStateDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF, locationDF)
 
     val externalIdMapDF = detailsByUser.union(detailsByState)
 
@@ -193,34 +189,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val userLocationResolvedDF = userOrgDenormDF
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
-    /**
-      * Resolve the state name:
-      * 1. State-Users:
-      * ORGANISATION.locationids=LOCATION.id and LOCATION.type='state'
-      * TO-DO: How to map it to the user table to get the respective user
-      *
-      * 2. Custodian User
-      * USER.locationids=LOCATION.id and LOCATION.type='state' and fetch the name,userid
-      */
-    val stateInfoByUserDF = userDenormDF.withColumn("exploded_location", explode(col("locationids")))
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
-      .withColumn("statename_resolved",
-        when(userDenormDF.col("course_channel") === userDenormDF.col("channel"), col("name"))
-          .otherwise(""))
-      .select(col("statename_resolved"), col("userid"))
-
-    val locationidDF = userDenormDF.join(organisationDF, organisationDF.col("id") === userDenormDF.col("rootorgid")
-      && organisationDF.col("isrootorg").equalTo(true))
-      .select(organisationDF.col("locationids"), userDenormDF.col("userid"), userDenormDF.col("channel"), userDenormDF.col("course_channel"))
-
-    val stateInforByStateDF = locationidDF.withColumn("exploded_location", explode(col("locationids")))
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
-      .withColumn("statename_resolved",
-        when(locationidDF.col("course_channel") === locationidDF.col("channel"), col("name")).otherwise(""))
-      .dropDuplicates(Seq("userid"))
-      .select(col("statename_resolved"), locationidDF.col("userid"))
-    val stateDenormDF = stateInfoByUserDF.union(stateInforByStateDF)
-
     val assessmentDF = getAssessmentData(assessmentProfileDF)
     /**
       * Compute the sum of all the worksheet contents score.
@@ -234,25 +202,23 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       * Filter only valid enrolled userid for the specific courseid
       */
 
-    val resolvedUserLocDF = userLocationResolvedDF.join(stateDenormDF, Seq("userid"), "left_outer")
-    val userAssessmentResolvedDF = resolvedUserLocDF.join(resDF,
-      resolvedUserLocDF.col("userid") === resDF.col("user_id")
-        && resolvedUserLocDF.col("batchid") === resDF.col("batch_id")
-        && resolvedUserLocDF.col("courseid") === resDF.col("course_id"), "inner")
-      .select(resolvedUserLocDF.col("userid"),
-        resolvedUserLocDF.col("batchid"),
-        resolvedUserLocDF.col("courseid"),
-        resolvedUserLocDF.col("firstname"),
-        resolvedUserLocDF.col("lastname"),
-        resolvedUserLocDF.col("maskedemail"),
-        resolvedUserLocDF.col("maskedphone"),
-        resolvedUserLocDF.col("rootorgid"),
-        resolvedUserLocDF.col("username"),
-        resolvedUserLocDF.col("organisationid"),
-        resolvedUserLocDF.col("district_name"),
-        resolvedUserLocDF.col("statename_resolved"),
-        resolvedUserLocDF.col("course_channel"),
-        resolvedUserLocDF.col("channel"),
+    val userAssessmentResolvedDF = userLocationResolvedDF.join(resDF,
+      userLocationResolvedDF.col("userid") === resDF.col("user_id")
+        && userLocationResolvedDF.col("batchid") === resDF.col("batch_id")
+        && userLocationResolvedDF.col("courseid") === resDF.col("course_id"), "inner")
+      .select(userLocationResolvedDF.col("userid"),
+        userLocationResolvedDF.col("batchid"),
+        userLocationResolvedDF.col("courseid"),
+        userLocationResolvedDF.col("firstname"),
+        userLocationResolvedDF.col("lastname"),
+        userLocationResolvedDF.col("maskedemail"),
+        userLocationResolvedDF.col("maskedphone"),
+        userLocationResolvedDF.col("rootorgid"),
+        userLocationResolvedDF.col("username"),
+        userLocationResolvedDF.col("organisationid"),
+        userLocationResolvedDF.col("district_name"),
+        userLocationResolvedDF.col("course_channel"),
+        userLocationResolvedDF.col("channel"),
         resDF.col("content_id"),
         resDF.col("total_score"),
         resDF.col("grand_total"),
@@ -458,17 +424,26 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   * */
 
 
-  def getUserSelfDeclaredDetails(userDF: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame): DataFrame = {
+  def getUserSelfDeclaredDetails(userDF: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, locationDF: DataFrame): DataFrame = {
 
     val filterUserIdDF = userDF.filter(col("rootorgid") === lit(custRootOrgId))
-      .select("userid", "course_channel", "channel")
+      .select("userid", "course_channel", "channel", "locationids")
 
-    val denormUserDF = externalIdentityDF
+    val extIdDF = externalIdentityDF
       .join(filterUserIdDF, Seq("userid"), "inner")
       .groupBy("userid", "course_channel", "channel")
       .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
       .agg(first(col("externalid")))
       .na.drop("all", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+
+    val stateInfoByUserDF = filterUserIdDF.withColumn("exploded_location", explode(col("locationids")))
+      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
+      .withColumn("statename_resolved",
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), col("name"))
+          .otherwise(""))
+      .select(col("statename_resolved"), col("userid"))
+
+    val denormUserDF = extIdDF.join(stateInfoByUserDF, Seq("userid"), "left_outer")
 
     val resolvedUserDetails = denormUserDF
       .withColumn("externalid_resolved",
@@ -477,25 +452,37 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-school-name")).otherwise(""))
       .withColumn("schoolUDISE_resolved",
         when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-school-udise-code")).otherwise(""))
-      .select(col("userid"), col("externalid_resolved"), col("schoolname_resolved"), col("schoolUDISE_resolved"))
+      .select(col("userid"), col("externalid_resolved"), col("schoolname_resolved"), col("schoolUDISE_resolved"), col("statename_resolved"))
     resolvedUserDetails
   }
 
-  def getStateDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, orgDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
+  def getStateDeclaredDetails(userDenormDF: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, organisationDF: DataFrame, userOrgDF: DataFrame, locationDF: DataFrame): DataFrame = {
 
     val stateExternalIdDF = externalIdentityDF
-      .join(userDf,
-        externalIdentityDF.col("idtype") === userDf.col("channel")
-          && externalIdentityDF.col("provider") === userDf.col("channel")
-          && externalIdentityDF.col("userid") === userDf.col("userid"), "inner")
+      .join(userDenormDF,
+        externalIdentityDF.col("idtype") === userDenormDF.col("channel")
+          && externalIdentityDF.col("provider") === userDenormDF.col("channel")
+          && externalIdentityDF.col("userid") === userDenormDF.col("userid"), "inner")
       .select(externalIdentityDF.col("userid"), col("externalid") , col("channel"), col("course_channel"))
 
-    val schoolInfoByState = userOrgDF.join(orgDF,
-      orgDF.col("id") === userOrgDF.col("organisationid"), "left_outer")
+    val schoolInfoByState = userOrgDF.join(organisationDF,
+      organisationDF.col("id") === userOrgDF.col("organisationid"), "left_outer")
       .select(col("userid"), col("orgname"), col("orgcode"))
+
+    val locationidDF = userDenormDF.join(organisationDF, organisationDF.col("id") === userDenormDF.col("rootorgid")
+      && organisationDF.col("isrootorg").equalTo(true))
+      .select(organisationDF.col("locationids"), userDenormDF.col("userid"), userDenormDF.col("channel"), userDenormDF.col("course_channel"))
+
+    val stateInfoDF = locationidDF.withColumn("exploded_location", explode(col("locationids")))
+      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
+      .withColumn("statename_resolved",
+        when(locationidDF.col("course_channel") === locationidDF.col("channel"), col("name")).otherwise(""))
+      .dropDuplicates(Seq("userid"))
+      .select(col("statename_resolved"), locationidDF.col("userid"))
 
     val denormStateDetailDF = schoolInfoByState
       .join(stateExternalIdDF, Seq("userid"), "left_outer")
+      .join(stateInfoDF, Seq("userid"), "left_outer")
       .withColumn("externalid_resolved",
         when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("channel"), stateExternalIdDF.col("externalid")).otherwise(""))
       .withColumn("schoolname_resolved",
@@ -505,11 +492,16 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .select(schoolInfoByState.col("userid"),
         col("externalid_resolved"),
         col("schoolname_resolved"),
-        col("schoolUDISE_resolved"))
+        col("schoolUDISE_resolved"),
+        col("statename_resolved"))
     denormStateDetailDF
   }
 
-  def getCustodianOrgId(systemSettingDF: DataFrame): String = {
+  def getCustodianOrgId(spark: SparkSession, loadData: (SparkSession, Map[String, String]) => DataFrame): String = {
+    val systemSettingDF = loadData(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+      .select(col("value")).persist()
+
     systemSettingDF.select("value").first().getString(0)
   }
 }
