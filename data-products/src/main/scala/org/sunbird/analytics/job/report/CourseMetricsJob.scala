@@ -257,6 +257,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     userStateResolvedDF
       .join(userInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
+      .dropDuplicates("userid")
       .persist(StorageLevel.MEMORY_AND_DISK)
   }
 
