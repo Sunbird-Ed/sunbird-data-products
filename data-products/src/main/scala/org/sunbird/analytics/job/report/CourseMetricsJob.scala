@@ -179,7 +179,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val detailsByState = getStateDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF)
 
     val userInfoDF = detailsByUser.union(detailsByState)
-    userInfoDF.show()
 
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
@@ -259,7 +258,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(userInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
-    finalReportDF.show()
       finalReportDF.cache();
   }
 
