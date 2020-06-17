@@ -154,7 +154,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
       .select(col("value")).persist()
 
-    val custRootOrgId = systemSettingDF.select("value").first().getString(0)
+    val custRootOrgId = getCustodianOrgId(systemSettingDF)
     val detailsByUser = getUserSelfDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF)
     val detailsByState = getStateDeclaredDetails(userDenormDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF)
 
@@ -205,7 +205,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .withColumn("statename_resolved",
         when(userDenormDF.col("course_channel") === userDenormDF.col("channel"), col("name"))
           .otherwise(""))
-      .dropDuplicates(Seq("userid"))
       .select(col("statename_resolved"), col("userid"))
 
     val locationidDF = userDenormDF.join(organisationDF, organisationDF.col("id") === userDenormDF.col("rootorgid")
@@ -219,9 +218,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .dropDuplicates(Seq("userid"))
       .select(col("statename_resolved"), locationidDF.col("userid"))
     val stateDenormDF = stateInfoByUserDF.union(stateInforByStateDF)
-      .dropDuplicates(Seq("userid"))
-
-
+    
     val assessmentDF = getAssessmentData(assessmentProfileDF)
     /**
       * Compute the sum of all the worksheet contents score.
@@ -508,5 +505,9 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         col("schoolname_resolved"),
         col("schoolUDISE_resolved"))
     denormStateDetailDF
+  }
+
+  def getCustodianOrgId(systemSettingDF: DataFrame): String = {
+    systemSettingDF.select("value").first().getString(0)
   }
 }
