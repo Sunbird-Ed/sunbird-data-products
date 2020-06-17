@@ -169,33 +169,17 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
       .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
-    /**
-      * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
-      *
-      * For state user
-      * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.id
-      *
-      * For Cust User
-      * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
-      * fetch USR_EXTERNAL_IDENTITY.id and map with USER.userid
-      * For cust- How to map provider with ORG.channel
-      */
-    val externalIdByStateDF = userDF
-      .join(externalIdentityDF, externalIdentityDF.col("idtype") === userDF.col("channel")
-        && externalIdentityDF.col("provider") === userDF.col("channel")
-        && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
-      .dropDuplicates(Seq("userid"))
-      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
-        externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
 
-    val externalIdByUserDF = externalIdentityDF
-      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
-        && externalIdentityDF.col("idtype").equalTo("declared-ext-id"), "inner")
-      .dropDuplicates(Seq("userid"))
-      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"),
-        externalIdentityDF.col("provider"), externalIdentityDF.col("idtype"))
+    val systemSettingDF = loadData(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+      .select(col("value")).persist()
 
-    val externalIdMapDF = externalIdByStateDF.union(externalIdByUserDF)
+    val custRootOrgId = systemSettingDF.select("value").first().getString(0)
+    val detailsByUser = getUserSelfDeclaredDetails(userDF, custRootOrgId, externalIdentityDF)
+    val detailsByState = getStateDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF)
+
+    val userInfoDF = detailsByUser.union(detailsByState)
+    userInfoDF.show()
 
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
@@ -262,74 +246,20 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
     val userStateResolvedDF = userBlockResolvedDF.join(resolvedStateDenormDF, Seq("userid"), "left_outer")
-    val resolvedExternalIdDF = userStateResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
     * Resolve organisation name from `rootorgid`
     * */
 
-    val resolvedOrgNameDF = resolvedExternalIdDF
-      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
-      .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
+    val resolvedOrgNameDF = userStateResolvedDF
+      .join(organisationDF, organisationDF.col("id") === userStateResolvedDF.col("rootorgid"), "left_outer")
+      .select(userStateResolvedDF.col("userid"), userStateResolvedDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
 
-    /*
-      * Resolve
-      * 1. school name from `orgid`
-      * 2. school UDISE code from
-      *   2.1 org.orgcode if user is a state user
-      *   2.2 externalID.id if user is a self signed up user
-    * */
-
-    val schoolInfoByUser = externalIdentityDF.join(organisationDF,
-      externalIdentityDF.col("provider") === organisationDF.col("channel"), "inner")
-      .withColumn("schoolcode_resolved", when(externalIdentityDF.col("idtype").equalTo("declared-school-udise-code"), col("externalid")).otherwise(""))
-      .withColumn("schoolname_resolved", when(externalIdentityDF.col("idtype").equalTo("declared-school-name")
-        && externalIdentityDF.col("externalid") === organisationDF.col("orgcode"), col("orgname")).otherwise(""))
-      .dropDuplicates(Seq("userid"))
-      .select(externalIdentityDF.col("userid"), organisationDF.col("id").as("organisationid"), col("schoolname_resolved"), col("schoolcode_resolved"))
-
-    val schoolInfoByStateDF = resolvedExternalIdDF
-      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
-      .dropDuplicates(Seq("userid"))
-      .select(resolvedExternalIdDF.col("userid"),
-        resolvedExternalIdDF.col("organisationid"), col("orgname").as("schoolname_resolved"), col("orgcode").as("schoolcode_resolved"))
-
-    val schoolInfoDF = schoolInfoByUser.union(schoolInfoByStateDF)
-      .dropDuplicates(Seq("userid"))
-
-
-    /**
-      * If the user present in the multiple organisation, then zip all the org names.
-      * Example:
-      * FROM:
-      * +-------+------------------------------------+
-      * |userid |orgname                             |
-      * +-------+------------------------------------+
-      * |user030|SACRED HEART(B)PS,TIRUVARANGAM      |
-      * |user030| MPPS BAYYARAM                     |
-      * |user001| MPPS BAYYARAM                     |
-      * +-------+------------------------------------+
-      * TO:
-      * +-------+-------------------------------------------------------+
-      * |userid |orgname                                                |
-      * +-------+-------------------------------------------------------+
-      * |user030|[ SACRED HEART(B)PS,TIRUVARANGAM, MPPS BAYYARAM ]      |
-      * |user001| MPPS BAYYARAM                                         |
-      * +-------+-------------------------------------------------------+
-      * Zipping the orgnames of particular userid
-      *
-      *
-      */
-    val schoolNameIndexDF = schoolInfoDF.withColumn("index", count("userid").over(Window.partitionBy("userid").orderBy("userid")).cast("int"))
-
-    val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
-      .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved"), collect_list("schoolcode_resolved").cast("string").as("schoolcode_resolved")))
-
-    val finalReportDF = resolvedExternalIdDF
-      .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
+    val finalReportDF = userStateResolvedDF
+      .join(userInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
-
+    finalReportDF.show()
       finalReportDF.cache();
   }
 
@@ -373,10 +303,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
-      .withColumn("resolved_externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("externalid")).otherwise(""))
-      .withColumn("resolved_schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("schoolname_resolved")).otherwise(""))
+      .withColumn("resolved_externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("declared-ext-id")).otherwise(""))
+      .withColumn("resolved_schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("declared-school-name")).otherwise(""))
       .withColumn("resolved_blockname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("block_name")).otherwise(""))
-      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("schoolcode_resolved")).otherwise(""))
+      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("declared-school-udise-code")).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("firstname"),
@@ -499,4 +429,91 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 
-}
+  /**
+    * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
+    *
+    * For state user
+    * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.id
+    *
+    * For Cust User
+    * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
+    * fetch USR_EXTERNAL_IDENTITY.id and map with USER.userid
+    * For cust- How to map provider with ORG.channel
+    */
+
+  /*
+  * Resolve
+  * 1. school name from `orgid`
+  * 2. school UDISE code from
+  *   2.1 org.orgcode if user is a state user
+  *   2.2 externalID.id if user is a self signed up user
+* */
+
+  def getUserSelfDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame): DataFrame = {
+
+    val filterUserIdDF = userDf.filter(col("rootorgid") === lit(custRootOrgId))
+      .select("userid")
+    val denormUserDF = externalIdentityDF
+        .join(filterUserIdDF, Seq("userid"), "inner")
+        .groupBy("userid")
+        .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+        .agg(first(col("externalid")))
+        .na.drop("all", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+    denormUserDF
+  }
+
+  def getStateDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, orgDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
+    val filterStateUserIdDF = userDf.filter(col("rootorgid") =!= lit(custRootOrgId))
+      .select("userid", "channel", "rootorgid")
+
+    val stateExternalIdDF = externalIdentityDF
+      .join(userDf,
+        externalIdentityDF.col("idtype") === filterStateUserIdDF.col("channel")
+          && externalIdentityDF.col("provider") === filterStateUserIdDF.col("channel")
+          && externalIdentityDF.col("userid") === filterStateUserIdDF.col("userid"), "inner")
+        .select(externalIdentityDF.col("userid"), col("externalid").as("declared-ext-id"))
+
+    val schoolInfoByState = userOrgDF.join(orgDF,
+      orgDF.col("id") === userOrgDF.col("organisationid"), "left_outer")
+      .select(col("userid"), col("orgname").as("declared-school-name"), col("orgcode").as("declared-school-udise-code"))
+
+    val denormStateDetailDF = getResolvedSchoolInfo(schoolInfoByState)
+      .join(stateExternalIdDF, Seq("userid"), "left_outer")
+        .select(schoolInfoByState.col("userid"),
+          col("declared-ext-id"),
+          col("declared-school-name"),
+          col("declared-school-udise-code"))
+    denormStateDetailDF
+  }
+
+  def getResolvedSchoolInfo(schoolInfoDF: DataFrame): DataFrame = {
+
+    /**
+      * If the user present in the multiple organisation, then zip all the org names.
+      * Example:
+      * FROM:
+      * +-------+------------------------------------+
+      * |userid |orgname                             |
+      * +-------+------------------------------------+
+      * |user030|SACRED HEART(B)PS,TIRUVARANGAM      |
+      * |user030| MPPS BAYYARAM                     |
+      * |user001| MPPS BAYYARAM                     |
+      * +-------+------------------------------------+
+      * TO:
+      * +-------+-------------------------------------------------------+
+      * |userid |orgname                                                |
+      * +-------+-------------------------------------------------------+
+      * |user030|[ SACRED HEART(B)PS,TIRUVARANGAM, MPPS BAYYARAM ]      |
+      * |user001| MPPS BAYYARAM                                         |
+      * +-------+-------------------------------------------------------+
+      * Zipping the orgnames of particular userid
+      *
+      *
+      */
+    val schoolNameIndexDF = schoolInfoDF.withColumn("index", count("userid").over(Window.partitionBy("userid").orderBy("userid")).cast("int"))
+
+    val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
+      .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("declared-school-name").cast("string").as("declared-school-name"), collect_list("declared-school-udise-code").cast("string").as("declared-school-udise-code")))
+    resolvedSchoolNameDF
+  }
+ }

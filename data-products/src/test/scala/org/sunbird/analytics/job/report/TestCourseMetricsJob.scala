@@ -30,6 +30,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
   var orgDF: DataFrame = _
   var userOrgDF: DataFrame = _
   var externalIdentityDF: DataFrame = _
+  var systemSettingDF: DataFrame = _
   var reporterMock: ReportGenerator = mock[ReportGenerator]
   val sunbirdCoursesKeyspace = "sunbird_courses"
   val sunbirdKeyspace = "sunbird"
@@ -104,6 +105,13 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .option("header", "true")
       .load("src/test/resources/course-metrics-updater/userOrgtable.csv")
       .cache()
+
+    systemSettingDF = spark
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "true")
+      .load("src/test/resources/course-metrics-updater/systemSettingTable.csv")
+      .cache()
   }
   
   "TestUpdateCourseMetrics" should "generate reports for 10 batches and validate all scenarios" in {
@@ -149,6 +157,11 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
       .anyNumberOfTimes()
       .returning(externalIdentityDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .anyNumberOfTimes()
+      .returning(systemSettingDF)
 
     val storageConfig = StorageConfig("local", "", "src/test/resources/course-metrics")
 
