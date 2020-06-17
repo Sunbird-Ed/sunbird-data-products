@@ -15,7 +15,7 @@ import org.joda.time.format.DateTimeFormat
 import org.sunbird.analytics.util.ESUtil
 import org.sunbird.cloud.storage.conf.AppConf
 
-case class druidOutput(identifier: String, channel: String)
+case class DruidOutput(identifier: String, channel: String)
 
 object AssessmentMetricsJob extends optional.Application with IJob with BaseReportsJob {
 
@@ -116,7 +116,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     import sqlContext.implicits._
 
     val druidResult = DruidDataFetcher.getDruidData(druidQuery)
-    val finalResult = druidResult.map { f => JSONUtils.deserialize[druidOutput](f) }
+    val finalResult = druidResult.map { f => JSONUtils.deserialize[DruidOutput](f) }
     val finalDF = finalResult.toDF()
     /*
    * courseBatchDF has details about the course and batch details for which we have to prepare the report
@@ -218,7 +218,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .dropDuplicates(Seq("userid"))
       .select(col("statename_resolved"), locationidDF.col("userid"))
     val stateDenormDF = stateInfoByUserDF.union(stateInforByStateDF)
-    
+
     val assessmentDF = getAssessmentData(assessmentProfileDF)
     /**
       * Compute the sum of all the worksheet contents score.
