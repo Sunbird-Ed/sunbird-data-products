@@ -5,6 +5,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
+import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -151,9 +152,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("maskedphone"),
         col("rootorgid"),
         col("locationids"),
-        col("channel"),
-        col("locationids")
-      ).persist()
+        col("channel")
+      ).persist(StorageLevel.MEMORY_AND_DISK)
 
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
       .filter(lower(col("isdeleted")) === "false")
@@ -174,7 +174,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
       .select(col("value")).persist()
 
-    val custRootOrgId = systemSettingDF.select("value").first().getString(0)
+    val custRootOrgId = getCustodianOrgId(systemSettingDF)
     val detailsByUser = getUserSelfDeclaredDetails(userDF, custRootOrgId, externalIdentityDF)
     val detailsByState = getStateDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF)
 
@@ -254,11 +254,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(organisationDF, organisationDF.col("id") === userStateResolvedDF.col("rootorgid"), "left_outer")
       .select(userStateResolvedDF.col("userid"), userStateResolvedDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
 
-    val finalReportDF = userStateResolvedDF
+    userStateResolvedDF
       .join(userInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
-      .dropDuplicates("userid")
-      finalReportDF.cache();
+      .persist(StorageLevel.MEMORY_AND_DISK)
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
@@ -390,7 +389,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
       // upsert batch details to cbatch index
       batchDetailsDF.saveToEs(s"$cBatchIndex/_doc", Map("es.mapping.id" -> "id", "es.write.operation" -> "upsert"))
-      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid} }, totalNoOfRecords: $totalRecords }}", None, INFO)
+      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }}", None, INFO)
 
     } catch {
       case ex: Exception => {
@@ -511,5 +510,9 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
       .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("declared-school-name").cast("string").as("declared-school-name"), collect_list("declared-school-udise-code").cast("string").as("declared-school-udise-code")))
     resolvedSchoolNameDF
+  }
+
+  def getCustodianOrgId(systemSettingDF: DataFrame): String = {
+    systemSettingDF.select("value").first().getString(0)
   }
  }
