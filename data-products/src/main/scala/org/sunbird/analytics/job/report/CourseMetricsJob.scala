@@ -4,9 +4,10 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
 import org.apache.spark.sql.types.DataTypes
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
+import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.joda.time.format.DateTimeFormat
@@ -18,13 +19,13 @@ case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boo
 
 case class BatchDetails(batchid: String, courseCompletionCountPerBatch: Long, participantsCountPerBatch: Long)
 
-case class CourseBatch(batchid: String, startDate: String, endDate: String);
+case class CourseBatch(batchid: String, startDate: String, endDate: String, courseChannel: String);
 
 trait ReportGenerator {
 
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String]) => DataFrame): Unit
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String]) => DataFrame, config: JobConfig)(implicit fc: FrameworkContext): Unit
 }
 
 object CourseMetricsJob extends optional.Application with IJob with ReportGenerator with BaseReportsJob {
@@ -61,26 +62,41 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val storageConfig = getStorageConfig(container, objectKey)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, storageConfig, loadData)
+      prepareReport(spark, storageConfig, loadData, config)
     });
     metrics.put("totalExecutionTime", time._1);
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
-
+    fc.closeContext()
   }
 
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame = {
     spark.read.format("org.apache.spark.sql.cassandra").options(settings).load()
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): Array[Row] = {
+  def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame, druidQuery: DruidQueryModel)(implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
       .select("courseid", "batchid", "enddate", "startdate")
     val timestamp = DateTime.now().minusDays(1).withTimeAtStartOfDay()
-    
+
+    /**
+      * 1. Fetching course_id and channel from content-model-snapshot
+      * 2. Mapping it with course_batch details
+      */
+
+    val druidResult = recordTime(DruidDataFetcher.getDruidData(druidQuery), "Total time taken to fetch from druid: ")
+    val finalResult = druidResult.map { f => JSONUtils.deserialize[DruidOutput](f) }
+    val finalDF = recordTime(finalResult.toDF(),"Time taken to convert to DF: ")
+
+    val courseBatchDenormDF = courseBatchDF.join(finalDF,
+      courseBatchDF.col("courseid") === finalDF.col("identifier"), "left_outer")
+      .select(courseBatchDF.col("*"), finalDF.col("channel"))
     JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
-    val activeBatches = courseBatchDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
-    val activeBatchList = activeBatches.select("batchId", "startDate", "endDate").collect();
+    val activeBatches = courseBatchDenormDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
+    val activeBatchList = activeBatches.select("batchId", "startDate", "endDate", "channel").collect();
 
     JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
     activeBatchList;
@@ -94,10 +110,12 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     result;
   }
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String]) => DataFrame): Unit = {
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String]) => DataFrame, config: JobConfig)(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession = spark;
-    val activeBatches = getActiveBatches(loadData);
+    //druid Query for fetching course_id and channel
+    val druidQuery = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
+    val activeBatches = getActiveBatches(loadData, druidQuery);
     val newIndexPrefix = AppConf.getConfig("course.metrics.es.index.cbatchstats.prefix")
     val newIndex = suffixDate(newIndexPrefix)
     val userData = CommonUtil.time({
@@ -108,12 +126,12 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     metrics.put("activeBatchesCount", activeBatchesCount)
     for (index <- activeBatches.indices) {
       val row = activeBatches(index);
-      val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2));
+      val batch = CourseBatch(row.getString(0), row.getString(1), row.getString(2), row.getString(3));
       val result = CommonUtil.time({
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ");
         val totalRecords = reportDF.count()
         recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
-        recordTime(saveReportToES(batch, reportDF, newIndex, totalRecords), s"Time taken to save report in ES for batch ${batch.batchid} - ");
+        recordTime(saveReportToES(batch, reportDF, newIndex,totalRecords), s"Time taken to save report in ES for batch ${batch.batchid} - ");
         reportDF.unpersist(true);
       });
       JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
@@ -134,29 +152,28 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("rootorgid"),
         col("locationids"),
         col("channel")
-      ).cache()
+      ).persist()
 
     val userOrgDF = loadData(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
       .filter(lower(col("isdeleted")) === "false")
-      .select(col("userid"), col("organisationid")).cache()
+      .select(col("userid"), col("organisationid")).persist()
 
     val organisationDF = loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
-      .select(col("id"), col("orgname")).cache()
+      .select(col("id"), col("orgname"),
+        col("channel"), col("orgcode"),
+        col("locationids"), col("isrootorg")).persist()
 
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-      .filter(col("type") === "district" || col("type") === "block")
       .select(col("id"), col("name"), col("type"))
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).cache()
-    /**
-     * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
-     */
-    val externalIdMapDF = userDF
-      .join(externalIdentityDF, externalIdentityDF.col("idtype") === userDF.col("channel")
-        && externalIdentityDF.col("provider") === userDF.col("channel")
-        && externalIdentityDF.col("userid") === userDF.col("userid"), "inner")
-      .select(externalIdentityDF.col("externalid"), externalIdentityDF.col("userid"))
+      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
+
+    val custRootOrgId = getCustodianOrgId(loadData)
+    val detailsByUser = getUserSelfDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, locationDF)
+    val detailsByState = getStateDeclaredDetails(userDF, custRootOrgId, externalIdentityDF, organisationDF, userOrgDF, locationDF)
+    
+    val userInfoDF = detailsByUser.union(detailsByState)
 
     /*
     * userDenormDF lacks organisation details, here we are mapping each users to get the organisationids
@@ -181,8 +198,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(col("name").as("district_name"), col("userid"))
 
     /**
-     * Resolve the block name by filtering location type = "BLOCK" for the locationids
-     */
+      * Resolve the block name by filtering location type = "BLOCK" for the locationids
+      */
     val blockDenormDF = userOrgDenormDF
       .withColumn("exploded_location", explode(col("locationids")))
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
@@ -192,55 +209,20 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(locationDenormDF, Seq("userid"), "left_outer")
 
     val userBlockResolvedDF = userLocationResolvedDF.join(blockDenormDF, Seq("userid"), "left_outer")
-    val resolvedExternalIdDF = userBlockResolvedDF.join(externalIdMapDF, Seq("userid"), "left_outer")
 
     /*
     * Resolve organisation name from `rootorgid`
     * */
 
-    val resolvedOrgNameDF = resolvedExternalIdDF
-      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("rootorgid"), "left_outer")
-      .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
+    val resolvedOrgNameDF = userBlockResolvedDF
+      .join(organisationDF, organisationDF.col("id") === userBlockResolvedDF.col("rootorgid"), "left_outer")
+      .select(userBlockResolvedDF.col("userid"), userBlockResolvedDF.col("rootorgid"), col("orgname").as("orgname_resolved"))
 
-    /*
-    * Resolve school name from `orgid`
-    * */
-    val schoolNameDF = resolvedExternalIdDF
-      .join(organisationDF, organisationDF.col("id") === resolvedExternalIdDF.col("organisationid"), "left_outer")
-      .select(resolvedExternalIdDF.col("userid"), resolvedExternalIdDF.col("organisationid"), col("orgname").as("schoolname_resolved"))
-
-    /**
-     * If the user present in the multiple organisation, then zip all the org names.
-     * Example:
-     * FROM:
-     * +-------+------------------------------------+
-     * |userid |orgname                             |
-     * +-------+------------------------------------+
-     * |user030|SACRED HEART(B)PS,TIRUVARANGAM      |
-     * |user030| MPPS BAYYARAM                     |
-     * |user001| MPPS BAYYARAM                     |
-     * +-------+------------------------------------+
-     * TO:
-     * +-------+-------------------------------------------------------+
-     * |userid |orgname                                                |
-     * +-------+-------------------------------------------------------+
-     * |user030|[ SACRED HEART(B)PS,TIRUVARANGAM, MPPS BAYYARAM ]      |
-     * |user001| MPPS BAYYARAM                                         |
-     * +-------+-------------------------------------------------------+
-     * Zipping the orgnames of particular userid
-     *
-     *
-     */
-    val schoolNameIndexDF = schoolNameDF.withColumn("index", count("userid").over(Window.partitionBy("userid").orderBy("userid")).cast("int"))
-
-    val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
-      .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("schoolname_resolved").cast("string").as("schoolname_resolved")))
-
-    resolvedExternalIdDF
-      .join(resolvedSchoolNameDF, Seq("userid"), "left_outer")
+    userBlockResolvedDF
+      .join(userInfoDF, Seq("userid"), "left_outer")
       .join(resolvedOrgNameDF, Seq("userid", "rootorgid"), "left_outer")
       .dropDuplicates("userid")
-      .cache();
+      .persist()
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
@@ -248,8 +230,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
     val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
-        , col("completionpercentage"), col("enrolleddate"), col("completedon")
-      )
+        , col("completionpercentage"), col("enrolleddate"), col("completedon"))
       /*
        * courseBatchDF has details about the course and batch details for which we have to prepare the report
        * courseBatchDF is the primary source for the report
@@ -258,6 +239,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .where(col("batchid") === batch.batchid && lower(col("active")).equalTo("true"))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
+      .withColumn("course_channel", lit(batch.courseChannel))
       .withColumn(
         "course_completion",
         when(col("completionpercentage").isNull, 0)
@@ -277,12 +259,16 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("courseid"),
         col("course_completion"),
         col("generatedOn"),
-        col("certificate_status")
+        col("certificate_status"),
+        col("course_channel")
       )
-
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
+      .withColumn("resolved_externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("declared-ext-id")).otherwise(""))
+      .withColumn("resolved_schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("declared-school-name")).otherwise(""))
+      .withColumn("resolved_blockname", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("block_name")).otherwise(""))
+      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("channel"), userDF.col("declared-school-udise-code")).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("firstname"),
@@ -293,11 +279,14 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("rootorgid"),
         col("userid"),
         col("locationids"),
-        col("externalid"),
+        col("resolved_externalid"),
         col("orgname_resolved"),
-        col("schoolname_resolved"),
+        col("resolved_schoolname"),
         col("district_name"),
-        col("block_name"))
+        col("resolved_udisecode"),
+        col("resolved_blockname"),
+        col("state_name")
+      )
       .cache()
     reportDF;
   }
@@ -333,7 +322,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("maskedemail").as("maskedEmail"),
         col("maskedphone").as("maskedPhone"),
         col("orgname_resolved").as("rootOrgName"),
-        col("schoolname_resolved").as("subOrgName"),
+        col("resolved_schoolname").as("subOrgName"),
         col("startdate").as("startDate"),
         col("enddate").as("endDate"),
         col("courseid").as("courseId"),
@@ -341,8 +330,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         col("batchid").as("batchId"),
         col("course_completion").cast("long").as("completedPercent"),
         col("district_name").as("districtName"),
-        col("block_name").as("blockName"),
-        col("externalid").as("externalId"),
+        col("resolved_blockname").as("blockName"),
+        col("resolved_externalid").as("externalId"),
+        col("resolved_udisecode").as("subOrgUDISECode"),
+        col("state_name").as("StateName"),
         from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
         col("certificate_status").as("certificateStatus"))
 
@@ -380,22 +371,149 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {
     reportDF
       .select(
-        col("externalid").as("External ID"),
+        col("resolved_externalid").as("External ID"),
         col("userid").as("User ID"),
         concat_ws(" ", col("firstname"), col("lastname")).as("User Name"),
         col("maskedemail").as("Email ID"),
         col("maskedphone").as("Mobile Number"),
         col("orgname_resolved").as("Organisation Name"),
+        col("state_name").as("State Name"),
         col("district_name").as("District Name"),
-        col("schoolname_resolved").as("School Name"),
-        col("block_name").as("Block Name"),
+        col("resolved_udisecode").as("School UDISE Code"),
+        col("resolved_schoolname").as("School Name"),
+        col("resolved_blockname").as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
       .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
-    JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords } ", None, INFO)
+    JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 
-}
+  /**
+    * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
+    *
+    * For state user
+    * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.id
+    *
+    * For Cust User
+    * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
+    * fetch USR_EXTERNAL_IDENTITY.id and map with USER.userid
+    * For cust- How to map provider with ORG.channel
+    */
+
+  /*
+  * Resolve
+  * 1. school name from `orgid`
+  * 2. school UDISE code from
+  *   2.1 org.orgcode if user is a state user
+  *   2.2 externalID.id if user is a self signed up user
+* */
+
+  /**
+    * Resolve the state name:
+    * 1. State-Users:
+    * ORGANISATION.locationids=LOCATION.id and LOCATION.type='state'
+    * TO-DO: How to map it to the user table to get the respective user
+    *
+    * 2. Custodian User
+    * USER.locationids=LOCATION.id and LOCATION.type='state' and fetch the name,userid
+    */
+
+  def getUserSelfDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, locationDF: DataFrame): DataFrame = {
+
+    val filterUserIdDF = userDf.filter(col("rootorgid") === lit(custRootOrgId))
+      .select("userid", "locationids")
+    val userIdDF = externalIdentityDF
+        .join(filterUserIdDF, Seq("userid"), "inner")
+        .groupBy("userid")
+        .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+        .agg(first(col("externalid")))
+        .na.drop("all", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+
+    val stateInfoDF = filterUserIdDF.withColumn("explode_location", explode(col("locationids")))
+      .join(locationDF, col("explode_location") === locationDF.col("id")
+        && locationDF.col("type") === "state")
+      .select(col("name").as("state_name"), col("userid"))
+
+    val denormUserDF = userIdDF
+      .join(stateInfoDF, Seq("userid"), "left_outer")
+    denormUserDF
+  }
+
+  def getStateDeclaredDetails(userDf: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, orgDF: DataFrame, userOrgDF: DataFrame, locationDF: DataFrame): DataFrame = {
+
+    val stateExternalIdDF = externalIdentityDF
+      .join(userDf,
+        externalIdentityDF.col("idtype") === userDf.col("channel")
+          && externalIdentityDF.col("provider") === userDf.col("channel")
+          && externalIdentityDF.col("userid") === userDf.col("userid"), "inner")
+        .select(externalIdentityDF.col("userid"), col("externalid").as("declared-ext-id"))
+
+    val schoolInfoByState = userOrgDF.join(orgDF,
+      orgDF.col("id") === userOrgDF.col("organisationid"), "left_outer")
+      .select(col("userid"), col("orgname").as("declared-school-name"), col("orgcode").as("declared-school-udise-code"))
+
+    val locationInfoDF = orgDF.withColumn("explode_location", explode(col("locationids")))
+      .join(locationDF, col("explode_location") === locationDF.col("id")
+        && locationDF.col("type") === "state")
+      .select(orgDF.col("id"), locationDF.col("name").as("state_name"),
+        orgDF.col("isrootorg"))
+
+    val stateInfoByOrg = locationInfoDF.join(userDf,
+      locationInfoDF.col("id") === userDf.col("rootorgid") &&
+        locationInfoDF.col("isrootorg").equalTo(true))
+      .select(col("state_name"),
+        userDf.col("userid"))
+
+    val denormStateDetailDF = getResolvedSchoolInfo(schoolInfoByState)
+      .join(stateExternalIdDF, Seq("userid"), "left_outer")
+      .join(stateInfoByOrg, Seq("userid"), "left_outer")
+        .select(schoolInfoByState.col("userid"),
+          col("declared-ext-id"),
+          col("declared-school-name"),
+          col("declared-school-udise-code"),
+          col("state_name"))
+    denormStateDetailDF
+  }
+
+  def getResolvedSchoolInfo(schoolInfoDF: DataFrame): DataFrame = {
+
+    /**
+      * If the user present in the multiple organisation, then zip all the org names.
+      * Example:
+      * FROM:
+      * +-------+------------------------------------+
+      * |userid |orgname                             |
+      * +-------+------------------------------------+
+      * |user030|SACRED HEART(B)PS,TIRUVARANGAM      |
+      * |user030| MPPS BAYYARAM                     |
+      * |user001| MPPS BAYYARAM                     |
+      * +-------+------------------------------------+
+      * TO:
+      * +-------+-------------------------------------------------------+
+      * |userid |orgname                                                |
+      * +-------+-------------------------------------------------------+
+      * |user030|[ SACRED HEART(B)PS,TIRUVARANGAM, MPPS BAYYARAM ]      |
+      * |user001| MPPS BAYYARAM                                         |
+      * +-------+-------------------------------------------------------+
+      * Zipping the orgnames of particular userid
+      *
+      *
+      */
+    val schoolNameIndexDF = schoolInfoDF.withColumn("index", count("userid").over(Window.partitionBy("userid").orderBy("userid")).cast("int"))
+
+    val resolvedSchoolNameDF = schoolNameIndexDF.selectExpr("*").filter(col("index") === 1).drop("organisationid", "index", "batchid")
+      .union(schoolNameIndexDF.filter(col("index") =!= 1).groupBy("userid").agg(collect_list("declared-school-name").cast("string").as("declared-school-name"), collect_list("declared-school-udise-code").cast("string").as("declared-school-udise-code")))
+    resolvedSchoolNameDF
+  }
+
+  def getCustodianOrgId(loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): String = {
+    val systemSettingDF = loadData(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+      .select(col("value")).persist()
+
+    systemSettingDF.select("value").first().getString(0)
+  }
+ }
