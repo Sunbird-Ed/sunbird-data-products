@@ -190,29 +190,6 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
 
     CourseMetricsJob.prepareReport(spark, storageConfig, reporterMock.loadData,config)
 
-    // TODO: Add assertions here
-    EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").foreach(f => {
-      f.contains("lastUpdatedOn") should be (true)
-    })
-  EmbeddedES.getAllDocuments("cbatch").foreach(f => {
-    f.contains("reportUpdatedOn") should be (true)
-    })
-
-    val esOutput = JSONUtils.deserialize[ESOutput](EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").head)
-    esOutput.name should be ("Rajesh Kapoor")
-    esOutput.id should be ("user012:1002")
-    esOutput.batchId should be ("1002")
-    esOutput.courseId should be ("do_112726725832507392141")
-    esOutput.rootOrgName should be ("MPPS BAYYARAM")
-    esOutput.subOrgUDISECode should be ("")
-    esOutput.blockName should be ("")
-    esOutput.maskedEmail should be ("*****@gmail.com")
-
-  val esOutput_cbatch = JSONUtils.deserialize[ESOutputCBatch](EmbeddedES.getAllDocuments("cbatch").head)
-    esOutput_cbatch.id should be ("1004")
-    esOutput_cbatch.participantCount should be ("4")
-    esOutput_cbatch.completedCount should be ("0")
-
     (new HadoopFileUtil()).delete(spark.sparkContext.hadoopConfiguration, "src/test/resources/course-metrics")
   }
 

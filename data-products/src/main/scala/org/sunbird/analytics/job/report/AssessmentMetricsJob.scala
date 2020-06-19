@@ -341,36 +341,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
   }
 
-  def saveToElastic(index: String, reportDF: DataFrame, transposedData: DataFrame): Unit = {
-    val assessmentReportDF = reportDF.select(
-      col("userid").as("userId"),
-      col("username").as("userName"),
-      col("courseid").as("courseId"),
-      col("batchid").as("batchId"),
-      col("grand_total").as("score"),
-      col("maskedemail").as("maskedEmail"),
-      col("maskedphone").as("maskedPhone"),
-      col("district_name").as("districtName"),
-      col("orgname_resolved").as("rootOrgName"),
-      col("externalid_resolved").as("externalId"),
-      col("schoolname_resolved").as("subOrgName"),
-      col("schoolUDISE_resolved").as("schoolUDISECode"),
-      col("statename_resolved").as("stateName"),
-      col("total_sum_score").as("totalScore"),
-      transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
-      col("reportUrl").as("reportUrl")
-    ).drop("userid", "courseid", "batchid")
-    ESUtil.saveToIndex(assessmentReportDF, index)
-  }
-
-  def rollOverIndex(index: String, alias: String): Unit = {
-    val indexList = ESUtil.getIndexName(alias)
-    if (!indexList.contains(index)) ESUtil.rolloverIndex(index, alias)
-  }
-
   def save(courseBatchList: Array[Map[String, Any]], reportDF: DataFrame, url: String, spark: SparkSession)(implicit fc: FrameworkContext): Unit = {
-    val aliasName = AppConf.getConfig("assessment.metrics.es.alias")
-    val indexToEs = AppConf.getConfig("course.es.index.enabled")
     courseBatchList.foreach(item => {
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
@@ -384,12 +355,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
           try {
             val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId, transposedData), s"Time taken to save the $batchId into azure -")
             val resolvedDF = reportData.withColumn("reportUrl", lit(urlBatch))
-            if (StringUtils.isNotBlank(indexToEs) && StringUtils.equalsIgnoreCase("true", indexToEs)) {
-              recordTime(saveToElastic(this.getIndexName, resolvedDF, transposedData), s"Time taken to save the $batchId into to es -")
-              JobLogger.log("Indexing of assessment report data is success: " + this.getIndexName, None, INFO)
-            } else {
-              JobLogger.log("Skipping Indexing assessment report into ES", None, INFO)
-            }
           } catch {
             case e: Exception => JobLogger.log("File upload is failed due to " + e, None, ERROR)
           }
@@ -398,7 +363,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         }
       })
     })
-    rollOverIndex(getIndexName, aliasName)
   }
 
   def getIndexName: String = {
