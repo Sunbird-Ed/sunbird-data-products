@@ -184,97 +184,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     // Get CustodianOrgID
     val custRootOrgId = getCustodianOrgId(loadData)
-
-    /**
-      * Resolve the state, district and block information for CustodianOrg Users
-      * CustodianOrg Users will have state, district and block (optional) information
-      */
-
-    val userExplodedLocationDF = userDF.withColumn("exploded_location", explode_outer(col("locationids")))
-      .select(col("userid"), col("exploded_location"))
-
-    val userStateDF = userExplodedLocationDF
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
-      .select(userExplodedLocationDF.col("userid"), col("name").as("state_name"))
-
-    val userDistrictDF = userExplodedLocationDF
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
-      .select(userExplodedLocationDF.col("userid"), col("name").as("district_name"))
-
-    val userBlockDF = userExplodedLocationDF
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
-      .select(userExplodedLocationDF.col("userid"), col("name").as("block_name"))
-
-    /**
-      * Join with the userDF to get one record per user with district and block information
-      */
-
-    val custodianOrguserLocationDF = userDF.filter(col("rootorgid") === lit(custRootOrgId))
-      .join(userStateDF, Seq("userid"), "inner")
-      .join(userDistrictDF, Seq("userid"), "left")
-      .join(userBlockDF, Seq("userid"), "left")
-      .select(userDF.col("*"),
-        col("state_name"),
-        col("district_name"),
-        col("block_name")).drop(col("locationids"))
-
-    /**
-      * Obtain the ExternalIdentity information for CustodianOrg users
-      */
-
-    val custodianUserPivotDF = custodianOrguserLocationDF.as("user_loc")
-      .join(externalIdentityDF, externalIdentityDF.col("userid") === col("user_loc.userid"), "left")
-      .groupBy(col("user_loc.userid"))
-      .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
-      .agg(first(col("externalid")))
-      .select("user_loc.userid", "declared-ext-id", "declared-school-name", "declared-school-udise-code")
-
-    val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
-      .join(custodianUserPivotDF, Seq("userid"), "left")
-      .select("userLocDF.*", "declared-ext-id", "declared-school-name", "declared-school-udise-code")
-
-    /**
-      * Resolve the State, district and block information for State Users
-      * State Users will either have just the state info or state, district and block info
-      * Obtain the location information from the organisations table first before joining
-      * with the state users
-      */
-
-    val stateOrgExplodedDF = organisationDF.withColumn("exploded_location", explode_outer(col("locationids")))
-      .select(col("id"), col("exploded_location"))
-
-    val orgStateDF = stateOrgExplodedDF.join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
-      .select(stateOrgExplodedDF.col("id"), col("name").as("state_name"))
-
-    val orgDistrictDF = stateOrgExplodedDF
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
-      .select(stateOrgExplodedDF.col("id"), col("name").as("district_name"))
-
-    val orgBlockDF = stateOrgExplodedDF
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
-      .select(stateOrgExplodedDF.col("id"), col("name").as("block_name"))
-
-    val stateOrgLocationDF = organisationDF
-      .join(orgStateDF, Seq("id"))
-      .join(orgDistrictDF, Seq("id"), "left")
-      .join(orgBlockDF, Seq("id"), "left")
-      .select(organisationDF.col("id").as("orgid"), col("orgname"),
-        col("orgcode"), col("isrootorg"), col("state_name"), col("district_name"), col("block_name"))
-
-    val stateUserLocationResolvedDF = userDF
-        .join(stateOrgLocationDF, userDF.col("rootorgid") === stateOrgLocationDF.col("orgid"))
-      .select(userDF.col("*"),
-        col("orgname").as("declared-school-name"),
-        col("orgcode").as("declared-school-udise-code"),
-        col("state_name"),
-        col("district_name"),
-        col("block_name")).drop(col("locationids"))
-
-    val stateUserDF = stateUserLocationResolvedDF.as("state_user")
-      .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
-        && externalIdentityDF.col("provider") === col("state_user.channel")
-        && externalIdentityDF.col("userid") === col("state_user.userid"), "left")
-      .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"))
+    val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
+    val stateUserDF = generateStateOrgUserData(userDF, organisationDF, locationDF, externalIdentityDF)
 
     val userLocationResolvedDF = custodianUserDF.unionByName(stateUserDF)
 
@@ -341,6 +252,107 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     userDF.unpersist()
 
     userDataDF
+  }
+
+  def generateCustodianOrgUserData(custodianOrgId: String, userDF: DataFrame, organisationDF: DataFrame,
+                                   locationDF: DataFrame, externalIdentityDF: DataFrame): DataFrame = {
+    /**
+      * Resolve the state, district and block information for CustodianOrg Users
+      * CustodianOrg Users will have state, district and block (optional) information
+      */
+
+    val userExplodedLocationDF = userDF.withColumn("exploded_location", explode_outer(col("locationids")))
+      .select(col("userid"), col("exploded_location"))
+
+    val userStateDF = userExplodedLocationDF
+      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
+      .select(userExplodedLocationDF.col("userid"), col("name").as("state_name"))
+
+    val userDistrictDF = userExplodedLocationDF
+      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
+      .select(userExplodedLocationDF.col("userid"), col("name").as("district_name"))
+
+    val userBlockDF = userExplodedLocationDF
+      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
+      .select(userExplodedLocationDF.col("userid"), col("name").as("block_name"))
+
+    /**
+      * Join with the userDF to get one record per user with district and block information
+      */
+
+    val custodianOrguserLocationDF = userDF.filter(col("rootorgid") === lit(custodianOrgId))
+      .join(userStateDF, Seq("userid"), "inner")
+      .join(userDistrictDF, Seq("userid"), "left")
+      .join(userBlockDF, Seq("userid"), "left")
+      .select(userDF.col("*"),
+        col("state_name"),
+        col("district_name"),
+        col("block_name")).drop(col("locationids"))
+
+    /**
+      * Obtain the ExternalIdentity information for CustodianOrg users
+      */
+
+    val custodianUserPivotDF = custodianOrguserLocationDF.as("user_loc")
+      .join(externalIdentityDF, externalIdentityDF.col("userid") === col("user_loc.userid"), "left")
+      .groupBy(col("user_loc.userid"))
+      .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
+      .agg(first(col("externalid")))
+      .select("user_loc.userid", "declared-ext-id", "declared-school-name", "declared-school-udise-code")
+
+    val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
+      .join(custodianUserPivotDF, Seq("userid"), "left")
+      .select("userLocDF.*", "declared-ext-id", "declared-school-name", "declared-school-udise-code")
+
+    custodianUserDF
+  }
+
+  def generateStateOrgUserData(userDF: DataFrame, organisationDF: DataFrame, locationDF: DataFrame,
+                               externalIdentityDF: DataFrame): DataFrame = {
+    /**
+      * Resolve the State, district and block information for State Users
+      * State Users will either have just the state info or state, district and block info
+      * Obtain the location information from the organisations table first before joining
+      * with the state users
+      */
+
+    val stateOrgExplodedDF = organisationDF.withColumn("exploded_location", explode_outer(col("locationids")))
+      .select(col("id"), col("exploded_location"))
+
+    val orgStateDF = stateOrgExplodedDF.join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
+      .select(stateOrgExplodedDF.col("id"), col("name").as("state_name"))
+
+    val orgDistrictDF = stateOrgExplodedDF
+      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
+      .select(stateOrgExplodedDF.col("id"), col("name").as("district_name"))
+
+    val orgBlockDF = stateOrgExplodedDF
+      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
+      .select(stateOrgExplodedDF.col("id"), col("name").as("block_name"))
+
+    val stateOrgLocationDF = organisationDF
+      .join(orgStateDF, Seq("id"))
+      .join(orgDistrictDF, Seq("id"), "left")
+      .join(orgBlockDF, Seq("id"), "left")
+      .select(organisationDF.col("id").as("orgid"), col("orgname"),
+        col("orgcode"), col("isrootorg"), col("state_name"), col("district_name"), col("block_name"))
+
+    val stateUserLocationResolvedDF = userDF
+      .join(stateOrgLocationDF, userDF.col("rootorgid") === stateOrgLocationDF.col("orgid"))
+      .select(userDF.col("*"),
+        col("orgname").as("declared-school-name"),
+        col("orgcode").as("declared-school-udise-code"),
+        col("state_name"),
+        col("district_name"),
+        col("block_name")).drop(col("locationids"))
+
+    val stateUserDF = stateUserLocationResolvedDF.as("state_user")
+      .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
+        && externalIdentityDF.col("provider") === col("state_user.channel")
+        && externalIdentityDF.col("userid") === col("state_user.userid"), "left")
+      .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"))
+
+    stateUserDF
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
