@@ -132,8 +132,8 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
     val json: String =
       """
         |{
-        |  "identifier": "do_1127102863240151041169",
-        |  "channel": "apekx"
+        |  "identifier": "do_1130293726460805121168",
+        |  "channel": "0123653943740170242"
         |}
       """.stripMargin
 
