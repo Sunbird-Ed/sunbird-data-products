@@ -10,16 +10,14 @@ import io.circe._
 import io.circe.parser._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
-import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.EmbeddedES
-import org.apache.spark.sql.Encoder
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
-import scala.collection.JavaConverters._
 
 case class ESOutput(name: String, id: String, userId: String, completedOn: String, maskedEmail: String, maskedPhone: String, rootOrgName: String, subOrgName: String, startDate: String, courseId: String, lastUpdatedOn: String, batchId: String, completedPercent: String, districtName: String, blockName: String, externalId: String, subOrgUDISECode: String,StateName: String, enrolledOn: String, certificateStatus: String)
 case class ESOutputCBatch(id: String, reportUpdatedOn: String, completedCount: String, participantCount: String)
@@ -132,8 +130,8 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
     val json: String =
       """
         |{
-        |  "identifier": "do_1130293726460805121168",
-        |  "channel": "0123653943740170242"
+        |  "identifier": "do_1130264512015646721166",
+        |  "channel": "01274266675936460840172"
         |}
       """.stripMargin
 
@@ -165,6 +163,10 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .load(s"$outputLocation/$outputDir/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
     batch1Results.size should be (1)
     batch1Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("c4cc494f-04c3-49f3-b3d5-7b1a1984abad")
+    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
 
     val batch2Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch2.csv").as[BatchReportOutput].collectAsList().asScala
@@ -180,6 +182,10 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .load(s"$outputLocation/$outputDir/report-$batch4.csv").as[BatchReportOutput].collectAsList().asScala
     batch4Results.size should be (1)
     batch4Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("97d81cb6-a348-42f1-91ba-150961a74444")
+    batch4Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("65sboa02")
+    batch4Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("177vid877")
+    batch4Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("Vidyodhaya")
+    batch4Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("DEVANAHALLI")
 
     val batch5Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch5.csv").as[BatchReportOutput].collectAsList().asScala

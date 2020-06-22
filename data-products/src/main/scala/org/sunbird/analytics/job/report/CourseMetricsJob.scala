@@ -293,17 +293,21 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       * Obtain the ExternalIdentity information for CustodianOrg users
       */
 
-    val custodianUserPivotDF = custodianOrguserLocationDF.as("user_loc")
-      .join(externalIdentityDF, externalIdentityDF.col("userid") === col("user_loc.userid"), "left")
-      .groupBy(col("user_loc.userid"))
+    val custodianUserPivotDF = custodianOrguserLocationDF
+      .join(externalIdentityDF, externalIdentityDF.col("userid") === custodianOrguserLocationDF.col("userid"), "left")
+      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel"), "left")
+      .groupBy(custodianOrguserLocationDF.col("userid"), organisationDF.col("id"))
       .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
       .agg(first(col("externalid")))
-      .select("user_loc.userid", "declared-ext-id", "declared-school-name", "declared-school-udise-code")
+      .select(custodianOrguserLocationDF.col("userid"),
+        col("declared-ext-id"),
+        col("declared-school-name"),
+        col("declared-school-udise-code"),
+        organisationDF.col("id").as("user_channel"))
 
     val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
       .join(custodianUserPivotDF, Seq("userid"), "left")
-      .select("userLocDF.*", "declared-ext-id", "declared-school-name", "declared-school-udise-code")
-
+      .select("userLocDF.*", "declared-ext-id", "declared-school-name", "declared-school-udise-code", "user_channel")
     custodianUserDF
   }
 
@@ -350,8 +354,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
         && externalIdentityDF.col("provider") === col("state_user.channel")
         && externalIdentityDF.col("userid") === col("state_user.userid"), "left")
-      .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"))
-
+      .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"), col("rootorgid").as("user_channel"))
     stateUserDF
   }
 
@@ -394,10 +397,10 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
-      .withColumn("resolved_externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("rootorgid"), userDF.col("declared-ext-id")).otherwise(""))
-      .withColumn("resolved_schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("rootorgid"), userDF.col("declared-school-name")).otherwise(""))
-      .withColumn("resolved_blockname", when(userCourseDenormDF.col("course_channel") === userDF.col("rootorgid"), userDF.col("block_name")).otherwise(""))
-      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("rootorgid"), userDF.col("declared-school-udise-code")).otherwise(""))
+      .withColumn("resolved_externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("user_channel"), userDF.col("declared-ext-id")).otherwise(""))
+      .withColumn("resolved_schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("user_channel"), userDF.col("declared-school-name")).otherwise(""))
+      .withColumn("resolved_blockname", when(userCourseDenormDF.col("course_channel") === userDF.col("user_channel"), userDF.col("block_name")).otherwise(""))
+      .withColumn("resolved_udisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("user_channel"), userDF.col("declared-school-udise-code")).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("firstname"),
