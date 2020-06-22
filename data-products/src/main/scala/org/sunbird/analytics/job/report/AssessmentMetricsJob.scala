@@ -427,11 +427,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   def getUserSelfDeclaredDetails(userDF: DataFrame, custRootOrgId: String, externalIdentityDF: DataFrame, locationDF: DataFrame): DataFrame = {
 
     val filterUserIdDF = userDF.filter(col("rootorgid") === lit(custRootOrgId))
-      .select("userid", "course_channel", "channel", "locationids")
+      .select("userid", "course_channel", "rootorgid", "locationids")
 
     val extIdDF = externalIdentityDF
       .join(filterUserIdDF, Seq("userid"), "inner")
-      .groupBy("userid", "course_channel", "channel")
+      .groupBy("userid", "course_channel", "rootorgid")
       .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
       .agg(first(col("externalid")))
       .na.drop("all", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
@@ -439,7 +439,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val stateInfoByUserDF = filterUserIdDF.withColumn("exploded_location", explode(col("locationids")))
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
       .withColumn("statename_resolved",
-        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), col("name"))
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("rootorgid"), col("name"))
           .otherwise(""))
       .select(col("statename_resolved"), col("userid"))
 
@@ -447,11 +447,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
     val resolvedUserDetails = denormUserDF
       .withColumn("externalid_resolved",
-        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-ext-id")).otherwise(""))
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("rootorgid"), denormUserDF.col("declared-ext-id")).otherwise(""))
       .withColumn("schoolname_resolved",
-        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-school-name")).otherwise(""))
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("rootorgid"), denormUserDF.col("declared-school-name")).otherwise(""))
       .withColumn("schoolUDISE_resolved",
-        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("channel"), denormUserDF.col("declared-school-udise-code")).otherwise(""))
+        when(filterUserIdDF.col("course_channel") === filterUserIdDF.col("rootorgid"), denormUserDF.col("declared-school-udise-code")).otherwise(""))
       .select(col("userid"), col("externalid_resolved"), col("schoolname_resolved"), col("schoolUDISE_resolved"), col("statename_resolved"))
     resolvedUserDetails
   }
@@ -463,7 +463,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         externalIdentityDF.col("idtype") === userDenormDF.col("channel")
           && externalIdentityDF.col("provider") === userDenormDF.col("channel")
           && externalIdentityDF.col("userid") === userDenormDF.col("userid"), "inner")
-      .select(externalIdentityDF.col("userid"), col("externalid") , col("channel"), col("course_channel"))
+      .select(externalIdentityDF.col("userid"), col("externalid") , col("rootorgid"), col("course_channel"))
 
     val schoolInfoByState = userOrgDF.join(organisationDF,
       organisationDF.col("id") === userOrgDF.col("organisationid"), "left_outer")
@@ -471,12 +471,12 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
     val locationidDF = userDenormDF.join(organisationDF, organisationDF.col("id") === userDenormDF.col("rootorgid")
       && organisationDF.col("isrootorg").equalTo(true))
-      .select(organisationDF.col("locationids"), userDenormDF.col("userid"), userDenormDF.col("channel"), userDenormDF.col("course_channel"))
+      .select(organisationDF.col("locationids"), userDenormDF.col("userid"), userDenormDF.col("rootorgid"), userDenormDF.col("course_channel"))
 
     val stateInfoDF = locationidDF.withColumn("exploded_location", explode(col("locationids")))
       .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
       .withColumn("statename_resolved",
-        when(locationidDF.col("course_channel") === locationidDF.col("channel"), col("name")).otherwise(""))
+        when(locationidDF.col("course_channel") === locationidDF.col("rootorgid"), col("name")).otherwise(""))
       .dropDuplicates(Seq("userid"))
       .select(col("statename_resolved"), locationidDF.col("userid"))
 
@@ -484,11 +484,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .join(stateExternalIdDF, Seq("userid"), "left_outer")
       .join(stateInfoDF, Seq("userid"), "left_outer")
       .withColumn("externalid_resolved",
-        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("channel"), stateExternalIdDF.col("externalid")).otherwise(""))
+        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("rootorgid"), stateExternalIdDF.col("externalid")).otherwise(""))
       .withColumn("schoolname_resolved",
-        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("channel"), schoolInfoByState.col("orgname")).otherwise(""))
+        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("rootorgid"), schoolInfoByState.col("orgname")).otherwise(""))
       .withColumn("schoolUDISE_resolved",
-        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("channel"), schoolInfoByState.col("orgcode")).otherwise(""))
+        when(stateExternalIdDF.col("course_channel") === stateExternalIdDF.col("rootorgid"), schoolInfoByState.col("orgcode")).otherwise(""))
       .select(schoolInfoByState.col("userid"),
         col("externalid_resolved"),
         col("schoolname_resolved"),
