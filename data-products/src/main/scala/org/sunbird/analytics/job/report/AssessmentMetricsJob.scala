@@ -163,8 +163,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val userRootOrgDF = userDenormDF
       .join(userOrgDF, userOrgDF.col("userid") === userDenormDF.col("userid") && userOrgDF.col("organisationid") === userDenormDF.col("rootorgid"))
       .select(userDenormDF.col("*"), col("organisationid"))
-      .select(userDenormDF.col("*"), col("organisationid"))
-
 
     val userSubOrgDF = userDenormDF
       .join(userOrgDF, userOrgDF.col("userid") === userDenormDF.col("userid") && userOrgDF.col("organisationid") =!= userDenormDF.col("rootorgid"))
@@ -217,7 +215,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     externalIdentityDF.unpersist()
     locationDF.unpersist()
     organisationDF.unpersist()
-    
+
     reportDF
   }
 
