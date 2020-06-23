@@ -343,13 +343,13 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(organisationDF.col("id").as("orgid"), col("orgname"),
         col("orgcode"), col("isrootorg"), col("state_name"), col("district_name"), col("block_name"))
 
-    // exclude the custodian user != custoRootOrIg
+    // exclude the custodian user != custRootOrgId
     // join userDf to user_orgDF and then join with OrgDF to get orgname and orgcode ( filter isrootorg = false)
 
     val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
       .join(userOrgDF, userDF.col("userid") === userOrgDF.col("userid"))
       .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
-        && stateOrgLocationDF.col("isrootorg").equalTo(false))
+        && stateOrgLocationDF.col("isrootorg").equalTo(false), "left")
       .dropDuplicates(Seq("userid"))
       .select(userDF.col("*"),
         col("orgname").as("declared-school-name"),
