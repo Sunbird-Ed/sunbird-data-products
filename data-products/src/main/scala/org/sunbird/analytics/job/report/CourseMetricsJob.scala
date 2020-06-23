@@ -185,7 +185,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     // Get CustodianOrgID
     val custRootOrgId = getCustodianOrgId(loadData)
     val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
-    val stateUserDF = generateStateOrgUserData(userDF, organisationDF, locationDF, externalIdentityDF)
+    val stateUserDF = generateStateOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF, userOrgDF)
 
     val userLocationResolvedDF = custodianUserDF.unionByName(stateUserDF)
 
@@ -292,10 +292,12 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     /**
       * Obtain the ExternalIdentity information for CustodianOrg users
       */
+      // isrootorg = true
 
     val custodianUserPivotDF = custodianOrguserLocationDF
       .join(externalIdentityDF, externalIdentityDF.col("userid") === custodianOrguserLocationDF.col("userid"), "left")
-      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel"), "left")
+      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
+        && organisationDF.col("isrootorg").equalTo(true), "left")
       .groupBy(custodianOrguserLocationDF.col("userid"), organisationDF.col("id"))
       .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
       .agg(first(col("externalid")))
@@ -311,8 +313,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     custodianUserDF
   }
 
-  def generateStateOrgUserData(userDF: DataFrame, organisationDF: DataFrame, locationDF: DataFrame,
-                               externalIdentityDF: DataFrame): DataFrame = {
+  def generateStateOrgUserData(custRootOrgId: String, userDF: DataFrame, organisationDF: DataFrame, locationDF: DataFrame,
+                               externalIdentityDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
     /**
       * Resolve the State, district and block information for State Users
       * State Users will either have just the state info or state, district and block info
@@ -341,8 +343,14 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(organisationDF.col("id").as("orgid"), col("orgname"),
         col("orgcode"), col("isrootorg"), col("state_name"), col("district_name"), col("block_name"))
 
-    val stateUserLocationResolvedDF = userDF
-      .join(stateOrgLocationDF, userDF.col("rootorgid") === stateOrgLocationDF.col("orgid"))
+    // exclude the custodian user != custoRootOrIg
+    // join userDf to user_orgDF and then join with OrgDF to get orgname and orgcode ( filter isrootorg = false)
+
+    val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
+      .join(userOrgDF, userDF.col("userid") === userOrgDF.col("userid"))
+      .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
+        && stateOrgLocationDF.col("isrootorg").equalTo(false))
+      .dropDuplicates(Seq("userid"))
       .select(userDF.col("*"),
         col("orgname").as("declared-school-name"),
         col("orgcode").as("declared-school-udise-code"),
