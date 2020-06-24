@@ -91,25 +91,25 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
       reportConfig.output.map { f =>
         val etbDf = etbTextBookReport.toDF().dropDuplicates("identifier","status")
-          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject,'identifier,'status)
+          .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'status)
         CourseUtils.postDataToBlob(etbDf,f,config)
 
         val dceDf = dceTextBookReport.toDF().dropDuplicates()
-          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject)
+          .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject)
         CourseUtils.postDataToBlob(dceDf,f,config)
 
         val dialdceDF = dceDialcodeReport.toDF()
         val dialcodeDCE = dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
           .drop("dialcodes","noOfScans","status","nodeType","noOfContent")
           .coalesce(1)
-          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject)
+          .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
         CourseUtils.postDataToBlob(dialcodeDCE,f,config)
 
         val dialetbDF = etbDialcodeReport.toDF()
         val dialcodeETB = dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
           .drop("dialcodes","noOfScans","term")
           .dropDuplicates()
-          .orderBy('medium,split('gradeLevel," ")(1).cast("int"),'subject)
+          .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
         CourseUtils.postDataToBlob(dialcodeETB,f,config)
       }
     }
