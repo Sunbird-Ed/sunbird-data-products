@@ -346,28 +346,20 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     // exclude the custodian user != custRootOrgId
     // join userDf to user_orgDF and then join with OrgDF to get orgname and orgcode ( filter isrootorg = false)
 
-    val rootOrgDF = userOrgDF
-      .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
-        && stateOrgLocationDF.col("isrootorg").equalTo(true))
-      .select(col("userid"), stateOrgLocationDF.col("*"))
-
     val subOrgDF = userOrgDF
       .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
         && stateOrgLocationDF.col("isrootorg").equalTo(false))
       .dropDuplicates(Seq("userid"))
       .select(col("userid"), stateOrgLocationDF.col("*"))
 
-    val orgDenormDF = rootOrgDF.join(subOrgDF, Seq("userid"), "left")
-      .select(subOrgDF("*"))
-
     val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
-      .join(orgDenormDF, Seq("userid"), "left")
+      .join(subOrgDF, Seq("userid"), "left")
       .select(userDF.col("*"),
-        orgDenormDF.col("orgname").as("declared-school-name"),
-        orgDenormDF.col("orgcode").as("declared-school-udise-code"),
-        orgDenormDF.col("state_name"),
-        orgDenormDF.col("district_name"),
-        orgDenormDF.col("block_name")).drop(col("locationids"))
+        subOrgDF.col("orgname").as("declared-school-name"),
+        subOrgDF.col("orgcode").as("declared-school-udise-code"),
+        subOrgDF.col("state_name"),
+        subOrgDF.col("district_name"),
+        subOrgDF.col("block_name")).drop(col("locationids"))
 
     val stateUserDF = stateUserLocationResolvedDF.as("state_user")
       .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
