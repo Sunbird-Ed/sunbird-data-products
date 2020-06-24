@@ -476,11 +476,22 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .select(organisationDF.col("id").as("orgid"), col("orgname"),
         col("orgcode"), col("isrootorg"), col("state_name"), col("district_name"))
 
-    val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
-      .join(userOrgDF, userDF.col("userid") === userOrgDF.col("userid"))
+    val rootOrgDF = userOrgDF
       .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
-        && stateOrgLocationDF.col("isrootorg").equalTo(false), "left")
+        && stateOrgLocationDF.col("isrootorg").equalTo(true))
+      .select(col("userid"), stateOrgLocationDF.col("*"))
+
+    val subOrgDF = userOrgDF
+      .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
+        && stateOrgLocationDF.col("isrootorg").equalTo(false))
       .dropDuplicates(Seq("userid"))
+      .select(col("userid"), stateOrgLocationDF.col("*"))
+
+    val orgDenormDF = rootOrgDF.join(subOrgDF, Seq("userid"), "left")
+      .select(subOrgDF("*"))
+
+    val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
+      .join(orgDenormDF, Seq("userid"), "left")
       .select(userDF.col("*"),
         col("orgname").as("declared-school-name"),
         col("orgcode").as("declared-school-udise-code"),
