@@ -151,7 +151,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       """
         |{
         |    "identifier": "do_1125559882615357441175",
-        |    "channel": "apekx"
+        |    "channel": "01250894314817126443"
         |  }
       """.stripMargin
 
