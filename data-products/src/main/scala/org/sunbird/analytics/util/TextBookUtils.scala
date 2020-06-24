@@ -193,7 +193,7 @@ object TextBookUtils {
         val report = parseDCEDialcode(textbook,chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
         if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
           val textbookInfo = getTextBookInfo(List(chapters))
-          val dialcodes = textbookInfo._2.lift(0).getOrElse("")
+          val dialcodes = if(null != chapters.dialcodes) chapters.dialcodes.head else ""
           val scans = getDialcodeScans(dialcodes)
           weeklyDialcodes = scans ++ weeklyDialcodes
           val chapterReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,"","","","",dialcodes,"","",0,0,term,"DCE_dialcode_data")
@@ -212,6 +212,7 @@ object TextBookUtils {
     if(unitReport.isEmpty && chapterReport.nonEmpty) { report = chapterReport ++ report }
     else { report = (unitReport ++ report).reverse
       if(chapterReport.nonEmpty && chapterReport.head.dialcode.nonEmpty && unitReport.head.dialcode.isEmpty) { report = chapterReport ++ report }
+      else if(chapterReport.nonEmpty && chapterReport.head.dialcode.nonEmpty && unitReport.head.dialcode.nonEmpty && unitReport.head.dialcode!=chapterReport.head.dialcode)  { report = chapterReport ++ report }
     }
     report
   }
@@ -224,13 +225,16 @@ object TextBookUtils {
     data.map(units => {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         textbook = units :: newData
-        if(null != units.leafNodesCount && units.leafNodesCount == 0) {
+        if(null != units.leafNodesCount && units.leafNodesCount == 0 && null != units.dialcodes) {
           val textbookInfo = getTextBookInfo(textbook)
-          val levelNames = textbookInfo._1
+          val levelNames = textbookInfo._1.filter(_.nonEmpty)
           val dialcodes = textbookInfo._2.lift(0).getOrElse("")
           dialcode = dialcodes
           val report = DialcodeExceptionData(textbookData.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, l1,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,"","",0,0,term,"DCE_dialcode_data")
           dceDialcode = report :: dceDialcode
+          if(units.children.isDefined) {
+            dceDialcode = parseDCEDialcode(textbookData,units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceDialcode)._1
+          }
         }
         else { dceDialcode = parseDCEDialcode(textbookData,units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceDialcode)._1 }
       }
@@ -257,7 +261,8 @@ object TextBookUtils {
     var levelNames = List[String]()
     var dialcodes = List[String]()
     var levelCount = 5
-    var parsedData = data(data.size-1)
+    var parsedData = data.head
+    val levelName = if(data.lift(1).isDefined) data(1).name else ""
 
     breakable {
       while(levelCount > 1) {
@@ -270,7 +275,7 @@ object TextBookUtils {
         levelCount = levelCount-1
       }
     }
-    (levelNames.reverse,dialcodes)
+    (levelName::levelNames.reverse,dialcodes)
   }
 
   def generateDCETextbookReport(response: ContentInfo, textbook: TextbookData): List[DCETextbookData] = {
@@ -316,7 +321,7 @@ object TextBookUtils {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         val output = parseDCETextbook(identifier,term,units.children.getOrElse(List[ContentInfo]()),index,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked,lengthOfChapters)
         indexValue = indexValue+1
-        if(null != units.parent && units.parent.equals(identifier)) { term = if(null != units.index && units.index<=lengthOfChapters/2) "T1"  else "T2"}
+        if(null != units.depth && units.depth == 1) { term = if(null != units.index && units.index<=lengthOfChapters/2) "T1"  else "T2"}
         tempValue = output._1
         counterQrLinked = output._3
         counterNotLinked = output._4
