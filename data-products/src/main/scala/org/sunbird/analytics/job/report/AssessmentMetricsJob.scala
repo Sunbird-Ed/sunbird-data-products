@@ -403,7 +403,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
   def generateCustodianOrgUserData(userDF: DataFrame, custodianOrgId: String, externalIdentityDF: DataFrame, locationDF: DataFrame, organisationDF: DataFrame): DataFrame = {
 
-    val userExplodedLocationDF = userDF.withColumn("exploded_location", explode(col("locationids")))
+    val userExplodedLocationDF = userDF.withColumn("exploded_location", explode_outer(col("locationids")))
       .select("userid", "exploded_location")
 
     val userStateDF = userExplodedLocationDF
@@ -448,7 +448,6 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         when(custodianOrguserLocationDF.col("course_channel") === custodianUserPivotDF.col("user_channel"), col("declared-school-udise-code")).otherwise(""))
       .withColumn("statename_resolved",
         when(custodianOrguserLocationDF.col("course_channel") === custodianUserPivotDF.col("user_channel"), col("state_name")).otherwise(""))
-      .dropDuplicates(Seq("userid"))
       .select(custodianOrguserLocationDF.col("*"),
         col("externalid_resolved"),
         col("schoolname_resolved"),
