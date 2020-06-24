@@ -476,16 +476,19 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .select(organisationDF.col("id").as("orgid"), col("orgname"),
         col("orgcode"), col("isrootorg"), col("state_name"), col("district_name"))
 
-    val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
-      .join(userOrgDF, userDF.col("userid") === userOrgDF.col("userid"))
+    val subOrgDF = userOrgDF
       .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
-        && stateOrgLocationDF.col("isrootorg").equalTo(false), "left")
+        && stateOrgLocationDF.col("isrootorg").equalTo(false))
       .dropDuplicates(Seq("userid"))
+      .select(col("userid"), stateOrgLocationDF.col("*"))
+
+    val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
+      .join(subOrgDF, Seq("userid"), "left")
       .select(userDF.col("*"),
-        col("orgname").as("declared-school-name"),
-        col("orgcode").as("declared-school-udise-code"),
-        col("state_name"),
-        col("district_name")).drop(col("locationids"))
+        subOrgDF.col("orgname").as("declared-school-name"),
+        subOrgDF.col("orgcode").as("declared-school-udise-code"),
+        subOrgDF.col("state_name"),
+        subOrgDF.col("district_name")).drop(col("locationids"))
 
     val stateUserDF = stateUserLocationResolvedDF.as("state_user")
       .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
