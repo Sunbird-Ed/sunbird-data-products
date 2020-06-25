@@ -192,7 +192,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         && userLocationResolvedDF.col("batchid") === resDF.col("batch_id")
         && userLocationResolvedDF.col("courseid") === resDF.col("course_id"), "inner")
         .select("batchid", "courseid", "userid", "maskedemail", "maskedphone", "username", "district_name",
-          "externalid_resolved", "schoolname_resolved", "schoolUDISE_resolved", "statename_resolved",
+          "externalid_resolved", "schoolname_resolved", "schoolUDISE_resolved", "state_name",
         "content_id", "total_score", "grand_total", "total_sum_score")
 
     /*
@@ -234,7 +234,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       col("total_sum_score"), report.col("userid"), report.col("courseid"), report.col("batchid"),
       col("grand_total"), report.col("maskedemail"), report.col("district_name"), report.col("maskedphone"),
       report.col("orgname_resolved"), report.col("externalid_resolved"), report.col("schoolname_resolved"),
-      report.col("username"), col("statename_resolved"), col("schoolUDISE_resolved"))
+      report.col("username"), col("state_name"), col("schoolUDISE_resolved"))
   }
 
   /**
@@ -307,7 +307,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       reportDF.col("maskedemail").as("Email ID"),
       reportDF.col("maskedphone").as("Mobile Number"),
       reportDF.col("orgname_resolved").as("Organisation Name"),
-      reportDF.col("statename_resolved").as("State Name"),
+      reportDF.col("state_name").as("State Name"),
       reportDF.col("district_name").as("District Name"),
       reportDF.col("schoolUDISE_resolved").as("School UDISE Code"),
       reportDF.col("schoolname_resolved").as("School Name"),
@@ -333,7 +333,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       col("externalid_resolved").as("externalId"),
       col("schoolname_resolved").as("subOrgName"),
       col("schoolUDISE_resolved").as("schoolUDISECode"),
-      col("statename_resolved").as("stateName"),
+      col("state_name").as("stateName"),
       col("total_sum_score").as("totalScore"),
       transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
       col("reportUrl").as("reportUrl")
@@ -446,14 +446,10 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
         when(custodianOrguserLocationDF.col("course_channel") === custodianUserPivotDF.col("user_channel"), col("declared-school-name")).otherwise(""))
       .withColumn("schoolUDISE_resolved",
         when(custodianOrguserLocationDF.col("course_channel") === custodianUserPivotDF.col("user_channel"), col("declared-school-udise-code")).otherwise(""))
-      .withColumn("statename_resolved",
-        when(custodianOrguserLocationDF.col("course_channel") === custodianUserPivotDF.col("user_channel"), col("state_name")).otherwise(""))
       .select(custodianOrguserLocationDF.col("*"),
         col("externalid_resolved"),
         col("schoolname_resolved"),
-        col("schoolUDISE_resolved"),
-        col("statename_resolved"))
-        .drop("state_name")
+        col("schoolUDISE_resolved"))
     custodianUserDF
   }
 
@@ -503,9 +499,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
           when(col("course_channel") === col("rootorgid"), col("declared-school-name")).otherwise(""))
         .withColumn("schoolUDISE_resolved",
           when(col("course_channel") === col("rootorgid"), col("declared-school-udise-code")).otherwise(""))
-        .withColumn("statename_resolved",
-          when(col("course_channel") === col("rootorgid"), col("state_name")).otherwise(""))
-        .drop("externalid", "declared-school-name", "declared-school-udise-code", "state_name")
+        .drop("externalid", "declared-school-name", "declared-school-udise-code")
     stateDenormUserDF
   }
 
