@@ -192,7 +192,6 @@ object TextBookUtils {
         index = index+1
         val report = parseDCEDialcode(textbook,chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
         if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
-          val textbookInfo = getTextBookInfo(List(chapters))
           val dialcodes = if(null != chapters.dialcodes) chapters.dialcodes.head else ""
           val scans = getDialcodeScans(dialcodes)
           weeklyDialcodes = scans ++ weeklyDialcodes
