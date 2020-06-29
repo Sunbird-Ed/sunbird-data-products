@@ -3,6 +3,7 @@ import pdb
 import os
 import pandas as pd
 
+from copy import deepcopy
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
@@ -14,9 +15,18 @@ class ReportMerger:
         self.report_config = report_config
         self.base_path = None
 
+        if self.report_config['rollup']:
+            rollup_splitted = self.report_config['rollupCol'].split('||')
+            self.rollupCol = rollup_splitted[0]
+            self.rollupColFormat = rollup_splitted[1] if len(rollup_splitted) > 1 else None
+
 
     def drop_stale(self, report_df_, delta_df_):
-        dims = self.report_config['merge']['dims']
+        if '||' in self.report_config['rollupCol']:
+            dims = [self.rollupCol]
+        else:
+            dims = self.report_config['merge']['dims']
+
         query = []
 
         try:
@@ -24,21 +34,29 @@ class ReportMerger:
         except Exception as e:
             raise Exception('Dimensions are not available in delta_file')
 
+        column_history = {}
+        for i, dim in enumerate(deepcopy(dims)):
+            dim_init = deepcopy(dim)
+            dim = ''.join(e for e in dim if e.isalnum())
+            dims[i] = dim
+            column_history[dim] = dim_init
+            grouped_data.rename(columns={dim_init: dim}, inplace=True)
+            report_df_.rename(columns={dim_init: dim}, inplace=True)
+
         for index, delta_row in grouped_data.iterrows():
             formatted_query = ' and '.join(["`{}`!='{}'".format(dim, delta_row[dim]) for dim in dims])
             query.append("({})".format(formatted_query))
 
         query = " or ".join(query)
+        report_df_ = report_df_.query(query)
 
-        return report_df_.query(query)
+        return report_df_.rename(columns=column_history)
 
 
     def rollup_report(self, report_df_):
-        rollupCol = self.report_config['rollupCol']
         rollupRange = self.report_config['rollupRange'] - 1
-        report_df_[rollupCol] = pd.to_datetime(report_df_[rollupCol])
 
-        endDate = report_df_[rollupCol].max().date()
+        endDate = report_df_[self.rollupCol].max().date()
         endYear = endDate.year
         endMonth = endDate.month
         endDay = endDate.day
@@ -64,9 +82,7 @@ class ReportMerger:
         elif self.report_config['rollupAge'] == 'DAY':
             startDate = endDate - timedelta(days=rollupRange)
 
-        report_df_ = report_df_[report_df_[rollupCol] >= pd.to_datetime(startDate)]
-
-        report_df_[rollupCol] = report_df_[rollupCol].astype(str)
+        report_df_ = report_df_[report_df_[self.rollupCol] >= pd.to_datetime(startDate)]
 
         return report_df_
 
@@ -89,6 +105,10 @@ class ReportMerger:
                 file_path=str(self.base_path.joinpath(delta_path))
                 )
             delta_df = pd.read_csv(self.base_path.joinpath(delta_path))
+
+            if self.report_config['rollup']:
+                if 'Date' in list(delta_df.columns):
+                    delta_df.rename(columns={'Date': self.rollupCol}, inplace=True)
         except Exception as e:
             print('ERROR::delta file is not available', delta_path)
             return True
@@ -109,16 +129,21 @@ class ReportMerger:
                 report_df[col] = report_df.get(col, pd.Series(index=report_df.index, name=col))
 
         if self.report_config['rollup']:
+            if self.rollupCol in list(report_df.columns):
+                report_df[self.rollupCol] = pd.to_datetime(report_df[self.rollupCol], format=self.rollupColFormat)
+
+            delta_df[self.rollupCol] = pd.to_datetime(delta_df[self.rollupCol], format="%Y-%m-%d")
+
             report_df = self.drop_stale(report_df, delta_df)
             report_df = pd.concat([report_df, delta_df])
-
             report_df = self.rollup_report(report_df)
 
-            report_df = report_df.sort_values(by=self.report_config['rollupCol'])
+            report_df = report_df.sort_values(by=self.rollupCol)
+
+            report_df[self.rollupCol] = report_df[self.rollupCol].dt.strftime(self.rollupColFormat)
         else:
             report_df = delta_df
 
-        
         report_df.to_csv(file_path, index=False)
         create_json(file_path)
         upload_file_to_store(
