@@ -17,6 +17,7 @@ import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.OutputDispatcher
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.sunbird.analytics.util.DecryptUtil
 
 case class ValidatedUserDistrictSummary(index: Int, districtName: String, blocks: Long, schools: Long, registered: Long)
 case class UserStatus(id: Long, status: String)
@@ -31,6 +32,9 @@ object Eligible extends UserStatus(6, "ELIGIBLE")
 case class ShadowUserData(channel: String, userextid: String, addedby: String, claimedon: java.sql.Timestamp, claimstatus: Int,
                           createdon: java.sql.Timestamp, email: String, name: String, orgextid: String, processid: String,
                           phone: String, updatedon: java.sql.Timestamp, userid: String, userids: List[String], userstatus: Int)
+
+case class UsrExternalIdentity(userid: String, idtype: String, provider: String, createdby: String, createdon: java.sql.Timestamp, externalid: String,
+                               lastupdatedby: String,lastupdatedon: java.sql.Timestamp, originalexternalid: String, originalidtype: String, originalprovider: String)
 
 // Shadow user summary in the json will have this POJO
 case class UserSummary(accounts_validated: Long, accounts_rejected: Long, accounts_unclaimed: Long, accounts_failed: Long)
@@ -49,14 +53,71 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         JobContext.parallelization = 10
         implicit val sparkSession: SparkSession = openSparkSession(jobConfig);
         implicit val frameworkContext = getReportingFrameworkContext();
+        DecryptUtil.initialise();
         execute(jobConfig)
         closeSparkSession()
     }
-
+    
     private def execute(config: JobConfig)(implicit sparkSession: SparkSession, fc: FrameworkContext) = {
 
-        generateReport();
+        /*generateReport();*/
         JobLogger.end("StateAdminReportJob completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
+        
+        generateExternalIdReport();
+        JobLogger.end("ExternalIdReportJob completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
+    }
+    
+    def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
+        import sparkSession.implicits._
+    
+        val container = AppConf.getConfig("cloud.container.reports")
+        val objectKey = AppConf.getConfig("admin.metrics.cloud.objectKey")
+        val storageConfig = getStorageConfig(container, objectKey);
+        val usrExternalIdentityEncoder = Encoders.product[UsrExternalIdentity].schema
+        var userExternalDataDF = loadData(sparkSession, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace), Some(usrExternalIdentityEncoder)).
+            filter(col(colName = "idtype").isin("declared-email", "declared-phone", "declared-school-name", "declared-school-udise-code", "declared-ext-id", "declared-state", "declared-district")).as[UsrExternalIdentity]
+        
+        userExternalDataDF = userExternalDataDF.filter(col("userid").isin("8eaa1621-ac15-42a4-9e26-9c846963f331", "56c2d9a3-fae9-4341-9862-4eeeead2e9a1"))
+        val locationDF = locationData();
+        var usergroupdf = userExternalDataDF.groupBy("userid", "provider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
+        usergroupdf.show(10, false)
+        val stateusergroupdf = usergroupdf.join(locationDF, usergroupdf.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
+                select(usergroupdf.col("*"), locationDF("locname").as("state"))
+        stateusergroupdf.show(10, false)
+        val distusergroupdf = stateusergroupdf.join(locationDF, usergroupdf.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
+            select(stateusergroupdf.col("*"), locationDF("locname").as("district"))
+        distusergroupdf.show(10, false)
+        val decryptedVal = DecryptUtil.decryptData("ZSRcFGKp5ap1oj2R3GzgL7kgIvHIXwUJVW9uG7jppEmN+CEnv/F6pn9DnJqby+5U0VlM2drSuVbg\nftsFxcQUuSlQM3Z2VJhNEM9uvd+cLzi907zPaD6k2OdZ6ERUgzykTQtMGOn7lhkDdxs1iV8l8A==")
+        System.out.println("decrypted value: "+decryptedVal)
+        /*usergroupdf = usergroupdf.withColumn(("dec-declared-email"), when(col("declared-email").isNull, col("declared-email")).
+            otherwise(DecryptUtil.decryptData(usergroupdf.select("declared-email").collectAsList())))*/
+        /*val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).*/
+        /*    where(col(colName = "userid").isin(userExternalDataDF.col("userid")))*/
+        val userIds = distusergroupdf.select("userid").map(_.getString(0)).collect.toList
+        val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
+            select(col(  "userid"),
+                col("locationIds"),
+            concat_ws(" ", col("firstname"), col("lastname")).as("Name")).filter(col("id").isin(userIds:_*))
+        userDf.show(10, false)
+        
+        val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
+            .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
+        userDenormDF.show(10, false)
+        val userDenormDF1group = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
+        userDenormDF1group.show(10, false)
+        val finalDf = distusergroupdf.join(userDenormDF1group, distusergroupdf.col("userid") === userDenormDF1group.col("userid"), "left_outer").
+            select(col("Name"),
+                distusergroupdf.col("userid").as("Diksha UUID"),
+                when(distusergroupdf.col("state").isNotNull, distusergroupdf.col("state")).otherwise(userDenormDF1group.col("state")).as("State"),
+                when(distusergroupdf.col("district").isNotNull, distusergroupdf.col("district")).otherwise(userDenormDF1group.col("district")).as("District"),
+                col("declared-school-name"). as("School Name"),
+                col("declared-school-udise-code").as("School UDISE ID"),
+                col("declared-ext-id").as("State provided ext. ID"),
+                col("declared-phone").as("Phone number"),
+                col("declared-email").as("Email ID"),
+                col("provider"))
+        finalDf.show(10, false)
+        finalDf.toDF.saveToBlobStore(storageConfig, "csv", "user_external_identifier", Option(Map("header" -> "true")), Option(Seq("provider")))
     }
     
     def generateStateRootSubOrgDF(subOrgDF: DataFrame, claimedShadowDataSummaryDF: DataFrame, claimedShadowUserDF: DataFrame) = {
@@ -243,4 +304,10 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
 
   }
 
+}
+
+object StateAdminReportJobTest {
+    def main(args: Array[String]): Unit = {
+        StateAdminReportJob.main("""{"model":"Test"}""")
+    }
 }
