@@ -16,7 +16,7 @@ import org.ekstep.analytics.framework.JobContext
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.OutputDispatcher
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
+
 import org.sunbird.analytics.util.DecryptUtil
 
 case class ValidatedUserDistrictSummary(index: Int, districtName: String, blocks: Long, schools: Long, registered: Long)
