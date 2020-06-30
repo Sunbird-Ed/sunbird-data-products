@@ -339,3 +339,105 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.course_batch (
      AND min_index_interval = 128
      AND read_repair_chance = 0.0
      AND speculative_retry = '99PERCENTILE';
+
+CREATE TABLE sunbird.user (
+    id text PRIMARY KEY,
+    accesscode text,
+    avatar text,
+    channel text,
+    countrycode text,
+    createdby text,
+    createddate text,
+    currentlogintime text,
+    dob text,
+    email text,
+    emailverified boolean,
+    firstname text,
+    flagsvalue int,
+    framework map<text, frozen<list<text>>>,
+    gender text,
+    grade list<text>,
+    isdeleted boolean,
+    language list<text>,
+    lastlogintime text,
+    lastname text,
+    location text,
+    locationids list<text>,
+    loginid text,
+    managedby text,
+    maskedemail text,
+    maskedphone text,
+    password text,
+    phone text,
+    phoneverified boolean,
+    prevusedemail text,
+    prevusedphone text,
+    profilesummary text,
+    profilevisibility map<text, text>,
+    recoveryemail text,
+    recoveryphone text,
+    registryid text,
+    roles list<text>,
+    rootorgid text,
+    status int,
+    subject list<text>,
+    temppassword text,
+    thumbnail text,
+    tncacceptedon timestamp,
+    tncacceptedversion text,
+    updatedby text,
+    updateddate text,
+    userid text,
+    username text,
+    usertype text,
+    webpages list<frozen<map<text, text>>>
+) WITH bloom_filter_fp_chance = 0.01
+    AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
+    AND comment = ''
+    AND compaction = {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
+    AND compression = {'chunk_length_in_kb': '64', 'class': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+    AND crc_check_chance = 1.0
+    AND dclocal_read_repair_chance = 0.1
+    AND default_time_to_live = 0
+    AND gc_grace_seconds = 864000
+    AND max_index_interval = 2048
+    AND memtable_flush_period_in_ms = 0
+    AND min_index_interval = 128
+    AND read_repair_chance = 0.0
+    AND speculative_retry = '99PERCENTILE';
+CREATE INDEX inx_u_userid ON sunbird.user (userid);
+CREATE INDEX inx_u_email ON sunbird.user (email);
+CREATE INDEX inx_u_loginid ON sunbird.user (loginid);
+CREATE INDEX inx_u_status ON sunbird.user (status);
+CREATE INDEX inx_u_username ON sunbird.user (username);
+CREATE INDEX inx_u_phone ON sunbird.user (phone);
+CREATE INDEX inx_u_managedby ON sunbird.user (managedby);
+
+CREATE TABLE sunbird.usr_external_identity (
+    userid text,
+    idtype text,
+    provider text,
+    createdby text,
+    createdon timestamp,
+    externalid text,
+    lastupdatedby text,
+    lastupdatedon timestamp,
+    originalexternalid text,
+    originalidtype text,
+    originalprovider text,
+    PRIMARY KEY (userid, idtype, provider)
+) WITH CLUSTERING ORDER BY (idtype ASC, provider ASC)
+    AND bloom_filter_fp_chance = 0.01
+    AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
+    AND comment = ''
+    AND compaction = {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
+    AND compression = {'chunk_length_in_kb': '64', 'class': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+    AND crc_check_chance = 1.0
+    AND dclocal_read_repair_chance = 0.1
+    AND default_time_to_live = 0
+    AND gc_grace_seconds = 864000
+    AND max_index_interval = 2048
+    AND memtable_flush_period_in_ms = 0
+    AND min_index_interval = 128
+    AND read_repair_chance = 0.0
+    AND speculative_retry = '99PERCENTILE';
