@@ -406,7 +406,7 @@ CREATE TABLE IF NOT EXISTS sunbird.user (
     AND read_repair_chance = 0.0
     AND speculative_retry = '99PERCENTILE';
 
-CREATE TABLE sunbird.usr_external_identity (
+CREATE TABLE IF NOT EXISTS sunbird.usr_external_identity (
     userid text,
     idtype text,
     provider text,
