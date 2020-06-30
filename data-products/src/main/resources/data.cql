@@ -340,7 +340,7 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.course_batch (
      AND read_repair_chance = 0.0
      AND speculative_retry = '99PERCENTILE';
 
-CREATE TABLE sunbird.user (
+CREATE TABLE IF NOT EXISTS sunbird.user (
     id text PRIMARY KEY,
     accesscode text,
     avatar text,
