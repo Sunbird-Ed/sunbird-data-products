@@ -29,7 +29,7 @@ object DecryptUtil {
             c = Cipher.getInstance(ALGORITHM)
             c.init(Cipher.DECRYPT_MODE, key);
         } catch {
-            case e: Exception => JobLogger.log(s"Error in DecryptUtil.initialise " + e.getMessage(), None, ERROR())(e.getMessage)
+            case e: Exception => JobLogger.log(s"Error in DecryptUtil.initialise " + e.getMessage(), None, ERROR)(e.getMessage)
         }
     }
     

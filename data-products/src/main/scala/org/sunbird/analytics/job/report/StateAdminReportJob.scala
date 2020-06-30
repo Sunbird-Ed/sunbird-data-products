@@ -79,21 +79,44 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         
         userExternalDataDF = userExternalDataDF.filter(col("userid").isin("8eaa1621-ac15-42a4-9e26-9c846963f331", "56c2d9a3-fae9-4341-9862-4eeeead2e9a1"))
         val locationDF = locationData();
-        var usergroupdf = userExternalDataDF.groupBy("userid", "provider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
-        usergroupdf.show(10, false)
-        val stateusergroupdf = usergroupdf.join(locationDF, usergroupdf.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
-                select(usergroupdf.col("*"), locationDF("locname").as("state"))
-        stateusergroupdf.show(10, false)
-        val distusergroupdf = stateusergroupdf.join(locationDF, usergroupdf.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
-            select(stateusergroupdf.col("*"), locationDF("locname").as("district"))
-        distusergroupdf.show(10, false)
+        var userExternalOriginalDataDF = userExternalDataDF.groupBy("userid", "provider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
+        userExternalOriginalDataDF.show(10, false)
+        val userExternalStateDF = userExternalOriginalDataDF.join(locationDF, userExternalOriginalDataDF.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
+                select(userExternalOriginalDataDF.col("*"), locationDF("locname").as("state"))
+        userExternalStateDF.show(10, false)
+        val userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
+            select(userExternalStateDF.col("*"), locationDF("locname").as("district"))
+        userExternalLocationDF.show(10, false)
         val decryptedVal = DecryptUtil.decryptData("ZSRcFGKp5ap1oj2R3GzgL7kgIvHIXwUJVW9uG7jppEmN+CEnv/F6pn9DnJqby+5U0VlM2drSuVbg\nftsFxcQUuSlQM3Z2VJhNEM9uvd+cLzi907zPaD6k2OdZ6ERUgzykTQtMGOn7lhkDdxs1iV8l8A==")
         System.out.println("decrypted value: "+decryptedVal)
-        /*usergroupdf = usergroupdf.withColumn(("dec-declared-email"), when(col("declared-email").isNull, col("declared-email")).
-            otherwise(DecryptUtil.decryptData(usergroupdf.select("declared-email").collectAsList())))*/
+        //userExternalOriginalDataDF.select("userid", "declared-email").map(r => (r.getString(0), r.getString(1))).collectAsMap
+        var emailMap = userExternalOriginalDataDF.rdd.map(r => (r.getString(0), r.getString(3))).collectAsMap()
+        var phoneMap = userExternalOriginalDataDF.rdd.map(r => (r.getString(0), r.getString(5))).collectAsMap()
+        /*userExternalOriginalDataDF = userExternalOriginalDataDF.withColumn(("dec-declared-email"), when(col("declared-email").isNull, col("declared-email")).
+            otherwise(DecryptUtil.decryptData(userExternalOriginalDataDF.select("declared-email").collectAsList())))*/
         /*val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).*/
         /*    where(col(colName = "userid").isin(userExternalDataDF.col("userid")))*/
-        val userIds = distusergroupdf.select("userid").map(_.getString(0)).collect.toList
+        val decEmailMap = collection.mutable.Map[String, String]()
+        val decPhoneMap = collection.mutable.Map[String, String]()
+        emailMap.foreach(email => {
+            val decEmail = DecryptUtil.decryptData(email._2)
+            decEmailMap += (email._1 -> decEmail)
+        })
+        phoneMap.foreach(phone => {
+            val decPhone = DecryptUtil.decryptData(phone._2)
+            decPhoneMap += (phone._1 -> decPhone)
+        })
+        /*emailMap.foreach{a =>
+            emailMap + (a._1, DecryptUtil.decryptData(a._2)}*/
+        /*phoneMap.mapValues(phone => DecryptUtil.decryptData(phone))*/
+        val decryptEmailDF = decEmailMap.toSeq.toDF("userId", "decrypted-email")
+        val decryptPhoneDF = decPhoneMap.toSeq.toDF("userId", "decrypted-phone")
+        val userDecrpytedDataDF = decryptEmailDF.join(decryptPhoneDF, decryptEmailDF.col("userId") === decryptPhoneDF.col("userId"), "left_outer").
+            select(decryptEmailDF.col("*"), decryptPhoneDF.col("decrypted-phone"))
+        userDecrpytedDataDF.show(10, false)
+        val userExternalDecryptData  = userExternalLocationDF.join(userDecrpytedDataDF, userExternalLocationDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
+            select(userExternalLocationDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
+        val userIds = userExternalDecryptData.select("userid").map(_.getString(0)).collect.toList
         val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
                 col("locationIds"),
@@ -103,21 +126,21 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
         userDenormDF.show(10, false)
-        val userDenormDF1group = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
-        userDenormDF1group.show(10, false)
-        val finalDf = distusergroupdf.join(userDenormDF1group, distusergroupdf.col("userid") === userDenormDF1group.col("userid"), "left_outer").
+        val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
+        userDenormLocationDF.show(10, false)
+        val resultDf = userExternalDecryptData.join(userDenormLocationDF, userExternalDecryptData.col("userid") === userDenormLocationDF.col("userid"), "left_outer").
             select(col("Name"),
-                distusergroupdf.col("userid").as("Diksha UUID"),
-                when(distusergroupdf.col("state").isNotNull, distusergroupdf.col("state")).otherwise(userDenormDF1group.col("state")).as("State"),
-                when(distusergroupdf.col("district").isNotNull, distusergroupdf.col("district")).otherwise(userDenormDF1group.col("district")).as("District"),
+                userExternalDecryptData.col("userid").as("Diksha UUID"),
+                when(userExternalDecryptData.col("state").isNotNull, userExternalDecryptData.col("state")).otherwise(userDenormLocationDF.col("state")).as("State"),
+                when(userExternalDecryptData.col("district").isNotNull, userExternalDecryptData.col("district")).otherwise(userDenormLocationDF.col("district")).as("District"),
                 col("declared-school-name"). as("School Name"),
                 col("declared-school-udise-code").as("School UDISE ID"),
                 col("declared-ext-id").as("State provided ext. ID"),
-                col("declared-phone").as("Phone number"),
-                col("declared-email").as("Email ID"),
+                col("decrypted-phone").as("Phone number"),
+                col("decrypted-email").as("Email ID"),
                 col("provider"))
-        finalDf.show(10, false)
-        finalDf.toDF.saveToBlobStore(storageConfig, "csv", "user_external_identifier", Option(Map("header" -> "true")), Option(Seq("provider")))
+        resultDf.show(10, false)
+        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
     }
     
     def generateStateRootSubOrgDF(subOrgDF: DataFrame, claimedShadowDataSummaryDF: DataFrame, claimedShadowUserDF: DataFrame) = {
