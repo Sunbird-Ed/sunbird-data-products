@@ -405,13 +405,6 @@ CREATE TABLE IF NOT EXISTS sunbird.user (
     AND min_index_interval = 128
     AND read_repair_chance = 0.0
     AND speculative_retry = '99PERCENTILE';
-CREATE INDEX inx_u_userid ON sunbird.user (userid);
-CREATE INDEX inx_u_email ON sunbird.user (email);
-CREATE INDEX inx_u_loginid ON sunbird.user (loginid);
-CREATE INDEX inx_u_status ON sunbird.user (status);
-CREATE INDEX inx_u_username ON sunbird.user (username);
-CREATE INDEX inx_u_phone ON sunbird.user (phone);
-CREATE INDEX inx_u_managedby ON sunbird.user (managedby);
 
 CREATE TABLE sunbird.usr_external_identity (
     userid text,
