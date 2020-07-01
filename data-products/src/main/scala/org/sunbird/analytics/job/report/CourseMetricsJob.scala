@@ -7,24 +7,16 @@ import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
-import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
-import org.sunbird.analytics.util.{Constants, ESUtil}
+import org.sunbird.analytics.util.CourseUtils
 import org.sunbird.cloud.storage.conf.AppConf
-
-case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boolean)
 
 case class BatchDetails(batchid: String, courseCompletionCountPerBatch: Long, participantsCountPerBatch: Long)
 
 case class CourseBatch(batchid: String, startDate: String, endDate: String, courseChannel: String);
-
-case class CourseDetails(result: CourseResult, responseCode: String)
-case class CourseResult(content: List[CourseInfo])
-case class CourseInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
-case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
 trait ReportGenerator {
 
@@ -78,22 +70,16 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     spark.read.format("org.apache.spark.sql.cassandra").options(settings).load()
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame, config: JobConfig)(implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
+  def getActiveBatches(loadData: (SparkSession, Map[String, String]) => DataFrame, batchFilters: String)(implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
 
     val timestamp = DateTime.now().minusDays(1).withTimeAtStartOfDay()
 
-    val batchInfo = getTPDBatches(config)
-    val courseBatchDenormDF = batchInfo.toDF().withColumn("batchInfo", explode(col("batches")))
-      .withColumn("batchId",col("batchInfo").getItem("batchId"))
-      .withColumn("startDate",col("batchInfo").getItem("startDate"))
-      .withColumn("endDate",col("batchInfo").getItem("endDate"))
-      .select("batchId", "startDate", "endDate", "channel")
-
+    val batchInfo = CourseUtils.getFilteredBatches(spark, batchFilters)
     JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
-    val activeBatches = courseBatchDenormDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
+    val activeBatches = batchInfo.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
     val activeBatchList = activeBatches.select("batchId", "startDate", "endDate", "channel").collect();
 
     JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
@@ -111,7 +97,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String]) => DataFrame, config: JobConfig)(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession = spark;
-    val activeBatches = getActiveBatches(loadData, config);
+    val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
+    val activeBatches = getActiveBatches(loadData, batchFilters);
     val newIndexPrefix = AppConf.getConfig("course.metrics.es.index.cbatchstats.prefix")
     val newIndex = suffixDate(newIndexPrefix)
     val userData = CommonUtil.time({
@@ -127,11 +114,9 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ");
         val totalRecords = reportDF.count()
         recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ");
-        recordTime(saveReportToES(batch, reportDF, newIndex,totalRecords), s"Time taken to save report in ES for batch ${batch.batchid} - ");
         reportDF.unpersist(true);
       });
       JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount - index + 1}", None, INFO)
-      createESIndex(newIndex)
     }
     userData._2.unpersist(true);
 
@@ -141,29 +126,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     spark.read.format("org.apache.spark.sql.redis")
       .option("keys.pattern", "*")
       .option("infer.schema", true).load()
-  }
-
-  def getTPDBatches(config: JobConfig): List[CourseInfo] = {
-    val apiUrl = Constants.COMPOSITE_SEARCH_URL
-    val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
-
-    val request = s"""{
-                     |	"request": {
-                     |		"filters": {
-                     |			"framework": $batchFilters,
-                     |     "contentType":"Course"
-                     |		},
-                     |		"sort_by": {
-                     |			"createdOn": "desc"
-                     |		},
-                     |		"limit": 10000,
-                     |		"fields": ["framework", "identifier", "name", "channel", "batches"]
-                     |	}
-                     |}""".stripMargin
-    val response = RestUtil.post[CourseDetails](apiUrl,request)
-    if(null != response && response.responseCode.equalsIgnoreCase("ok")) {
-      response.result.content
-    } else List()
+      .select("id","channel", "userid","username","declared-school-name","district_name","organisationid","email","subject","createdby","orgname_resolved","language","declared-school-udise-code",
+        "maskedemail","state_name","framework","grade","firstname","flagsvalue","phoneverified","rootorgid","usertype","locationids","declared-ext-id","block_name","maskedphone","lastname")
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
@@ -230,79 +194,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       )
       .cache()
     reportDF;
-  }
-
-  def createESIndex(newIndex: String): String = {
-    val cBatchIndex = AppConf.getConfig("course.metrics.es.index.cbatch")
-    val aliasName = AppConf.getConfig("course.metrics.es.alias")
-    try {
-      val indexList = ESUtil.getIndexName(aliasName)
-      val oldIndex = indexList.mkString("")
-      if (!oldIndex.equals(newIndex)) ESUtil.rolloverIndex(newIndex, aliasName)
-    } catch {
-      case ex: Exception => {
-        JobLogger.log(ex.getMessage, None, ERROR)
-        ex.printStackTrace()
-      }
-    }
-    newIndex;
-  }
-
-  def saveReportToES(batch: CourseBatch, reportDF: DataFrame, newIndex: String, totalRecords:Long)(implicit spark: SparkSession): Unit = {
-
-    import org.elasticsearch.spark.sql._
-    val participantsCount = reportDF.count()
-    val courseCompletionCount = reportDF.filter(col("course_completion").equalTo(100)).count()
-
-    val batchStatsDF = reportDF
-      .select(
-        concat_ws(" ", col("firstname"), col("lastname")).as("name"),
-        concat_ws(":", col("userid"), col("batchid")).as("id"),
-        col("userid").as("userId"),
-        col("completedon").as("completedOn"),
-        col("maskedemail").as("maskedEmail"),
-        col("maskedphone").as("maskedPhone"),
-        col("orgname_resolved").as("rootOrgName"),
-        col("resolved_schoolname").as("subOrgName"),
-        col("startdate").as("startDate"),
-        col("enddate").as("endDate"),
-        col("courseid").as("courseId"),
-        col("generatedOn").as("lastUpdatedOn"),
-        col("batchid").as("batchId"),
-        col("course_completion").cast("long").as("completedPercent"),
-        col("district_name").as("districtName"),
-        col("resolved_blockname").as("blockName"),
-        col("resolved_externalid").as("externalId"),
-        col("resolved_udisecode").as("subOrgUDISECode"),
-        col("state_name").as("StateName"),
-        from_unixtime(unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSSZ"), "yyyy-MM-dd'T'HH:mm:ss'Z'").as("enrolledOn"),
-        col("certificate_status").as("certificateStatus"))
-
-    import spark.implicits._
-    val batchDetails = Seq(BatchDetails(batch.batchid, courseCompletionCount, participantsCount)).toDF
-    val batchDetailsDF = batchDetails
-      .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
-      .select(
-        col("batchid").as("id"),
-        col("generatedOn").as("reportUpdatedOn"),
-        when(col("courseCompletionCountPerBatch").isNull, 0).otherwise(col("courseCompletionCountPerBatch")).as("completedCount"),
-        when(col("participantsCountPerBatch").isNull, 0).otherwise(col("participantsCountPerBatch")).as("participantCount"))
-
-    val cBatchIndex = AppConf.getConfig("course.metrics.es.index.cbatch")
-
-    try {
-      batchStatsDF.saveToEs(s"$newIndex/_doc", Map("es.mapping.id" -> "id"))
-      JobLogger.log("Indexing batchStatsDF is success for: " + batch.batchid, None, INFO)
-      // upsert batch details to cbatch index
-      batchDetailsDF.saveToEs(s"$cBatchIndex/_doc", Map("es.mapping.id" -> "id", "es.write.operation" -> "upsert"))
-      JobLogger.log(s"CourseMetricsJob: Elasticsearch index stats { $cBatchIndex : { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }}", None, INFO)
-
-    } catch {
-      case ex: Exception => {
-        JobLogger.log(ex.getMessage, None, ERROR)
-        ex.printStackTrace()
-      }
-    }
   }
 
   def suffixDate(index: String): String = {
