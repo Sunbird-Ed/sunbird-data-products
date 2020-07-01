@@ -143,7 +143,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("Diksha Sub-Org ID"),
                 col("provider").as("Channel"))
         resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("Channel")))
-        resultDf.show(10, false)
         resultDf
     }
     
