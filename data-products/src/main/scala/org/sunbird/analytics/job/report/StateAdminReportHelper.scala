@@ -18,7 +18,7 @@ trait StateAdminReportHelper extends BaseReportsJob {
       col("code").as("loccode"),
       col("name").as("locname"),
       col("parentid").as("locparentid"),
-      col("type").as("loctype"))
+      col("type").as("loctype")).cache()
     locationDF
   }
 
@@ -61,7 +61,11 @@ trait StateAdminReportHelper extends BaseReportsJob {
     blockData.filter(col(colName = "slug").isNotNull)
   }
 
-  def loadOrganisationDF()(implicit sparkSession: SparkSession) = {
+  def loadOrganisationSlugDF()(implicit sparkSession: SparkSession) = {
+    loadOrganisationData.filter(col(colName = "slug").isNotNull).cache();
+  }
+  
+  def loadOrganisationData()(implicit sparkSession: SparkSession) = {
     loadData(sparkSession, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace), None).select(
       col("id").as("id"),
       col("isrootorg").as("isrootorg"),
@@ -72,7 +76,7 @@ trait StateAdminReportHelper extends BaseReportsJob {
       col("orgname").as("orgname"),
       col("locationids").as("locationids"),
       col("externalid").as("externalid"),
-      col("slug").as("slug")).filter(col(colName = "slug").isNotNull).cache();
+      col("slug").as("slug")).cache();
   }
 
 }

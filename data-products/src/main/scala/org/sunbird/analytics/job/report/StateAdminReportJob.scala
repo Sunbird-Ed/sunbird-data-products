@@ -75,18 +75,19 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         import sparkSession.implicits._
         
         val usrExternalIdentityEncoder = Encoders.product[UsrExternalIdentity].schema
-        //loading usr_external_identity table details based on declared values and location details
+        //loading usr_external_identity table details based on declared values and location details and appending org-external-id if present
         val userExternalDataDF = loadData(sparkSession, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace), Some(usrExternalIdentityEncoder)).
             filter(col(colName = "idtype").isin("declared-email", "declared-phone", "declared-school-name", "declared-school-udise-code", "declared-ext-id", "declared-state", "declared-district")).as[UsrExternalIdentity]
-        val locationDF = locationData();
+        val locationDF = locationData()
+        val orgExternalIdList: List[String] = loadOrganisationData().select("externalid").filter(col("externalid").isNotNull).map(_.getString(0)).collect().toList
         
         //appending state and district values to user-external-identifier based on location ids
         val userExternalOriginalDataDF = userExternalDataDF.groupBy("userid", "provider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
         val userExternalStateDF = userExternalOriginalDataDF.join(locationDF, userExternalOriginalDataDF.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
                 select(userExternalOriginalDataDF.col("*"), locationDF("locname").as("state"))
-        val userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
+        var userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
             select(userExternalStateDF.col("*"), locationDF("locname").as("district"))
-        
+        userExternalLocationDF = userExternalLocationDF.withColumn("Diksha Sub-Org ID", when(userExternalLocationDF.col("declared-school-udise-code").isin(orgExternalIdList:_*), userExternalLocationDF.col("declared-school-udise-code")))
         //decrypting email and phone values
         val userDecrpytedDataDF = decryptDF(userExternalOriginalDataDF)
         //appending decrypted values to the user-external-identifier dataframe
@@ -139,8 +140,10 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("declared-ext-id").as("State provided ext. ID"),
                 col("decrypted-phone").as("Phone number"),
                 col("decrypted-email").as("Email ID"),
-                col("provider"))
-        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
+                col("Diksha Sub-Org ID"),
+                col("provider").as("Channel"))
+        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("Channel")))
+        resultDf.show(10, false)
         resultDf
     }
     
@@ -162,7 +165,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val shadowUserDF = loadData(sparkSession, Map("table" -> "shadow_user", "keyspace" -> sunbirdKeyspace), Some(shadowDataEncoder)).as[ShadowUserData]
         val claimedShadowUserDF = shadowUserDF.where(col("claimstatus")=== ClaimedStatus.id)
         
-        val organisationDF = loadOrganisationDF()
+        val organisationDF = loadOrganisationSlugDF()
         val channelSlugDF = getChannelSlugDF(organisationDF)
         val shadowUserStatusDF = appendShadowUserStatus(shadowUserDF);
         val shadowDataSummary = generateSummaryData(shadowUserStatusDF)
