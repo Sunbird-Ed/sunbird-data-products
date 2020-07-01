@@ -94,6 +94,7 @@ class ReportMerger:
         report_path = report_path[1:] if report_path[0] == '/' else report_path
         delta_path = delta_path[1:] if delta_path[0] == '/' else delta_path
         file_path = self.base_path.joinpath(report_path)
+        col_order = []
         report_container = self.report_config.get('postContainer') if self.report_config.get('postContainer') else 'report-verification'
 
         try:
@@ -105,9 +106,9 @@ class ReportMerger:
                 file_path=str(self.base_path.joinpath(delta_path))
                 )
             delta_df = pd.read_csv(self.base_path.joinpath(delta_path))
-
+            col_order = delta_df.columns.to_list()
             if self.report_config['rollup']:
-                if 'Date' in list(delta_df.columns):
+                if 'Date' in col_order:
                     delta_df.rename(columns={'Date': self.rollupCol}, inplace=True)
         except Exception as e:
             print('ERROR::delta file is not available', delta_path)
@@ -121,15 +122,16 @@ class ReportMerger:
                 file_path=str(file_path)
             )
             report_df = pd.read_csv(file_path)
+            col_order = report_df.columns.to_list()
         except Exception as e:
             print('INFO::report file is not available', report_path)
             report_df = pd.DataFrame()
 
-            for col in delta_df.columns.to_list():
+            for col in col_order:
                 report_df[col] = report_df.get(col, pd.Series(index=report_df.index, name=col))
 
         if self.report_config['rollup']:
-            if self.rollupCol in list(report_df.columns):
+            if self.rollupCol in report_df.columns.to_list():
                 report_df[self.rollupCol] = pd.to_datetime(report_df[self.rollupCol], format=self.rollupColFormat)
 
             delta_df[self.rollupCol] = pd.to_datetime(delta_df[self.rollupCol], format="%Y-%m-%d")
@@ -144,6 +146,7 @@ class ReportMerger:
         else:
             report_df = delta_df
 
+        report_df = report_df.reindex(columns=col_order)
         report_df.to_csv(file_path, index=False)
         create_json(file_path)
         upload_file_to_store(
