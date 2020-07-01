@@ -48,6 +48,6 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
     assert(reportDF.columns.contains("Phone number") === true)
     assert(reportDF.columns.contains("Email ID") === true)
     val userName = reportDF.select("Name").collect().map(_ (0)).toList
-    assert(userName(0) === "localuser118f localuser118l")
+    assert(userName(0) === "localuser115f localuser115l")
   }
 }
