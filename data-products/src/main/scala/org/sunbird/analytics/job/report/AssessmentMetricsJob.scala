@@ -86,24 +86,63 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     * Loading the specific tables from the cassandra db.
     */
   def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String]) => DataFrame, batchFilters: String)(implicit fc: FrameworkContext): DataFrame = {
+    val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
+    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
+      .filter(lower(col("active")).equalTo("true"))
+      .select(col("batchid"), col("userid"), col("courseid"), col("active")
+        , col("completionpercentage"), col("enrolleddate"), col("completedon"))
 
-    val courseChannelDF = CourseUtils.getFilteredBatches(spark, batchFilters)
+    val courseBatchDF = CourseUtils.getFilteredBatches(spark, batchFilters)
+    val userCourseDenormDF = courseBatchDF.join(userCoursesDF, userCoursesDF.col("batchid") === courseBatchDF.col("batchid"), "inner")
+      .select(
+        userCoursesDF.col("batchid"),
+        col("userid"),
+        col("active"),
+        courseBatchDF.col("courseid"),
+        courseBatchDF.col("channel").as("course_channel"))
+
     val userDF = spark.read.format("org.apache.spark.sql.redis")
       .option("keys.pattern", "*")
       .option("infer.schema", true).load()
-      .select("userid","batchid","firstname","lastname","maskedemail","maskedphone","rootorgid","username","organisationid","district_name","course_channel", "total_score","grand_total",
-        "content_id","total_score","grand_total","externalid_resolved","schoolname_resolved","schoolUDISE_resolved","statename_resolved","orgname_resolved", "active","total_max_score")
+      .select("userid","firstname","lastname","maskedemail","maskedphone","rootorgid","username",
+        "organisationid","district_name", "externalid","schoolname","schoolUDISE","statename","orgname")
+
+    val userDenormDF = userDF.join(userCourseDenormDF, userDF.col("userid") === userCourseDenormDF.col("userid"),"inner")
+
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
+      .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
+
+    val assessmentDF = getAssessmentData(assessmentProfileDF)
+    val assessmentAggDf = Window.partitionBy("user_id", "batch_id", "course_id")
+    val userAssessmentResolvedDF = assessmentDF
+      .withColumn("agg_score", sum("total_score") over assessmentAggDf)
+      .withColumn("agg_max_score", sum("total_max_score") over assessmentAggDf)
+      .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
 
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
 
-    val userCourseDenormDF = courseChannelDF.join(userDF, userDF.col("batchid") === courseChannelDF.col("batchId"), "inner")
-
-    val assessmentAggDf = Window.partitionBy("user_id", "batch_id", "course_id")
-    val resDF = userCourseDenormDF
-      .withColumn("agg_score", sum("total_score") over assessmentAggDf)
-      .withColumn("agg_max_score", sum("total_max_score") over assessmentAggDf)
-      .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
+    val resDF = userDenormDF.join(userAssessmentResolvedDF,
+      userDenormDF.col("userid") === userAssessmentResolvedDF.col("user_id")
+        && userDenormDF.col("batchid") === userAssessmentResolvedDF.col("batch_id")
+        && userDenormDF.col("courseid") === userAssessmentResolvedDF.col("course_id"), "inner")
+      .select(userDenormDF.col("userid"),
+        userDenormDF.col("batchid"),
+        userDenormDF.col("courseid"),
+        userDenormDF.col("firstname"),
+        userDenormDF.col("lastname"),
+        userDenormDF.col("maskedemail"),
+        userDenormDF.col("maskedphone"),
+        userDenormDF.col("rootorgid"),
+        userDenormDF.col("username"),
+        userDenormDF.col("organisationid"),
+        userDenormDF.col("district_name"),
+        userDenormDF.col("course_channel"),
+        userDenormDF.col("channel"),
+        userAssessmentResolvedDF.col("content_id"),
+        userAssessmentResolvedDF.col("total_score"),
+        userAssessmentResolvedDF.col("grand_total"),
+        userAssessmentResolvedDF.col("total_sum_score"))
     resDF
   }
 

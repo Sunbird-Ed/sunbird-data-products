@@ -161,10 +161,10 @@ object CourseUtils {
     } else List()
 
     batchInfo.toDF().withColumn("batchInfo", explode(col("batches")))
-      .withColumn("batchId",col("batchInfo").getItem("batchId"))
-      .withColumn("startDate",col("batchInfo").getItem("startDate"))
-      .withColumn("endDate",col("batchInfo").getItem("endDate"))
-      .withColumnRenamed("identifier", "courseid")
-      .select("courseid", "batchid", "startdate", "enddate", "channel")
+      .withColumn("batchid",col("batchInfo").getItem("batchId"))
+      .withColumn("startdate",col("batchInfo").getItem("startDate"))
+      .withColumn("enddate",col("batchInfo").getItem("endDate"))
+      .select(col("identifier").as("courseid"),
+        col("batchid"),col("startdate"),col("enddate"),col("channel"))
   }
 }

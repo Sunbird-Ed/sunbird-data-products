@@ -79,8 +79,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     val batchInfo = CourseUtils.getFilteredBatches(spark, batchFilters)
     JobLogger.log("Filtering out inactive batches where date is >= " + timestamp, None, INFO)
 
-    val activeBatches = batchInfo.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
-    val activeBatchList = activeBatches.select("batchId", "startDate", "endDate", "channel").collect();
+    val activeBatches = batchInfo.filter(col("enddate").isNull || unix_timestamp(to_date(col("enddate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
+    val activeBatchList = activeBatches.select("batchid", "startdate", "enddate", "channel").collect();
 
     JobLogger.log("Total number of active batches:" + activeBatchList.size, None, INFO)
     activeBatchList;
@@ -126,8 +126,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     spark.read.format("org.apache.spark.sql.redis")
       .option("keys.pattern", "*")
       .option("infer.schema", true).load()
-      .select("id","channel", "userid","username","declared-school-name","district_name","organisationid","email","subject","createdby","orgname_resolved","language","declared-school-udise-code",
-        "maskedemail","state_name","framework","grade","firstname","flagsvalue","phoneverified","rootorgid","usertype","locationids","declared-ext-id","block_name","maskedphone","lastname")
+      .select("userid","username","schoolname","districtname","email","orgname","schooludisecode",
+        "maskedemail","statename","externalid","blockname","maskedphone")
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
