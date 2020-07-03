@@ -108,7 +108,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val locationDF = loadData(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
       .select(col("id"), col("name"), col("type")).persist()
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
+      .select(col("provider"), col("idtype"), col("externalid"), col("userid"),
+        col("originalprovider")).persist()
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
@@ -427,7 +428,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
     val custodianUserPivotDF = custodianOrguserLocationDF
       .join(externalIdentityDF, externalIdentityDF.col("userid") === custodianOrguserLocationDF.col("userid"), "left")
-      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
+      .join(organisationDF, externalIdentityDF.col("originalprovider") === organisationDF.col("channel")
         && organisationDF.col("isrootorg").equalTo(true), "left")
       .groupBy(custodianOrguserLocationDF.col("userid"), organisationDF.col("id"))
       .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
