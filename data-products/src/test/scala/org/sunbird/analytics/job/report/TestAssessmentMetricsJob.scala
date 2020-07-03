@@ -11,7 +11,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.{JSONUtils, RestUtil}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.{ESUtil, EmbeddedES, EsResponse}
+import org.sunbird.analytics.util.EmbeddedES
 import org.sunbird.cloud.storage.BaseStorageService
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -270,55 +270,6 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     val denormedDF = AssessmentMetricsJob.denormAssessment(reportDF)
     // TODO: Check save is called or not
     AssessmentMetricsJob.saveReport(denormedDF, tempDir)
-  }
-
-  it should "fetch the only self assess content names from the elastic search" in {
-    val contentESIndex = AppConf.getConfig("assessment.metrics.content.index")
-    assert(contentESIndex.isEmpty === false)
-    val contentList = List("do_112835335135993856149", "do_112835336280596480151", "do_112832394979106816114")
-    val contentDF = ESUtil.getAssessmentNames(spark, contentList, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
-    contentDF.createOrReplaceTempView("content_metadata")
-    val content_id_df = spark.sql("select * from content_metadata where identifier ='do_112835335135993856149'")
-    val content_name = content_id_df.select("name").collect().map(_ (0)).toList
-    val content_id = content_id_df.select("identifier").collect().map(_ (0)).toList
-    assert(content_name(0) === "My content 1")
-    assert(content_id(0) === "do_112835335135993856149")
-    assert(contentDF.count() === 2) // Length should be 2, Since 2 contents are self assess and 1 content is resource
-  }
-
-  it should "Able to create a elastic search index" in {
-    //TODO: Sonar cloud testcase failing.. Need to debug
-    val esResponse: EsResponse = ESUtil.createIndex(AssessmentMetricsJob.getIndexName, "");
-    //assert(esResponse.acknowledged === true)
-  }
-
-  it should "Able to add index to alias" in {
-    ESUtil.createIndex(esIndexName, "");
-    ESUtil.removeIndexFromAlias(List(esIndexName), "cbatch-assessment")
-    val esResponse: EsResponse = ESUtil.addIndexToAlias(esIndexName, "cbatch-assessment");
-    assert(esResponse.acknowledged === true)
-  }
-
-
-  it should "Remove all index from the alias" in {
-    val esResponse: EsResponse = ESUtil.removeAllIndexFromAlias("cbatch-assessment");
-    assert(esResponse.acknowledged === true)
-  }
-
-  it should "not throw any error, Should create alias and index to save data into es" in {
-    val df = spark.createDataFrame(Seq(
-      ("user010", "Manju", "do_534985557934", "batch1", "10", "****@gmail.com", "*****75643","21","Karnataka", "Tumkur", "Orname", "", "NVPHS", "20", "Math", ""),
-      ("user110", "Manoj", "do_534985557934", "batch2", "13", "****@gmail.com", "*****75643", "21","Karnataka","Tumkur", "Orname", "", "NVPHS", "20", "Math", "")
-    )).toDF("userid", "username", "courseid", "batchid", "grand_total", "maskedemail", "maskedphone","schoolUDISE_resolved","state_name", "district_name", "orgname_resolved", "externalid_resolved", "schoolname_resolved", "total_sum_score", "content_name", "reportUrl")
-    try {
-      val indexName = AssessmentMetricsJob.getIndexName
-      AssessmentMetricsJob.saveToElastic(indexName, df, df);
-      val requestURL = ESUtil.elasticSearchURL + "/" + indexName + "/_count?q=courseId:do_534985557934"
-      val response = RestUtil.get[String](requestURL)
-      assert(response !== null)
-    } catch {
-      case ex: Exception => assert(ex === null)
-    }
   }
 
 }

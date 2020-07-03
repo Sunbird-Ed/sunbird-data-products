@@ -18,8 +18,6 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
 
-case class ESIndexResponse(isOldIndexDeleted: Boolean, isIndexLinkedToAlias: Boolean)
-
 case class BatchDetails(batchid: String, courseCompletionCountPerBatch: Long, participantsCountPerBatch: Long)
 
 case class CourseBatch(batchid: String, startDate: String, endDate: String, courseChannel: String)
