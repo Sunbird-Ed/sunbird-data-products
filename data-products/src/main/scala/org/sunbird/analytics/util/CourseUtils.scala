@@ -137,7 +137,7 @@ object CourseUtils {
     }
   }
 
-  def getFilteredBatches(spark: SparkSession, batchFilters: String): DataFrame = {
+  def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
     val apiUrl = Constants.COMPOSITE_SEARCH_URL
@@ -145,8 +145,7 @@ object CourseUtils {
       s"""{
          |	"request": {
          |		"filters": {
-         |			"framework": $batchFilters,
-         |     "contentType":"Course"
+         |      "identifier": "$courseId"
          |		},
          |		"sort_by": {
          |			"createdOn": "desc"
@@ -156,15 +155,8 @@ object CourseUtils {
          |	}
          |}""".stripMargin
     val response = RestUtil.post[CourseResponse](apiUrl, request)
-    val batchInfo = if (null != response && response.responseCode.equalsIgnoreCase("ok")) {
-      response.result.content
-    } else List()
-
-    batchInfo.toDF().withColumn("batchInfo", explode(col("batches")))
-      .withColumn("batchid",col("batchInfo").getItem("batchId"))
-      .withColumn("startdate",col("batchInfo").getItem("startDate"))
-      .withColumn("enddate",col("batchInfo").getItem("endDate"))
-      .select(col("identifier").as("courseid"),
-        col("batchid"),col("startdate"),col("enddate"),col("channel"))
+    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+      response.result.content.head
+    } else CourseBatchInfo("","","","",List())
   }
 }

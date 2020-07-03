@@ -31,6 +31,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
   var externalIdentityDF: DataFrame = _
   var systemSettingDF: DataFrame = _
   var assessmentProfileDF: DataFrame = _
+  var userInfoDF: DataFrame = _
   var reporterMock: ReportGenerator = mock[ReportGenerator]
   val sunbirdCoursesKeyspace = "sunbird_courses"
   val sunbirdKeyspace = "sunbird"
@@ -56,6 +57,8 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       .option("header", "true")
       .load("src/test/resources/assessment-metrics-updater/usr_external_identity.csv")
       .cache()
+
+    userInfoDF = spark.read.json("src/test/resources/course-metrics-updater/user_data.json").cache()
 
     assessmentProfileDF = spark
       .read
@@ -140,92 +143,6 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     assert(AppConf.getConfig("course.es.index.enabled").isEmpty === false)
   }
 
-  it should "Ensure for the user `user030` should have all proper records values" in {
-    implicit val mockFc = mock[FrameworkContext];
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
-    val config = JSONUtils.deserialize[JobConfig](strConfig)
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
-    //mocking for DruidDataFetcher
-    import scala.concurrent.ExecutionContext.Implicits.global
-    val json: String =
-      """
-        |{
-        |    "identifier": "do_1125559882615357441175",
-        |    "channel": "apekx"
-        |  }
-      """.stripMargin
-
-    val doc: Json = parse(json).getOrElse(Json.Null);
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
-
-    implicit val mockDruidConfig = DruidConfig.DefaultConfig
-    val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
-      .returning(courseBatchDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
-      .returning(userCoursesDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
-      .returning(userDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
-      .returning(userOrgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
-      .returning(orgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-      .returning(locationDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .returning(externalIdentityDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
-      .returning(assessmentProfileDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
-      .anyNumberOfTimes()
-      .returning(systemSettingDF)
-
-    val reportDF = AssessmentMetricsJob
-      .prepareReport(spark, reporterMock.loadData,druidConfig)
-      .cache()
-    val denormedDF = AssessmentMetricsJob.denormAssessment(reportDF)
-    denormedDF.createOrReplaceTempView("report_df")
-    val content1_DF = spark.sql("select * from report_df where userid ='user030' and content_name = 'My content 1' ")
-
-    val username = content1_DF.select("username").collect().map(_ (0)).toList
-    assert(username(0) === "Karishma Kapoor")
-
-    val total_score_value = content1_DF.select("total_sum_score").collect().map(_ (0)).toList
-    assert(total_score_value(0) === "50%")
-
-    val courseid_value = content1_DF.select("courseid").collect().map(_ (0)).toList
-    assert(courseid_value(0) === "do_1125559882615357441175")
-
-    val batchid_value = content1_DF.select("batchid").collect().map(_ (0)).toList
-    assert(batchid_value(0) === "1010")
-
-    val district_name = content1_DF.select("district_name").collect().map(_ (0)).toList
-    assert(district_name(0) === "GULBARGA")
-
-    val org_name = content1_DF.select("orgname_resolved").collect().map(_ (0)).toList
-    assert(org_name(0) === "SACRED HEART(B)PS,TIRUVARANGAM")
-  }
-
   it should "Sort and get the best score" in {
     val df = spark.createDataFrame(Seq(
       ("do_112835335135993856149", "A3", "user030", "do_1125559882615357441175", "1010", "1971-09-22 02:10:53.444+0000", "2019-09-04 09:59:51.000+0000", "10", "5", "2019-09-06 09:59:51.000+0000", "50%", ""),
@@ -238,7 +155,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
 
   it should "Ensure CSV Report Should have all proper columns names" in {
     implicit val mockFc = mock[FrameworkContext]
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["TPD"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
     val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
     //mocking for DruidDataFetcher
@@ -256,48 +173,35 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
-    val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
+      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(userCoursesDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
-      .returning(userDF)
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+      .anyNumberOfTimes()
+      .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
-      .returning(userOrgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
-      .returning(orgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-      .returning(locationDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .returning(externalIdentityDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(assessmentProfileDF)
 
+    val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
       .anyNumberOfTimes()
       .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJob
-      .prepareReport(spark, reporterMock.loadData, druidConfig)
+      .prepareReport(spark, reporterMock.loadData, "NCF")
       .cache()
     val denormedDF = AssessmentMetricsJob.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJob.transposeDF(denormedDF)
@@ -313,7 +217,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     (mockFc.getStorageService(_: String, _: String, _: String)).expects(*, *, *).returns(mockStorageService).anyNumberOfTimes();
     (mockStorageService.upload _).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
     val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
     //mocking for DruidDataFetcher
@@ -331,48 +235,35 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
-    val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
+      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(userCoursesDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
-      .returning(userDF)
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+      .anyNumberOfTimes()
+      .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
-      .returning(userOrgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
-      .returning(orgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-      .returning(locationDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .returning(externalIdentityDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(assessmentProfileDF)
 
+    val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
       .anyNumberOfTimes()
       .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJob
-      .prepareReport(spark, reporterMock.loadData, druidConfig)
+      .prepareReport(spark, reporterMock.loadData, "TPD")
       .cache()
 
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
@@ -393,83 +284,6 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     assert(content_name(0) === "My content 1")
     assert(content_id(0) === "do_112835335135993856149")
     assert(contentDF.count() === 2) // Length should be 2, Since 2 contents are self assess and 1 content is resource
-  }
-
-  it should "generate reports for the best score" in {
-    implicit val mockFc = mock[FrameworkContext];
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
-    val config = JSONUtils.deserialize[JobConfig](strConfig)
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
-    //mocking for DruidDataFetcher
-    import scala.concurrent.ExecutionContext.Implicits.global
-    val json: String =
-      """
-        |{
-        |    "identifier": "do_1125559882615357441175",
-        |    "channel": "apekx"
-        |  }
-      """.stripMargin
-
-    val doc: Json = parse(json).getOrElse(Json.Null);
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
-
-    implicit val mockDruidConfig = DruidConfig.DefaultConfig
-    val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
-    assessmentProfileDF = spark
-      .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/assessment_best_score.csv")
-      .cache()
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
-      .returning(courseBatchDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
-      .returning(userCoursesDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace))
-      .returning(userDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace))
-      .returning(userOrgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace))
-      .returning(orgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace))
-      .returning(locationDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .returning(externalIdentityDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace))
-      .returning(assessmentProfileDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace))
-      .anyNumberOfTimes()
-      .returning(systemSettingDF)
-
-    val reportDF = AssessmentMetricsJob
-      .prepareReport(spark, reporterMock.loadData,druidConfig)
-      .cache()
-
-    reportDF.createOrReplaceTempView("best_attempt")
-    val df = spark.sql("select * from best_attempt where batchid ='1010' and courseid='do_1125559882615357441175' and content_id='do_112835335135993856149' and userid ='user030'")
-    val best_attempt_score = df.select("total_score").collect().map(_ (0)).toList
-    assert(best_attempt_score.head === "50")
   }
 
   it should "Able to create a elastic search index" in {
@@ -495,7 +309,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
     val df = spark.createDataFrame(Seq(
       ("user010", "Manju", "do_534985557934", "batch1", "10", "****@gmail.com", "*****75643","21","Karnataka", "Tumkur", "Orname", "", "NVPHS", "20", "Math", ""),
       ("user110", "Manoj", "do_534985557934", "batch2", "13", "****@gmail.com", "*****75643", "21","Karnataka","Tumkur", "Orname", "", "NVPHS", "20", "Math", "")
-    )).toDF("userid", "username", "courseid", "batchid", "grand_total", "maskedemail", "maskedphone","schoolUDISE_resolved","statename_resolved", "district_name", "orgname_resolved", "externalid_resolved", "schoolname_resolved", "total_sum_score", "content_name", "reportUrl")
+    )).toDF("userid", "username", "courseid", "batchid", "grand_total", "maskedemail", "maskedphone","schoolUDISE_resolved","state_name", "district_name", "orgname_resolved", "externalid_resolved", "schoolname_resolved", "total_sum_score", "content_name", "reportUrl")
     try {
       val indexName = AssessmentMetricsJob.getIndexName
       AssessmentMetricsJob.saveToElastic(indexName, df, df);
