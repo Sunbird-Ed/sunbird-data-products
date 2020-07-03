@@ -13,7 +13,7 @@ import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
-import org.sunbird.analytics.util.{CourseUtils, ESUtil}
+import org.sunbird.analytics.util.CourseUtils
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
