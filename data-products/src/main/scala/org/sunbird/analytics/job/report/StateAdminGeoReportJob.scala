@@ -49,7 +49,7 @@ object StateAdminGeoReportJob extends optional.Application with IJob with StateA
     val objectKey = AppConf.getConfig("admin.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
     
-    val organisationDF: DataFrame = loadOrganisationDF()
+    val organisationDF: DataFrame = loadOrganisationSlugDF()
     val subOrgDF: DataFrame = generateSubOrgData(organisationDF)
     val blockData:DataFrame = generateBlockLevelData(subOrgDF)
     

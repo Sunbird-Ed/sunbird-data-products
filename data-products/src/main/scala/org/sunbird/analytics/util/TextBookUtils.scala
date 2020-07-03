@@ -192,8 +192,7 @@ object TextBookUtils {
         index = index+1
         val report = parseDCEDialcode(textbook,chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
         if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
-          val textbookInfo = getTextBookInfo(List(chapters))
-          val dialcodes = textbookInfo._2.lift(0).getOrElse("")
+          val dialcodes = if(null != chapters.dialcodes) chapters.dialcodes.head else ""
           val scans = getDialcodeScans(dialcodes)
           weeklyDialcodes = scans ++ weeklyDialcodes
           val chapterReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,"","","","",dialcodes,"","",0,0,term,"DCE_dialcode_data")
@@ -212,6 +211,7 @@ object TextBookUtils {
     if(unitReport.isEmpty && chapterReport.nonEmpty) { report = chapterReport ++ report }
     else { report = (unitReport ++ report).reverse
       if(chapterReport.nonEmpty && chapterReport.head.dialcode.nonEmpty && unitReport.head.dialcode.isEmpty) { report = chapterReport ++ report }
+      else if(chapterReport.nonEmpty && chapterReport.head.dialcode.nonEmpty && unitReport.head.dialcode.nonEmpty && unitReport.head.dialcode!=chapterReport.head.dialcode)  { report = chapterReport ++ report }
     }
     report
   }
@@ -224,13 +224,16 @@ object TextBookUtils {
     data.map(units => {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         textbook = units :: newData
-        if(null != units.leafNodesCount && units.leafNodesCount == 0) {
+        if(null != units.leafNodesCount && units.leafNodesCount == 0 && null != units.dialcodes) {
           val textbookInfo = getTextBookInfo(textbook)
-          val levelNames = textbookInfo._1
+          val levelNames = textbookInfo._1.filter(_.nonEmpty)
           val dialcodes = textbookInfo._2.lift(0).getOrElse("")
           dialcode = dialcodes
           val report = DialcodeExceptionData(textbookData.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, l1,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,"","",0,0,term,"DCE_dialcode_data")
           dceDialcode = report :: dceDialcode
+          if(units.children.isDefined) {
+            dceDialcode = parseDCEDialcode(textbookData,units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceDialcode)._1
+          }
         }
         else { dceDialcode = parseDCEDialcode(textbookData,units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceDialcode)._1 }
       }
@@ -257,7 +260,8 @@ object TextBookUtils {
     var levelNames = List[String]()
     var dialcodes = List[String]()
     var levelCount = 5
-    var parsedData = data(data.size-1)
+    var parsedData = data.head
+    val levelName = if(data.lift(1).isDefined) data(1).name else ""
 
     breakable {
       while(levelCount > 1) {
@@ -270,7 +274,7 @@ object TextBookUtils {
         levelCount = levelCount-1
       }
     }
-    (levelNames.reverse,dialcodes)
+    (levelName::levelNames.reverse,dialcodes)
   }
 
   def generateDCETextbookReport(response: ContentInfo, textbook: TextbookData): List[DCETextbookData] = {
@@ -316,7 +320,7 @@ object TextBookUtils {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         val output = parseDCETextbook(identifier,term,units.children.getOrElse(List[ContentInfo]()),index,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked,lengthOfChapters)
         indexValue = indexValue+1
-        if(null != units.parent && units.parent.equals(identifier)) { term = if(null != units.index && units.index<=lengthOfChapters/2) "T1"  else "T2"}
+        if(null != units.depth && units.depth == 1) { term = if(null != units.index && units.index<=lengthOfChapters/2) "T1"  else "T2"}
         tempValue = output._1
         counterQrLinked = output._3
         counterNotLinked = output._4
@@ -376,7 +380,7 @@ object TextBookUtils {
   def getContentDataList(tenantId: String)(implicit fc: FrameworkContext): List[TBContentResult] = {
     val request = s"""{"queryType": "groupBy","dataSource": "content-model-snapshot","intervals": "1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00","aggregations": [{"name": "count","type": "count"}],"dimensions": [{"fieldName": "channel","aliasName": "channel"}, {"fieldName": "identifier","aliasName": "identifier","type": "Extraction","outputType": "STRING","extractionFn": [{"type": "javascript","fn": "function(str){return str == null ? null: str.split('.')[0]}"}]}, {"fieldName": "name","aliasName": "name"}, {"fieldName": "pkgVersion","aliasName": "pkgVersion"}, {"fieldName": "contentType","aliasName": "contentType"}, {"fieldName": "lastSubmittedOn","aliasName": "lastSubmittedOn"}, {"fieldName": "mimeType","aliasName": "mimeType"}, {"fieldName": "resourceType","aliasName": "resourceType"}, {"fieldName": "createdFor","aliasName": "createdFor"}, {"fieldName": "createdOn","aliasName": "createdOn"}, {"fieldName": "lastPublishedOn","aliasName": "lastPublishedOn"}, {"fieldName": "creator","aliasName": "creator"}, {"fieldName": "board","aliasName": "board"}, {"fieldName": "medium","aliasName": "medium"}, {"fieldName": "gradeLevel","aliasName": "gradeLevel"}, {"fieldName": "subject","aliasName": "subject"}, {"fieldName": "status","aliasName": "status"}],"filters": [{"type": "equals","dimension": "contentType","value": "Resource"}, {"type": "in","dimension": "status","values": ["Live", "Draft", "Review", "Unlisted"]}, {"type": "equals","dimension": "createdFor","value": "$tenantId"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}}""".stripMargin
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
-    val druidResponse = DruidDataFetcher.getDruidData(druidQuery, true)
+    val druidResponse = DruidDataFetcher.getDruidData(druidQuery, queryAsStream = true)
     
     val result = druidResponse.map(f => JSONUtils.deserialize[TBContentResult](f))
     result
