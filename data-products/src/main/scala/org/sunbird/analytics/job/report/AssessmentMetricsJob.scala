@@ -4,7 +4,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
@@ -16,6 +16,7 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 case class DruidOutput(identifier: String, channel: String)
 case class CourseInfo(courseid: String, batchid: String, startdate: String, enddate: String, channel: String)
+case class CourseBatchOutput(courseid: String, batchid: String, startdate: String, enddate: String)
 
 object AssessmentMetricsJob extends optional.Application with IJob with BaseReportsJob {
 
@@ -69,10 +70,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   /**
-    * Method used to load the cassnadra table data by passing configurations
+    * Generic method used to load data by passing configurations
     *
     * @param spark    - Spark Sessions
-    * @param settings - Cassnadra configs
+    * @param settings - Cassandra/Redis configs
+    * @param url - Cassandra/Redis url
     * @return
     */
   def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame = {
@@ -88,30 +90,33 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     */
   def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame, batchFilters: String)(implicit fc: FrameworkContext): DataFrame = {
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
-    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra").select("courseid", "batchid", "startdate", "enddate")
-    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra").select("courseid", "batchid", "startdate", "enddate")
+    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .filter(lower(col("active")).equalTo("true"))
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
 
-    val userDF = loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+    val userDF = loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
       .select(col("userid"),col("firstname"),col("lastname"),col("maskedemail"),col("maskedphone"),
         col("districtname"), col("externalid"),col("schoolname"),col("schooludisecode"),col("statename"),col("orgname"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
 
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
 
-    val courseChannelDenormDF = courseBatchDF.collect().map(row => {
-      val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
+    val encoder = Encoders.product[CourseBatchOutput]
+    val courseBatchRdd = courseBatchDF.as[CourseBatchOutput](encoder).rdd
+
+    val courseChannelDenormDF = courseBatchRdd.map(f => {
+      val courses = CourseUtils.getCourseInfo(spark, f.courseid)
       if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
-        CourseInfo(row.getString(0),row.getString(1),row.getString(2),row.getString(3),courses.channel)
+        CourseInfo(f.courseid,f.batchid,f.startdate,f.enddate,courses.channel)
       }
       else CourseInfo("","","","","")
-    }).filter(f => f.courseid.nonEmpty).toList.toDF()
+    }).filter(f => f.courseid.nonEmpty).toDF()
 
     /*
    * courseBatchDF has details about the course and batch details for which we have to prepare the report
@@ -193,23 +198,23 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
     val request =
       s"""
          {
-         |  "_source": {
-         |    "includes": [
-         |      "name"
-         |    ]
-         |  },
-         |  "query": {
-         |    "bool": {
-         |      "must": [
-         |        {
-         |          "terms": {
-         |            "identifier.raw": $contentList
-         |          }
-         |        },
-         |        { "match": { "contentType":  "$contentType" }}
-         |      ]
-         |    }
-         |  }
+         | "_source": {
+         |   "includes": [
+         |     "name"
+         |   ]
+         | },
+         | "query": {
+         |   "bool": {
+         |     "must": [
+         |       {
+         |         "terms": {
+         |           "identifier.raw": $contentList
+         |         }
+         |       },
+         |       { "match": { "contentType":  "$contentType" }}
+         |     ]
+         |   }
+         | }
          |}
        """.stripMargin
     val response = RestUtil.post[CourseResponse](apiUrl,request)

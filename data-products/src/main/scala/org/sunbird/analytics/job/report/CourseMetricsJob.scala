@@ -79,7 +79,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
     implicit  val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
 
-    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .select("courseid", "batchid", "enddate", "startdate")
 
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
@@ -134,7 +134,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
   }
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame): DataFrame = {
-    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
       .select(col("userid"),col("firstname"),col("lastname"),col("schoolname"),col("districtname"),col("email"),col("orgname"),col("schooludisecode"),
         col("maskedemail"),col("statename"),col("externalid"),col("blockname"),col("maskedphone"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
@@ -257,7 +257,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-    val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+    val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
       /*

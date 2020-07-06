@@ -9,6 +9,7 @@ import ing.wbaa.druid.client.DruidClient
 import io.circe._
 import io.circe.parser._
 import org.apache.spark.sql.functions._
+import scala.collection.JavaConverters._
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
@@ -67,7 +68,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .load("src/test/resources/course-metrics-updater/system_settings.csv").cache()
   }
   
-  "TestUpdateCourseMetrics" should "generate reports for 10 batches and validate all scenarios" in {
+  "TestUpdateCourseMetrics" should "generate reports for batches and validate all scenarios" in {
 
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
@@ -77,6 +78,8 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
       .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
       .anyNumberOfTimes()
       .returning(userDF)
+
+    CourseMetricsJob.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra")
 
 
     val convertMethod = udf((value: mutable.WrappedArray[String]) => {
@@ -152,11 +155,29 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
     CourseMetricsJob.prepareReport(spark, storageConfig, reporterMock.loadData,config)
 
     implicit val batchReportEncoder: Encoder[BatchReportOutput] = Encoders.product[BatchReportOutput]
+    val batch1 = "01303150537737011211"
+    val batch2 = "0130334873750159361"
 
     val batchReportsCount = Option(new File(s"$outputLocation/$outputDir").list)
       .map(_.count(_.endsWith(".csv"))).getOrElse(0)
 
-    batchReportsCount should be (1)
+    batchReportsCount should be (2)
+
+    val batch1Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$outputDir/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
+    batch1Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("c7ef3848-bbdb-4219-8344-817d5b8103fa")
+    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("c98456789-fdcvbn")
+    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("20")
+    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("School-1")
+    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("SERA")
+
+    val batch2Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$outputDir/report-$batch2.csv").as[BatchReportOutput].collectAsList().asScala
+    batch2Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("f3dd58a4-a56f-4c1d-95cf-3231927a28e9")
+    batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("df09619-fdcvbn")
+    batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("10")
+    batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("School-2")
+    batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("BLOCK")
     /*
     // TODO: Add assertions here
     EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").foreach(f => {
