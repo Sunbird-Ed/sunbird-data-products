@@ -82,7 +82,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val orgExternalIdList: List[String] = loadOrganisationData().select("externalid").filter(col("externalid").isNotNull).map(_.getString(0)).collect().toList
         
         //appending state and district values to user-external-identifier based on location ids
-        val userExternalOriginalDataDF = userExternalDataDF.groupBy("userid", "provider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
+        val userExternalOriginalDataDF = userExternalDataDF.groupBy("userid", "originalprovider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
         val userExternalStateDF = userExternalOriginalDataDF.join(locationDF, userExternalOriginalDataDF.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
                 select(userExternalOriginalDataDF.col("*"), locationDF("locname").as("state"))
         var userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
@@ -141,7 +141,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("decrypted-phone").as("Phone number"),
                 col("decrypted-email").as("Email ID"),
                 col("Diksha Sub-Org ID"),
-                col("provider").as("Channel"))
+                col("originalprovider").as("Channel"))
         resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("Channel")))
         resultDf
     }
