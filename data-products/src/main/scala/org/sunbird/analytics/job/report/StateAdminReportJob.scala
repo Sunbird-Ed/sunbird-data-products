@@ -64,7 +64,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     private def execute(config: JobConfig)(implicit sparkSession: SparkSession, fc: FrameworkContext) = {
 
-        /*generateReport();*/
+        generateReport();
         JobLogger.end("StateAdminReportJob completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
         
         generateExternalIdReport();
