@@ -6,41 +6,30 @@ case class UserEnrolments(userid: String, courseid: Option[String], batchid: Str
                           completedon: Option[java.util.Date], completionpercentage: Option[Int], contentstatus: Option[java.util.Map[String, Int]], datetime: Option[java.util.Date], enrolleddate: Option[String], lastreadcontentid : Option[String],
                           lastreadcontentstatus: Option[Int], progress: Option[Int], status: Option[Int])
 
-
+/**
+ * Job to migrate data from content_consumption to user_content_consumption
+ * and user_courses to user_enrolments tables
+ * 
+ * Before running the job, set `spark.cassandra.connection.host=<cassandraIp>`
+ * start spaerk shell with these settings
+ * --packages com.datastax.spark:spark-cassandra-connector_2.11:2.5.0 --conf spark.cassandra.connection.host=<cassandraIp>
+ * 
+ */
 object CourseDataMigration {
-    def printStatement(value: String) = {
-        println(value)
-    }
 
-    def migrateContentConsumption(sc: SparkContext, keyspace: String) = {
-        val data = sc.cassandraTable[UserContentConsumption](keyspace, "content_consumption")
-        printStatement("Data Count : " + data.count())
+    def migrateContentConsumption(sc: SparkContext) = {
+        val data = sc.cassandraTable[UserContentConsumption]("sunbird_courses", "content_consumption")
+        println("content_consumption data Count : " + data.count())
         val filteredData = data.filter(f => null != f.courseid)
-        filteredData.saveToCassandra(keyspace, "user_content_consumption")
-        printStatement("Count migratd: " + filteredData.count())
+        filteredData.saveToCassandra("sunbird_courses", "user_content_consumption")
+        println("user_content_consumption count post migration: " + filteredData.count())
     }
 
-    def migrateUserCourses(sc: SparkContext, keyspace: String) = {
-        val data = sc.cassandraTable[UserEnrolments](keyspace, "user_courses")
-        printStatement("Data Count : " + data.count())
+    def migrateUserCourses(sc: SparkContext) = {
+        val data = sc.cassandraTable[UserEnrolments]("sunbird_courses", "user_courses")
+        println("user_courses data Count : " + data.count())
         val filteredData = data.filter(f => f.courseid.isDefined && !f.courseid.isEmpty)
-        filteredData.saveToCassandra(keyspace, "user_enrolments")
-        printStatement("Count migrated: " + filteredData.count())
+        filteredData.saveToCassandra("sunbird_courses", "user_enrolments")
+        println("user_enrolments count post migration: " + filteredData.count())
     }
-
-    def migrateSunbirdCourses(sc: SparkContext, host: Option[String], keyspace: Option[String], table: String = ""): Unit = {
-        if(host.isDefined) {
-            sc.getConf.set("spark.cassandra.connection.host", host.get)
-            if(keyspace.isDefined){
-                table match {
-                    case "content_consumption" => migrateContentConsumption(sc, keyspace.get)
-                    case "user_courses" => migrateUserCourses(sc, keyspace.get)
-                    case "_" => println("Table should be one of content_consumption or user_courses")
-                }
-            }
-        } else {
-            println("Host is not defined")
-        }
-    }
-
 }
