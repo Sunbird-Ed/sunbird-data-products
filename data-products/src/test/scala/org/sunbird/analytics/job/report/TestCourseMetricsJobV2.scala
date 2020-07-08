@@ -92,11 +92,6 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(userDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_org", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
-      .anyNumberOfTimes()
-      .returning(userOrgDF)
-
-    (reporterMock.loadData _)
       .expects(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
       .anyNumberOfTimes()
       .returning(orgDF)

@@ -89,16 +89,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .cache()
 
     /*
-     * This has 30 unique location
-     * */
-    locationDF = spark
-      .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updaterv2/locationTable.csv")
-      .cache()
-
-    /*
      * There are 8 organisation added to the data, which can be mapped to `rootOrgId` in user table
      * and `organisationId` in userOrg table
      * */
@@ -258,6 +248,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     the[Exception] thrownBy {
       AssessmentMetricsJobV2.main(strConfig)
     } should have message "Failed to open native connection to Cassandra at {127.0.0.0}:9042"
+    spark = getSparkSession()
   }
 
   it should "return an empty list if no assessment names found for given content" in {

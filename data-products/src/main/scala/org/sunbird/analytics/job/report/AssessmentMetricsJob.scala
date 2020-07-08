@@ -238,11 +238,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   /**
-   * Get the Either last updated assessment question or Best attempt assessment
-   *
-   * @param reportDF - Dataframe, Report df.
-   * @return DataFrame
-   */
+    * Get the Either last updated assessment question or Best attempt assessment
+    *
+    * @param reportDF - Dataframe, Report df.
+    * @return DataFrame
+    */
   def getAssessmentData(reportDF: DataFrame): DataFrame = {
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
