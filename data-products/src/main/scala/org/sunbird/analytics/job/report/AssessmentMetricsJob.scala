@@ -69,12 +69,12 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   /**
-   * Method used to load the cassnadra table data by passing configurations
-   *
-   * @param spark    - Spark Sessions
-   * @param settings - Cassnadra configs
-   * @return
-   */
+    * Method used to load the cassnadra table data by passing configurations
+    *
+    * @param spark    - Spark Sessions
+    * @param settings - Cassnadra configs
+    * @return
+    */
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame = {
     spark
       .read
@@ -84,8 +84,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   /**
-   * Loading the specific tables from the cassandra db.
-   */
+    * Loading the specific tables from the cassandra db.
+    */
   def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String]) => DataFrame, druidQuery: DruidQueryModel)(implicit fc: FrameworkContext): DataFrame = {
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace)).select("courseid", "batchid", "enddate", "startdate")
@@ -176,23 +176,23 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
     val assessmentDF = getAssessmentData(assessmentProfileDF)
     /**
-     * Compute the sum of all the worksheet contents score.
-     */
+      * Compute the sum of all the worksheet contents score.
+      */
     val assessmentAggDf = Window.partitionBy("user_id", "batch_id", "course_id")
     val resDF = assessmentDF
       .withColumn("agg_score", sum("total_score") over assessmentAggDf)
       .withColumn("agg_max_score", sum("total_max_score") over assessmentAggDf)
       .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
     /**
-     * Filter only valid enrolled userid for the specific courseid
-     */
+      * Filter only valid enrolled userid for the specific courseid
+      */
 
     val userAssessmentResolvedDF = userLocationResolvedDF.join(resDF,
       userLocationResolvedDF.col("userid") === resDF.col("user_id")
         && userLocationResolvedDF.col("batchid") === resDF.col("batch_id")
         && userLocationResolvedDF.col("courseid") === resDF.col("course_id"), "inner")
-      .select("batchid", "courseid", "userid", "maskedemail", "maskedphone", "username", "district_name",
-        "externalid_resolved", "schoolname_resolved", "schoolUDISE_resolved", "state_name",
+        .select("batchid", "courseid", "userid", "maskedemail", "maskedphone", "username", "district_name",
+          "externalid_resolved", "schoolname_resolved", "schoolUDISE_resolved", "state_name",
         "content_id", "total_score", "grand_total", "total_sum_score")
 
     /*
@@ -208,7 +208,7 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   * */
 
     val reportDF = userAssessmentResolvedDF
-      .join(resolvedOrgNameDF, Seq("userid"), "left_outer")
+     .join(resolvedOrgNameDF, Seq("userid"), "left_outer")
 
     userDF.unpersist()
     userOrgDF.unpersist()
@@ -220,21 +220,21 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   /**
-   * De-norming the assessment report - Adding content name column to the content id
-   *
-   * @return - Assessment denormalised dataframe
-   */
+    * De-norming the assessment report - Adding content name column to the content id
+    *
+    * @return - Assessment denormalised dataframe
+    */
   def denormAssessment(report: DataFrame)(implicit spark: SparkSession): DataFrame = {
     val contentIds: List[String] = recordTime(report.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]], "Time taken to get the content IDs- ")
     JobLogger.log("ContentIds are" + contentIds, None, INFO)
     val contentMetaDataDF = ESUtil.getAssessmentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.content.index"), AppConf.getConfig("assessment.metrics.supported.contenttype"))
     report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select(
-        col("name").as("content_name"),
-        col("total_sum_score"), report.col("userid"), report.col("courseid"), report.col("batchid"),
-        col("grand_total"), report.col("maskedemail"), report.col("district_name"), report.col("maskedphone"),
-        report.col("orgname_resolved"), report.col("externalid_resolved"), report.col("schoolname_resolved"),
-        report.col("username"), col("state_name"), col("schoolUDISE_resolved"))
+      col("name").as("content_name"),
+      col("total_sum_score"), report.col("userid"), report.col("courseid"), report.col("batchid"),
+      col("grand_total"), report.col("maskedemail"), report.col("district_name"), report.col("maskedphone"),
+      report.col("orgname_resolved"), report.col("externalid_resolved"), report.col("schoolname_resolved"),
+      report.col("username"), col("state_name"), col("schoolUDISE_resolved"))
   }
 
   /**
@@ -252,11 +252,11 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
 
 
   /**
-   * This method is used to upload the report the azure cloud service and
-   * Index report data into core elastic search.
-   * Alias name: cbatch-assessment
-   * Index name: cbatch-assessment-24-08-1993-09-30 (dd-mm-yyyy-hh-mm)
-   */
+    * This method is used to upload the report the azure cloud service and
+    * Index report data into core elastic search.
+    * Alias name: cbatch-assessment
+    * Index name: cbatch-assessment-24-08-1993-09-30 (dd-mm-yyyy-hh-mm)
+    */
   def saveReport(reportDF: DataFrame, url: String)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
     val result = reportDF.groupBy("courseid").agg(collect_list("batchid").as("batchid"))
     val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
@@ -269,25 +269,25 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   /**
-   * Converting rows into  column (Reshaping the dataframe.)
-   * This method converts the name column into header row formate
-   * Example:
-   * Input DF
-   * +------------------+-------+--------------------+-------+-----------+
-   * |              name| userid|            courseid|batchid|total_score|
-   * +------------------+-------+--------------------+-------+-----------+
-   * |Playingwithnumbers|user021|do_21231014887798...|   1001|         10|
-   * |     Whole Numbers|user021|do_21231014887798...|   1001|          4|
-   * +------------------+---------------+-------+--------------------+----
-   *
-   * Output DF: After re-shaping the data frame.
-   * +--------------------+-------+-------+------------------+-------------+
-   * |            courseid|batchid| userid|Playingwithnumbers|Whole Numbers|
-   * +--------------------+-------+-------+------------------+-------------+
-   * |do_21231014887798...|   1001|user021|                10|            4|
-   * +--------------------+-------+-------+------------------+-------------+
-   * Example:
-   */
+    * Converting rows into  column (Reshaping the dataframe.)
+    * This method converts the name column into header row formate
+    * Example:
+    * Input DF
+    * +------------------+-------+--------------------+-------+-----------+
+    * |              name| userid|            courseid|batchid|total_score|
+    * +------------------+-------+--------------------+-------+-----------+
+    * |Playingwithnumbers|user021|do_21231014887798...|   1001|         10|
+    * |     Whole Numbers|user021|do_21231014887798...|   1001|          4|
+    * +------------------+---------------+-------+--------------------+----
+    *
+    * Output DF: After re-shaping the data frame.
+    * +--------------------+-------+-------+------------------+-------------+
+    * |            courseid|batchid| userid|Playingwithnumbers|Whole Numbers|
+    * +--------------------+-------+-------+------------------+-------------+
+    * |do_21231014887798...|   1001|user021|                10|            4|
+    * +--------------------+-------+-------+------------------+-------------+
+    * Example:
+    */
   def transposeDF(reportDF: DataFrame): DataFrame = {
     // Re-shape the dataFrame (Convert the content name from the row to column)
     reportDF.groupBy("courseid", "batchid", "userid")
@@ -384,15 +384,15 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   }
 
   /**
-   * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
-   *
-   * For state user
-   * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.externalid
-   *
-   * For Cust User
-   * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
-   * fetch USR_EXTERNAL_IDENTITY.id and map with USR_EXTERNAL_IDENTITY.userid
-   */
+    * externalIdMapDF - Filter out the external id by idType and provider and Mapping userId and externalId
+    *
+    * For state user
+    * USR_EXTERNAL_IDENTITY.provider=User.channel and USR_EXTERNAL_IDENTITY.idType=USER.channel and fetch the USR_EXTERNAL_IDENTITY.externalid
+    *
+    * For Cust User
+    * USR_EXTERNAL_IDENTITY.idType='declared-ext-id' and USR_EXTERNAL_IDENTITY.provider=ORG.channel
+    * fetch USR_EXTERNAL_IDENTITY.id and map with USR_EXTERNAL_IDENTITY.userid
+    */
   /*
   * Resolve school Information
   * 1. school name from `orgid`
@@ -415,8 +415,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .select(userExplodedLocationDF.col("userid"), col("name").as("district_name"))
 
     /**
-     * Join with the userDF to get one record per user with district and block information
-     */
+      * Join with the userDF to get one record per user with district and block information
+      */
 
     val custodianOrguserLocationDF = userDF.filter(col("rootorgid") === lit(custodianOrgId))
       .join(userStateDF, Seq("userid"), "inner")
@@ -457,14 +457,14 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
                                externalIdentityDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
 
     val stateOrgExplodedDF = organisationDF.withColumn("exploded_location", explode_outer(col("locationids")))
-      .select(col("id"), col("exploded_location"))
+    .select(col("id"), col("exploded_location"))
 
     val orgStateDF = stateOrgExplodedDF.join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
-      .select(stateOrgExplodedDF.col("id"), col("name").as("state_name"))
+    .select(stateOrgExplodedDF.col("id"), col("name").as("state_name"))
 
     val orgDistrictDF = stateOrgExplodedDF
-      .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
-      .select(stateOrgExplodedDF.col("id"), col("name").as("district_name"))
+    .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
+    .select(stateOrgExplodedDF.col("id"), col("name").as("district_name"))
 
     val stateOrgLocationDF = organisationDF
       .join(orgStateDF, Seq("id"))
@@ -493,13 +493,13 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
       .select(col("state_user.*"), externalIdentityDF.col("externalid"))
 
     val stateDenormUserDF = stateUserDF
-      .withColumn("externalid_resolved",
-        when(col("course_channel") === col("rootorgid"), col("externalid")).otherwise(""))
-      .withColumn("schoolname_resolved",
-        when(col("course_channel") === col("rootorgid"), col("declared-school-name")).otherwise(""))
-      .withColumn("schoolUDISE_resolved",
-        when(col("course_channel") === col("rootorgid"), col("declared-school-udise-code")).otherwise(""))
-      .drop("externalid", "declared-school-name", "declared-school-udise-code")
+        .withColumn("externalid_resolved",
+          when(col("course_channel") === col("rootorgid"), col("externalid")).otherwise(""))
+        .withColumn("schoolname_resolved",
+          when(col("course_channel") === col("rootorgid"), col("declared-school-name")).otherwise(""))
+        .withColumn("schoolUDISE_resolved",
+          when(col("course_channel") === col("rootorgid"), col("declared-school-udise-code")).otherwise(""))
+        .drop("externalid", "declared-school-name", "declared-school-udise-code")
     stateDenormUserDF
   }
 
