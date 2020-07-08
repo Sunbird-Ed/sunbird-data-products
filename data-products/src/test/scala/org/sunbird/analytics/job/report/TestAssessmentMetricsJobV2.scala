@@ -215,15 +215,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     AssessmentMetricsJobV2.saveReport(denormedDF, tempDir)
   }
 
-  it should "throw error if spark is not running" in {
-    spark.stop()
-    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"druidConfig": {"queryType": "groupBy","dataSource": "content-model-snapshot","intervals": "LastDay","granularity": "all","aggregations": [{"name": "count","type": "count","fieldName": "count"}],"dimensions": [{"fieldName": "identifier","aliasName": "identifier"}, {"fieldName": "channel","aliasName": "channel"}],"filters": [{"type": "equals","dimension": "contentType","value": "Course"}],"descending": "false"},"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "127.0.0.0","sparkRedisConnectionHost": "127.0.0.0","sparkRedisDB": "7"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
-    the[Exception] thrownBy {
-      AssessmentMetricsJobV2.main(strConfig)
-    } should have message "Failed to open native connection to Cassandra at {127.0.0.0}:9042"
-    spark = getSparkSession()
-  }
-
   it should "return an empty list if no assessment names found for given content" in {
     val result = AssessmentMetricsJobV2.getAssessmentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
     result.collect().length should be(0)
