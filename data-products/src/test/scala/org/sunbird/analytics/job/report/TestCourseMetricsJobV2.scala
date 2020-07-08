@@ -19,13 +19,6 @@ import org.scalamock.scalatest.MockFactory
 import scala.collection.mutable
 import scala.concurrent.Future
 
-case class ESOutput(name: String, id: String, userId: String, completedOn: String, maskedEmail: String, maskedPhone: String, rootOrgName: String, subOrgName: String, startDate: String, courseId: String, lastUpdatedOn: String, batchId: String, completedPercent: String, districtName: String, blockName: String, externalId: String, subOrgUDISECode: String,StateName: String, enrolledOn: String, certificateStatus: String)
-case class ESOutputCBatch(id: String, reportUpdatedOn: String, completedCount: String, participantCount: String)
-case class BatchReportOutput(`User ID`: String, `School Name`: String, `Mobile Number`: String, `Certificate Status`: String,
-                             `Completion Date`: String, `District Name`: String, `User Name`: String, `External ID`: String,
-                             `State Name`: String, `Enrolment Date`: String, `Email ID`: String, `Course Progress`: String,
-                             `Organisation Name`: String, `Block Name`: String, `School UDISE Code`: String)
-
 class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
   var spark: SparkSession = _
   var courseBatchDF: DataFrame = _
@@ -36,7 +29,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
   var userOrgDF: DataFrame = _
   var externalIdentityDF: DataFrame = _
   var systemSettingDF: DataFrame = _
-  var reporterMock: ReportGenerator = mock[ReportGenerator]
+  var reporterMock: ReportGeneratorV2 = mock[ReportGeneratorV2]
   val sunbirdCoursesKeyspace = "sunbird_courses"
   val sunbirdKeyspace = "sunbird"
 

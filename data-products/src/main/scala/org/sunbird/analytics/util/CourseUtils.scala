@@ -17,7 +17,7 @@ case class Result(content: List[CourseInfo])
 case class CourseInfo(channel: String, identifier: String, name: String)
 
 case class CourseResponse(result: CourseResult, responseCode: String)
-case class CourseResult(content: List[CourseBatchInfo])
+case class CourseResult(count: Int, content: List[CourseBatchInfo])
 case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
 case class BatchInfo(batchId: String, startDate: String, endDate: String)
 

@@ -14,7 +14,6 @@ import org.joda.time.format.DateTimeFormat
 import org.sunbird.analytics.util.{Constants, CourseResponse, CourseUtils}
 import org.sunbird.cloud.storage.conf.AppConf
 
-case class DruidOutput(identifier: String, channel: String)
 case class CourseInfo(courseid: String, batchid: String, startdate: String, enddate: String, channel: String)
 case class CourseBatchOutput(courseid: String, batchid: String, startdate: String, enddate: String)
 

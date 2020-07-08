@@ -17,18 +17,14 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
 
-case class BatchDetails(batchid: String, courseCompletionCountPerBatch: Long, participantsCountPerBatch: Long)
-
-case class CourseBatch(batchid: String, startDate: String, endDate: String, courseChannel: String)
-
-trait ReportGenerator {
+trait ReportGeneratorV2 {
 
   def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame
 
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig)(implicit fc: FrameworkContext): Unit
 }
 
-object CourseMetricsJobV2 extends optional.Application with IJob with ReportGenerator with BaseReportsJob {
+object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
 
   implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJob"
   val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")

@@ -32,7 +32,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
   var systemSettingDF: DataFrame = _
   var assessmentProfileDF: DataFrame = _
   var userInfoDF: DataFrame = _
-  var reporterMock: ReportGenerator = mock[ReportGenerator]
+  var reporterMock: ReportGeneratorV2 = mock[ReportGeneratorV2]
   val sunbirdCoursesKeyspace = "sunbird_courses"
   val sunbirdKeyspace = "sunbird"
   val esIndexName = "cbatch-assessent-report"
