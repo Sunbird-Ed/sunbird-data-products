@@ -78,10 +78,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .select("courseid", "batchid", "enddate", "startdate")
 
-    courseBatchDF.show(false)
-    val batchesList = List("0130320389509939204","0130293763489873929")
-
-
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
     val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
 
@@ -91,11 +87,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
     val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").collect
     JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
-
-    val filteredBatches = activeBatchList.map(f => if(batchesList.contains(f.getString(1))) {
-      f.getString(1)
-    })
-    filteredBatches.map(f=>println(f))
 
     activeBatchList
   }

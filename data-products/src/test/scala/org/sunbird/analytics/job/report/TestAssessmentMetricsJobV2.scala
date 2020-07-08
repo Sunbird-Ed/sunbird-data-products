@@ -48,23 +48,23 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/courseBatchTable.csv")
+      .load("src/test/resources/assessment-metrics-updaterv2/courseBatchTable.csv")
       .cache()
 
     externalIdentityDF = spark
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/usr_external_identity.csv")
+      .load("src/test/resources/assessment-metrics-updaterv2/usr_external_identity.csv")
       .cache()
 
-    userInfoDF = spark.read.json("src/test/resources/course-metrics-updater/user_data.json").cache()
+    userInfoDF = spark.read.json("src/test/resources/course-metrics-updaterv2/user_data.json").cache()
 
     assessmentProfileDF = spark
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/assessment.csv")
+      .load("src/test/resources/assessment-metrics-updaterv2/assessment.csv")
       .cache()
 
 
@@ -77,7 +77,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/userCoursesTable.csv")
+      .load("src/test/resources/assessment-metrics-updaterv2/userCoursesTable.csv")
       .cache()
 
     /*
@@ -85,7 +85,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
      * */
     userDF = spark
       .read
-      .json("src/test/resources/assessment-metrics-updater/userTable.json")
+      .json("src/test/resources/assessment-metrics-updaterv2/userTable.json")
       .cache()
 
     /*
@@ -95,7 +95,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/locationTable.csv")
+      .load("src/test/resources/assessment-metrics-updaterv2/locationTable.csv")
       .cache()
 
     /*
@@ -104,7 +104,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
      * */
     orgDF = spark
       .read
-      .json("src/test/resources/assessment-metrics-updater/orgTable.json")
+      .json("src/test/resources/assessment-metrics-updaterv2/orgTable.json")
       .cache()
 
     /*
@@ -114,14 +114,14 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updater/userOrgtable.csv")
+      .load("src/test/resources/assessment-metrics-updaterv2/userOrgtable.csv")
       .cache()
 
     systemSettingDF = spark
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true")
-      .load("src/test/resources/course-metrics-updater/systemSettingTable.csv")
+      .load("src/test/resources/course-metrics-updaterv2/systemSettingTable.csv")
       .cache()
 
     EmbeddedES.loadData("compositesearch", "cs", Buffer(
@@ -262,7 +262,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
   it should "return an empty list if no assessment names found for given content" in {
     val result = AssessmentMetricsJobV2.getAssessmentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
-    result.show(false)
     result.collect().length should be(0)
   }
 

@@ -39,26 +39,26 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
     spark = getSparkSession()
 
     courseBatchDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updater/course_batch_data.csv").cache()
+      .load("src/test/resources/course-metrics-updaterv2/course_batch_data.csv").cache()
 
     externalIdentityDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updater/user_external_data.csv").cache()
+      .load("src/test/resources/course-metrics-updaterv2/user_external_data.csv").cache()
 
     userCoursesDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updater/user_courses_data.csv").cache()
+      .load("src/test/resources/course-metrics-updaterv2/user_courses_data.csv").cache()
 
-    userDF = spark.read.json("src/test/resources/course-metrics-updater/user_data.json").cache()
+    userDF = spark.read.json("src/test/resources/course-metrics-updaterv2/user_data.json").cache()
 
     locationDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updater/location_data.csv").cache()
+      .load("src/test/resources/course-metrics-updaterv2/location_data.csv").cache()
 
-    orgDF = spark.read.json("src/test/resources/course-metrics-updater/organisation.json").cache()
+    orgDF = spark.read.json("src/test/resources/course-metrics-updaterv2/organisation.json").cache()
 
     userOrgDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updater/user_org_data.csv").cache()
+      .load("src/test/resources/course-metrics-updaterv2/user_org_data.csv").cache()
 
     systemSettingDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updater/system_settings.csv").cache()
+      .load("src/test/resources/course-metrics-updaterv2/system_settings.csv").cache()
   }
 
   "TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
