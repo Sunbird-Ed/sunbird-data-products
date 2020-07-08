@@ -31,6 +31,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
 
+// $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def name(): String = "CourseMetricsJob"
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -65,6 +66,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     fc.closeContext()
   }
 
+// $COVERAGE-ON$ Enabling scoverage for all other functions
   def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame = {
     spark.read.format(url).options(settings).load()
   }

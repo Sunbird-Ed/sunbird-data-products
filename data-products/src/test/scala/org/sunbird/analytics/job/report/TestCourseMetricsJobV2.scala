@@ -19,7 +19,7 @@ import org.scalamock.scalatest.MockFactory
 import scala.collection.mutable
 import scala.concurrent.Future
 
-class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
+class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseReportsJob {
   var spark: SparkSession = _
   var courseBatchDF: DataFrame = _
   var userCoursesDF: DataFrame = _
@@ -175,6 +175,15 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
     */
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
+  }
+
+  it should "test redis and cassandra connections" in {
+    implicit val fc = Option(mock[FrameworkContext])
+    spark.sparkContext.stop()
+
+    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
+    getReportingSparkContext(JSONUtils.deserialize[JobConfig](strConfig))
+    val conf = openSparkSession(JSONUtils.deserialize[JobConfig](strConfig))
   }
 
 }

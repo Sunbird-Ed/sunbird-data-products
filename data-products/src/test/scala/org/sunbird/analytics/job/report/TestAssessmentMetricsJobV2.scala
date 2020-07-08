@@ -7,6 +7,7 @@ import ing.wbaa.druid._
 import ing.wbaa.druid.client.DruidClient
 import io.circe._
 import io.circe.parser._
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.{JSONUtils, RestUtil}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig}
@@ -67,7 +68,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .load("src/test/resources/assessment-metrics-updaterv2/assessment.csv")
       .cache()
 
-
+    AssessmentMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra")
     /*
      * Data created with 35 participants mapped to only batch from 1001 - 1010 (10), so report
      * should be created for these 10 batch (1001 - 1010) and 34 participants (1 user is not active in the course)
@@ -152,6 +153,15 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     assert(column_names.contains("courseid") === true)
     assert(column_names.contains("userid") === true)
     assert(column_names.contains("batchid") === true)
+
+    val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
+    val report = reportDF.withColumn("content_name", lit("Content-1"))
+      .withColumn("total_sum_score",lit("90"))
+      .withColumn("grand_total", lit("100"))
+    AssessmentMetricsJobV2.saveReport(report, tempDir, "true")
+
+    val reportWithoutBatchDetails = reportDF.na.replace("batchid",Map("1006"->""))
+    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true")
   }
 
   it should "generate reports" in {
@@ -212,7 +222,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     // TODO: Check save is called or not
-    AssessmentMetricsJobV2.saveReport(denormedDF, tempDir)
+    AssessmentMetricsJobV2.saveReport(denormedDF, tempDir, "false")
   }
 
   it should "return an empty list if no assessment names found for given content" in {

@@ -25,11 +25,10 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   val metrics = scala.collection.mutable.Map[String, BigInt]();
   val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
 
+// $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def name(): String = "AssessmentMetricsJob"
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
-
-
     JobLogger.init("Assessment Metrics")
     JobLogger.start("Assessment Job Started executing", Option(Map("config" -> config, "model" -> name)))
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
@@ -38,15 +37,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext();
     execute(jobConfig)
   }
-
-  def recordTime[R](block: => R, msg: String): (R) = {
-    val t0 = System.currentTimeMillis()
-    val result = block
-    val t1 = System.currentTimeMillis()
-    JobLogger.log(msg + (t1 - t0), None, INFO)
-    result;
-  }
-
 
   private def execute(config: JobConfig)(implicit sc: SparkContext, fc: FrameworkContext) = {
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
@@ -59,7 +49,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val time = CommonUtil.time({
       val reportDF = recordTime(prepareReport(spark, loadData, batchFilters).cache(), s"Time take generate the dataframe} - ")
       val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
-      recordTime(saveReport(denormalizedDF, tempDir), s"Time take to save the all the reports into both azure and es -")
+      val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
+      recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure), s"Time take to save the all the reports into both azure and es -")
       reportDF.unpersist(true)
     });
     metrics.put("totalExecutionTime", time._1);
@@ -68,6 +59,14 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     fc.closeContext()
   }
 
+// $COVERAGE-ON$ Enabling scoverage for all other functions
+  def recordTime[R](block: => R, msg: String): (R) = {
+    val t0 = System.currentTimeMillis()
+    val result = block
+    val t1 = System.currentTimeMillis()
+    JobLogger.log(msg + (t1 - t0), None, INFO)
+    result;
+  }
   /**
    * Generic method used to load data by passing configurations
    *
@@ -236,9 +235,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
    * Alias name: cbatch-assessment
    * Index name: cbatch-assessment-24-08-1993-09-30 (dd-mm-yyyy-hh-mm)
    */
-  def saveReport(reportDF: DataFrame, url: String)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
+  def saveReport(reportDF: DataFrame, url: String, uploadToAzure: String)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
     val result = reportDF.groupBy("courseid").agg(collect_list("batchid").as("batchid"))
-    val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
     if (StringUtils.isNotBlank(uploadToAzure) && StringUtils.equalsIgnoreCase("true", uploadToAzure)) {
       val courseBatchList = result.collect.map(r => Map(result.columns.zip(r.toSeq): _*))
       save(courseBatchList, reportDF, url, spark)
