@@ -80,33 +80,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .load("src/test/resources/assessment-metrics-updaterv2/userCoursesTable.csv")
       .cache()
 
-    /*
-     * This has users 30 from user001 - user030
-     * */
-    userDF = spark
-      .read
-      .json("src/test/resources/assessment-metrics-updaterv2/userTable.json")
-      .cache()
-
-    /*
-     * There are 8 organisation added to the data, which can be mapped to `rootOrgId` in user table
-     * and `organisationId` in userOrg table
-     * */
-    orgDF = spark
-      .read
-      .json("src/test/resources/assessment-metrics-updaterv2/orgTable.json")
-      .cache()
-
-    /*
-     * Each user is mapped to organisation table from any of 8 organisation
-     * */
-    userOrgDF = spark
-      .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updaterv2/userOrgtable.csv")
-      .cache()
-
     systemSettingDF = spark
       .read
       .format("com.databricks.spark.csv")

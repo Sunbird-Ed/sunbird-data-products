@@ -49,14 +49,6 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
 
     userDF = spark.read.json("src/test/resources/course-metrics-updaterv2/user_data.json").cache()
 
-    locationDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updaterv2/location_data.csv").cache()
-
-    orgDF = spark.read.json("src/test/resources/course-metrics-updaterv2/organisation.json").cache()
-
-    userOrgDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updaterv2/user_org_data.csv").cache()
-
     systemSettingDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
       .load("src/test/resources/course-metrics-updaterv2/system_settings.csv").cache()
   }
@@ -90,16 +82,6 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
       .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
       .anyNumberOfTimes()
       .returning(userDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
-      .anyNumberOfTimes()
-      .returning(orgDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "location", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
-      .anyNumberOfTimes()
-      .returning(locationDF)
 
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
