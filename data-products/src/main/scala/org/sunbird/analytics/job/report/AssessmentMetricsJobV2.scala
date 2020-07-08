@@ -88,8 +88,9 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
    */
   def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame, batchFilters: String)(implicit fc: FrameworkContext): DataFrame = {
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
-    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra").select("courseid", "batchid", "startdate", "enddate")
-    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+    val cassandraUrl = "org.apache.spark.sql.cassandra"
+    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl).select("courseid", "batchid", "startdate", "enddate")
+    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl)
       .filter(lower(col("active")).equalTo("true"))
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
@@ -99,7 +100,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         col("districtname"), col("externalid"),col("schoolname"),col("schooludisecode"),col("statename"),col("orgname"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
 
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl)
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
     implicit val sqlContext = new SQLContext(spark.sparkContext)
@@ -275,7 +276,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
   def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame): String = {
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
-    val renamedDir = s"$tempDir/renamed"
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("assessment.metrics.cloud.objectKey"))
     val azureData = reportDF.select(
       reportDF.col("externalid").as("External ID"),
@@ -309,7 +309,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
             .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
           try {
             val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId, transposedData), s"Time taken to save the $batchId into azure -")
-            val resolvedDF = reportData.withColumn("reportUrl", lit(urlBatch))
           } catch {
             case e: Exception => JobLogger.log("File upload is failed due to " + e, None, ERROR)
           }

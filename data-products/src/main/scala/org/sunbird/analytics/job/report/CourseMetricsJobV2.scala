@@ -49,7 +49,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   private def execute(config: JobConfig)(implicit sc: SparkContext, fc: FrameworkContext) = {
     val tempDir = AppConf.getConfig("course.metrics.temp.dir")
     val readConsistencyLevel: String = AppConf.getConfig("course.metrics.cassandra.input.consistency")
-    val renamedDir = s"$tempDir/renamed"
     val sparkConf = sc.getConf
       .set("es.write.operation", "upsert")
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
@@ -85,7 +84,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
 
-    // val activeBatches = courseBatchDF.filter(col("endDate").isNull || unix_timestamp(to_date(col("endDate"), "yyyy-MM-dd")).geq(timestamp.getMillis / 1000))
     val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
     val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").collect
     JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
