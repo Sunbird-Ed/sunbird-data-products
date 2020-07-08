@@ -19,14 +19,14 @@ case class CourseBatchOutput(courseid: String, batchid: String, startdate: Strin
 
 object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseReportsJob {
 
-  implicit val className = "org.ekstep.analytics.job.AssessmentMetricsJob"
+  implicit val className = "org.ekstep.analytics.job.AssessmentMetricsJobV2"
 
   private val indexName: String = AppConf.getConfig("assessment.metrics.es.index.prefix") + DateTimeFormat.forPattern("dd-MM-yyyy-HH-mm").print(DateTime.now())
   val metrics = scala.collection.mutable.Map[String, BigInt]();
   val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
 
 // $COVERAGE-OFF$ Disabling scoverage for main and execute method
-  def name(): String = "AssessmentMetricsJob"
+  def name(): String = "AssessmentMetricsJobV2"
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
     JobLogger.init("Assessment Metrics")

@@ -26,13 +26,13 @@ trait ReportGeneratorV2 {
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
 
-  implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJob"
+  implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJobV2"
   val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
   val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
 
 // $COVERAGE-OFF$ Disabling scoverage for main and execute method
-  def name(): String = "CourseMetricsJob"
+  def name(): String = "CourseMetricsJobV2"
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
