@@ -62,7 +62,6 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory {
   }
 
   "TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
-
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(courseBatchDF)
