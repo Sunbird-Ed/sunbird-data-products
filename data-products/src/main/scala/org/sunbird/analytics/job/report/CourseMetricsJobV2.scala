@@ -131,8 +131,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame): DataFrame = {
     loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
-      .select(col("userid"),col("firstname"),col("lastname"),col("schoolname"),col("districtname"),col("email"),col("orgname"),col("schooludisecode"),
-        col("maskedemail"),col("statename"),col("externalid"),col("blockname"),col("maskedphone"),
+      .select(col("userid"),col("firstname"),col("lastname"),col("schoolname"),col("district"),col("email"),col("orgname"),col("schooludisecode"),
+        col("maskedemail"),col("state"),col("externalid"),col("block"),col("maskedphone"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
   }
 
@@ -185,10 +185,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("externalid"),
         col("orgname"),
         col("schoolname"),
-        col("districtname"),
+        col("district"),
         col("schooludisecode"),
-        col("blockname"),
-        col("statename")
+        col("block"),
+        col("state")
       ).persist()
     reportDF
   }
@@ -202,11 +202,11 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("maskedemail").as("Email ID"),
         col("maskedphone").as("Mobile Number"),
         col("orgname").as("Organisation Name"),
-        col("statename").as("State Name"),
-        col("districtname").as("District Name"),
+        col("state").as("State Name"),
+        col("district").as("District Name"),
         col("schooludisecode").as("School UDISE Code"),
         col("schoolname").as("School Name"),
-        col("blockname").as("Block Name"),
+        col("block").as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),

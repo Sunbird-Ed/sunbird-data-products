@@ -97,7 +97,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
     val userDF = loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
       .select(col("userid"),col("firstname"),col("lastname"),col("maskedemail"),col("maskedphone"),
-        col("districtname"), col("externalid"),col("schoolname"),col("schooludisecode"),col("statename"),col("orgname"),
+        col("district"), col("externalid"),col("schoolname"),col("schooludisecode"),col("state"),col("orgname"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
 
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl)
@@ -161,8 +161,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       userDenormDF.col("userid") === resDF.col("user_id")
         && userDenormDF.col("batchid") === resDF.col("batch_id")
         && userDenormDF.col("courseid") === resDF.col("course_id"), "inner")
-      .select("batchid", "courseid", "userid", "maskedemail", "maskedphone", "username", "districtname",
-        "externalid", "schoolname", "schooludisecode", "statename", "orgname",
+      .select("batchid", "courseid", "userid", "maskedemail", "maskedphone", "username", "district",
+        "externalid", "schoolname", "schooludisecode", "state", "orgname",
         "content_id", "total_score", "grand_total", "total_sum_score")
 
     userDF.unpersist()
@@ -182,9 +182,9 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       .select(
         col("name").as("content_name"),
         col("total_sum_score"), report.col("userid"), report.col("courseid"), report.col("batchid"),
-        col("grand_total"), report.col("maskedemail"), report.col("districtname"), report.col("maskedphone"),
+        col("grand_total"), report.col("maskedemail"), report.col("district"), report.col("maskedphone"),
         report.col("orgname"), report.col("externalid"), report.col("schoolname"),
-        report.col("username"), col("statename"), col("schooludisecode"))
+        report.col("username"), col("state"), col("schooludisecode"))
   }
 
   def getAssessmentNames(spark: SparkSession, content: List[String], contentType: String): DataFrame = {
@@ -284,8 +284,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       reportDF.col("maskedemail").as("Email ID"),
       reportDF.col("maskedphone").as("Mobile Number"),
       reportDF.col("orgname").as("Organisation Name"),
-      reportDF.col("statename").as("State Name"),
-      reportDF.col("districtname").as("District Name"),
+      reportDF.col("state").as("State Name"),
+      reportDF.col("district").as("District Name"),
       reportDF.col("schooludisecode").as("School UDISE Code"),
       reportDF.col("schoolname").as("School Name"),
       transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
