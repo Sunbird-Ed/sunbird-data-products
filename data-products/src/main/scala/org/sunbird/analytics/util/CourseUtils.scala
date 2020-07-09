@@ -1,13 +1,13 @@
 package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, explode}
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
-import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -15,6 +15,11 @@ import org.sunbird.cloud.storage.conf.AppConf
 case class CourseDetails(result: Result)
 case class Result(content: List[CourseInfo])
 case class CourseInfo(channel: String, identifier: String, name: String)
+
+case class CourseResponse(result: CourseResult, responseCode: String)
+case class CourseResult(count: Int, content: List[CourseBatchInfo])
+case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
+case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
 trait CourseReport {
   def getCourse(config: Map[String, AnyRef])(sc: SparkContext): DataFrame
@@ -130,5 +135,28 @@ object CourseUtils {
       JobLogger.log(s"Merge report script failed with exit code $mergeReportExitCode", None, ERROR)
       throw new Exception(s"Merge report script failed with exit code $mergeReportExitCode")
     }
+  }
+
+  def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+    val apiUrl = Constants.COMPOSITE_SEARCH_URL
+    val request =
+      s"""{
+         |	"request": {
+         |		"filters": {
+         |      "identifier": "$courseId"
+         |		},
+         |		"sort_by": {
+         |			"createdOn": "desc"
+         |		},
+         |		"limit": 10000,
+         |		"fields": ["framework", "identifier", "name", "channel", "batches"]
+         |	}
+         |}""".stripMargin
+    val response = RestUtil.post[CourseResponse](apiUrl, request)
+    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+      response.result.content.head
+    } else CourseBatchInfo("","","","",List())
   }
 }

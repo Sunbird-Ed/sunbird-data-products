@@ -67,7 +67,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
     systemSettingDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
       .load("src/test/resources/course-metrics-updater/system_settings.csv").cache()
   }
-  
+
   "TestUpdateCourseMetrics" should "generate reports for 10 batches and validate all scenarios" in {
 
     (reporterMock.loadData _)
@@ -80,7 +80,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
         value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
       else null
     }, new ArrayType(MapType(StringType, StringType), true))
-    
+
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
