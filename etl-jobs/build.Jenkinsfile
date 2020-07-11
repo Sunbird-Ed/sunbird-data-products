@@ -39,20 +39,20 @@ node() {
 
             stage('Archive artifacts'){
                 sh """
-                        mkdir adhoc_jobs_artifacts
-                        cp etl-jobs/target/etl-jobs-1.0.jar adhoc_jobs_artifacts
-                        cp etl-jobs/target/etl-jobs-1.0-distribution.tar.gz adhoc_jobs_artifacts
-                        zip -j adhoc_jobs_artifacts.zip:${artifact_version} adhoc_jobs_artifacts/*
+                        mkdir etl_jobs_artifacts
+                        cp etl-jobs/target/etl-jobs-1.0.jar etl_jobs_artifacts
+                        cp etl-jobs/target/etl-jobs-1.0-distribution.tar.gz etl_jobs_artifacts
+                        zip -j etl_jobs_artifacts.zip:${artifact_version} etl_jobs_artifacts/*
                     """
-                archiveArtifacts artifacts: "adhoc_jobs_artifacts.zip:${artifact_version}", fingerprint: true, onlyIfSuccessful: true
-                sh """echo {\\"artifact_name\\" : \\"adhoc_jobs_artifacts.zip\\", \\"artifact_version\\" : \\"${artifact_version}\\", \\"node_name\\" : \\"${env.NODE_NAME}\\"} > metadata.json"""
+                archiveArtifacts artifacts: "etl_jobs_artifacts.zip:${artifact_version}", fingerprint: true, onlyIfSuccessful: true
+                sh """echo {\\"artifact_name\\" : \\"etl_jobs_artifacts.zip\\", \\"artifact_version\\" : \\"${artifact_version}\\", \\"node_name\\" : \\"${env.NODE_NAME}\\"} > metadata.json"""
                 archiveArtifacts artifacts: 'metadata.json', onlyIfSuccessful: true
                 currentBuild.result = "SUCCESS"
                 currentBuild.description = "Artifact: ${artifact_version}, Public: ${params.github_release_tag}"
             }
         }
 
-    catch (err) {
+    catch (err) {a
         currentBuild.result = "FAILURE"
         throw err
     }

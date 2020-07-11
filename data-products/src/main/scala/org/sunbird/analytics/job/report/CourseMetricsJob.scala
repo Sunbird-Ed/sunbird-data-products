@@ -211,29 +211,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .groupBy("userid" )
       .agg(concat_ws(",", collect_set("orgname")).as("orgname_resolved"))
 
-    /**
-    * Resolve School Name from SubOrgs
-    * * If the user present in the multiple sub organizations, then zip all the org names.
-    * * Example:
-    * * FROM:
-    * * +-------+------------------------------------+
-    * * |userid |orgname                             |
-    * * +-------+------------------------------------+
-    * * |user030|SACRED HEART(B)PS,TIRUVARANGAM      |
-    * * |user030| MPPS BAYYARAM                     |
-    * * |user001| MPPS BAYYARAM                     |
-    * * +-------+------------------------------------+
-    * * TO:
-    * * +-------+-------------------------------------------------------+
-    * * |userid |orgname                                                |
-    * * +-------+-------------------------------------------------------+
-    * * |user030|[ SACRED HEART(B)PS,TIRUVARANGAM, MPPS BAYYARAM ]      |
-    * * |user001| MPPS BAYYARAM                                         |
-    * * +-------+-------------------------------------------------------+
-    * * Zipping the orgnames of particular userid
-    * *
-    *
-    */
     val schoolNameDF = userOrgDenormDF
       .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("organisationid"), "left_outer")
       .select(userOrgDenormDF.col("userid"), col("orgname").as("schoolname_resolved"))
