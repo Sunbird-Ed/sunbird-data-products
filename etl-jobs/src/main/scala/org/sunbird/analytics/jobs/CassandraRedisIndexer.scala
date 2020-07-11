@@ -25,38 +25,22 @@ object CassandraRedisIndexer {
     val specificUserId = args(0) // userid
     val fromSpecificDate = args(1) // date in YYYY-MM-DD format
 
-    val sunbirdKeyspace = "sunbird"
-    val userTableName = "user"
+    val userKeyspace = config.getString("cassandra.user.keyspace")
     val redisKeyProperty = "id" // userid
 
     val dtf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSSZ")
     val dtf2 = new SimpleDateFormat("yyyy-MM-dd")
-
-
-    val conf = new SparkConf()
-      .setAppName("CassandraToRedisIndexer")
-      .setMaster("local[*]")
-      // Cassandra settings
-      .set("spark.cassandra.connection.host", "localhost")
-      // redis settings
-      .set("spark.redis.host", "localhost")
-      .set("spark.redis.port", "6379")
-      .set("spark.redis.db", "12")
-    //.set("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
-
-    val sc = new SparkContext(conf)
-    //val userKeyspace = config.getString("cassandra.user.keyspace")
-
 
     val spark: SparkSession =
       SparkSession
         .builder()
         .appName("AppName")
         .config("spark.master", "local")
-        .config("spark.cassandra.connection.host", "localhost")
-        .config("spark.redis.host", "localhost")
-        .config("spark.redis.port", "6379")
-        .config("spark.redis.db", "12")
+        .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
+        .config("spark.redis.host", config.getString("redis.host"))
+        .config("spark.redis.port", config.getString("redis.port"))
+        .config("spark.redis.db", config.getString("redis.user.database.index"))
+        .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
         .getOrCreate()
 
     def seqOfAnyToSeqString(param: Seq[AnyRef]): Seq[(String, String)]
@@ -82,7 +66,7 @@ object CassandraRedisIndexer {
         println(s"Fetching all the user records from this specific date:$fromSpecificDate ")
         userDF.filter(col("updateddate").isNull || to_date(col("updateddate"), "yyyy-MM-dd HH:mm:ss:SSSZ").geq(lit(fromSpecificDate)))
       } else {
-        println("elsePart")
+        println("Input are empty hence returning userdf without filter")
         userDF
       }
     }
