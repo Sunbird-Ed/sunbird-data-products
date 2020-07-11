@@ -25,7 +25,7 @@ object CassandraRedisIndexer {
     val specificUserId = args(0) // userid
     val fromSpecificDate = args(1) // date in YYYY-MM-DD format
 
-    val userKeyspace = config.getString("cassandra.user.keyspace")
+    val sunbirdKeyspace = config.getString("cassandra.user.keyspace")
     val redisKeyProperty = "id" // userid
 
     val dtf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSSZ")
