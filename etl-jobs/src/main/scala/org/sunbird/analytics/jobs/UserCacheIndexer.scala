@@ -15,7 +15,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.sunbird.analytics.util.JSONUtils
 
-object CassandraRedisIndexer {
+object UserCacheIndexer {
 
   private val config: Config = ConfigFactory.load
 
