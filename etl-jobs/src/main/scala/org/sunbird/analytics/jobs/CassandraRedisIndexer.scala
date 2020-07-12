@@ -22,9 +22,12 @@ object CassandraRedisIndexer {
   def main(args: Array[String]): Unit = {
 
     //val isForAllUsers = args(0) // true/false
-    val specificUserId = args(0) // userid
-    val fromSpecificDate = args(1) // date in YYYY-MM-DD format
-
+    var specificUserId = ""
+    var fromSpecificDate = ""
+    if (!args.isEmpty) {
+      specificUserId = args(0) // userid
+      fromSpecificDate = args(1) // date in YYYY-MM-DD format
+    }
     val sunbirdKeyspace = config.getString("cassandra.user.keyspace")
     val redisKeyProperty = "id" // userid
 
@@ -205,6 +208,7 @@ object CassandraRedisIndexer {
     }
 
     def getCustodianOrgId(): String = {
+      //spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
       val systemSettingDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "system_settings").option("keyspace", sunbirdKeyspace).load()
         .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
         .select(col("value")).persist()
