@@ -88,8 +88,8 @@ object UserCacheIndexer {
         .select(col("userid"), col("organisationid")).persist()
 
       val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
-      //.select(col("id"), col("orgname"), col("channel"), col("orgcode"),
-      // col("locationids"), col("isrootorg")).persist()
+      .select(col("id"), col("orgname"), col("channel"), col("orgcode"),
+       col("locationids"), col("isrootorg")).persist()
 
       val locationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "location").option("keyspace", sunbirdKeyspace).load()
       //.select(col("id"), col("name"), col("type")).persist()
@@ -225,7 +225,7 @@ object UserCacheIndexer {
         .withColumn("exploded_location", explode_outer(col("locationids")))
         .select(col("userid"), col("exploded_location"), col("locationids"))
 
-      println("userExplodedLocationDF" + userExplodedLocationDF.show(false))
+     // println("userExplodedLocationDF" + userExplodedLocationDF.show(false))
 
       val userStateDF = userExplodedLocationDF
         .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
