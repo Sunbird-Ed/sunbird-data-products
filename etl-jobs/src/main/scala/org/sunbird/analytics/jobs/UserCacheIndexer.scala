@@ -47,7 +47,7 @@ object UserCacheIndexer {
         .config("spark.cassandra.read.timeout_ms", "300000")
         .getOrCreate()
 
-    def seqOfAnyToSeqString(param: Seq[AnyRef]): Seq[(String, String)]
+    def filterData(param: Seq[AnyRef]): Seq[(String, String)]
     = {
       param.map {
         case (x, y) => (x.toString, if (!y.isInstanceOf[String]) {
@@ -141,10 +141,10 @@ object UserCacheIndexer {
       locationDF.unpersist()
       externalIdentityDF.unpersist()
       userDF.unpersist()
-      filteredDf(userDataDF)
+      selectRequiredCols(userDataDF)
     }
 
-    def filteredDf(denormedUserDF: DataFrame): DataFrame = {
+    def selectRequiredCols(denormedUserDF: DataFrame): DataFrame = {
       denormedUserDF.select(
         col("id").as("id"),
         col("userid").as("userid"),
@@ -326,12 +326,10 @@ object UserCacheIndexer {
     val userDenormedData = getUserData()
     println("Inserting user denormed data into redis")
     val fieldNames = userDenormedData.schema.fieldNames
-    println("fieldNames are" + fieldNames)
-    val maps = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect()
+    val maps = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap)
     val mappedData = maps.map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
     mappedData.foreach(y => {
-      val toSeq = seqOfAnyToSeqString(y._2)
-      spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(toSeq), y._1)
+      spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
     })
   }
 }
