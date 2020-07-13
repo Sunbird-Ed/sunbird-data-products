@@ -84,6 +84,8 @@ object UserCacheIndexer {
         .withColumn("subject", explode_outer(col("framework.subject")))
         .withColumn("board", explode_outer(col("framework.board")))
         .withColumn("grade", explode_outer(col("framework.gradeLevel")))
+        .withColumn("framework_id", explode_outer(col("framework.id")))
+        .drop("framework")
 
       val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_org").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
         .select(col("userid"), col("organisationid")).persist()
@@ -157,7 +159,7 @@ object UserCacheIndexer {
         col("emailverified").as("emailverified"),
         col("firstname").as("firstname"),
         col("flagsvalue").as("flagsvalue"),
-        col("framework").as("framework"),
+        col("framework_id").as("framework"),
         col("gender").as("gender"),
         col("grade").as("grade"),
         col("isdeleted").as("isdeleted"),
@@ -326,7 +328,7 @@ object UserCacheIndexer {
     val userDenormedData = getUserData()
     println("Inserting user denormed data into redis")
     val fieldNames = userDenormedData.schema.fieldNames
-    val maps = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap)
+    val maps = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect()
     val mappedData = maps.map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
     mappedData.foreach(y => {
       spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
