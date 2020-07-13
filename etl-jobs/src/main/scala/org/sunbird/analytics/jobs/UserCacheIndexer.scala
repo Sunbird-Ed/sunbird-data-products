@@ -318,7 +318,7 @@ object UserCacheIndexer {
     }
 
     val userDenormedData = getUserData()
-    println("Inserting user denormed data into redis")
+    println("Inserting user denormed data into redis" + userDenormedData.count())
     val fieldNames = userDenormedData.schema.fieldNames
     val mappedData = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
     mappedData.foreach(y => {
