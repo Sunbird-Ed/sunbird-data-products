@@ -21,7 +21,7 @@ trait ReportGeneratorV2 {
 
   def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig)(implicit fc: FrameworkContext): Unit
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
@@ -35,18 +35,22 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   def name(): String = "CourseMetricsJobV2"
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
-
     JobLogger.init("CourseMetricsJob")
     JobLogger.start("CourseMetrics Job Started executing", Option(Map("config" -> config, "model" -> name)))
-    val jobConfig = JSONUtils.deserialize[JobConfig](config)
+
+    val conf = config.split(";")
+    val batchIds = if(conf.length > 1) {
+      conf(1).split(",").toList
+    } else List()
+    val jobConfig = JSONUtils.deserialize[JobConfig](conf(0))
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig)
 
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
-    execute(jobConfig)
+    execute(jobConfig, batchIds)
   }
 
-  private def execute(config: JobConfig)(implicit sc: SparkContext, fc: FrameworkContext) = {
+  private def execute(config: JobConfig, batchList: List[String])(implicit sc: SparkContext, fc: FrameworkContext) = {
     val tempDir = AppConf.getConfig("course.metrics.temp.dir")
     val readConsistencyLevel: String = AppConf.getConfig("course.metrics.cassandra.input.consistency")
     val sparkConf = sc.getConf
@@ -58,7 +62,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val storageConfig = getStorageConfig(container, objectKey)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, storageConfig, loadData, config)
+      prepareReport(spark, storageConfig, loadData, config, batchList)
     })
     metrics.put("totalExecutionTime", time._1)
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
@@ -70,14 +74,21 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     spark.read.format(url).options(settings).load()
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String) => DataFrame)
+  def getActiveBatches(loadData: (SparkSession, Map[String, String], String) => DataFrame, batchList: List[String])
                       (implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
 
     implicit  val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
 
-    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
-      .select("courseid", "batchid", "enddate", "startdate")
+    val courseBatchDF = if(batchList.nonEmpty) {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+        .filter(batch => batchList.contains(batch.getString(1)))
+        .select("courseid", "batchid", "enddate", "startdate")
+    }
+    else {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+        .select("courseid", "batchid", "enddate", "startdate")
+    }
 
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
     val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
@@ -99,10 +110,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     result
   }
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig)(implicit fc: FrameworkContext): Unit = {
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
-    val activeBatches = getActiveBatches(loadData)
+    val activeBatches = getActiveBatches(loadData, batchList)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
@@ -132,7 +143,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame): DataFrame = {
     loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
       .select(col("userid"),col("firstname"),col("lastname"),col("schoolname"),col("district"),col("email"),col("orgname"),col("schooludisecode"),
-        col("maskedemail"),col("state"),col("externalid"),col("block"),col("maskedphone"),
+        col("maskedemail"),col("state"),col("externalid"),col("block"),col("maskedphone"), col("userchannel"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
   }
 
@@ -175,6 +186,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
+      .withColumn("externalid", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("externalid")).otherwise(""))
+      .withColumn("schoolname", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("schoolname")).otherwise(""))
+      .withColumn("block", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("block")).otherwise(""))
+      .withColumn("schooludisecode", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("schooludisecode")).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("firstname"),

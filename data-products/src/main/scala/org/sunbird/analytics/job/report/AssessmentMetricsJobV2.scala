@@ -31,14 +31,20 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
     JobLogger.init("Assessment Metrics")
     JobLogger.start("Assessment Job Started executing", Option(Map("config" -> config, "model" -> name)))
-    val jobConfig = JSONUtils.deserialize[JobConfig](config)
+
+    val conf = config.split(";")
+    val batchIds = if(conf.length > 1) {
+      conf(1).split(",").toList
+    } else List()
+
+    val jobConfig = JSONUtils.deserialize[JobConfig](conf(0))
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig);
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig);
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext();
-    execute(jobConfig)
+    execute(jobConfig, batchIds)
   }
 
-  private def execute(config: JobConfig)(implicit sc: SparkContext, fc: FrameworkContext) = {
+  private def execute(config: JobConfig, batchList: List[String])(implicit sc: SparkContext, fc: FrameworkContext) = {
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val readConsistencyLevel: String = AppConf.getConfig("assessment.metrics.cassandra.input.consistency")
     val sparkConf = sc.getConf
@@ -47,7 +53,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
     val time = CommonUtil.time({
-      val reportDF = recordTime(prepareReport(spark, loadData, batchFilters).cache(), s"Time take generate the dataframe} - ")
+      val reportDF = recordTime(prepareReport(spark, loadData, batchFilters, batchList).cache(), s"Time take generate the dataframe} - ")
       val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
       val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
       recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure), s"Time take to save the all the reports into both azure and es -")
@@ -86,17 +92,26 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   /**
    * Loading the specific tables from the cassandra db.
    */
-  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame, batchFilters: String)(implicit fc: FrameworkContext): DataFrame = {
+  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame, batchFilters: String, batchList: List[String])(implicit fc: FrameworkContext): DataFrame = {
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
     val cassandraUrl = "org.apache.spark.sql.cassandra"
-    val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl).select("courseid", "batchid", "startdate", "enddate")
+    val courseBatchDF = if(batchList.nonEmpty) {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+        .filter(batch => batchList.contains(batch.getString(1)))
+        .select("courseid", "batchid", "enddate", "startdate")
+    }
+    else {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+        .select("courseid", "batchid", "enddate", "startdate")
+    }
+
     val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl)
       .filter(lower(col("active")).equalTo("true"))
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
 
     val userDF = loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
-      .select(col("userid"),col("firstname"),col("lastname"),col("maskedemail"),col("maskedphone"),
+      .select(col("userid"),col("firstname"),col("lastname"),col("maskedemail"),col("maskedphone"), col("userchannel"),
         col("district"), col("externalid"),col("schoolname"),col("schooludisecode"),col("state"),col("orgname"),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
 
@@ -137,12 +152,27 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
     val userDenormDF = userCourseDenormDF
       .join(userDF, userDF.col("userid") === userCourseDenormDF.col("userid"), "inner")
+      .withColumn("externalid", when(userCourseDenormDF.col("course_channel") === userDF.col("userchannel"), userDF.col("externalid")).otherwise(""))
+      .withColumn("schoolname", when(userCourseDenormDF.col("course_channel") === userDF.col("userchannel"), userDF.col("schoolname")).otherwise(""))
+      .withColumn("schooludisecode", when(userCourseDenormDF.col("course_channel") === userDF.col("userchannel"), userDF.col("schooludisecode")).otherwise(""))
       .select(
         userCourseDenormDF.col("courseid"),
         userCourseDenormDF.col("batchid"),
         userCourseDenormDF.col("active"),
         userCourseDenormDF.col("course_channel"),
-        userDF.col("*"))
+        userDF.col("userid"),
+        col("firstname"),
+        col("lastname"),
+        col("maskedemail"),
+        col("maskedphone"),
+        col("district"),
+        col("externalid"),
+        col("schoolname"),
+        col("schooludisecode"),
+        col("state"),
+        col("orgname"),
+        col("username"),
+        col("userchannel"))
 
     val assessmentDF = getAssessmentData(assessmentProfileDF)
     /**
