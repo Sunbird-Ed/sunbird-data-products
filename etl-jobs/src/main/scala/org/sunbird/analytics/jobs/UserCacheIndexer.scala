@@ -88,14 +88,14 @@ object UserCacheIndexer {
         .select(col("userid"), col("organisationid")).persist()
 
       val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
-        .select(col("id"), col("orgname"), col("channel"), col("orgcode"),
-          col("locationids"), col("isrootorg")).persist()
+      //.select(col("id"), col("orgname"), col("channel"), col("orgcode"),
+      // col("locationids"), col("isrootorg")).persist()
 
       val locationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "location").option("keyspace", sunbirdKeyspace).load()
-        .select(col("id"), col("name"), col("type")).persist()
+      //.select(col("id"), col("name"), col("type")).persist()
 
       val externalIdentityDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "usr_external_identity").option("keyspace", sunbirdKeyspace).load()
-        .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
+      //.select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
       // Get CustodianOrgID
       val custRootOrgId = getCustodianOrgId()
       val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
@@ -208,11 +208,10 @@ object UserCacheIndexer {
     }
 
     def getCustodianOrgId(): String = {
-      //spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
       val systemSettingDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "system_settings").option("keyspace", sunbirdKeyspace).load()
-        .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+      val df = systemSettingDF.where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
         .select(col("value")).persist()
-      systemSettingDF.select("value").first().getString(0)
+      df.select("value").first().getString(0)
     }
 
     def generateCustodianOrgUserData(custodianOrgId: String, userDF: DataFrame, organisationDF: DataFrame,
