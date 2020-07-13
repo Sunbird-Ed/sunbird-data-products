@@ -1,18 +1,10 @@
 package org.sunbird.analytics.jobs
 
-import java.text.SimpleDateFormat
-
+import com.redislabs.provider.redis._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, first, lit, lower, _}
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import com.typesafe.config.{Config, ConfigFactory}
-import com.datastax.spark.connector._
-import com.redislabs.provider.redis._
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext
 import org.sunbird.analytics.util.JSONUtils
 
 object UserCacheIndexer {
@@ -22,8 +14,8 @@ object UserCacheIndexer {
   def main(args: Array[String]): Unit = {
 
     //val isForAllUsers = args(0) // true/false
-    var specificUserId = ""
-    var fromSpecificDate = ""
+    var specificUserId: String = null
+    var fromSpecificDate: String = null
     if (!args.isEmpty) {
       specificUserId = args(0) // userid
       fromSpecificDate = args(1) // date in YYYY-MM-DD format
@@ -60,14 +52,14 @@ object UserCacheIndexer {
     }
 
     def filterUserData(userDF: DataFrame): DataFrame = {
-      if (null != specificUserId && StringUtils.isNotEmpty(specificUserId)) {
-        println("for specfic userId" + specificUserId)
+      if (null != specificUserId && !StringUtils.equalsIgnoreCase(specificUserId, "null")) {
+        println("Filtering for " + specificUserId)
         userDF.filter(col("id") === specificUserId)
-      } else if (null != fromSpecificDate && StringUtils.isNotEmpty(fromSpecificDate)) {
-        println(s"Fetching all the user records from this specific date:$fromSpecificDate ")
+      } else if (null != fromSpecificDate && !StringUtils.equalsIgnoreCase(fromSpecificDate, "null")) {
+        println(s"Filtering for :$fromSpecificDate ")
         userDF.filter(col("updateddate").isNull || to_date(col("updateddate"), "yyyy-MM-dd HH:mm:ss:SSSZ").geq(lit(fromSpecificDate)))
       } else {
-        println("Input are empty hence returning userdf without filter")
+        println("No inputs found!! Returning user data without filter")
         userDF
       }
     }
@@ -330,6 +322,7 @@ object UserCacheIndexer {
     val fieldNames = userDenormedData.schema.fieldNames
     val mappedData = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
     mappedData.foreach(y => {
+      println("Inserted : " + y._1)
       spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
     })
     //    val mappedData = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap)
