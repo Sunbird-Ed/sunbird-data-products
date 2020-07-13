@@ -206,6 +206,9 @@ object UserCacheIndexer {
         col("user_channel").as("orgname"),
         col("schoolname_resolved").as("schoolname"),
         col("district").as("district"),
+        col("board").as("board"),
+        col("medium").as("medium"),
+        col("grade").as("grade"),
         col("block").as("block")
       )
     }
