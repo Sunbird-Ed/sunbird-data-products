@@ -160,7 +160,7 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
 
     the[Exception] thrownBy {
       ETBMetricsModel.execute(sc.emptyRDD, Option(jobConfig))
-    } should have message "Merge report script failed with exit code 2"
+    } should have message "Merge report script failed with exit code 127"
 
   }
 
