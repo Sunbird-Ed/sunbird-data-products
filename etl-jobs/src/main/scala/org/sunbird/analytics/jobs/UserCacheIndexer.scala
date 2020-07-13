@@ -44,6 +44,7 @@ object UserCacheIndexer {
         .config("spark.redis.port", config.getString("redis.port"))
         .config("spark.redis.db", config.getString("redis.user.database.index"))
         .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
+        .config("spark.cassandra.read.timeout_ms", "300000")
         .getOrCreate()
 
     def seqOfAnyToSeqString(param: Seq[AnyRef]): Seq[(String, String)]
@@ -323,8 +324,10 @@ object UserCacheIndexer {
     }
 
     val userDenormedData = getUserData()
-    val fn = userDenormedData.schema.fieldNames
-    val maps = userDenormedData.rdd.map(row => fn.map(field => field -> row.getAs(field)).toMap).collect()
+    println("Inserting user denormed data into redis")
+    val fieldNames = userDenormedData.schema.fieldNames
+    println("fieldNames are" + fieldNames)
+    val maps = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect()
     val mappedData = maps.map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
     mappedData.foreach(y => {
       val toSeq = seqOfAnyToSeqString(y._2)
