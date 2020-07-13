@@ -95,20 +95,12 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
         val etbDf = etbTextBookReport.toDF().dropDuplicates("identifier","status")
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'status)
-        var mergeMap = mergeConf map {
-          case ("reportPath","dialcode_counts.csv") => "reportPath" -> "ETB_textbook_data.csv"
-          case x => x
-        }
-        var reportMap = if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
+        var reportMap = updateReportPath(mergeConf, reportConfig, "ETB_textbook_data.csv")
         CourseUtils.postDataToBlob(etbDf,f,config.updated("reportConfig",reportMap))
 
         val dceDf = dceTextBookReport.toDF().dropDuplicates()
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject)
-        mergeMap = mergeConf map {
-          case ("reportPath","dialcode_counts.csv") => "reportPath" -> "DCE_textbook_data.csv"
-          case x => x
-        }
-        reportMap = if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
+        reportMap = updateReportPath(mergeConf, reportConfig, "DCE_textbook_data.csv")
         CourseUtils.postDataToBlob(dceDf,f,config.updated("reportConfig",reportMap))
 
         val dialdceDF = dceDialcodeReport.toDF()
@@ -116,11 +108,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
           .drop("dialcodes","noOfScans","status","nodeType","noOfContent")
           .coalesce(1)
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
-        mergeMap = mergeConf map {
-          case ("reportPath","dialcode_counts.csv") => "reportPath" -> "DCE_dialcode_data.csv"
-          case x => x
-        }
-        reportMap = if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
+        reportMap = updateReportPath(mergeConf, reportConfig, "DCE_dialcode_data.csv")
         CourseUtils.postDataToBlob(dialcodeDCE,f,config.updated("reportConfig",reportMap))
 
         val dialetbDF = etbDialcodeReport.toDF()
@@ -128,15 +116,19 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
           .drop("dialcodes","noOfScans","term")
           .dropDuplicates()
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
-        mergeMap = mergeConf map {
-          case ("reportPath","dialcode_counts.csv") => "reportPath" -> "ETB_dialcode_data.csv"
-          case x => x
-        }
-        reportMap = if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
+        reportMap = updateReportPath(mergeConf, reportConfig, "ETB_dialcode_data.csv")
         CourseUtils.postDataToBlob(dialcodeETB,f,config.updated("reportConfig",reportMap))
       }
     }
     events
+  }
+
+  def updateReportPath(mergeConf: Map[String,AnyRef], reportConfig: Map[String,AnyRef], reportPath: String): Map[String,AnyRef] = {
+    val mergeMap = mergeConf map {
+      case ("reportPath","dialcode_counts.csv") => "reportPath" -> reportPath
+      case x => x
+    }
+    if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
   }
 
   def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
