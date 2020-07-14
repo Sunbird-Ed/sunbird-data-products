@@ -144,8 +144,9 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .anyNumberOfTimes()
       .returning(systemSettingDF)
 
+    val batchList = List("1000","1002","1003","1004","1005","1006","1007","1008","1009","1010","1011","1012","1013")
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "NCF", List())
+      .prepareReport(spark, reporterMock.loadData, "NCF", batchList)
       .cache()
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)

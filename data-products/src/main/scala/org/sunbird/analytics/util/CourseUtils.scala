@@ -21,6 +21,22 @@ case class CourseResult(count: Int, content: List[CourseBatchInfo])
 case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
 case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
+object UserCache {
+  val userid = "userid"
+  val userchannel = "userchannel"
+  val firstname = "firstname"
+  val lastname = "lastname"
+  val maskedemail = "maskedemail"
+  val maskedphone = "maskedphone"
+  val state = "state"
+  val district = "district"
+  val block = "block"
+  val externalid = "externalid"
+  val schoolname = "schoolname"
+  val schooludisecode = "schooludisecode"
+  val orgname = "orgname"
+}
+
 trait CourseReport {
   def getCourse(config: Map[String, AnyRef])(sc: SparkContext): DataFrame
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame
@@ -68,6 +84,8 @@ object CourseUtils {
   def postDataToBlob(data: DataFrame, outputConfig: OutputConfig, config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext) = {
     val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
+    println()
+    println(reportConfig)
 
     val labelsLookup = reportConfig.labels ++ Map("date" -> "Date")
     val key = config.getOrElse("key", null).asInstanceOf[String]
@@ -90,6 +108,7 @@ object CourseUtils {
     val fileParameters = config.getOrElse("fileParameters", List("")).asInstanceOf[List[String]]
     val dims = config.getOrElse("folderPrefix", List()).asInstanceOf[List[String]]
     val mergeConfig = reportConfig.mergeConfig
+    println(mergeConfig)
    val deltaFiles = if (dims.nonEmpty) {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), Option(dims))
     } else {

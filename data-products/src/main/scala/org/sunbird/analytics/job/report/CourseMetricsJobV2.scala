@@ -12,7 +12,7 @@ import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
-import org.sunbird.analytics.util.CourseUtils
+import org.sunbird.analytics.util.{CourseUtils, UserCache}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
@@ -142,8 +142,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame): DataFrame = {
     loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
-      .select(col("userid"),col("firstname"),col("lastname"),col("schoolname"),col("district"),col("email"),col("orgname"),col("schooludisecode"),
-        col("maskedemail"),col("state"),col("externalid"),col("block"),col("maskedphone"), col("userchannel"),
+      .select(col(UserCache.userid),col(UserCache.firstname),col(UserCache.lastname),col(UserCache.schoolname),col(UserCache.district),col(UserCache.orgname),col(UserCache.schooludisecode),
+        col(UserCache.maskedemail),col(UserCache.state),col(UserCache.externalid),col(UserCache.block),col(UserCache.maskedphone), col(UserCache.userchannel),
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
   }
 
@@ -186,24 +186,24 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
-      .withColumn("externalid", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("externalid")).otherwise(""))
-      .withColumn("schoolname", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("schoolname")).otherwise(""))
-      .withColumn("block", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("block")).otherwise(""))
-      .withColumn("schooludisecode", when(userCourseDenormDF.col("channel") === userDF.col("userchannel"), userDF.col("schooludisecode")).otherwise(""))
+      .withColumn(UserCache.externalid, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
+      .withColumn(UserCache.schoolname, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
+      .withColumn(UserCache.block, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
+      .withColumn(UserCache.schooludisecode, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
-        col("firstname"),
         col("channel"),
-        col("lastname"),
-        col("maskedemail"),
-        col("maskedphone"),
-        col("externalid"),
-        col("orgname"),
-        col("schoolname"),
-        col("district"),
-        col("schooludisecode"),
-        col("block"),
-        col("state")
+        col(UserCache.firstname),
+        col(UserCache.lastname),
+        col(UserCache.maskedemail),
+        col(UserCache.maskedphone),
+        col(UserCache.externalid),
+        col(UserCache.orgname),
+        col(UserCache.schoolname),
+        col(UserCache.district),
+        col(UserCache.schooludisecode),
+        col(UserCache.block),
+        col(UserCache.state)
       ).persist()
     reportDF
   }
@@ -211,17 +211,17 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {
     reportDF
       .select(
-        col("externalid").as("External ID"),
-        col("userid").as("User ID"),
-        concat_ws(" ", col("firstname"), col("lastname")).as("User Name"),
-        col("maskedemail").as("Email ID"),
-        col("maskedphone").as("Mobile Number"),
-        col("orgname").as("Organisation Name"),
-        col("state").as("State Name"),
-        col("district").as("District Name"),
-        col("schooludisecode").as("School UDISE Code"),
-        col("schoolname").as("School Name"),
-        col("block").as("Block Name"),
+        col(UserCache.externalid).as("External ID"),
+        col(UserCache.userid).as("User ID"),
+        concat_ws(" ", col(UserCache.firstname), col(UserCache.lastname)).as("User Name"),
+        col(UserCache.maskedemail).as("Email ID"),
+        col(UserCache.maskedphone).as("Mobile Number"),
+        col(UserCache.orgname).as("Organisation Name"),
+        col(UserCache.state).as("State Name"),
+        col(UserCache.district).as("District Name"),
+        col(UserCache.schooludisecode).as("School UDISE Code"),
+        col(UserCache.schoolname).as("School Name"),
+        col(UserCache.block).as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
