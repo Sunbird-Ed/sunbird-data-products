@@ -3,6 +3,7 @@ package org.sunbird.analytics.jobs
 import com.redislabs.provider.redis._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, first, lit, lower, _}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.analytics.util.JSONUtils
@@ -24,35 +25,36 @@ object UserCacheIndexer {
     val sunbirdKeyspace = "sunbird"
     val redisKeyProperty = "id" // userid
 
-    val spark: SparkSession =
-      SparkSession
-        .builder()
-        .appName("AppName")
-        .config("spark.master", "local")
-        .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
-        .config("spark.redis.host", config.getString("redis.host"))
-        .config("spark.redis.port", config.getString("redis.port"))
-        .config("spark.redis.db", config.getString("redis.user.database.index"))
-        .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
-        .config("spark.cassandra.read.timeoutMS", "300000")
-        .getOrCreate()
+    val lowerBound = 0
+    val upperBound = 1
 
-//        val spark: SparkSession =
-//          SparkSession
-//            .builder()
-//            .appName("AppName")
-//            .config("spark.master", "local")
-//            .config("spark.cassandra.connection.host", "localhost")
-//            .config("spark.redis.host", "localhost")
-//            .config("spark.redis.port", "6379")
-//            .config("spark.redis.db", "12")
-//            .config("spark.redis.max.pipeline.size", "1000")
-//            .config("spark.cassandra.read.timeout_ms", "300000")
-//            .getOrCreate()
+        val spark: SparkSession =
+          SparkSession
+            .builder()
+            .appName("AppName")
+            .config("spark.master", "local")
+            .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
+            .config("spark.redis.host", config.getString("redis.host"))
+            .config("spark.redis.port", config.getString("redis.port"))
+            .config("spark.redis.db", config.getString("redis.user.database.index"))
+            .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
+            .config("spark.cassandra.read.timeoutMS", "300000")
+            .getOrCreate()
+
+//    val spark: SparkSession =
+//      SparkSession
+//        .builder()
+//        .appName("AppName")
+//        .config("spark.master", "local")
+//        .config("spark.cassandra.connection.host", "localhost")
+//        .config("spark.redis.host", "localhost")
+//        .config("spark.redis.port", "6379")
+//        .config("spark.redis.db", "12")
+//        .config("spark.redis.max.pipeline.size", "1000")
+//        .config("spark.cassandra.read.timeout_ms", "300000")
+//        .getOrCreate()
 
     //
-    getUserData()
-
 
     def filterData(param: Seq[AnyRef]): Seq[(String, String)]
     = {
@@ -176,9 +178,13 @@ object UserCacheIndexer {
       //      println("schoolNameDF===" + schoolNameDF.show(false))
       //      println("userDataDF==" + userDataDF.show(false))
 
-      populateToRedis(userLocationResolvedDF, "user")
-      populateToRedis(resolvedOrgNameDF, "orgName")
-      populateToRedis(schoolNameDF, "schoolName")
+      //      populateToRedis(userLocationResolvedDF, "user")
+      //      populateToRedis(resolvedOrgNameDF, "orgName")
+      //      populateToRedis(schoolNameDF, "schoolName")
+
+      splitTheDataFrame(userDataDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
+      splitTheDataFrame(resolvedOrgNameDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
+      splitTheDataFrame(schoolNameDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
 
       userOrgDF.unpersist()
       organisationDF.unpersist()
@@ -188,7 +194,11 @@ object UserCacheIndexer {
       //      val userSelectedDF = selectRequiredCols(userDataDF)
       //      println("userSelectedDF" + userSelectedDF.show(false))
       //    userSelectedDF
-      //userDataDF
+
+
+      //userDataDF.filter(col("row_num").between(1,2)).show()
+      //      val indexedData = userDataDF.withColumn("index", row_number().over(Window.orderBy("id")))
+      //      indexedData
     }
 
     def selectRequiredCols(denormedUserDF: DataFrame): DataFrame = {
@@ -373,15 +383,40 @@ object UserCacheIndexer {
       stateUserDF
     }
 
-    def populateToRedis(dataFrame: DataFrame, dataType: String): Unit = {
-      println(s"$dataType: Total Records" + dataFrame.count())
+    def populateToRedis(dataFrame: DataFrame): Unit = {
+      println(s"Total Records" + dataFrame.count())
       val fieldNames = dataFrame.schema.fieldNames
       val mappedData = dataFrame.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
       mappedData.foreach(y => {
-        println(s"$dataType : Inserted " + y._1)
+        println("Inserted " + y._1)
         spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
       })
     }
+
+    def getBounds(lowerBound: Int, upperBound: Int): Map[String, Int] = {
+      Map("lowerBound" -> upperBound, "upperBound" -> (upperBound + 1000))
+    }
+
+    getUserData()
+    //val denormedData: DataFrame = getUserData()
+
+
+    def splitTheDataFrame(denormedData: DataFrame): Unit = {
+      val totalRecords = denormedData.count()
+      println("TotalRecords" + totalRecords)
+      val baseValue = if (totalRecords > 1000) 1000 else totalRecords
+      if (baseValue != 0) {
+        val loopCount = totalRecords / baseValue
+        for (i <- BigInt(1) to BigInt(loopCount)) {
+          val boundValues = getBounds(lowerBound, upperBound)
+          println("BoundValues" + boundValues)
+          val result = denormedData.filter(col("index").between(boundValues.get("lowerBound").getOrElse(0), boundValues.get("upperBound").getOrElse(1)))
+          populateToRedis(result)
+        }
+      }
+    }
+
   }
+
 
 }
