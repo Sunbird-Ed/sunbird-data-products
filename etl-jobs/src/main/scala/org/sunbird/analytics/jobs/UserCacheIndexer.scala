@@ -24,18 +24,18 @@ object UserCacheIndexer {
     val sunbirdKeyspace = "sunbird"
     val redisKeyProperty = "id" // userid
 
-    val spark: SparkSession =
-      SparkSession
-        .builder()
-        .appName("AppName")
-        .config("spark.master", "local")
-        .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
-        .config("spark.redis.host", config.getString("redis.host"))
-        .config("spark.redis.port", config.getString("redis.port"))
-        .config("spark.redis.db", config.getString("redis.user.database.index"))
-        .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
-        .config("spark.cassandra.read.timeout_ms", "300000")
-        .getOrCreate()
+        val spark: SparkSession =
+          SparkSession
+            .builder()
+            .appName("AppName")
+            .config("spark.master", "local")
+            .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
+            .config("spark.redis.host", config.getString("redis.host"))
+            .config("spark.redis.port", config.getString("redis.port"))
+            .config("spark.redis.db", config.getString("redis.user.database.index"))
+            .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
+            .config("spark.cassandra.read.timeoutMS", "300000")
+            .getOrCreate()
 
 //    val spark: SparkSession =
 //      SparkSession
@@ -43,7 +43,7 @@ object UserCacheIndexer {
 //        .appName("AppName")
 //        .config("spark.master", "local")
 //        .config("spark.cassandra.connection.host", "localhost")
-//        .config("spark.redis.host","localhost")
+//        .config("spark.redis.host", "localhost")
 //        .config("spark.redis.port", "6379")
 //        .config("spark.redis.db", "12")
 //        .config("spark.redis.max.pipeline.size", "1000")
@@ -82,7 +82,7 @@ object UserCacheIndexer {
       }
     }
 
-    def getUserData(): DataFrame = {
+    def getUserData(): Unit = {
 
       val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load().
         select("*").persist())
@@ -93,7 +93,8 @@ object UserCacheIndexer {
         .withColumn("grade", explode_outer(col("framework.gradeLevel")))
         .withColumn("framework_id", explode_outer(col("framework.id")))
         .drop("framework")
-      populateToRedis(userDF)
+
+      //populateToRedis(userDF) // Insert all userData Into redis
 
       // User Data
 
@@ -149,13 +150,24 @@ object UserCacheIndexer {
         .join(schoolNameDF, Seq("userid"), "left")
         .persist()
 
+      println("userLocation===" + userLocationResolvedDF.show(false))
+      println("resolvedOrgNameDF===" + resolvedOrgNameDF.show(false))
+      println("schoolNameDF===" + schoolNameDF.show(false))
+      println("userDataDF==" + userDataDF.show(false))
+
+      populateToRedis(userLocationResolvedDF, "user")
+      populateToRedis(resolvedOrgNameDF, "orgName")
+      populateToRedis(schoolNameDF, "schoolName")
+
       userOrgDF.unpersist()
       organisationDF.unpersist()
       locationDF.unpersist()
       externalIdentityDF.unpersist()
       userDF.unpersist()
-      println("userDataDF" + userDataDF.show(false))
-      userDataDF
+      //      val userSelectedDF = selectRequiredCols(userDataDF)
+      //      println("userSelectedDF" + userSelectedDF.show(false))
+      //    userSelectedDF
+      //userDataDF
     }
 
     def selectRequiredCols(denormedUserDF: DataFrame): DataFrame = {
@@ -340,11 +352,11 @@ object UserCacheIndexer {
       stateUserDF
     }
 
-    def populateToRedis(dataFrame: DataFrame): Unit = {
+    def populateToRedis(dataFrame: DataFrame, dataType: String): Unit = {
       val fieldNames = dataFrame.schema.fieldNames
       val mappedData = dataFrame.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
       mappedData.foreach(y => {
-        println("Inserted : " + y._1)
+        println(s"$dataType : Inserted " + y._1)
         spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
       })
     }
