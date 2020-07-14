@@ -168,10 +168,10 @@ object UserCacheIndexer {
         .groupBy("userid")
         .agg(concat_ws(",", collect_set("schoolname_resolved")).as("schoolname_resolved"))
 
-      val userDataDF = userLocationResolvedDF
-        .join(resolvedOrgNameDF, Seq("userid"), "left")
-        .join(schoolNameDF, Seq("userid"), "left")
-        .persist()
+//      val userDataDF = userLocationResolvedDF
+//        .join(resolvedOrgNameDF, Seq("userid"), "left")
+//        .join(schoolNameDF, Seq("userid"), "left")
+//        .persist()
 
       //      println("userLocation===" + userLocationResolvedDF.show(false))
       //      println("resolvedOrgNameDF===" + resolvedOrgNameDF.show(false))
@@ -182,7 +182,7 @@ object UserCacheIndexer {
       //      populateToRedis(resolvedOrgNameDF, "orgName")
       //      populateToRedis(schoolNameDF, "schoolName")
 
-      splitTheDataFrame(userDataDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
+      splitTheDataFrame(userLocationResolvedDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
       splitTheDataFrame(resolvedOrgNameDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
       splitTheDataFrame(schoolNameDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
 
