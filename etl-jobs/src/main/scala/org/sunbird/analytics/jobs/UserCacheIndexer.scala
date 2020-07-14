@@ -13,13 +13,14 @@ object UserCacheIndexer {
 
   def main(args: Array[String]): Unit = {
 
-    //val isForAllUsers = args(0) // true/false
+    //val isForAllUsers = args(0) // true/providerfalse
     var specificUserId: String = null
     var fromSpecificDate: String = null
     if (!args.isEmpty) {
       specificUserId = args(0) // userid
       fromSpecificDate = args(1) // date in YYYY-MM-DD format
     }
+    //val sunbirdKeyspace = "sunbird"
     val sunbirdKeyspace = config.getString("cassandra.user.keyspace")
     val redisKeyProperty = "id" // userid
 
@@ -35,6 +36,19 @@ object UserCacheIndexer {
         .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
         .config("spark.cassandra.read.timeout_ms", "300000")
         .getOrCreate()
+
+//    val spark: SparkSession =
+//      SparkSession
+//        .builder()
+//        .appName("AppName")
+//        .config("spark.master", "local")
+//        .config("spark.cassandra.connection.host", "localhost")
+//        .config("spark.redis.host","localhost")
+//        .config("spark.redis.port", "6379")
+//        .config("spark.redis.db", "12")
+//        .config("spark.redis.max.pipeline.size", "1000")
+//        .config("spark.cassandra.read.timeout_ms", "300000")
+//        .getOrCreate()
 
     def filterData(param: Seq[AnyRef]): Seq[(String, String)]
     = {
@@ -75,6 +89,9 @@ object UserCacheIndexer {
         .withColumn("grade", explode_outer(col("framework.gradeLevel")))
         .withColumn("framework_id", explode_outer(col("framework.id")))
         .drop("framework")
+      populateToRedis(userDF)
+
+      // User Data
 
       val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_org").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
         .select(col("userid"), col("organisationid")).persist()
@@ -87,13 +104,14 @@ object UserCacheIndexer {
       //.select(col("id"), col("name"), col("type")).persist()
 
       val externalIdentityDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "usr_external_identity").option("keyspace", sunbirdKeyspace).load()
-      //.select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
+        .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
       // Get CustodianOrgID
+
       val custRootOrgId = getCustodianOrgId()
       val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
       val stateUserDF = generateStateOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF, userOrgDF)
 
-      val userLocationResolvedDF = custodianUserDF.unionByName(stateUserDF)
+      val userLocationResolvedDF = custodianUserDF.unionByName(stateUserDF) // UserLocation
       /**
        * Get a union of RootOrg and SubOrg information for a User
        */
@@ -132,7 +150,8 @@ object UserCacheIndexer {
       locationDF.unpersist()
       externalIdentityDF.unpersist()
       userDF.unpersist()
-      selectRequiredCols(userDataDF)
+      println("userDataDF" + userDataDF.show(false))
+      userDataDF
     }
 
     def selectRequiredCols(denormedUserDF: DataFrame): DataFrame = {
@@ -317,22 +336,14 @@ object UserCacheIndexer {
       stateUserDF
     }
 
-    val userDenormedData = getUserData()
-    println("Inserting user denormed data into redis" + userDenormedData.count())
-    val fieldNames = userDenormedData.schema.fieldNames
-    val mappedData = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
-    mappedData.foreach(y => {
-      println("Inserted : " + y._1)
-      spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
-    })
-    //    val mappedData = userDenormedData.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap)
-    //      .map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
-    //    val totalRows = mappedData.count()
-    //    println("Total number of denormed user records are" + totalRows)
-    //    (BigInt(0) to BigInt(totalRows - 1)).foreach(index => {
-    //      val row = mappedData.zipWithIndex.filter(_._2 == index).map(_._1).first()
-    //      spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(row._2)), row._1)
-    //    })
+    def populateToRedis(dataFrame: DataFrame): Unit = {
+      val fieldNames = dataFrame.schema.fieldNames
+      val mappedData = dataFrame.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
+      mappedData.foreach(y => {
+        println("Inserted : " + y._1)
+        spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
+      })
+    }
   }
 
 }
