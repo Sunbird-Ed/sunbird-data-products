@@ -23,7 +23,6 @@ object UserCacheIndexer {
     val sunbirdKeyspace = "sunbird"
     val redisKeyProperty = "userid" // userid
 
-    val boundValues = Map("lowerBound" -> 0, "upperBound" -> 1)
 
     val spark: SparkSession =
       SparkSession
@@ -203,7 +202,6 @@ object UserCacheIndexer {
         .withColumn("exploded_location", explode_outer(col("locationids")))
         .select(col("userid"), col("exploded_location"), col("locationids"))
 
-      // println("userExplodedLocationDF" + userExplodedLocationDF.show(false))
 
       val userStateDF = userExplodedLocationDF
         .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
