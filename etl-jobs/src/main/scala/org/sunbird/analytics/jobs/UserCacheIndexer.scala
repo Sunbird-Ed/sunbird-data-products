@@ -75,28 +75,11 @@ object UserCacheIndexer {
         .withColumn("grade", explode_outer(col("framework.gradeLevel")))
         .withColumn("framework_id", explode_outer(col("framework.id")))
         .drop("framework"))
-      val selectedUserDF = userDF.select(col("id"),
-        col("userid"),
-        col("firstname"),
-        col("lastname"),
-        col("phone"),
-        col("phoneverified"),
-        col("emailverified"),
-        col("flagsvalue"),
-        col("rootorgid"),
-        col("createdby"),
-        col("channel"),
-        col("roles"),
-        col("status"),
-        col("webpages"),
-        col("createddate"),
-        col("isdeleted"),
-        col("locationids"),
-        col("updateddate"),
-        col("profilevisibility"),
-        col("loginid"),
+      val selectedUserDF = userDF.select(
+        col("*"), // It populate all user data
         col("framework_id").as("framework")
-      ).persist()
+      ).drop("framework_id").persist()
+      println("selectedUserDF" + selectedUserDF.show(false))
 
 
       populateToRedis(selectedUserDF, "USER_DF") // Insert all userData Into redis
