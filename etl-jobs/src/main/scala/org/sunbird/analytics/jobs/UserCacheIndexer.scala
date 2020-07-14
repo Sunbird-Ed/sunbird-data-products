@@ -21,7 +21,7 @@ object UserCacheIndexer {
       fromSpecificDate = args(1) // date in YYYY-MM-DD format
     }
     //val sunbirdKeyspace = "sunbird"
-    val sunbirdKeyspace = config.getString("cassandra.user.keyspace")
+    val sunbirdKeyspace = "sunbird"
     val redisKeyProperty = "id" // userid
 
     val spark: SparkSession =
@@ -49,6 +49,10 @@ object UserCacheIndexer {
 //        .config("spark.redis.max.pipeline.size", "1000")
 //        .config("spark.cassandra.read.timeout_ms", "300000")
 //        .getOrCreate()
+
+    //
+    getUserData()
+
 
     def filterData(param: Seq[AnyRef]): Seq[(String, String)]
     = {
