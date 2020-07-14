@@ -23,7 +23,7 @@ object UserCacheIndexer {
     }
     //val sunbirdKeyspace = "sunbird"
     val sunbirdKeyspace = "sunbird"
-    val redisKeyProperty = "id" // userid
+    val redisKeyProperty = "userid" // userid
 
     val lowerBound = 0
     val upperBound = 1
@@ -117,7 +117,7 @@ object UserCacheIndexer {
         .withColumn("framework_id", explode_outer(col("framework.id")))
         .drop("framework")
 
-      //populateToRedis(userDF) // Insert all userData Into redis
+      populateToRedis(userDF) // Insert all userData Into redis
 
       // User Data
 
@@ -136,8 +136,20 @@ object UserCacheIndexer {
       // Get CustodianOrgID
 
       val custRootOrgId = getCustodianOrgId()
+
       val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
+      val filteredCustoDian = custodianUserDF.select(col("declared-ext-id"), col("declared-school-name").as("schoolname"),
+        col("declared-ext-id").as("externalid"), col("state_name").as("state"), col("district"), col("block"),
+        col("declared-school-udise-code").as("schooludisecode"), col("user_channel").as("userchannel"), col("userid")
+      )
+      populateToRedis(filteredCustoDian)
+
       val stateUserDF = generateStateOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF, userOrgDF)
+      val filteredStateDF = stateUserDF.select(col("declared-ext-id"), col("declared-school-name"),
+        col("declared-ext-id"), col("state_name"), col("district"), col("block"),
+        col("declared-school-udise-code"), col("user_channel"), col("userid"))
+
+      populateToRedis(filteredStateDF)
 
       val userLocationResolvedDF = custodianUserDF.unionByName(stateUserDF) // UserLocation
       /**
@@ -161,112 +173,26 @@ object UserCacheIndexer {
         .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("rootorgid"), "left_outer")
         .groupBy("userid")
         .agg(concat_ws(",", collect_set("orgname")).as("orgname_resolved"))
+      val filteredOrgDf = resolvedOrgNameDF.select(col("userid"), col("orgname_resolved").as("orgname"))
+
+      populateToRedis(filteredOrgDf)
 
       val schoolNameDF = userOrgDenormDF
         .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("organisationid"), "left_outer")
         .select(userOrgDenormDF.col("userid"), col("orgname").as("schoolname_resolved"))
         .groupBy("userid")
         .agg(concat_ws(",", collect_set("schoolname_resolved")).as("schoolname_resolved"))
+      val filteredSchoolNameDF = schoolNameDF.select(col("userid"), col("schoolname_resolved").as("schoolname"))
 
-//      val userDataDF = userLocationResolvedDF
-//        .join(resolvedOrgNameDF, Seq("userid"), "left")
-//        .join(schoolNameDF, Seq("userid"), "left")
-//        .persist()
-
-      //      println("userLocation===" + userLocationResolvedDF.show(false))
-      //      println("resolvedOrgNameDF===" + resolvedOrgNameDF.show(false))
-      //      println("schoolNameDF===" + schoolNameDF.show(false))
-      //      println("userDataDF==" + userDataDF.show(false))
-
-      //      populateToRedis(userLocationResolvedDF, "user")
-      //      populateToRedis(resolvedOrgNameDF, "orgName")
-      //      populateToRedis(schoolNameDF, "schoolName")
-
-      splitTheDataFrame(userLocationResolvedDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
-      splitTheDataFrame(resolvedOrgNameDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
-      splitTheDataFrame(schoolNameDF.withColumn("index", row_number().over(Window.orderBy("userid"))))
+      populateToRedis(filteredSchoolNameDF)
 
       userOrgDF.unpersist()
       organisationDF.unpersist()
       locationDF.unpersist()
       externalIdentityDF.unpersist()
       userDF.unpersist()
-      //      val userSelectedDF = selectRequiredCols(userDataDF)
-      //      println("userSelectedDF" + userSelectedDF.show(false))
-      //    userSelectedDF
-
-
-      //userDataDF.filter(col("row_num").between(1,2)).show()
-      //      val indexedData = userDataDF.withColumn("index", row_number().over(Window.orderBy("id")))
-      //      indexedData
     }
 
-    def selectRequiredCols(denormedUserDF: DataFrame): DataFrame = {
-      denormedUserDF.select(
-        col("id").as("id"),
-        col("userid").as("userid"),
-        col("channel").as("channel"),
-        col("countrycode").as("countrycode"),
-        col("createdby").as("createdby"),
-        col("createddate").as("createddate"),
-        //col("currentlogintime").as("currentlogintime"),
-        col("email").as("email"),
-        col("emailverified").as("emailverified"),
-        col("firstname").as("firstname"),
-        col("flagsvalue").as("flagsvalue"),
-        col("framework_id").as("framework"),
-        col("gender").as("gender"),
-        col("grade").as("grade"),
-        col("isdeleted").as("isdeleted"),
-        col("language").as("language"),
-        col("lastlogintime").as("lastlogintime"),
-        col("lastname").as("lastname"),
-        col("location").as("location"),
-        col("locationids").as("locationids"),
-        col("loginid").as("loginid"),
-        col("maskedemail").as("maskedemail"),
-        col("maskedphone").as("maskedphone"),
-        col("password").as("password"),
-        col("phone").as("phone"),
-        col("phoneverified").as("phoneverified"),
-        col("prevusedemail").as("prevusedemail"),
-        col("prevusedphone").as("prevusedphone"),
-        col("profilesummary").as("profilesummary"),
-        col("profilevisibility").as("profilevisibility"),
-        col("provider").as("provider"),
-        col("recoveryemail").as("recoveryemail"),
-        col("recoveryphone").as("recoveryphone"),
-        col("registryid").as("registryid"),
-        col("roles").as("roles"),
-        col("rootorgid").as("rootorgid"),
-        col("status").as("status"),
-        col("subject").as("subject"),
-        col("tcstatus").as("tcstatus"),
-        col("tcupdateddate").as("tcupdateddate"),
-        col("temppassword").as("temppassword"),
-        col("thumbnail").as("thumbnail"),
-        col("temppassword").as("temppassword"),
-        col("tncacceptedon").as("tncacceptedon"),
-        col("tncacceptedversion").as("tncacceptedversion"),
-        col("updatedby").as("updatedby"),
-        col("updateddate").as("updateddate"),
-        col("username").as("username"),
-        col("usertype").as("usertype"),
-        col("webpages").as("webpages"),
-        col("temppassword").as("temppassword"),
-        col("declared-ext-id").as("externalid"),
-        col("declared-school-name").as("schoolname"),
-        col("declared-school-udise-code").as("schooludisecode"),
-        col("user_channel").as("userchannel"),
-        col("user_channel").as("orgname"),
-        col("schoolname_resolved").as("schoolname"),
-        col("district").as("district"),
-        col("board").as("board"),
-        col("medium").as("medium"),
-        col("grade").as("grade"),
-        col("block").as("block")
-      )
-    }
 
     def getCustodianOrgId(): String = {
       val systemSettingDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "system_settings").option("keyspace", sunbirdKeyspace).load()
