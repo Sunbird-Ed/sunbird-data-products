@@ -353,6 +353,7 @@ object UserCacheIndexer {
     }
 
     def populateToRedis(dataFrame: DataFrame, dataType: String): Unit = {
+      println(s"$dataType: Total Records" + dataFrame.count())
       val fieldNames = dataFrame.schema.fieldNames
       val mappedData = dataFrame.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
       mappedData.foreach(y => {
