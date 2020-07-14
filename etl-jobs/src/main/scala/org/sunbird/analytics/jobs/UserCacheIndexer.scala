@@ -14,47 +14,29 @@ object UserCacheIndexer {
 
   def main(args: Array[String]): Unit = {
 
-    //val isForAllUsers = args(0) // true/providerfalse
     var specificUserId: String = null
     var fromSpecificDate: String = null
     if (!args.isEmpty) {
       specificUserId = args(0) // userid
       fromSpecificDate = args(1) // date in YYYY-MM-DD format
     }
-    //val sunbirdKeyspace = "sunbird"
     val sunbirdKeyspace = "sunbird"
     val redisKeyProperty = "userid" // userid
 
-    val lowerBound = 0
-    val upperBound = 1
+    val boundValues = Map("lowerBound" -> 0, "upperBound" -> 1)
 
-        val spark: SparkSession =
-          SparkSession
-            .builder()
-            .appName("AppName")
-            .config("spark.master", "local")
-            .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
-            .config("spark.redis.host", config.getString("redis.host"))
-            .config("spark.redis.port", config.getString("redis.port"))
-            .config("spark.redis.db", config.getString("redis.user.database.index"))
-            .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
-            .config("spark.cassandra.read.timeoutMS", "300000")
-            .getOrCreate()
-
-//    val spark: SparkSession =
-//      SparkSession
-//        .builder()
-//        .appName("AppName")
-//        .config("spark.master", "local")
-//        .config("spark.cassandra.connection.host", "localhost")
-//        .config("spark.redis.host", "localhost")
-//        .config("spark.redis.port", "6379")
-//        .config("spark.redis.db", "12")
-//        .config("spark.redis.max.pipeline.size", "1000")
-//        .config("spark.cassandra.read.timeout_ms", "300000")
-//        .getOrCreate()
-
-    //
+    val spark: SparkSession =
+      SparkSession
+        .builder()
+        .appName("AppName")
+        .config("spark.master", "local")
+        .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
+        .config("spark.redis.host", config.getString("redis.host"))
+        .config("spark.redis.port", config.getString("redis.port"))
+        .config("spark.redis.db", config.getString("redis.user.database.index"))
+        .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
+        .config("spark.cassandra.read.timeoutMS", "300000")
+        .getOrCreate()
 
     def filterData(param: Seq[AnyRef]): Seq[(String, String)]
     = {
@@ -84,42 +66,41 @@ object UserCacheIndexer {
       }
     }
 
-    def getUserData(): Unit = {
+    def denormUserData(): Unit = {
 
-      val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load().
-        select(col("id"),
-          col("userid"),
-          col("firstname"),
-          col("lastname"),
-          col("phone"),
-          col("phoneverified"),
-          col("emailverified"),
-          col("flagsvalue"),
-          col("framework"),
-          col("rootorgid"),
-          col("createdby"),
-          col("channel"),
-          col("roles"),
-          col("status"),
-          col("webpages"),
-          col("createddate"),
-          col("isdeleted"),
-          col("locationids"),
-          col("updateddate"),
-          col("profilevisibility"),
-          col("loginid")
-        ).persist())
+      val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load()
         // Flattening the BGMS
         .withColumn("medium", explode_outer(col("framework.medium")))
         .withColumn("subject", explode_outer(col("framework.subject")))
         .withColumn("board", explode_outer(col("framework.board")))
         .withColumn("grade", explode_outer(col("framework.gradeLevel")))
         .withColumn("framework_id", explode_outer(col("framework.id")))
-        .drop("framework")
+        .drop("framework"))
+      val selectedUserDF = userDF.select(col("id"),
+        col("userid"),
+        col("firstname"),
+        col("lastname"),
+        col("phone"),
+        col("phoneverified"),
+        col("emailverified"),
+        col("flagsvalue"),
+        col("rootorgid"),
+        col("createdby"),
+        col("channel"),
+        col("roles"),
+        col("status"),
+        col("webpages"),
+        col("createddate"),
+        col("isdeleted"),
+        col("locationids"),
+        col("updateddate"),
+        col("profilevisibility"),
+        col("loginid"),
+        col("framework_id").as("framework")
+      ).persist()
 
-      populateToRedis(userDF) // Insert all userData Into redis
 
-      // User Data
+      populateToRedis(selectedUserDF, "USER_DF") // Insert all userData Into redis
 
       val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_org").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
         .select(col("userid"), col("organisationid")).persist()
@@ -138,18 +119,28 @@ object UserCacheIndexer {
       val custRootOrgId = getCustodianOrgId()
 
       val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
-      val filteredCustoDian = custodianUserDF.select(col("declared-ext-id"), col("declared-school-name").as("schoolname"),
-        col("declared-ext-id").as("externalid"), col("state_name").as("state"), col("district"), col("block"),
-        col("declared-school-udise-code").as("schooludisecode"), col("user_channel").as("userchannel"), col("userid")
+
+      val filteredCustoDian = custodianUserDF.select(
+        col("declared-school-name").as("schoolname"),
+        col("declared-ext-id").as("externalid"),
+        col("state_name").as("state"),
+        col("district"), col("block"),
+        col("declared-school-udise-code").as("schooludisecode"),
+        col("user_channel").as("userchannel"), col("userid")
       )
-      populateToRedis(filteredCustoDian)
+      populateToRedis(filteredCustoDian.distinct(), "CUSTODIAN")
 
       val stateUserDF = generateStateOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF, userOrgDF)
-      val filteredStateDF = stateUserDF.select(col("declared-ext-id"), col("declared-school-name"),
-        col("declared-ext-id"), col("state_name"), col("district"), col("block"),
-        col("declared-school-udise-code"), col("user_channel"), col("userid"))
 
-      populateToRedis(filteredStateDF)
+      val filteredStateDF = stateUserDF.select(
+        col("declared-school-name").as("schoolname"),
+        col("declared-ext-id").as("externalid"),
+        col("state_name").as("state"),
+        col("district"), col("block"),
+        col("declared-school-udise-code").as("schooludisecode"),
+        col("user_channel").as("userchannel"), col("userid"))
+
+      populateToRedis(filteredStateDF.distinct(), "STATE")
 
       val userLocationResolvedDF = custodianUserDF.unionByName(stateUserDF) // UserLocation
       /**
@@ -175,7 +166,7 @@ object UserCacheIndexer {
         .agg(concat_ws(",", collect_set("orgname")).as("orgname_resolved"))
       val filteredOrgDf = resolvedOrgNameDF.select(col("userid"), col("orgname_resolved").as("orgname"))
 
-      populateToRedis(filteredOrgDf)
+      populateToRedis(filteredOrgDf, "ORG_NAME")
 
       val schoolNameDF = userOrgDenormDF
         .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("organisationid"), "left_outer")
@@ -184,7 +175,7 @@ object UserCacheIndexer {
         .agg(concat_ws(",", collect_set("schoolname_resolved")).as("schoolname_resolved"))
       val filteredSchoolNameDF = schoolNameDF.select(col("userid"), col("schoolname_resolved").as("schoolname"))
 
-      populateToRedis(filteredSchoolNameDF)
+      populateToRedis(filteredSchoolNameDF, "SCHOOL_NAME")
 
       userOrgDF.unpersist()
       organisationDF.unpersist()
@@ -309,40 +300,17 @@ object UserCacheIndexer {
       stateUserDF
     }
 
-    def populateToRedis(dataFrame: DataFrame): Unit = {
+    def populateToRedis(dataFrame: DataFrame, from: String): Unit = {
       val filteredDF = dataFrame.filter(col("userid").isNotNull)
-      println(s"Total Records" + filteredDF.count())
       val fieldNames = filteredDF.schema.fieldNames
       val mappedData = filteredDF.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
       mappedData.foreach(y => {
-        println("Inserted " + y._1)
+        println(s"$from INSERTED " + y._1)
         spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
       })
     }
 
-    def getBounds(lowerBound: Int, upperBound: Int): Map[String, Int] = {
-      Map("lowerBound" -> upperBound, "upperBound" -> (upperBound + 1000))
-    }
-
-    getUserData()
-    //val denormedData: DataFrame = getUserData()
-
-
-    def splitTheDataFrame(denormedData: DataFrame): Unit = {
-      val totalRecords = denormedData.count()
-      println("TotalRecords" + totalRecords)
-      val baseValue = if (totalRecords > 1000) 1000 else totalRecords
-      if (baseValue != 0) {
-        val loopCount = totalRecords / baseValue
-        for (i <- BigInt(1) to BigInt(loopCount)) {
-          val boundValues = getBounds(lowerBound, upperBound)
-          println("BoundValues" + boundValues)
-          val result = denormedData.filter(col("index").between(boundValues.get("lowerBound").getOrElse(0), boundValues.get("upperBound").getOrElse(1)))
-          populateToRedis(result)
-        }
-      }
-    }
-
+    denormUserData()
   }
 
 
