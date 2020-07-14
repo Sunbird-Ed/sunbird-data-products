@@ -37,18 +37,18 @@ object UserCacheIndexer {
         .config("spark.cassandra.read.timeoutMS", "300000")
         .getOrCreate()
 
-    //    val spark: SparkSession =
-    //      SparkSession
-    //        .builder()
-    //        .appName("AppName")
-    //        .config("spark.master", "local")
-    //        .config("spark.cassandra.connection.host", "localhost")
-    //        .config("spark.redis.host", "localhost")
-    //        .config("spark.redis.port", "6379")
-    //        .config("spark.redis.db", "12")
-    //        .config("spark.redis.max.pipeline.size", "1000")
-    //        .config("spark.cassandra.read.timeout_ms", "300000")
-    //        .getOrCreate()
+//        val spark: SparkSession =
+//          SparkSession
+//            .builder()
+//            .appName("AppName")
+//            .config("spark.master", "local")
+//            .config("spark.cassandra.connection.host", "localhost")
+//            .config("spark.redis.host", "localhost")
+//            .config("spark.redis.port", "6379")
+//            .config("spark.redis.db", "12")
+//            .config("spark.redis.max.pipeline.size", "1000")
+//            .config("spark.cassandra.read.timeout_ms", "300000")
+//            .getOrCreate()
 
     //
     getUserData()
@@ -85,7 +85,28 @@ object UserCacheIndexer {
     def getUserData(): Unit = {
 
       val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load().
-        select("*").persist())
+        select(col("id"),
+          col("userid"),
+          col("firstname"),
+          col("lastname"),
+          col("phone"),
+          col("phoneverified"),
+          col("emailverified"),
+          col("flagsvalue"),
+          col("framework"),
+          col("rootorgid"),
+          col("createdby"),
+          col("channel"),
+          col("roles"),
+          col("status"),
+          col("webpages"),
+          col("createddate"),
+          col("isdeleted"),
+          col("locationids"),
+          col("updateddate"),
+          col("profilevisibility"),
+          col("loginid")
+        ).persist())
         // Flattening the BGMS
         .withColumn("medium", explode_outer(col("framework.medium")))
         .withColumn("subject", explode_outer(col("framework.subject")))
@@ -150,10 +171,10 @@ object UserCacheIndexer {
         .join(schoolNameDF, Seq("userid"), "left")
         .persist()
 
-//      println("userLocation===" + userLocationResolvedDF.show(false))
-//      println("resolvedOrgNameDF===" + resolvedOrgNameDF.show(false))
-//      println("schoolNameDF===" + schoolNameDF.show(false))
-//      println("userDataDF==" + userDataDF.show(false))
+      //      println("userLocation===" + userLocationResolvedDF.show(false))
+      //      println("resolvedOrgNameDF===" + resolvedOrgNameDF.show(false))
+      //      println("schoolNameDF===" + schoolNameDF.show(false))
+      //      println("userDataDF==" + userDataDF.show(false))
 
       populateToRedis(userLocationResolvedDF, "user")
       populateToRedis(resolvedOrgNameDF, "orgName")
