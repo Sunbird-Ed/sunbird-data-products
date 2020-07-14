@@ -24,31 +24,31 @@ object UserCacheIndexer {
     val sunbirdKeyspace = "sunbird"
     val redisKeyProperty = "id" // userid
 
-        val spark: SparkSession =
-          SparkSession
-            .builder()
-            .appName("AppName")
-            .config("spark.master", "local")
-            .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
-            .config("spark.redis.host", config.getString("redis.host"))
-            .config("spark.redis.port", config.getString("redis.port"))
-            .config("spark.redis.db", config.getString("redis.user.database.index"))
-            .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
-            .config("spark.cassandra.read.timeoutMS", "300000")
-            .getOrCreate()
+    val spark: SparkSession =
+      SparkSession
+        .builder()
+        .appName("AppName")
+        .config("spark.master", "local")
+        .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
+        .config("spark.redis.host", config.getString("redis.host"))
+        .config("spark.redis.port", config.getString("redis.port"))
+        .config("spark.redis.db", config.getString("redis.user.database.index"))
+        .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
+        .config("spark.cassandra.read.timeoutMS", "300000")
+        .getOrCreate()
 
-//    val spark: SparkSession =
-//      SparkSession
-//        .builder()
-//        .appName("AppName")
-//        .config("spark.master", "local")
-//        .config("spark.cassandra.connection.host", "localhost")
-//        .config("spark.redis.host", "localhost")
-//        .config("spark.redis.port", "6379")
-//        .config("spark.redis.db", "12")
-//        .config("spark.redis.max.pipeline.size", "1000")
-//        .config("spark.cassandra.read.timeout_ms", "300000")
-//        .getOrCreate()
+    //    val spark: SparkSession =
+    //      SparkSession
+    //        .builder()
+    //        .appName("AppName")
+    //        .config("spark.master", "local")
+    //        .config("spark.cassandra.connection.host", "localhost")
+    //        .config("spark.redis.host", "localhost")
+    //        .config("spark.redis.port", "6379")
+    //        .config("spark.redis.db", "12")
+    //        .config("spark.redis.max.pipeline.size", "1000")
+    //        .config("spark.cassandra.read.timeout_ms", "300000")
+    //        .getOrCreate()
 
     //
     getUserData()
@@ -150,10 +150,10 @@ object UserCacheIndexer {
         .join(schoolNameDF, Seq("userid"), "left")
         .persist()
 
-      println("userLocation===" + userLocationResolvedDF.show(false))
-      println("resolvedOrgNameDF===" + resolvedOrgNameDF.show(false))
-      println("schoolNameDF===" + schoolNameDF.show(false))
-      println("userDataDF==" + userDataDF.show(false))
+//      println("userLocation===" + userLocationResolvedDF.show(false))
+//      println("resolvedOrgNameDF===" + resolvedOrgNameDF.show(false))
+//      println("schoolNameDF===" + schoolNameDF.show(false))
+//      println("userDataDF==" + userDataDF.show(false))
 
       populateToRedis(userLocationResolvedDF, "user")
       populateToRedis(resolvedOrgNameDF, "orgName")
@@ -178,7 +178,7 @@ object UserCacheIndexer {
         col("countrycode").as("countrycode"),
         col("createdby").as("createdby"),
         col("createddate").as("createddate"),
-        col("currentlogintime").as("currentlogintime"),
+        //col("currentlogintime").as("currentlogintime"),
         col("email").as("email"),
         col("emailverified").as("emailverified"),
         col("firstname").as("firstname"),
