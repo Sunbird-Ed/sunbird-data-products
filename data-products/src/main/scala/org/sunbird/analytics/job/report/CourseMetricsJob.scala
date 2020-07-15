@@ -211,7 +211,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("rootorgid"), "left_outer")
       .groupBy("userid" )
       .agg(concat_ws(",", collect_set("orgname")).as("orgname_resolved"))
-
     /**
     * Resolve School Name from SubOrgs
     * * If the user present in the multiple sub organizations, then zip all the org names.
