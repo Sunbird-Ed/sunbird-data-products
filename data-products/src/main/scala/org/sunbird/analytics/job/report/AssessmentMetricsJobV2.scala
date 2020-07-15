@@ -82,11 +82,11 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
    * @return
    */
   def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame = {
-    spark
-      .read
-      .format(url)
-      .options(settings)
-      .load()
+    val schema = Encoders.product[UserData].schema
+    if(url.equals("org.apache.spark.sql.redis")) { spark.read.schema(schema).format(url).options(settings).load() }
+    else {
+      spark.read.format(url).options(settings).load()
+    }
   }
 
   /**
@@ -110,10 +110,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
 
-    val schema = Encoders.product[UserData].schema
-    val userDF = spark.read
-      .schema(schema)
-      .format("org.apache.spark.sql.redis").options(Map("keys.pattern" -> "*","infer.schema" -> "true")).load()
+    val userDF = loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
 
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl)

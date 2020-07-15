@@ -71,7 +71,11 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
 // $COVERAGE-ON$ Enabling scoverage for all other functions
   def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame = {
-    spark.read.format(url).options(settings).load()
+    val schema = Encoders.product[UserData].schema
+    if(url.equals("org.apache.spark.sql.redis")) { spark.read.schema(schema).format(url).options(settings).load() }
+    else {
+      spark.read.format(url).options(settings).load()
+    }
   }
 
   def getActiveBatches(loadData: (SparkSession, Map[String, String], String) => DataFrame, batchList: List[String])
@@ -141,10 +145,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame): DataFrame = {
-    val schema = Encoders.product[UserData].schema
-    spark.read
-      .schema(schema)
-      .format("org.apache.spark.sql.redis").options(Map("keys.pattern" -> "*","infer.schema" -> "true")).load()
+    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
   }
 
