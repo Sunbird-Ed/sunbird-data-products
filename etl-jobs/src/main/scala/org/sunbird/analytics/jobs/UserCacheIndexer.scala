@@ -150,15 +150,6 @@ object UserCacheIndexer {
 
       populateToRedis(filteredOrgDf, "ORG_NAME")
 
-      val schoolNameDF = userOrgDenormDF
-        .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("organisationid"), "left_outer")
-        .select(userOrgDenormDF.col("userid"), col("orgname").as("schoolname_resolved"))
-        .groupBy("userid")
-        .agg(concat_ws(",", collect_set("schoolname_resolved")).as("schoolname_resolved"))
-      val filteredSchoolNameDF = schoolNameDF.select(col("userid"), col("schoolname_resolved").as("schoolname"))
-
-      populateToRedis(filteredSchoolNameDF, "SCHOOL_NAME")
-
       userOrgDF.unpersist()
       organisationDF.unpersist()
       locationDF.unpersist()
