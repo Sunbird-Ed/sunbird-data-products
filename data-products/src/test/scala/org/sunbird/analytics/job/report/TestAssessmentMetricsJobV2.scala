@@ -145,7 +145,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "NCF")
+      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"))
       .cache()
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)
@@ -158,6 +158,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val report = reportDF.withColumn("content_name", lit("Content-1"))
       .withColumn("total_sum_score",lit("90"))
       .withColumn("grand_total", lit("100"))
+    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report)
     AssessmentMetricsJobV2.saveReport(report, tempDir, "true")
 
     val reportWithoutBatchDetails = reportDF.na.replace("batchid",Map("1006"->""))
@@ -216,7 +217,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "TPD")
+      .prepareReport(spark, reporterMock.loadData, "TPD", List())
       .cache()
 
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")

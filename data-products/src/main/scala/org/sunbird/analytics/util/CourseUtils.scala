@@ -21,6 +21,22 @@ case class CourseResult(count: Int, content: List[CourseBatchInfo])
 case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
 case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
+object UserCache {
+  val userid = "userid"
+  val userchannel = "userchannel"
+  val firstname = "firstname"
+  val lastname = "lastname"
+  val maskedemail = "maskedemail"
+  val maskedphone = "maskedphone"
+  val state = "state"
+  val district = "district"
+  val block = "block"
+  val externalid = "externalid"
+  val schoolname = "schoolname"
+  val schooludisecode = "schooludisecode"
+  val orgname = "orgname"
+}
+
 trait CourseReport {
   def getCourse(config: Map[String, AnyRef])(sc: SparkContext): DataFrame
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame

@@ -121,7 +121,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
-    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData,config)
+    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List())
 
     implicit val batchReportEncoder: Encoder[BatchReportOutput] = Encoders.product[BatchReportOutput]
     val batch1 = "01303150537737011211"
@@ -135,18 +135,18 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
     batch1Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("c7ef3848-bbdb-4219-8344-817d5b8103fa")
-    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("c98456789-fdcvbn")
-    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("20")
-    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("School-1")
-    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("SERA")
+    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
 
     val batch2Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch2.csv").as[BatchReportOutput].collectAsList().asScala
     batch2Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("f3dd58a4-a56f-4c1d-95cf-3231927a28e9")
-    batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("df09619-fdcvbn")
-    batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("10")
-    batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("School-2")
-    batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("BLOCK")
+    batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
+    batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
+    batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
+    batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
     /*
     // TODO: Add assertions here
     EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").foreach(f => {
