@@ -12,7 +12,7 @@ import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
-import org.sunbird.analytics.util.{CourseUtils, UserCache}
+import org.sunbird.analytics.util.{CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
@@ -141,10 +141,11 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame): DataFrame = {
-    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
-      .select(col(UserCache.userid),col(UserCache.firstname),col(UserCache.lastname),col(UserCache.schoolname),col(UserCache.district),col(UserCache.orgname),col(UserCache.schooludisecode),
-        col(UserCache.maskedemail),col(UserCache.state),col(UserCache.externalid),col(UserCache.block),col(UserCache.maskedphone), col(UserCache.userchannel),
-        concat_ws(" ", col("firstname"), col("lastname")).as("username"))
+    val schema = Encoders.product[UserData].schema
+    spark.read
+      .schema(schema)
+      .format("org.apache.spark.sql.redis").options(Map("keys.pattern" -> "*","infer.schema" -> "true")).load()
+      .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {

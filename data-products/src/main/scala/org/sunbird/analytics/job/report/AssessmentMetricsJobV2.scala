@@ -11,7 +11,7 @@ import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
-import org.sunbird.analytics.util.{Constants, CourseResponse, CourseUtils, UserCache}
+import org.sunbird.analytics.util.{Constants, CourseResponse, CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
 
 case class CourseInfo(courseid: String, batchid: String, startdate: String, enddate: String, channel: String)
@@ -110,10 +110,11 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
 
-    val userDF = loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis")
-      .select(col(UserCache.userid),col(UserCache.firstname),col(UserCache.lastname),col(UserCache.maskedemail),col(UserCache.maskedphone), col(UserCache.userchannel),
-        col(UserCache.district), col(UserCache.externalid),col(UserCache.schoolname),col(UserCache.schooludisecode),col(UserCache.state),col(UserCache.orgname),
-        concat_ws(" ", col(UserCache.firstname), col(UserCache.lastname)).as("username"))
+    val schema = Encoders.product[UserData].schema
+    val userDF = spark.read
+      .schema(schema)
+      .format("org.apache.spark.sql.redis").options(Map("keys.pattern" -> "*","infer.schema" -> "true")).load()
+      .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
 
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl)
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")

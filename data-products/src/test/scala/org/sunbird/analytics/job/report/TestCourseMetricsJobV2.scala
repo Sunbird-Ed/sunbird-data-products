@@ -123,6 +123,14 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List())
 
+    implicit val sc = spark
+
+    val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
+    batchInfo.map(batches => {
+      val reportDf = CourseMetricsJobV2.getReportDF(batches,userDF,reporterMock.loadData)
+      CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count())
+    })
+
     implicit val batchReportEncoder: Encoder[BatchReportOutput] = Encoders.product[BatchReportOutput]
     val batch1 = "01303150537737011211"
     val batch2 = "0130334873750159361"
