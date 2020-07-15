@@ -79,8 +79,6 @@ object UserCacheIndexer {
         col("*"), // It populate all user data
         col("framework_id").as("framework")
       ).drop("framework_id").persist()
-      println("selectedUserDF" + selectedUserDF.show(false))
-
 
       populateToRedis(selectedUserDF, "USER_DF") // Insert all userData Into redis
 
