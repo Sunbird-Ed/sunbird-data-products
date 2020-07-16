@@ -106,7 +106,7 @@ object UserCacheIndexer {
         col("state_name").as("state"),
         col("district"), col("block"),
         col("declared-school-udise-code").as("schooludisecode"),
-        col("user_channel").as("userchannel"), col("userid")
+        col("user_channel").as("userchannel"), col("userid"), col("usersignintype")
       )
       populateToRedis(filteredCustoDian.distinct(), "CUSTODIAN")
 
@@ -118,7 +118,7 @@ object UserCacheIndexer {
         col("state_name").as("state"),
         col("district"), col("block"),
         col("declared-school-udise-code").as("schooludisecode"),
-        col("user_channel").as("userchannel"), col("userid"))
+        col("user_channel").as("userchannel"), col("userid"), col("usersignintype"))
 
       populateToRedis(filteredStateDF.distinct(), "STATE")
 
@@ -199,6 +199,7 @@ object UserCacheIndexer {
           col("state_name"),
           col("district"),
           col("block"))
+          .withColumn("usersignintype", lit("Self-Signed-In"))
       // .drop(col("locationids"))
 
       val custodianUserPivotDF = custodianOrguserLocationDF
@@ -260,6 +261,7 @@ object UserCacheIndexer {
           subOrgDF.col("state_name"),
           subOrgDF.col("district"),
           subOrgDF.col("block"))
+        .withColumn("usersignintype", lit("Validated"))
       // .drop(col("locationids"))
 
       val stateUserDF = stateUserLocationResolvedDF.as("state_user")
