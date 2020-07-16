@@ -10,11 +10,12 @@ import io.circe._
 import io.circe.parser._
 import org.apache.spark.sql.functions._
 import scala.collection.JavaConverters._
-import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
+import org.sunbird.analytics.util.UserData
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -55,15 +56,16 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
   "TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF)
 
+    val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userDF)
 
-    CourseMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra")
+    CourseMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", new StructType())
 
 
     val convertMethod = udf((value: mutable.WrappedArray[String]) => {
@@ -74,22 +76,22 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .anyNumberOfTimes()
       .returning(userDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .anyNumberOfTimes()
       .returning(externalIdentityDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .anyNumberOfTimes()
       .returning(systemSettingDF)
 

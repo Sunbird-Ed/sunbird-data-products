@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
-import org.apache.spark.sql.types.DataTypes
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql._
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
@@ -19,9 +19,9 @@ import scala.collection.mutable
 
 trait ReportGeneratorV2 {
 
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame
+  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
@@ -70,27 +70,26 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
 // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame = {
-    val schema = Encoders.product[UserData].schema
-    if(url.equals("org.apache.spark.sql.redis")) { spark.read.schema(schema).format(url).options(settings).load() }
+  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
+    if(schema.nonEmpty) { spark.read.schema(schema).format(url).options(settings).load() }
     else {
       spark.read.format(url).options(settings).load()
     }
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String) => DataFrame, batchList: List[String])
+  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])
                       (implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
 
     implicit  val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
 
     val courseBatchDF = if(batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
         .filter(batch => batchList.contains(batch.getString(1)))
         .select("courseid", "batchid", "enddate", "startdate")
     }
     else {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
         .select("courseid", "batchid", "enddate", "startdate")
     }
 
@@ -114,7 +113,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     result
   }
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
     val activeBatches = getActiveBatches(loadData, batchList)
@@ -144,14 +143,15 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   }
 
-  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame): DataFrame = {
-    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
+    val schema = Encoders.product[UserData].schema
+    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
   }
 
-  def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-    val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+    val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
       /*
