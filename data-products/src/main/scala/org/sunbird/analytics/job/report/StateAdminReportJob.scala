@@ -141,8 +141,9 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("decrypted-phone").as("Phone number"),
                 col("decrypted-email").as("Email ID"),
                 col("Diksha Sub-Org ID"),
-                col("originalprovider").as("Channel"))
-        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("Channel")))
+                col("originalprovider").as("Channel"),
+                col("originalprovider").as("provider"))
+        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
         resultDf
     }
     
