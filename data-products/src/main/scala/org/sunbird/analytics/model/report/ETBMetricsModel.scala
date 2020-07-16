@@ -90,30 +90,45 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
       val scansDF = getScanCounts(config)
 
       reportConfig.output.map { f =>
+        val reportConfig = config("reportConfig").asInstanceOf[Map[String,AnyRef]]
+        val mergeConf = reportConfig.getOrElse("mergeConfig", Map()).asInstanceOf[Map[String,AnyRef]]
+
         val etbDf = etbTextBookReport.toDF().dropDuplicates("identifier","status")
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'status)
-        CourseUtils.postDataToBlob(etbDf,f,config)
+        var reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("etbtextbook.filename"))
+        CourseUtils.postDataToBlob(etbDf,f,config.updated("reportConfig",reportMap))
 
         val dceDf = dceTextBookReport.toDF().dropDuplicates()
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject)
-        CourseUtils.postDataToBlob(dceDf,f,config)
+        reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("dcetextbook.filename"))
+        CourseUtils.postDataToBlob(dceDf,f,config.updated("reportConfig",reportMap))
 
         val dialdceDF = dceDialcodeReport.toDF()
         val dialcodeDCE = dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
           .drop("dialcodes","noOfScans","status","nodeType","noOfContent")
           .coalesce(1)
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
-        CourseUtils.postDataToBlob(dialcodeDCE,f,config)
+        reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("dcedialcode.filename"))
+        CourseUtils.postDataToBlob(dialcodeDCE,f,config.updated("reportConfig",reportMap))
 
         val dialetbDF = etbDialcodeReport.toDF()
         val dialcodeETB = dialetbDF.join(scansDF,dialetbDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
           .drop("dialcodes","noOfScans","term")
           .dropDuplicates()
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
-        CourseUtils.postDataToBlob(dialcodeETB,f,config)
+        reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("etbdialcode.filename"))
+        CourseUtils.postDataToBlob(dialcodeETB,f,config.updated("reportConfig",reportMap))
       }
     }
     events
+  }
+
+  def updateReportPath(mergeConf: Map[String,AnyRef], reportConfig: Map[String,AnyRef], reportPath: String): Map[String,AnyRef] = {
+    val mergeMap = mergeConf map {
+      case ("reportPath","dialcode_counts.csv") => "reportPath" -> reportPath
+      case x => x
+    }
+    if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
   }
 
   def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
