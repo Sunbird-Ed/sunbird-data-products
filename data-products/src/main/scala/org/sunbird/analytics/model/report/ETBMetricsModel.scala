@@ -95,12 +95,12 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
         val etbDf = etbTextBookReport.toDF().dropDuplicates("identifier","status")
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'status)
-        var reportMap = updateReportPath(mergeConf, reportConfig, "ETB_textbook_data.csv")
+        var reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("etbtextbook.filename"))
         CourseUtils.postDataToBlob(etbDf,f,config.updated("reportConfig",reportMap))
 
         val dceDf = dceTextBookReport.toDF().dropDuplicates()
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject)
-        reportMap = updateReportPath(mergeConf, reportConfig, "DCE_textbook_data.csv")
+        reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("dcetextbook.filename"))
         CourseUtils.postDataToBlob(dceDf,f,config.updated("reportConfig",reportMap))
 
         val dialdceDF = dceDialcodeReport.toDF()
@@ -108,7 +108,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
           .drop("dialcodes","noOfScans","status","nodeType","noOfContent")
           .coalesce(1)
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
-        reportMap = updateReportPath(mergeConf, reportConfig, "DCE_dialcode_data.csv")
+        reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("dcedialcode.filename"))
         CourseUtils.postDataToBlob(dialcodeDCE,f,config.updated("reportConfig",reportMap))
 
         val dialetbDF = etbDialcodeReport.toDF()
@@ -116,7 +116,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
           .drop("dialcodes","noOfScans","term")
           .dropDuplicates()
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject,'identifier,'l1Name,'l2Name,'l3Name,'l4Name,'l5Name)
-        reportMap = updateReportPath(mergeConf, reportConfig, "ETB_dialcode_data.csv")
+        reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("etbdialcode.filename"))
         CourseUtils.postDataToBlob(dialcodeETB,f,config.updated("reportConfig",reportMap))
       }
     }
