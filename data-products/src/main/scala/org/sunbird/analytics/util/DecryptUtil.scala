@@ -37,6 +37,7 @@ object DecryptUtil {
         if (!StringUtils.isBlank(encryption_key)) return encryption_key
         else {
             encryption_key = AppConf.getConfig("sunbird_encryption_key");
+            JobLogger.log(s"Encrypt key value: ${encryption_key} }", None, INFO)(new String())
         }
         if (StringUtils.isBlank(encryption_key)) {
             JobLogger.log(s"throwing exception for invalid salt==", None, INFO)(new String())
