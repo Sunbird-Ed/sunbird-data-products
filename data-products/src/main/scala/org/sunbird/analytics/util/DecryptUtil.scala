@@ -1,11 +1,12 @@
 package org.sunbird.analytics.util
 
 import java.nio.charset.StandardCharsets
+import java.util
 
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import org.apache.commons.lang3.StringUtils
-import org.ekstep.analytics.framework.Level.{ERROR, INFO}
+import org.ekstep.analytics.framework.Level.{ INFO}
 import org.ekstep.analytics.framework.util.JobLogger
 import org.sunbird.cloud.storage.conf.AppConf
 import sun.misc.BASE64Decoder
@@ -29,25 +30,21 @@ object DecryptUtil {
             c = Cipher.getInstance(ALGORITHM)
             c.init(Cipher.DECRYPT_MODE, key);
         } catch {
-            case e: Exception => JobLogger.log(s"Error in DecryptUtil.initialise " + e.getMessage(), None, ERROR)(e.getMessage)
+            case e: Exception => JobLogger.log(s"Error in DecryptUtil.initialise " + e.getMessage(), None, INFO)(e.getMessage)
         }
     }
     
      def getSalt() : String = {
-        if (!StringUtils.isBlank(encryption_key)) return encryption_key
-        else {
-            encryption_key = AppConf.getConfig("sunbird_encryption_key");
-            JobLogger.log(s"Encrypt key value: ${encryption_key} }", None, INFO)(new String())
+         encryption_key = AppConf.getConfig("sunbird_encryption_key");
+         if (StringUtils.isEmpty(encryption_key)) {
+             JobLogger.log(s"Encrypt key is empty", None, INFO)(new String())
         }
-        if (StringUtils.isBlank(encryption_key)) {
-            JobLogger.log(s"throwing exception for invalid salt==", None, INFO)(new String())
-            throw new Exception("Error in creating encryptionkey")
-        }
+         JobLogger.log(s"Encrypt key length value: ${encryption_key.length} }", None, INFO)(new String())
          return encryption_key
     }
     
     val keyValue: Array[Byte] = Array[Byte]('T', 'h', 'i', 's', 'A', 's', 'I', 'S', 'e', 'r', 'c', 'e', 'K', 't', 'e', 'y')
-    def generateKey() = new SecretKeySpec(keyValue, ALGORITHM)
+    def generateKey() = new SecretKeySpec(util.Arrays.copyOf(keyValue, 16), ALGORITHM)
     
     def decryptData(data: String): String = decryptData(data, false)
     
@@ -64,8 +61,9 @@ object DecryptUtil {
             while ( {
                 i < ITERATIONS
             }) {
+                
                 val decordedValue = new BASE64Decoder().decodeBuffer(valueToDecrypt)
-                val decValue = c.doFinal(decordedValue)
+                val decValue: Array[Byte] = c.doFinal(decordedValue)
                 dValue = new String(decValue, StandardCharsets.UTF_8).substring(sunbird_encryption.length)
                 valueToDecrypt = dValue
                 
@@ -75,10 +73,11 @@ object DecryptUtil {
             }
             return dValue
         } catch {
-            case ex: Exception =>
+            case ex: Exception => {
                 ex.printStackTrace()
-                JobLogger.log("decrypt: Exception occurred with error message = " + ex.getMessage, None, ERROR)(ex.getMessage)
+                JobLogger.log("decrypt: Exception occurred with error message = " + ex.getMessage, None, INFO)(ex.getMessage)
                 if (throwExceptionOnFailure) throw new Exception("Exception in decrypting the value")
+            }
         }
         value
     }
