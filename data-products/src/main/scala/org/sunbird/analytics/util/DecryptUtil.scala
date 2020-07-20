@@ -44,7 +44,7 @@ object DecryptUtil {
     }
     
     val keyValue: Array[Byte] = Array[Byte]('T', 'h', 'i', 's', 'A', 's', 'I', 'S', 'e', 'r', 'c', 'e', 'K', 't', 'e', 'y')
-    def generateKey() = new SecretKeySpec(util.Arrays.copyOf(keyValue, 16), ALGORITHM)
+    def generateKey() = new SecretKeySpec(keyValue, ALGORITHM)
     
     def decryptData(data: String): String = decryptData(data, false)
     
@@ -63,7 +63,7 @@ object DecryptUtil {
             }) {
                 
                 val decordedValue = new BASE64Decoder().decodeBuffer(valueToDecrypt)
-                val decValue: Array[Byte] = c.doFinal(decordedValue)
+                val decValue = c.doFinal(decordedValue)
                 dValue = new String(decValue, StandardCharsets.UTF_8).substring(sunbird_encryption.length)
                 valueToDecrypt = dValue
                 
