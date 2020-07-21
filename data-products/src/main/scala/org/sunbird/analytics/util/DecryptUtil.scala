@@ -6,7 +6,7 @@ import java.util
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import org.apache.commons.lang3.StringUtils
-import org.ekstep.analytics.framework.Level.{ INFO}
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.JobLogger
 import org.sunbird.cloud.storage.conf.AppConf
 import sun.misc.BASE64Decoder
@@ -35,12 +35,12 @@ object DecryptUtil {
     }
     
      def getSalt() : String = {
-         encryption_key = AppConf.getConfig("sunbird_encryption_key");
+         encryption_key = AppConf.getConfig("sunbird_encryption_key")
          if (StringUtils.isEmpty(encryption_key)) {
              JobLogger.log(s"Encrypt key is empty", None, INFO)(new String())
         }
-         JobLogger.log(s"Encrypt key length value: ${encryption_key.length} }", None, INFO)(new String())
-         return encryption_key
+         JobLogger.log(s"Encrypt key value: ${encryption_key} length: ${encryption_key.length}}", None, INFO)(new String())
+         encryption_key
     }
     
     val keyValue: Array[Byte] = Array[Byte]('T', 'h', 'i', 's', 'A', 's', 'I', 'S', 'e', 'r', 'c', 'e', 'K', 't', 'e', 'y')
@@ -49,9 +49,12 @@ object DecryptUtil {
     def decryptData(data: String): String = decryptData(data, false)
     
     private def decryptData(data: String, throwExceptionOnFailure: Boolean): String =
-        if ("ON".equalsIgnoreCase(sunbirdEncryption)) if (StringUtils.isBlank(data)) data
-        else decrypt(data, throwExceptionOnFailure)
-        else data
+        if (StringUtils.isBlank(data)) {
+            JobLogger.log("decryptData:: data is blank", None, INFO)(new String())
+            data
+        } else {
+            decrypt(data, throwExceptionOnFailure)
+        }
     
     def decrypt(value: String, throwExceptionOnFailure: Boolean): String = {
         try {
@@ -61,7 +64,6 @@ object DecryptUtil {
             while ( {
                 i < ITERATIONS
             }) {
-                
                 val decordedValue = new BASE64Decoder().decodeBuffer(valueToDecrypt)
                 val decValue = c.doFinal(decordedValue)
                 dValue = new String(decValue, StandardCharsets.UTF_8).substring(sunbird_encryption.length)

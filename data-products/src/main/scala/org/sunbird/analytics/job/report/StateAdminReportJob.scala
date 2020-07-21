@@ -110,6 +110,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     private def decryptDF(userExternalOriginalDataDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) : DataFrame = {
         import sparkSession.implicits._
+        userExternalOriginalDataDF.show(10)
         val emailMap = userExternalOriginalDataDF.rdd.map(r => (r.getString(0), r.getString(3))).collectAsMap()
         val phoneMap = userExternalOriginalDataDF.rdd.map(r => (r.getString(0), r.getString(5))).collectAsMap()
         val decEmailMap = collection.mutable.Map[String, String]()
@@ -117,10 +118,12 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         emailMap.foreach(email => {
             val decEmail = DecryptUtil.decryptData(email._2)
             decEmailMap += (email._1 -> decEmail)
+            JobLogger.log(s"Decryption email details before enc:: ${email._2}  ::after:: ${decEmail}",  None, INFO)
         })
         phoneMap.foreach(phone => {
             val decPhone = DecryptUtil.decryptData(phone._2)
             decPhoneMap += (phone._1 -> decPhone)
+            JobLogger.log(s"Decryption phone details before enc:: ${phone._2}  ::after:: ${decPhone}",  None, INFO)
         })
         val decryptEmailDF = decEmailMap.toSeq.toDF("userId", "decrypted-email")
         val decryptPhoneDF = decPhoneMap.toSeq.toDF("userId", "decrypted-phone")
