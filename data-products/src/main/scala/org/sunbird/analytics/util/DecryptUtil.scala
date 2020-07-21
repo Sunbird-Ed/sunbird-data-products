@@ -39,7 +39,7 @@ object DecryptUtil {
          if (StringUtils.isEmpty(encryption_key)) {
              JobLogger.log(s"Encrypt key is empty", None, INFO)(new String())
         }
-         JobLogger.log(s"Encrypt key value: ${encryption_key} length: ${encryption_key.length}}", None, INFO)(new String())
+         JobLogger.log(s"Encrypt key length: ${encryption_key.length}}", None, INFO)(new String())
          encryption_key
     }
     

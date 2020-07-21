@@ -118,12 +118,10 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         emailMap.foreach(email => {
             val decEmail = DecryptUtil.decryptData(email._2)
             decEmailMap += (email._1 -> decEmail)
-            JobLogger.log(s"Decryption email details before enc:: ${email._2}  ::after:: ${decEmail}",  None, INFO)
         })
         phoneMap.foreach(phone => {
             val decPhone = DecryptUtil.decryptData(phone._2)
             decPhoneMap += (phone._1 -> decPhone)
-            JobLogger.log(s"Decryption phone details before enc:: ${phone._2}  ::after:: ${decPhone}",  None, INFO)
         })
         val decryptEmailDF = decEmailMap.toSeq.toDF("userId", "decrypted-email")
         val decryptPhoneDF = decPhoneMap.toSeq.toDF("userId", "decrypted-phone")
