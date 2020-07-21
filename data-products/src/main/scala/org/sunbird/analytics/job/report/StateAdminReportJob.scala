@@ -110,7 +110,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     private def decryptDF(userExternalOriginalDataDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) : DataFrame = {
         import sparkSession.implicits._
-        userExternalOriginalDataDF.show(10)
         val emailMap = userExternalOriginalDataDF.rdd.map(r => (r.getString(0), r.getString(3))).collectAsMap()
         val phoneMap = userExternalOriginalDataDF.rdd.map(r => (r.getString(0), r.getString(5))).collectAsMap()
         val decEmailMap = collection.mutable.Map[String, String]()
