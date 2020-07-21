@@ -1,11 +1,12 @@
 package org.sunbird.analytics.util
 
 import java.nio.charset.StandardCharsets
+import java.util
 
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import org.apache.commons.lang3.StringUtils
-import org.ekstep.analytics.framework.Level.{ERROR, INFO}
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.JobLogger
 import org.sunbird.cloud.storage.conf.AppConf
 import sun.misc.BASE64Decoder
@@ -29,20 +30,17 @@ object DecryptUtil {
             c = Cipher.getInstance(ALGORITHM)
             c.init(Cipher.DECRYPT_MODE, key);
         } catch {
-            case e: Exception => JobLogger.log(s"Error in DecryptUtil.initialise " + e.getMessage(), None, ERROR)(e.getMessage)
+            case e: Exception => JobLogger.log(s"Error in DecryptUtil.initialise " + e.getMessage(), None, INFO)(e.getMessage)
         }
     }
     
      def getSalt() : String = {
-        if (!StringUtils.isBlank(encryption_key)) return encryption_key
-        else {
-            encryption_key = AppConf.getConfig("sunbird_encryption_key");
+         encryption_key = AppConf.getConfig("sunbird_encryption_key")
+         if (StringUtils.isEmpty(encryption_key)) {
+             JobLogger.log(s"Encrypt key is empty", None, INFO)(new String())
         }
-        if (StringUtils.isBlank(encryption_key)) {
-            JobLogger.log(s"throwing exception for invalid salt==", None, INFO)(new String())
-            throw new Exception("Error in creating encryptionkey")
-        }
-         return encryption_key
+         JobLogger.log(s"Encrypt key length: ${encryption_key.length}}", None, INFO)(new String())
+         encryption_key
     }
     
     val keyValue: Array[Byte] = Array[Byte]('T', 'h', 'i', 's', 'A', 's', 'I', 'S', 'e', 'r', 'c', 'e', 'K', 't', 'e', 'y')
@@ -51,9 +49,12 @@ object DecryptUtil {
     def decryptData(data: String): String = decryptData(data, false)
     
     private def decryptData(data: String, throwExceptionOnFailure: Boolean): String =
-        if ("ON".equalsIgnoreCase(sunbirdEncryption)) if (StringUtils.isBlank(data)) data
-        else decrypt(data, throwExceptionOnFailure)
-        else data
+        if (StringUtils.isBlank(data)) {
+            JobLogger.log("decryptData:: data is blank", None, INFO)(new String())
+            data
+        } else {
+            decrypt(data, throwExceptionOnFailure)
+        }
     
     def decrypt(value: String, throwExceptionOnFailure: Boolean): String = {
         try {
@@ -74,10 +75,11 @@ object DecryptUtil {
             }
             return dValue
         } catch {
-            case ex: Exception =>
+            case ex: Exception => {
                 ex.printStackTrace()
-                JobLogger.log("decrypt: Exception occurred with error message = " + ex.getMessage, None, ERROR)(ex.getMessage)
+                JobLogger.log("decrypt: Exception occurred with error message = " + ex.getMessage, None, INFO)(ex.getMessage)
                 if (throwExceptionOnFailure) throw new Exception("Exception in decrypting the value")
+            }
         }
         value
     }
