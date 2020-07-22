@@ -24,11 +24,14 @@ trait ReportGeneratorV2 {
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
+case class CourseData(userid: String, courseid: String, completionPercentage: Int)
+
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
 
   implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJobV2"
   val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
   val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
+  val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
 
 // $COVERAGE-OFF$ Disabling scoverage for main and execute method
@@ -102,6 +105,28 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     activeBatchList
   }
 
+  def getUserCourseInfo(loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    import sqlContext.implicits._
+
+    val userAgg = loadData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+      .select("user_id","activity_id","agg")
+
+    val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra")
+      .select("identifier","hierarchy")
+
+    val userCourseDf = userAgg.join(hierarchyData, userAgg.col("activity_id") === hierarchyData.col("identifier"), "inner")
+
+    userCourseDf.rdd.map(row => {
+      val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(4))
+      val leafNodesCount = hierarchy.getOrElse("leafNodesCount",0).asInstanceOf[Int]
+      val completedCount = row(2).asInstanceOf[Map[String,Int]]("completedCount")
+      var completionPercentage = ((completedCount/leafNodesCount) * 100).abs
+      completionPercentage = if (completionPercentage > 100) 100 else completionPercentage
+      CourseData(row.getString(0), row.getString(1), completionPercentage)
+    }).toDF()
+  }
+
   def recordTime[R](block: => R, msg: String): R = {
     val t0 = System.currentTimeMillis()
     val result = block
@@ -114,6 +139,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     implicit val sparkSession: SparkSession = spark
     val activeBatches = getActiveBatches(loadData, batchList)
+    val userCourses = getUserCourseInfo(loadData)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
@@ -128,7 +154,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userData._2, userCourses, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
           recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
@@ -147,11 +173,11 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
   }
 
-  def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getReportDF(batch: CourseBatch, userDF: DataFrame, courseDf: DataFrame,loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-    val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
+    val userCourseDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
-        , col("completionpercentage"), col("enrolleddate"), col("completedon"))
+        , col("enrolleddate"), col("completedon"))
       /*
        * courseBatchDF has details about the course and batch details for which we have to prepare the report
        * courseBatchDF is the primary source for the report
@@ -161,28 +187,26 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
       .withColumn("channel", lit(batch.courseChannel))
-      .withColumn(
-        "course_completion",
-        when(col("completionpercentage").isNull, 0)
-          .when(col("completionpercentage") > 100, 100)
-          .otherwise(col("completionpercentage")).cast("int"))
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
       .withColumn("certificate_status", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
       .select(
         col("batchid"),
         col("userid"),
-        col("completionpercentage"),
         col("enddate"),
         col("startdate"),
         col("enrolleddate"),
         col("completedon"),
         col("active"),
         col("courseid"),
-        col("course_completion"),
         col("generatedOn"),
         col("certificate_status"),
         col("channel")
       )
+
+    val userCourseDenormDF = userCourseDF.join(courseDf, Seq("userid"), "inner")
+      .select(userCourseDF.col("*"),
+        courseDf.col("completionPercentage").as("course_completion"))
+
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
