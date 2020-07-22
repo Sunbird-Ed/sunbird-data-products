@@ -53,10 +53,10 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
     val time = CommonUtil.time({
-      val reportDF = recordTime(prepareReport(spark, loadData, batchFilters, batchList).cache(), s"Time take generate the dataframe} - ")
+      val reportDF = recordTime(prepareReport(spark, loadData, batchFilters, batchList, config).cache(), s"Time take generate the dataframe} - ")
       val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
       val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
-      recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure), s"Time take to save the all the reports into both azure and es -")
+      recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, config), s"Time take to save the all the reports into both azure and es -")
       reportDF.unpersist(true)
     });
     metrics.put("totalExecutionTime", time._1);
@@ -92,7 +92,9 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   /**
    * Loading the specific tables from the cassandra db.
    */
-  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame, batchFilters: String, batchList: List[String])(implicit fc: FrameworkContext): DataFrame = {
+  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String) => DataFrame,
+                    batchFilters: String, batchList: List[String], config: JobConfig)(implicit fc: FrameworkContext): DataFrame = {
+    val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
     val cassandraUrl = "org.apache.spark.sql.cassandra"
     val courseBatchDF = if(batchList.nonEmpty) {
@@ -150,11 +152,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   *here, it will add some more user details
   * */
 
-    val userDenormDF = userCourseDenormDF
+    val reportDF = userCourseDenormDF
       .join(userDF, userDF.col(UserCache.userid) === userCourseDenormDF.col("userid"), "inner")
-      .withColumn(UserCache.externalid, when(userCourseDenormDF.col("course_channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
-      .withColumn(UserCache.schoolname, when(userCourseDenormDF.col("course_channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
-      .withColumn(UserCache.schooludisecode, when(userCourseDenormDF.col("course_channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
       .select(
         userCourseDenormDF.col("courseid"),
         userCourseDenormDF.col("batchid"),
@@ -174,20 +173,28 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         col("username"),
         col(UserCache.userchannel))
 
+    val userDenormDF = if (!reportId.toLowerCase.equalsIgnoreCase("nishtha-reports")) {
+      reportDF
+        .withColumn(UserCache.externalid, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.externalid)).otherwise(""))
+        .withColumn(UserCache.schoolname, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schoolname)).otherwise(""))
+        .withColumn(UserCache.schooludisecode, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schooludisecode)).otherwise(""))
+
+    } else reportDF
+
     val assessmentDF = getAssessmentData(assessmentProfileDF)
     /**
-     * Compute the sum of all the worksheet contents score.
-     */
+      * Compute the sum of all the worksheet contents score.
+      */
     val assessmentAggDf = Window.partitionBy("user_id", "batch_id", "course_id")
     val resDF = assessmentDF
       .withColumn("agg_score", sum("total_score") over assessmentAggDf)
       .withColumn("agg_max_score", sum("total_max_score") over assessmentAggDf)
       .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
     /**
-     * Filter only valid enrolled userid for the specific courseid
-     */
+      * Filter only valid enrolled userid for the specific courseid
+      */
 
-    val reportDF = userDenormDF.join(resDF,
+    val finalReportDF = userDenormDF.join(resDF,
       userDenormDF.col("userid") === resDF.col("user_id")
         && userDenormDF.col("batchid") === resDF.col("batch_id")
         && userDenormDF.col("courseid") === resDF.col("course_id"), "inner")
@@ -196,7 +203,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         "content_id", "total_score", "grand_total", "total_sum_score")
 
     userDF.unpersist()
-    reportDF
+    finalReportDF
   }
 
   /**
@@ -266,11 +273,11 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
    * Alias name: cbatch-assessment
    * Index name: cbatch-assessment-24-08-1993-09-30 (dd-mm-yyyy-hh-mm)
    */
-  def saveReport(reportDF: DataFrame, url: String, uploadToAzure: String)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
+  def saveReport(reportDF: DataFrame, url: String, uploadToAzure: String, config: JobConfig)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
     val result = reportDF.groupBy("courseid").agg(collect_list("batchid").as("batchid"))
     if (StringUtils.isNotBlank(uploadToAzure) && StringUtils.equalsIgnoreCase("true", uploadToAzure)) {
       val courseBatchList = result.collect.map(r => Map(result.columns.zip(r.toSeq): _*))
-      save(courseBatchList, reportDF, url, spark)
+      save(courseBatchList, reportDF, url, spark, config)
     } else {
       JobLogger.log("Skipping uploading reports into to azure", None, INFO)
     }
@@ -304,9 +311,11 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       .getItem(1))), lit("%")))
   }
 
-  def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame): String = {
+  def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame, config: JobConfig): String = {
+    val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
+    val container = if(reportId.toLowerCase.equals("nishtha-reports")) AppConf.getConfig("cloud.container.nishtha.reports")  else AppConf.getConfig("cloud.container.reports")
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
-    val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("assessment.metrics.cloud.objectKey"))
+    val storageConfig = getStorageConfig(container, AppConf.getConfig("assessment.metrics.cloud.objectKey"))
     val azureData = reportDF.select(
       reportDF.col(UserCache.externalid).as("External ID"),
       reportDF.col(UserCache.userid).as("User ID"),
@@ -326,7 +335,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
   }
 
-  def save(courseBatchList: Array[Map[String, Any]], reportDF: DataFrame, url: String, spark: SparkSession)(implicit fc: FrameworkContext): Unit = {
+  def save(courseBatchList: Array[Map[String, Any]], reportDF: DataFrame, url: String, spark: SparkSession, config: JobConfig)(implicit fc: FrameworkContext): Unit = {
     courseBatchList.foreach(item => {
       val courseId = item.getOrElse("courseid", "").asInstanceOf[String]
       val batchList = item.getOrElse("batchid", "").asInstanceOf[Seq[String]].distinct
@@ -338,7 +347,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
           val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
             .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
           try {
-            val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId, transposedData), s"Time taken to save the $batchId into azure -")
+            val urlBatch: String = recordTime(saveToAzure(reportData, url, batchId, transposedData, config), s"Time taken to save the $batchId into azure -")
           } catch {
             case e: Exception => JobLogger.log("File upload is failed due to " + e, None, ERROR)
           }

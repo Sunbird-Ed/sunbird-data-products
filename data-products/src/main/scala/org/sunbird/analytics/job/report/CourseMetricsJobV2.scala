@@ -1,11 +1,11 @@
 package org.sunbird.analytics.job.report
 
 import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{col, unix_timestamp, _}
-import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.{col, _}
+import org.apache.spark.sql.types.DataTypes
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
@@ -21,7 +21,7 @@ trait ReportGeneratorV2 {
 
   def loadData(spark: SparkSession, settings: Map[String, String], url: String): DataFrame
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String], reportId: String)(implicit fc: FrameworkContext): Unit
 }
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
@@ -57,12 +57,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       .set("es.write.operation", "upsert")
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
 
-    val container = AppConf.getConfig("cloud.container.reports")
+    val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
+    val container = if(reportId.toLowerCase.equals("nishtha-reports")) AppConf.getConfig("cloud.container.nishtha.reports")  else AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, storageConfig, loadData, config, batchList)
+      prepareReport(spark, storageConfig, loadData, config, batchList, reportId)
     })
     metrics.put("totalExecutionTime", time._1)
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
@@ -78,7 +79,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
                       (implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
 
     implicit  val sqlContext: SQLContext = spark.sqlContext
-    import sqlContext.implicits._
 
     val courseBatchDF = if(batchList.nonEmpty) {
       loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
@@ -110,7 +110,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     result
   }
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String) => DataFrame,
+                    config: JobConfig, batchList: List[String], reportId: String)(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
     val activeBatches = getActiveBatches(loadData, batchList)
@@ -128,7 +129,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userData._2, loadData, reportId), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
           recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
@@ -147,7 +148,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
   }
 
-  def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String) => DataFrame, reportId: String)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
     val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
@@ -186,10 +187,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
       .join(userDF, Seq("userid"), "inner")
-      .withColumn(UserCache.externalid, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
-      .withColumn(UserCache.schoolname, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
-      .withColumn(UserCache.block, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
-      .withColumn(UserCache.schooludisecode, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
       .select(
         userCourseDenormDF.col("*"),
         col("channel"),
@@ -203,9 +200,17 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col(UserCache.district),
         col(UserCache.schooludisecode),
         col(UserCache.block),
-        col(UserCache.state)
-      ).persist()
-    reportDF
+        col(UserCache.state),
+        col(UserCache.userchannel)
+      )
+    val finalReportDF = if (!reportId.toLowerCase.equalsIgnoreCase("nishtha-reports")) {
+      reportDF
+        .withColumn(UserCache.externalid, when(reportDF.col("channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.externalid)).otherwise(""))
+        .withColumn(UserCache.schoolname, when(reportDF.col("channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schoolname)).otherwise(""))
+        .withColumn(UserCache.block, when(reportDF.col("channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.block)).otherwise(""))
+        .withColumn(UserCache.schooludisecode, when(reportDF.col("channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schooludisecode)).otherwise(""))
+    } else reportDF
+    finalReportDF.persist()
   }
 
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {

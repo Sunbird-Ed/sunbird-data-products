@@ -1,23 +1,15 @@
 package org.sunbird.analytics.job.report
 
-import java.time.{ZoneOffset, ZonedDateTime}
-
-import cats.syntax.either._
-import ing.wbaa.druid._
-import ing.wbaa.druid.client.DruidClient
-import io.circe._
-import io.circe.parser._
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.ekstep.analytics.framework.util.{JSONUtils, RestUtil}
-import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig}
+import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.EmbeddedES
 import org.sunbird.cloud.storage.BaseStorageService
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable.Buffer
-import scala.concurrent.Future
 
 class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
@@ -25,17 +17,10 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
   var courseBatchDF: DataFrame = _
   var userCoursesDF: DataFrame = _
-  var userDF: DataFrame = _
-  var locationDF: DataFrame = _
-  var orgDF: DataFrame = _
-  var userOrgDF: DataFrame = _
-  var externalIdentityDF: DataFrame = _
-  var systemSettingDF: DataFrame = _
   var assessmentProfileDF: DataFrame = _
   var userInfoDF: DataFrame = _
   var reporterMock: ReportGeneratorV2 = mock[ReportGeneratorV2]
   val sunbirdCoursesKeyspace = "sunbird_courses"
-  val sunbirdKeyspace = "sunbird"
   val esIndexName = "cbatch-assessent-report"
 
   override def beforeAll(): Unit = {
@@ -50,13 +35,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .format("com.databricks.spark.csv")
       .option("header", "true")
       .load("src/test/resources/assessment-metrics-updaterv2/courseBatchTable.csv")
-      .cache()
-
-    externalIdentityDF = spark
-      .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/assessment-metrics-updaterv2/usr_external_identity.csv")
       .cache()
 
     userInfoDF = spark.read.json("src/test/resources/course-metrics-updaterv2/user_data.json").cache()
@@ -79,13 +57,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .format("com.databricks.spark.csv")
       .option("header", "true")
       .load("src/test/resources/assessment-metrics-updaterv2/userCoursesTable.csv")
-      .cache()
-
-    systemSettingDF = spark
-      .read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .load("src/test/resources/course-metrics-updaterv2/systemSettingTable.csv")
       .cache()
 
     EmbeddedES.loadData("compositesearch", "cs", Buffer(
@@ -139,13 +110,8 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(assessmentProfileDF)
 
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
-      .anyNumberOfTimes()
-      .returning(systemSettingDF)
-
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"))
+      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"), config)
       .cache()
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)
@@ -158,11 +124,11 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val report = reportDF.withColumn("content_name", lit("Content-1"))
       .withColumn("total_sum_score",lit("90"))
       .withColumn("grand_total", lit("100"))
-    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report)
-    AssessmentMetricsJobV2.saveReport(report, tempDir, "true")
+    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report, config)
+    AssessmentMetricsJobV2.saveReport(report, tempDir, "true", config)
 
     val reportWithoutBatchDetails = reportDF.na.replace("batchid",Map("1006"->""))
-    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true")
+    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true", config)
   }
 
   it should "generate reports" in {
@@ -173,22 +139,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
-    //mocking for DruidDataFetcher
-    import scala.concurrent.ExecutionContext.Implicits.global
-    val json: String =
-      """
-        |{
-        |    "identifier": "do_1125559882615357441175",
-        |    "channel": "apekx"
-        |  }
-      """.stripMargin
-
-    val doc: Json = parse(json).getOrElse(Json.Null);
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
-
-    implicit val mockDruidConfig = DruidConfig.DefaultConfig
 
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
@@ -207,23 +157,57 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(assessmentProfileDF)
 
-    val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra")
-      .anyNumberOfTimes()
-      .returning(systemSettingDF)
-
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "TPD", List())
+      .prepareReport(spark, reporterMock.loadData, "TPD", List(), config)
       .cache()
 
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     // TODO: Check save is called or not
-    AssessmentMetricsJobV2.saveReport(denormedDF, tempDir, "false")
+    AssessmentMetricsJobV2.saveReport(denormedDF, tempDir, "false", config)
+  }
+
+  it should "Ensure CSV Report Should have all proper columns names for NISHTHA" in {
+    implicit val mockFc = mock[FrameworkContext]
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"reportId": "NISHTHA-reports", "batchFilters":["TPD"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val config = JSONUtils.deserialize[JobConfig](strConfig)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .returning(courseBatchDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .returning(userCoursesDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+      .anyNumberOfTimes()
+      .returning(userInfoDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .returning(assessmentProfileDF)
+
+    val reportDF = AssessmentMetricsJobV2
+      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"), config)
+      .cache()
+    val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
+    val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)
+    val column_names = finalReport.columns
+    assert(column_names.contains("courseid") === true)
+    assert(column_names.contains("userid") === true)
+    assert(column_names.contains("batchid") === true)
+
+    val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
+    val report = reportDF.withColumn("content_name", lit("Content-1"))
+      .withColumn("total_sum_score",lit("90"))
+      .withColumn("grand_total", lit("100"))
+    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report, config)
+    AssessmentMetricsJobV2.saveReport(report, tempDir, "true", config)
+
+    val reportWithoutBatchDetails = reportDF.na.replace("batchid",Map("1006"->""))
+    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true", config)
   }
 
   it should "return an empty list if no assessment names found for given content" in {
