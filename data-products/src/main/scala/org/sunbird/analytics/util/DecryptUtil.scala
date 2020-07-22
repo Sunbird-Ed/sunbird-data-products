@@ -35,7 +35,7 @@ object DecryptUtil {
     }
     
      def getSalt() : String = {
-         encryption_key = AppConf.getConfig(s"sunbird_encryption_key")
+         encryption_key = AppConf.getConfig("sunbird_encryption_key")
          encryption_key = replaceSpecialChars(encryption_key)
          if (StringUtils.isEmpty(encryption_key)) {
              JobLogger.log(s"Encrypt key is empty", None, INFO)(new String())
