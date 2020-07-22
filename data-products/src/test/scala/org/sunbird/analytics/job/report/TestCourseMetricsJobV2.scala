@@ -82,44 +82,18 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
     batch1Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("c7ef3848-bbdb-4219-8344-817d5b8103fa")
-//    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
-//    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
-//    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
-//    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
 
     val batch2Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch2.csv").as[BatchReportOutput].collectAsList().asScala
     batch2Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("f3dd58a4-a56f-4c1d-95cf-3231927a28e9")
-//    batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
-//    batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
-//    batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
-//    batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
-    /*
-    // TODO: Add assertions here
-    EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").foreach(f => {
-      f.contains("lastUpdatedOn") should be (true)
-    })
-    EmbeddedES.getAllDocuments("cbatch").foreach(f => {
-      f.contains("reportUpdatedOn") should be (true)
-    })
-    */
-
-    /*
-    val esOutput = JSONUtils.deserialize[ESOutput](EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").head)
-    esOutput.name should be ("Rajesh Kapoor")
-    esOutput.id should be ("user012:1002")
-    esOutput.batchId should be ("1002")
-    esOutput.courseId should be ("do_112726725832507392141")
-    esOutput.rootOrgName should be ("MPPS BAYYARAM")
-    esOutput.subOrgUDISECode should be ("")
-    esOutput.blockName should be ("")
-    esOutput.maskedEmail should be ("*****@gmail.com")
-
-  val esOutput_cbatch = JSONUtils.deserialize[ESOutputCBatch](EmbeddedES.getAllDocuments("cbatch").head)
-    esOutput_cbatch.id should be ("1004")
-    esOutput_cbatch.participantCount should be ("4")
-    esOutput_cbatch.completedCount should be ("0")
-    */
+    batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("df09619-fdcvbn")
+    batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("10")
+    batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("School-2")
+    batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("BLOCK")
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
@@ -172,44 +146,18 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
     batch1Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("c7ef3848-bbdb-4219-8344-817d5b8103fa")
-//    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
-//    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
-//    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
-//    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
+    batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("c98456789-fdcvbn")
+    batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("20")
+    batch1Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("School-1")
+    batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("SERA")
 
     val batch2Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch2.csv").as[BatchReportOutput].collectAsList().asScala
     batch2Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("f3dd58a4-a56f-4c1d-95cf-3231927a28e9")
-//    batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List(null)
-//    batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
-//    batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
-//    batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
-    /*
-    // TODO: Add assertions here
-    EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").foreach(f => {
-      f.contains("lastUpdatedOn") should be (true)
-    })
-    EmbeddedES.getAllDocuments("cbatch").foreach(f => {
-      f.contains("reportUpdatedOn") should be (true)
-    })
-    */
-
-    /*
-    val esOutput = JSONUtils.deserialize[ESOutput](EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").head)
-    esOutput.name should be ("Rajesh Kapoor")
-    esOutput.id should be ("user012:1002")
-    esOutput.batchId should be ("1002")
-    esOutput.courseId should be ("do_112726725832507392141")
-    esOutput.rootOrgName should be ("MPPS BAYYARAM")
-    esOutput.subOrgUDISECode should be ("")
-    esOutput.blockName should be ("")
-    esOutput.maskedEmail should be ("*****@gmail.com")
-
-  val esOutput_cbatch = JSONUtils.deserialize[ESOutputCBatch](EmbeddedES.getAllDocuments("cbatch").head)
-    esOutput_cbatch.id should be ("1004")
-    esOutput_cbatch.participantCount should be ("4")
-    esOutput_cbatch.completedCount should be ("0")
-    */
+    batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("df09619-fdcvbn")
+    batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("10")
+    batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List("School-2")
+    batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("BLOCK")
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
