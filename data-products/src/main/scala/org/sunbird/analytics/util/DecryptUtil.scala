@@ -35,12 +35,20 @@ object DecryptUtil {
     }
     
      def getSalt() : String = {
-         encryption_key = AppConf.getConfig("sunbird_encryption_key")
+         encryption_key = AppConf.getConfig(s"sunbird_encryption_key")
+         encryption_key = replaceSpecialChars(encryption_key)
          if (StringUtils.isEmpty(encryption_key)) {
              JobLogger.log(s"Encrypt key is empty", None, INFO)(new String())
-        }
+         }
          JobLogger.log(s"Encrypt key length: ${encryption_key.length}}", None, INFO)(new String())
          encryption_key
+    }
+    
+    def replaceSpecialChars(value: String) = {
+        var replacedValue = value.replace("\r","\\r")
+        replacedValue = replacedValue.replace("\t", "\\t")
+        replacedValue = replacedValue.replace("\n", "\\n")
+        replacedValue
     }
     
     val keyValue: Array[Byte] = Array[Byte]('T', 'h', 'i', 's', 'A', 's', 'I', 'S', 'e', 'r', 'c', 'e', 'K', 't', 'e', 'y')
