@@ -11,13 +11,15 @@ import io.circe.parser._
 import org.apache.spark.sql.functions._
 import scala.collection.JavaConverters._
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType}
-import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
 
 import scala.collection.mutable
 import scala.concurrent.Future
+
+case class UserAgg(activity_type:String,activity_id:String, user_id:String,context_id:String, agg: Map[String,Int],agg_last_updated:String)
 
 class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseReportsJob {
   var spark: SparkSession = _
@@ -29,8 +31,11 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
   var userOrgDF: DataFrame = _
   var externalIdentityDF: DataFrame = _
   var systemSettingDF: DataFrame = _
+  var userAggDF: DataFrame = _
+  var contentHierarchyDF: DataFrame = _
   var reporterMock: ReportGeneratorV2 = mock[ReportGeneratorV2]
   val sunbirdCoursesKeyspace = "sunbird_courses"
+  val sunbirdHierarchyStore = "dev_hierarchy_store"
   val sunbirdKeyspace = "sunbird"
 
   override def beforeAll(): Unit = {
@@ -51,12 +56,31 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     systemSettingDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
       .load("src/test/resources/course-metrics-updaterv2/system_settings.csv").cache()
+
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    import sqlContext.implicits._
+
+    userAggDF = List(UserAgg("Course","do_113056098660089856158","c7ef3848-bbdb-4219-8344-817d5b8103fa","cb:0130561083009187841",Map("completedCount"->1),"{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
+      UserAgg("Course","do_13456760076615812","f3dd58a4-a56f-4c1d-95cf-3231927a28e9","cb:0130561083009187841",Map("completedCount"->1),"{'completedCount': '2020-07-21 08:30:48.855000+0000'}")).toDF()
+
+    contentHierarchyDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
+      .load("src/test/resources/course-metrics-updaterv2/content_hierarchy.csv").cache()
   }
 
   "TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
       .returning(courseBatchDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .anyNumberOfTimes()
+      .returning(userAggDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra")
+      .anyNumberOfTimes()
+      .returning(contentHierarchyDF)
 
     (reporterMock.loadData _)
       .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
