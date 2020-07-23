@@ -120,7 +120,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     implicit val sparkSession: SparkSession = spark
 
     val modelParams = config.modelParams.getOrElse(Map[String, AnyRef]())
-    val allChannelData: Boolean = modelParams.getOrElse("allChannelPath", false).asInstanceOf[Boolean]
+    val allChannelData: Boolean = modelParams.getOrElse("allChannelData", false).asInstanceOf[Boolean]
     val reportPath: String = if(allChannelData) modelParams.getOrElse("reportPath","").asInstanceOf[String] else "course-progress-reports/"
 
     val activeBatches = getActiveBatches(loadData, batchList)

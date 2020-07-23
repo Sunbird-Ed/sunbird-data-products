@@ -127,9 +127,9 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .returning(alteredUserCourseDf)
 
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"allChannelPath":true,"reportPath":"nishtha-course-progress-reports/","batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"localhost","sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"allChannelData":true,"reportPath":"nishtha-course-progress-reports/","batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"localhost","sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
-    val allChannelData: Boolean = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("allChannelPath", "").asInstanceOf[Boolean]
+    val allChannelData: Boolean = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("allChannelData", "").asInstanceOf[Boolean]
     val reportPath: String = if(allChannelData) config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportPath",false).asInstanceOf[String] else "course-progress-reports/"
 
     val outputLocation = "/tmp/course-metrics"
