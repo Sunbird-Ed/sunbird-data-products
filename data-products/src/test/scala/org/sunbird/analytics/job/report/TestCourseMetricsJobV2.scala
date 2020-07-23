@@ -9,7 +9,6 @@ import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.UserData
-import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -128,13 +127,10 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .returning(alteredUserCourseDf)
 
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"reportId": "NISHTHA-reports","reportPath": "course-nishtha-dashboard/" ,"batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"allChannelPath":true,"reportPath":"nishtha-course-progress-reports/","batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"localhost","sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
-    val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
-    val reportPath: String =
-      if(reportId.toLowerCase.equals("nishtha-reports"))
-        config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportPath","").asInstanceOf[String]
-      else AppConf.getConfig("assessment.metrics.cloud.objectKey")
+    val allChannelData: Boolean = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("allChannelPath", "").asInstanceOf[Boolean]
+    val reportPath: String = if(allChannelData) config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportPath",false).asInstanceOf[String] else "course-progress-reports/"
 
     val outputLocation = "/tmp/course-metrics"
     val storageConfig = StorageConfig("local", "", outputLocation)
@@ -145,7 +141,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
     batchInfo.map(batches => {
-      val reportDf = CourseMetricsJobV2.getReportDF(batches,userDF,reporterMock.loadData, reportId)
+      val reportDf = CourseMetricsJobV2.getReportDF(batches,userDF,reporterMock.loadData, allChannelData)
       CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count(), reportPath)
     })
 

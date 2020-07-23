@@ -95,6 +95,9 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     implicit val mockFc = mock[FrameworkContext]
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["TPD"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
+    val modelParams = config.modelParams.getOrElse(Map[String, AnyRef]())
+    val allChannelData: Boolean = modelParams.getOrElse("allChannelData", false).asInstanceOf[Boolean]
+    val reportPath = if(allChannelData) modelParams.getOrElse("reportPath","").asInstanceOf[String] else AppConf.getConfig("assessment.metrics.cloud.objectKey")
 
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
@@ -115,7 +118,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(assessmentProfileDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"),config)
+      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"),allChannelData)
       .cache()
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)
@@ -128,11 +131,11 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val report = reportDF.withColumn("content_name", lit("Content-1"))
       .withColumn("total_sum_score",lit("90"))
       .withColumn("grand_total", lit("100"))
-    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report, config)
-    AssessmentMetricsJobV2.saveReport(report, tempDir, "true", config)
+    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report, reportPath)
+    AssessmentMetricsJobV2.saveReport(report, tempDir, "true", reportPath)
 
     val reportWithoutBatchDetails = reportDF.na.replace("batchid",Map("1006"->""))
-    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true", config)
+    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true", reportPath)
   }
 
   it should "generate reports" in {
@@ -144,6 +147,10 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
+    val modelParams = config.modelParams.getOrElse(Map[String, AnyRef]())
+    val allChannelData: Boolean = modelParams.getOrElse("allChannelData", false).asInstanceOf[Boolean]
+    val reportPath = if(allChannelData) modelParams.getOrElse("reportPath","").asInstanceOf[String] else AppConf.getConfig("assessment.metrics.cloud.objectKey")
+
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF)
@@ -163,13 +170,13 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(assessmentProfileDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "TPD", List(), config)
+      .prepareReport(spark, reporterMock.loadData, "TPD", List(), allChannelData)
       .cache()
 
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     // TODO: Check save is called or not
-    AssessmentMetricsJobV2.saveReport(denormedDF, tempDir, "false", config)
+    AssessmentMetricsJobV2.saveReport(denormedDF, tempDir, "false", reportPath)
   }
 
   it should "Ensure CSV Report Should have all proper columns names for NISHTHA" in {
@@ -177,6 +184,10 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentMetricsJobV2","modelParams":{"reportId": "NISHTHA-reports","reportPath": "assessment-nishtha-dashboard/", "batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
+    val modelParams = config.modelParams.getOrElse(Map[String, AnyRef]())
+    val allChannelData: Boolean = modelParams.getOrElse("allChannelData", false).asInstanceOf[Boolean]
+    val reportPath = if(allChannelData) modelParams.getOrElse("reportPath","").asInstanceOf[String] else AppConf.getConfig("assessment.metrics.cloud.objectKey")
+
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF)
@@ -196,7 +207,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(assessmentProfileDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"),config)
+      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"),allChannelData)
       .cache()
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)
@@ -209,11 +220,11 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val report = reportDF.withColumn("content_name", lit("Content-1"))
       .withColumn("total_sum_score",lit("90"))
       .withColumn("grand_total", lit("100"))
-    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report, config)
-    AssessmentMetricsJobV2.saveReport(report, tempDir, "true", config)
+    AssessmentMetricsJobV2.saveToAzure(report,"","1006",report, reportPath)
+    AssessmentMetricsJobV2.saveReport(report, tempDir, "true", reportPath)
 
     val reportWithoutBatchDetails = reportDF.na.replace("batchid",Map("1006"->""))
-    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true", config)
+    AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true", reportPath)
   }
   it should "return an empty list if no assessment names found for given content" in {
     val result = AssessmentMetricsJobV2.getAssessmentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
