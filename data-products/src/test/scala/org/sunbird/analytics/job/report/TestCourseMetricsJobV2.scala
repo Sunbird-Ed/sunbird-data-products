@@ -4,12 +4,12 @@ import java.io.File
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
-
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.UserData
+import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -71,7 +71,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val config = JSONUtils.deserialize[JobConfig](strConfig)
     val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
 
-    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List(), reportId)
+    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List())
 
     implicit val batchReportEncoder: Encoder[BatchReportOutput] = Encoders.product[BatchReportOutput]
     val batch1 = "01303150537737011211"
@@ -127,36 +127,39 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
-    val outputLocation = "/tmp/course-metrics"
-    val outputDir = "course-progress-reports"
-    val storageConfig = StorageConfig("local", "", outputLocation)
-
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"reportId": "NISHTHA-reports", "batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"reportId": "NISHTHA-reports","reportPath": "course-nishtha-dashboard/" ,"batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
     val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
+    val reportPath: String =
+      if(reportId.toLowerCase.equals("nishtha-reports"))
+        config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportPath","").asInstanceOf[String]
+      else AppConf.getConfig("assessment.metrics.cloud.objectKey")
 
-    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List(), reportId)
+    val outputLocation = "/tmp/course-metrics"
+    val storageConfig = StorageConfig("local", "", outputLocation)
+
+    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List())
 
     implicit val sc = spark
 
     val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
     batchInfo.map(batches => {
       val reportDf = CourseMetricsJobV2.getReportDF(batches,userDF,reporterMock.loadData, reportId)
-      CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count())
+      CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count(), reportPath)
     })
 
     implicit val batchReportEncoder: Encoder[BatchReportOutput] = Encoders.product[BatchReportOutput]
     val batch1 = "01303150537737011211"
     val batch2 = "0130334873750159361"
 
-    val batchReportsCount = Option(new File(s"$outputLocation/$outputDir").list)
+    val batchReportsCount = Option(new File(s"$outputLocation/$reportPath").list)
       .map(_.count(_.endsWith(".csv"))).getOrElse(0)
 
     batchReportsCount should be (2)
 
     val batch1Results = spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$outputDir/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
+      .load(s"$outputLocation/$reportPath/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
     batch1Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("c7ef3848-bbdb-4219-8344-817d5b8103fa")
     batch1Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("c98456789-fdcvbn")
     batch1Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("20")
@@ -164,7 +167,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     batch1Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List("SERA")
 
     val batch2Results = spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$outputDir/report-$batch2.csv").as[BatchReportOutput].collectAsList().asScala
+      .load(s"$outputLocation/$reportPath/report-$batch2.csv").as[BatchReportOutput].collectAsList().asScala
     batch2Results.map {res => res.`User ID`}.toList should contain theSameElementsAs List("f3dd58a4-a56f-4c1d-95cf-3231927a28e9")
     batch2Results.map {res => res.`External ID`}.toList should contain theSameElementsAs List("df09619-fdcvbn")
     batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List("10")

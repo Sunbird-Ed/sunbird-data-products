@@ -23,7 +23,7 @@ trait ReportGeneratorV2 {
 
   def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String], reportId: String)(implicit fc: FrameworkContext): Unit
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
@@ -59,13 +59,12 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       .set("es.write.operation", "upsert")
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
 
-    val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
-    val container = if(reportId.toLowerCase.equals("nishtha-reports")) AppConf.getConfig("cloud.container.nishtha.reports")  else AppConf.getConfig("cloud.container.reports")
+    val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, storageConfig, loadData, config, batchList, reportId)
+      prepareReport(spark, storageConfig, loadData, config, batchList)
     })
     metrics.put("totalExecutionTime", time._1)
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
@@ -116,9 +115,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame,
-                    config: JobConfig, batchList: List[String], reportId: String)(implicit fc: FrameworkContext): Unit = {
+                    config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
+    val modelParams = config.modelParams.getOrElse(Map[String, AnyRef]())
+    val reportId: String = modelParams.getOrElse("reportId", "").asInstanceOf[String]
+    val reportPath: String = if(reportId.toLowerCase.equals("nishtha-reports")) modelParams.getOrElse("reportPath","").asInstanceOf[String] else "course-progress-reports/"
+
     val activeBatches = getActiveBatches(loadData, batchList)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
@@ -136,7 +139,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         val result = CommonUtil.time({
           val reportDF = recordTime(getReportDF(batch, userData._2, loadData, reportId), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
+          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
@@ -218,7 +221,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     finalReportDF.persist()
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords:Long, reportPath: String): Unit = {
+    println("reportPath: " + reportPath)
     reportDF
       .select(
         col(UserCache.externalid).as("External ID"),
@@ -237,7 +241,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
           .as("Course Progress"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
-      .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
+      .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 

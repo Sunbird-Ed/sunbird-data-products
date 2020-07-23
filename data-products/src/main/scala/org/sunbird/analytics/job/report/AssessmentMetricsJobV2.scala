@@ -312,10 +312,11 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   }
 
   def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame, config: JobConfig): String = {
-    val reportId: String = config.modelParams.getOrElse(Map[String, AnyRef]()).getOrElse("reportId", "").asInstanceOf[String]
-    val container = if(reportId.toLowerCase.equals("nishtha-reports")) AppConf.getConfig("cloud.container.nishtha.reports")  else AppConf.getConfig("cloud.container.reports")
+    val modelParams = config.modelParams.getOrElse(Map[String, AnyRef]())
+    val reportId: String = modelParams.getOrElse("reportId", "").asInstanceOf[String]
+    val reportPath = if(reportId.toLowerCase.equals("nishtha-reports")) modelParams.getOrElse("reportPath","").asInstanceOf[String] else AppConf.getConfig("assessment.metrics.cloud.objectKey")
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
-    val storageConfig = getStorageConfig(container, AppConf.getConfig("assessment.metrics.cloud.objectKey"))
+    val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), reportPath)
     val azureData = reportDF.select(
       reportDF.col(UserCache.externalid).as("External ID"),
       reportDF.col(UserCache.userid).as("User ID"),
@@ -331,8 +332,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       reportDF.col("total_sum_score").as("Total Score"))
       .drop(UserCache.userid, "courseid", "batchid")
     azureData.saveToBlobStore(storageConfig, "csv", "report-" + batchId, Option(Map("header" -> "true")), None);
-    s"${AppConf.getConfig("cloud.container.reports")}/${AppConf.getConfig("assessment.metrics.cloud.objectKey")}/report-$batchId.csv"
-
+    s"${AppConf.getConfig("cloud.container.reports")}/${reportPath}/report-$batchId.csv"
   }
 
   def save(courseBatchList: Array[Map[String, Any]], reportDF: DataFrame, url: String, spark: SparkSession, config: JobConfig)(implicit fc: FrameworkContext): Unit = {
