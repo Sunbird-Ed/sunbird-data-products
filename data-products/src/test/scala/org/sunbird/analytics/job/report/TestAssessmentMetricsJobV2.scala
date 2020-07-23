@@ -1,11 +1,14 @@
 package org.sunbird.analytics.job.report
 
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.{DataFrame, SparkSession}
+
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
+
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.EmbeddedES
+import org.sunbird.analytics.util.{EmbeddedES, UserData}
 import org.sunbird.cloud.storage.BaseStorageService
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -46,7 +49,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .load("src/test/resources/assessment-metrics-updaterv2/assessment.csv")
       .cache()
 
-    AssessmentMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra")
+    AssessmentMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", new StructType())
     /*
      * Data created with 35 participants mapped to only batch from 1001 - 1010 (10), so report
      * should be created for these 10 batch (1001 - 1010) and 34 participants (1 user is not active in the course)
@@ -94,24 +97,25 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(userCoursesDF)
 
+    val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(assessmentProfileDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"), config)
+      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"),config)
       .cache()
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)
@@ -141,20 +145,21 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(userCoursesDF)
 
+    val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(assessmentProfileDF)
 
     val reportDF = AssessmentMetricsJobV2
@@ -173,24 +178,25 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(userCoursesDF)
 
+    val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis")
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra")
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(assessmentProfileDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"), config)
+      .prepareReport(spark, reporterMock.loadData, "NCF", List("1006","1005","1015","1016"),config)
       .cache()
     val denormedDF = AssessmentMetricsJobV2.denormAssessment(reportDF)
     val finalReport = AssessmentMetricsJobV2.transposeDF(denormedDF)
@@ -209,7 +215,6 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val reportWithoutBatchDetails = reportDF.na.replace("batchid",Map("1006"->""))
     AssessmentMetricsJobV2.saveReport(reportWithoutBatchDetails, tempDir, "true", config)
   }
-
   it should "return an empty list if no assessment names found for given content" in {
     val result = AssessmentMetricsJobV2.getAssessmentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
     result.collect().length should be(0)
