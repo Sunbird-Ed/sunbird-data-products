@@ -181,7 +181,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
   it should "Ensure CSV Report Should have all proper columns names for NISHTHA" in {
     implicit val mockFc = mock[FrameworkContext]
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentMetricsJobV2","modelParams":{"reportId": "NISHTHA-reports","reportPath": "assessment-nishtha-dashboard/", "batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentMetricsJobV2","modelParams":{"allChannelData": true,"reportPath": "assessment-nishtha-dashboard/", "batchFilters":["TPD"],"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
     val modelParams = config.modelParams.getOrElse(Map[String, AnyRef]())
