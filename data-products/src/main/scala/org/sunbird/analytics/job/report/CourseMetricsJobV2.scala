@@ -24,7 +24,7 @@ trait ReportGeneratorV2 {
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
-case class CourseData(userid: String, courseid: String, completionPercentage: Int)
+case class CourseData(userid: String, courseid: String, completionPercentage: String, level1: String, l1Count: String)
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
 
@@ -115,16 +115,53 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra")
       .select("identifier","hierarchy")
 
-    val userCourseDf = userAgg.join(hierarchyData, userAgg.col("activity_id") === hierarchyData.col("identifier"), "inner")
+    val resDf = hierarchyData.collect().map(row => {
+      val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(1))
+      val courseInfo = parseCourseHierarchy(userAgg, List(hierarchy),0, List[String]())
+      CourseData(courseInfo._2, courseInfo._1.lift(0).getOrElse(""), courseInfo._1.lift(1).getOrElse(""), courseInfo._1.lift(2).getOrElse(""), courseInfo._1.lift(3).getOrElse(""))
+    }).toList.toDF()
+    resDf
+  }
 
-    userCourseDf.rdd.map(row => {
-      val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(4))
-      val leafNodesCount = hierarchy.getOrElse("leafNodesCount",0).asInstanceOf[Int]
-      val completedCount = row(2).asInstanceOf[Map[String,Int]]("completedCount")
-      var completionPercentage = ((completedCount/leafNodesCount) * 100).abs
-      completionPercentage = if (completionPercentage > 100) 100 else completionPercentage
-      CourseData(row.getString(0), row.getString(1), completionPercentage)
-    }).toDF()
+  def parseCourseHierarchy(userAgg: DataFrame, data: List[Map[String,AnyRef]], levelCount: Int, prevData: List[String]): (List[String],String) = {
+    var courseData = prevData
+    var userId = ""
+    if(levelCount < 2) {
+      data.map(childNodes => {
+        val mimeType = childNodes.getOrElse("mimeType","").asInstanceOf[String]
+        val visibility = childNodes.getOrElse("visibility","").asInstanceOf[String]
+        val contentType = childNodes.getOrElse("contentType","").asInstanceOf[String]
+
+        if(levelCount == 0 || (mimeType.equals("collection") && visibility.equals("Default") && contentType.equals("Course"))) {
+          val identifier = childNodes.getOrElse("identifier","").asInstanceOf[String]
+          val leafNodesCount = childNodes.getOrElse("leafNodesCount",0).asInstanceOf[Int]
+          val completionPercentage = getCourseProgress(userAgg, identifier, leafNodesCount)
+          userId = completionPercentage._2
+          val courseInfo = List(identifier, completionPercentage._1.toString)
+          courseData = courseData ++ courseInfo
+          val children = childNodes.getOrElse("children",List()).asInstanceOf[List[Map[String,AnyRef]]]
+          if(children.nonEmpty) {
+            courseData = parseCourseHierarchy(userAgg, children, levelCount+1, courseData)._1
+          }
+        }
+      })
+    }
+    (courseData,userId)
+  }
+
+  def getCourseProgress(userAgg: DataFrame, identifier: String, leafNodesCount: Int): (Int,String) = {
+    var completionPercentage = 0
+    var userid = ""
+
+    userAgg.collect().map(row => {
+      if(row.getString(1).equals(identifier)) {
+        userid = row.getString(0)
+        val completedCount = row(2).asInstanceOf[Map[String,Int]]("completedCount")
+        completionPercentage = ((completedCount/leafNodesCount.toDouble) * 100).toInt
+        completionPercentage = if (completionPercentage > 100) 100 else completionPercentage
+      }
+    })
+    (completionPercentage,userid)
   }
 
   def recordTime[R](block: => R, msg: String): R = {
@@ -173,7 +210,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         concat_ws(" ", col("firstname"), col("lastname")).as("username"))
   }
 
-  def getReportDF(batch: CourseBatch, userDF: DataFrame, courseDf: DataFrame,loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getReportDF(batch: CourseBatch, userDF: DataFrame, courseDf: DataFrame, loadData: (SparkSession, Map[String, String], String) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
     val userCourseDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra")
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
