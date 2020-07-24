@@ -51,19 +51,21 @@ class DruidJobSubmitter:
         print('String interpolation for the report config completed')
         return report_config_str
 
-    def check_schedule(self, reportSchedule,report_id):
-        if reportSchedule == 'DAILY' :
+    def check_schedule(self, report_schedule, report_id, interval_slider):
+        if report_schedule == 'DAILY':
             return True
-        elif reportSchedule == 'WEEKLY' :
-            if date.today().weekday() == 0:
+        elif report_schedule == 'WEEKLY':
+            interval_slider = int(interval_slider) if interval_slider is not None else 0
+            if interval_slider < 7 and interval_slider >= 0 and date.today().weekday() == interval_slider:
                 return True
-        elif reportSchedule == 'MONTHLY' :
-            if date.today().day == 1 :
+        elif report_schedule == 'MONTHLY':
+            interval_slider = int(interval_slider) + 1 if interval_slider is not None else 1
+            if interval_slider < 21 and interval_slider > 0 and date.today().day == interval_slider:
                 return True
-        elif reportSchedule == 'ONCE' :
+        elif report_schedule == 'ONCE':
             self.deactivate_job(report_id)
             return True
-        else :
+        else:
             return False
 
     def submit_job(self, report_config):
@@ -81,7 +83,7 @@ class DruidJobSubmitter:
         print('Starting the job submitter...')
         reports = self.get_active_jobs()
         for report in reports:
-            if(self.check_schedule(report['reportSchedule'].upper(),report['reportId'])) :
+            if(self.check_schedule(report['reportSchedule'].upper(), report['reportId'], report['config']['reportConfig']['dateRange'].get('intervalSlider'))):
                 report_config = self.interpolate_config(report['config'])
                 self.submit_job(report_config)
         print('Job submission completed...')

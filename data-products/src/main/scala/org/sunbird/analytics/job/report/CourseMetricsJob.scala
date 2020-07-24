@@ -180,7 +180,8 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .select(col("id"), col("name"), col("type")).persist()
 
     val externalIdentityDF = loadData(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace))
-      .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
+      .select(col("provider"), col("idtype"), col("externalid"), col("userid"),
+        col("originalprovider")).persist()
 
     // Get CustodianOrgID
     val custRootOrgId = getCustodianOrgId(loadData)
@@ -210,7 +211,6 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
       .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("rootorgid"), "left_outer")
       .groupBy("userid" )
       .agg(concat_ws(",", collect_set("orgname")).as("orgname_resolved"))
-
     /**
     * Resolve School Name from SubOrgs
     * * If the user present in the multiple sub organizations, then zip all the org names.
@@ -296,7 +296,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
     val custodianUserPivotDF = custodianOrguserLocationDF
       .join(externalIdentityDF, externalIdentityDF.col("userid") === custodianOrguserLocationDF.col("userid"), "left")
-      .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
+      .join(organisationDF, externalIdentityDF.col("originalprovider") === organisationDF.col("channel")
         && organisationDF.col("isrootorg").equalTo(true), "left")
       .groupBy(custodianOrguserLocationDF.col("userid"), organisationDF.col("id"))
       .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))

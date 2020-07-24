@@ -77,7 +77,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val usrExternalIdentityEncoder = Encoders.product[UsrExternalIdentity].schema
         //loading usr_external_identity table details based on declared values and location details and appending org-external-id if present
         val userExternalDataDF = loadData(sparkSession, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace), Some(usrExternalIdentityEncoder)).
-            filter(col(colName = "idtype").isin("declared-email", "declared-phone", "declared-school-name", "declared-school-udise-code", "declared-ext-id", "declared-state", "declared-district")).as[UsrExternalIdentity]
+            filter(col(colName = "idtype").isin("declared-email", "declared-phone", "declared-school-name", "declared-school-udise-code", "declared-ext-id", "declared-state", "declared-district").and(col("originalexternalid").isNotNull)).as[UsrExternalIdentity]
         val locationDF = locationData()
         val orgExternalIdList: List[String] = loadOrganisationData().select("externalid").filter(col("externalid").isNotNull).map(_.getString(0)).collect().toList
         
@@ -141,8 +141,9 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("decrypted-phone").as("Phone number"),
                 col("decrypted-email").as("Email ID"),
                 col("Diksha Sub-Org ID"),
-                col("originalprovider").as("Channel"))
-        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("Channel")))
+                col("originalprovider").as("Channel"),
+                col("originalprovider").as("provider"))
+        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
         resultDf
     }
     
