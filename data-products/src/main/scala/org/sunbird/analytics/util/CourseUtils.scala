@@ -158,8 +158,6 @@ object CourseUtils {
   }
 
   def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
-    implicit val sqlContext = new SQLContext(spark.sparkContext)
-    import sqlContext.implicits._
     val apiUrl = Constants.COMPOSITE_SEARCH_URL
     val request =
       s"""{
