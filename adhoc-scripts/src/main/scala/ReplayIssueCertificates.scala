@@ -11,7 +11,7 @@ object ReplayIssueCertificates {
     
     case class Event(eid: String, ets:Long, mid: String, actor: Map[String, AnyRef], context: Map[String, AnyRef], `object`: Map[String, AnyRef], edata: Map[String, AnyRef])
 
-    val batchSize = 2
+    val batchSize = 10
     def prepareEvent(batchId: String, courseId: String, usersList: List[List[String]]): Seq[String] = {
         usersList.map(users => {
             val actor = Map("id" -> "Course Certificate Generator", "type" -> "System")
