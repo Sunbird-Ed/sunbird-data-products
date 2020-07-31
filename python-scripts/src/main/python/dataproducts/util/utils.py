@@ -378,20 +378,20 @@ def file_missing_exception(raise_except=False):
         return Exception
 
 
-def download_file_from_store(blob_name, file_path, container_name):
+def download_file_from_store(blob_name, file_path, container_name, is_private=True):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
-        azure_utils.get_data_from_store(container_name, blob_name, file_path)
+        azure_utils.get_data_from_store(container_name, blob_name, file_path, is_private)
     elif storage_provider == "S3":
         pass
     elif storage_provider == "GCP":
         pass
 
 
-def upload_file_to_store(blob_name, file_path, container_name):
+def upload_file_to_store(blob_name, file_path, container_name, is_private=True):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
-        azure_utils.post_data_to_store(container_name, blob_name, file_path)
+        azure_utils.post_data_to_store(container_name, blob_name, file_path, is_private)
     elif storage_provider == "S3":
         pass
     elif storage_provider == "GCP":

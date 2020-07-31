@@ -11,14 +11,15 @@ from datetime import datetime, date
 from azure.common import AzureMissingResourceHttpError
 from pandas.errors import EmptyDataError
 
-from dataproducts.util.utils import create_json, post_data_to_blob, push_metric_event, \
-                            get_tenant_info, get_data_from_blob
+from dataproducts.util.utils import push_metric_event, get_tenant_info, \
+                                    download_file_from_store, upload_file_to_store
 
 class LandingPageMetrics:
     def __init__(self, data_store_location, org_search):
         self.data_store_location = Path(data_store_location)
         self.org_search = org_search
         self.current_time = None
+        self.report_container = 'reports'
 
 
     def generate_report(self):
@@ -34,18 +35,33 @@ class LandingPageMetrics:
                 org_path = self.data_store_location.joinpath('portal_dashboards', slug)
                 os.makedirs(org_path, exist_ok=True)
 
-                get_data_from_blob(org_path.joinpath('daily_metrics.csv'))
-                get_data_from_blob(org_path.joinpath('DCE_textbook_data.csv'))
-                get_data_from_blob(org_path.joinpath('content_creation.csv'))
+                download_file_from_store(
+                    blob_name=org_path.name + '/daily_metrics.csv',
+                    file_path=org_path.joinpath('daily_metrics.csv'),
+                    container_name=self.report_container
+                    )
+                download_file_from_store(
+                    blob_name=org_path.name + '/DCE_textbook_data.csv',
+                    file_path=org_path.joinpath('DCE_textbook_data.csv'),
+                    container_name=self.report_container
+                    )
+                download_file_from_store(
+                    blob_name=org_path.name + '/content_creation.csv',
+                    file_path=org_path.joinpath('content_creation.csv'),
+                    container_name=self.report_container
+                    )
                 dm_df = pd.read_csv(org_path.joinpath('daily_metrics.csv'))
                 dm_df = dm_df.set_index('Date')
                 dm_df.set_index(pd.to_datetime(dm_df.index, format='%d-%m-%Y'), inplace=True)
                 _2018 = dm_df.loc[dm_df.index < '2019-06-01'].sum()[
                     ['Total QR scans', 'Total Content Downloads', 'Total Content Plays', 'Total Content Play Time (in hours)']]
-                _2019 = dm_df.loc[dm_df.index >= '2019-06-01'].sum()[
+                _2019 = dm_df.loc[(dm_df.index >= '2019-06-01') & (dm_df.index < '2020-06-01')].sum()[
+                    ['Total QR scans', 'Total Content Downloads', 'Total Content Plays', 'Total Content Play Time (in hours)']]
+                _2020 = dm_df.loc[dm_df.index >= '2020-06-01'].sum()[
                     ['Total QR scans', 'Total Content Downloads', 'Total Content Plays', 'Total Content Play Time (in hours)']]
                 _2018.to_json(org_path.joinpath('landing_page_2018.json'))
                 _2019.to_json(org_path.joinpath('landing_page_2019.json'))
+                _2020.to_json(org_path.joinpath('landing_page_2020.json'))
                 try:
                     dce_df = pd.read_csv(org_path.joinpath('DCE_textbook_data.csv'))
                     cc_df = pd.read_csv(org_path.joinpath('content_creation.csv'))
@@ -63,9 +79,30 @@ class LandingPageMetrics:
                 with open(str(org_path.joinpath('landing_page_creation_metrics.json')), 'w') as f:
                     json.dump(result, f)
 
-                post_data_to_blob(org_path.joinpath('landing_page_2018.json'))
-                post_data_to_blob(org_path.joinpath('landing_page_2019.json'))
-                post_data_to_blob(org_path.joinpath('landing_page_creation_metrics.json'))
+                upload_file_to_store(
+                    container_name=self.report_container,
+                    blob_name=org_path.name + '/landing_page_2018.json',
+                    file_path=str(org_path.joinpath('landing_page_2018.json')),
+                    is_private=False
+                    )
+                upload_file_to_store(
+                    container_name=self.report_container,
+                    blob_name=org_path.name + '/landing_page_2019.json',
+                    file_path=str(org_path.joinpath('landing_page_2019.json')),
+                    is_private=False
+                    )
+                upload_file_to_store(
+                    container_name=self.report_container,
+                    blob_name=org_path.name + '/landing_page_2020.json',
+                    file_path=str(org_path.joinpath('landing_page_2020.json')),
+                    is_private=False
+                    )
+                upload_file_to_store(
+                    container_name=self.report_container,
+                    blob_name=org_path.name + '/landing_page_creation_metrics.json',
+                    file_path=str(org_path.joinpath('landing_page_creation_metrics.json')),
+                    is_private=False
+                    )
             except EmptyDataError:
                 pass
             except AzureMissingResourceHttpError:
