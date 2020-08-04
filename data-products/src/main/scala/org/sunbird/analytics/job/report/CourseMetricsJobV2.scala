@@ -159,7 +159,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
           val courseInfo = List(identifier, leafNodesCount.toString)
           courseData = courseData ++ courseInfo
           val children = childNodes.getOrElse("children",List()).asInstanceOf[List[Map[String,AnyRef]]]
-          if(children.nonEmpty) {
+          if(null != children && children.nonEmpty) {
             courseData = parseCourseHierarchy(children, levelCount+1, courseData)
           }
         }
@@ -192,7 +192,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     for (index <- activeBatches.indices) {
       val row = activeBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
-      if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
+      if(null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
         val result = CommonUtil.time({
           val reportDF = recordTime(getReportDF(batch, userData._2, userCourses, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")

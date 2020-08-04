@@ -125,7 +125,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
     val courseChannelDenormDF = courseBatchRdd.map(f => {
       val courses = CourseUtils.getCourseInfo(spark, f.courseid)
-      if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
+      if(null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         CourseInfo(f.courseid,f.batchid,f.startdate,f.enddate,courses.channel)
       }
       else CourseInfo("","","","","")
