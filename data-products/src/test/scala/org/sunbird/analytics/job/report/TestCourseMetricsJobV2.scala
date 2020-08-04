@@ -76,7 +76,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 

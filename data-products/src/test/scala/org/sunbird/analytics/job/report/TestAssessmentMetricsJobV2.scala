@@ -6,6 +6,7 @@ import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.{EmbeddedES, UserData}
+import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.collection.mutable.Buffer
 
@@ -91,7 +92,12 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
   }
 
   it should "ensure all data" in {
-    implicit val mockFc = mock[FrameworkContext]
+    implicit val mockFc = mock[FrameworkContext];
+    val mockStorageService = mock[BaseStorageService]
+    (mockFc.getStorageService(_: String, _: String, _: String)).expects(*, *, *).returns(mockStorageService).anyNumberOfTimes();
+    (mockStorageService.upload _).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
+    (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
+
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
@@ -100,7 +106,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(userCoursesDF)
       .anyNumberOfTimes()
 

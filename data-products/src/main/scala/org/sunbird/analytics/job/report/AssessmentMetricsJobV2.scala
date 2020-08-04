@@ -143,7 +143,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
 
-    val userCoursesDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
+    val userCoursesDF = loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
       .filter(lower(col("active")).equalTo("true"))
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
