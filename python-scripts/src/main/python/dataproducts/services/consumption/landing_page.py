@@ -19,7 +19,7 @@ class LandingPageMetrics:
         self.data_store_location = Path(data_store_location)
         self.org_search = org_search
         self.current_time = None
-        self.report_container = 'reports'
+        self.report_container = os.environ['REPORT_CONTAINER']
 
 
     def generate_report(self):
@@ -36,19 +36,19 @@ class LandingPageMetrics:
                 os.makedirs(org_path, exist_ok=True)
 
                 download_file_from_store(
+                    container_name=self.report_container,
                     blob_name=org_path.name + '/daily_metrics.csv',
-                    file_path=org_path.joinpath('daily_metrics.csv'),
-                    container_name=self.report_container
+                    file_path=org_path.joinpath('daily_metrics.csv')
                     )
                 download_file_from_store(
+                    container_name=self.report_container,
                     blob_name=org_path.name + '/DCE_textbook_data.csv',
-                    file_path=org_path.joinpath('DCE_textbook_data.csv'),
-                    container_name=self.report_container
+                    file_path=org_path.joinpath('DCE_textbook_data.csv')
                     )
                 download_file_from_store(
+                    container_name=self.report_container,
                     blob_name=org_path.name + '/content_creation.csv',
-                    file_path=org_path.joinpath('content_creation.csv'),
-                    container_name=self.report_container
+                    file_path=org_path.joinpath('content_creation.csv')
                     )
                 dm_df = pd.read_csv(org_path.joinpath('daily_metrics.csv'))
                 dm_df = dm_df.set_index('Date')

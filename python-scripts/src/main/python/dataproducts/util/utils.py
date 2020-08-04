@@ -429,7 +429,7 @@ def get_data_from_blob(result_loc_, backup=False):
     try:
         result_loc_.parent.mkdir(exist_ok=True)
         if backup:
-            container_name = 'portal-reports-backup'
+            container_name = os.environ['REPORT_BACKUP_CONTAINER']
             file_name = result_loc_.name
             date_name = result_loc_.parent.name
             report_name = result_loc_.parent.parent.name
@@ -439,7 +439,7 @@ def get_data_from_blob(result_loc_, backup=False):
                 container_name=container_name,
             )
         else:
-            container_name = 'reports'
+            container_name = os.environ['REPORT_CONTAINER']
             download_file_from_store(
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
                 file_path=str(result_loc_),
@@ -484,7 +484,7 @@ def post_data_to_blob(result_loc_, backup=False):
     """
     try:
         if backup:
-            container_name = 'portal-reports-backup'
+            container_name = os.environ['REPORT_BACKUP_CONTAINER']
             file_name = result_loc_.name
             date_name = result_loc_.parent.name
             report_name = result_loc_.parent.parent.name
@@ -494,7 +494,7 @@ def post_data_to_blob(result_loc_, backup=False):
                 file_path=str(result_loc_)
             )
         else:
-            container_name = 'reports'
+            container_name = os.environ['REPORT_CONTAINER']
             azure_utils.post_data_to_store(
                 container_name=container_name,
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
