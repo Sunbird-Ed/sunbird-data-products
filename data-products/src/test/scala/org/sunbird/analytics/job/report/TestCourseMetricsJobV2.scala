@@ -187,17 +187,6 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
 
-  it should "test redis and cassandra connections" in {
-    implicit val fc = Option(mock[FrameworkContext])
-    spark.sparkContext.stop()
-
-    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
-    getReportingSparkContext(JSONUtils.deserialize[JobConfig](strConfig))
-    val conf = openSparkSession(JSONUtils.deserialize[JobConfig](strConfig))
-    conf.sparkContext.stop()
-    spark = getSparkSession()
-  }
-
   it should "run with filtered contents" in {
     implicit val mockFc = mock[FrameworkContext]
 
@@ -249,6 +238,17 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
 
+  }
+
+  it should "test redis and cassandra connections" in {
+    implicit val fc = Option(mock[FrameworkContext])
+    spark.sparkContext.stop()
+
+    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
+    getReportingSparkContext(JSONUtils.deserialize[JobConfig](strConfig))
+    val conf = openSparkSession(JSONUtils.deserialize[JobConfig](strConfig))
+    conf.sparkContext.stop()
+    spark = getSparkSession()
   }
 
 }
