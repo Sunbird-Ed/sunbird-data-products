@@ -14,8 +14,8 @@ def init():
                 },
                 {
                     "type": "in",
-                    "dimension": "contentType",
-                    "values": ["Resource", "ExplanationResource", "FocusSpot", "PracticeQuestionSet", "eTextBook", "LearningOutcomeDefinition", "PracticeResource", "ExperientialResource", "SelfAssess", "CuriosityQuestionSet"]
+                    "dimension": "mimeType",
+                    "values": "mimetype_filter"
                 },
                 {
                     "type": "in",
@@ -34,26 +34,13 @@ def init():
             "name",
             "channel",
             "contentType",
-            "mediaType",
             "mimeType",
-            "objectType",
-            "resourceType",
             "status",
-            "author",
             "creator",
             "createdOn",
             "lastPublishedOn",
-            "lastSubmittedOn",
-            "lastUpdatedOn",
             "me_averageRating",
-            "me_totalRatings",
-            "me_totalDownloads",
-            "me_totalTimeSpentInApp",
-            "me_totalTimeSpentInPortal",
-            "me_totalTimeSpentInDesktop",
-            "me_totalPlaySessionCountInApp",
-            "me_totalPlaySessionCountInPortal",
-            "me_totalPlaySessionCountInDesktop"
+            "me_totalRatings"
         ]
     }
     """
