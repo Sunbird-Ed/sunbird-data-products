@@ -198,4 +198,57 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     spark = getSparkSession()
   }
 
+  it should "run with filtered contents" in {
+    implicit val mockFc = mock[FrameworkContext]
+
+    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"contentsFilters": {"request": {"filters": {"contentType": "NISHTHA"},"fields": ["identifier", "name"]}},"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+
+    val outputLocation = "/tmp/course-metrics"
+    val storageConfig = StorageConfig("local", "", outputLocation)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .returning(courseBatchDF)
+
+    val schema = Encoders.product[UserData].schema
+    (reporterMock.loadData _)
+      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
+      .anyNumberOfTimes()
+      .returning(userDF)
+
+    CourseMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", new StructType())
+
+
+    val convertMethod = udf((value: mutable.WrappedArray[String]) => {
+      if(null != value && value.nonEmpty)
+        value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
+      else null
+    }, new ArrayType(MapType(StringType, StringType), true))
+
+    val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(alteredUserCourseDf)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(userDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(externalIdentityDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(systemSettingDF)
+
+    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
+
+  }
+
 }

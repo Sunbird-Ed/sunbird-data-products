@@ -179,4 +179,13 @@ object CourseUtils {
       response.result.content.head
     } else CourseBatchInfo("","","","",List())
   }
+
+  def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
+    val apiUrl = Constants.COMPOSITE_SEARCH_URL
+    val response = RestUtil.post[CourseResponse](apiUrl, query)
+    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+      response.result.content
+    } else List[CourseBatchInfo]()
+  }
+
 }

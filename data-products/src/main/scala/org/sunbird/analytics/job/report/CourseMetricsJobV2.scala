@@ -78,7 +78,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])
-                      (implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
+                      (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
 
     implicit  val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
@@ -99,8 +99,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
 
     val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").collect
-    JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
+    val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate")
+    JobLogger.log("Total number of active batches:" + activeBatchList.count, None, INFO)
 
     activeBatchList
   }
@@ -115,18 +115,30 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
+    val modelParams = config.modelParams.get
+    val contentFilters = modelParams.getOrElse("contentFilters",Map()).asInstanceOf[Map[String,AnyRef]]
+
     implicit val sparkSession: SparkSession = spark
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    import sqlContext.implicits._
+
     val activeBatches = getActiveBatches(loadData, batchList)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
-    val activeBatchesCount = new AtomicInteger(activeBatches.length)
+    val activeBatchesCount = new AtomicInteger(activeBatches.count().toInt)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
-    val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
+    val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
 
-    for (index <- activeBatches.indices) {
-      val row = activeBatches(index)
+    val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
+    val filteredBatches = if(contentFilters.nonEmpty) {
+      activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
+        .select(activeBatches.col("*")).collect
+    } else activeBatches.collect
+
+    for (index <- filteredBatches.indices) {
+      val row = filteredBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
       if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
