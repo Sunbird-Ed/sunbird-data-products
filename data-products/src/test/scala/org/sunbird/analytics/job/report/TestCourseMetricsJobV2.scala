@@ -15,7 +15,7 @@ import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.UserData
+import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -190,7 +190,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
   it should "run with filtered contents" in {
     implicit val mockFc = mock[FrameworkContext]
 
-    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"contentsFilters": {"request": {"filters": {"contentType": "NISHTHA"},"fields": ["identifier", "name"]}},"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
+    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"contentFilters": {"request": {"filters": {"contentType": "Course"},"fields": ["identifier", "name"]}},"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
 
     val outputLocation = "/tmp/course-metrics"
@@ -207,7 +207,9 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .returning(userDF)
 
     CourseMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", new StructType())
-
+    val query = """{"request": {"filters": {"contentType": "Courses"},"fields": ["identifier", "name"]}}""".stripMargin
+    val courseInfo = CourseUtils.filterContents(spark, query)
+    courseInfo should be (List())
 
     val convertMethod = udf((value: mutable.WrappedArray[String]) => {
       if(null != value && value.nonEmpty)

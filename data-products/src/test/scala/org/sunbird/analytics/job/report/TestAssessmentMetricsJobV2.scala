@@ -220,7 +220,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(systemSettingDF)
 
     val reportDF = AssessmentMetricsJobV2
-      .prepareReport(spark, reporterMock.loadData, "TPD", List(), Map())
+      .prepareReport(spark, reporterMock.loadData, "TPD", List(), Map("request" -> Map("filters" -> Map("contentType" -> "Course"), "fields" -> List("identifier", "name"))))
       .cache()
 
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
