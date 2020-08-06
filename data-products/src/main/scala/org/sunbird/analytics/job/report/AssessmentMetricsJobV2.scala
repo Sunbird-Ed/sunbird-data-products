@@ -46,9 +46,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   }
 
   private def execute(config: JobConfig, batchList: List[String])(implicit sc: SparkContext, fc: FrameworkContext) = {
-    val modelParams = config.modelParams.get
-    val contentFilters = modelParams.getOrElse("contentFilters",Map()).asInstanceOf[Map[String,AnyRef]]
-
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
     val readConsistencyLevel: String = AppConf.getConfig("assessment.metrics.cassandra.input.consistency")
     val sparkConf = sc.getConf
@@ -57,7 +54,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
     val time = CommonUtil.time({
-      val reportDF = recordTime(prepareReport(spark, loadData, batchFilters, batchList, contentFilters).cache(), s"Time take generate the dataframe} - ")
+      val reportDF = recordTime(prepareReport(spark, loadData, batchFilters, batchList).cache(), s"Time take generate the dataframe} - ")
       val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
       val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
       recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure), s"Time take to save the all the reports into both azure and es -")
@@ -95,11 +92,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   /**
    * Loading the specific tables from the cassandra db.
    */
-  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchFilters: String, batchList: List[String], contentFilters: Map[String,AnyRef])(implicit fc: FrameworkContext): DataFrame = {
-    implicit val sqlContext = new SQLContext(spark.sparkContext)
-    import sqlContext.implicits._
-    val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
-
+  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchFilters: String, batchList: List[String])(implicit fc: FrameworkContext): DataFrame = {
     val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
     val cassandraUrl = "org.apache.spark.sql.cassandra"
     val courseBatchDF = if(batchList.nonEmpty) {
@@ -111,11 +104,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
         .select("courseid", "batchid", "enddate", "startdate")
     }
-
-    val filteredBatches = if(contentFilters.nonEmpty) {
-      courseBatchDF.join(filteredContents, courseBatchDF.col("courseid") === filteredContents.col("identifier"), "inner")
-        .select(courseBatchDF.col("*"))
-    } else courseBatchDF
 
     val userCoursesDF = loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
       .filter(lower(col("active")).equalTo("true"))
@@ -129,8 +117,11 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
 
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+
     val encoder = Encoders.product[CourseBatchOutput]
-    val courseBatchRdd = filteredBatches.as[CourseBatchOutput](encoder).rdd
+    val courseBatchRdd = courseBatchDF.as[CourseBatchOutput](encoder).rdd
 
     val courseChannelDenormDF = courseBatchRdd.map(f => {
       val courses = CourseUtils.getCourseInfo(spark, f.courseid)
