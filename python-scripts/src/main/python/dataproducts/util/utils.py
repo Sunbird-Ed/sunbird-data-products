@@ -258,13 +258,14 @@ def verify_state_district(loc_map_path_, state_, df_):
     return df_
 
 
-def get_content_model(result_loc_, druid_, date_, config_, status_=["Live"]):
+def get_content_model(result_loc_, druid_, date_, config_, version_, status_=["Live"]):
     """
     get current content model snapshot
     :param result_loc_: pathlib.Path object to store resultant CSV at
     :param druid_: host ip and port for druid broker
     :param date_: datetime object to pass in path
     :param config_: pass the mime type filters
+    :param version_: differentiate between versions of query. values in ['v1', 'v2']
     :param status_: status of the content which has to retrieved
     :return: None
     """
@@ -273,9 +274,13 @@ def get_content_model(result_loc_, druid_, date_, config_, status_=["Live"]):
             'Content-Type': "application/json"
         }
         url = "{}druid/v2/".format(druid_)
-        qr = content_list.init()
+        if version_ == 'v1':
+            qr = content_list_v1.init()
+        elif version_ == 'v2':
+            qr = content_list_v2.init()
         qr = json.loads(qr)
-        qr['filter']['fields'][1]['values'] = config_['content']['mimeType']
+        if version_ == 'v2':
+            qr['filter']['fields'][1]['values'] = config_['content']['mimeType']
         qr['filter']['fields'][2]['values'] = status_
         response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
         result = response.json()
@@ -283,25 +288,8 @@ def get_content_model(result_loc_, druid_, date_, config_, status_=["Live"]):
         for segment in result:
             response_list.append(pd.DataFrame(segment['events']))
         content_model = pd.concat(response_list)
-        rename_mimetype = {
-            'application/epub': 'Document',
-            'application/octet-stream': 'Document',
-            'application/pdf': 'Document',
-            'application/msword': 'Document',
-            'application/vnd.ekstep.ecml-archive': 'Interactive Content',
-            'application/vnd.ekstep.h5p-archive': 'Interactive Content',
-            'application/vnd.ekstep.html-archive': 'Interactive Content',
-            'text/x-url': 'Document',
-            'video/3gpp': 'Video',
-            'video/avi': 'Video',
-            'video/ogg': 'Video',
-            'video/quicktime': 'Video',
-            'video/mp4': 'Video',
-            'video/mpeg': 'Video',
-            'video/webm': 'Video',
-            'video/x-youtube': 'YouTube'
-        }
-        content_model['mimeType'].replace(rename_mimetype, inplace=True)
+        if version_ == 'v2':
+            content_model['mimeType'].replace(config_['rename_mimetype'], inplace=True)
         content_model.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'),
                              index=False, encoding='utf-8-sig')
         post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'), backup=True)
@@ -549,7 +537,7 @@ def get_courses(result_loc_, druid_, date_):
     post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'courses.csv'), backup=True)
 
 
-def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_):
+def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_, version_):
     """
     Get content plays and timespent by content id.
     :param result_loc_: local path to store resultant csv
@@ -557,6 +545,7 @@ def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_):
     :param end_date_: datetime object used for druid query
     :param druid_: druid broker ip and port in http://ip:port/ format
     :param config_: Platform cofigs for druid query
+    :param version_: to differentiate version of query. value in ['v1', 'v2']
     :return: None
     """
     headers = {
@@ -569,7 +558,7 @@ def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_):
     query = query.replace('$app', config_['context']['pdata']['id']['app'])
     query = query.replace('$portal', config_['context']['pdata']['id']['portal'])
     query = json.loads(query)
-    if start_date_ > datetime(2020, 7, 2):
+    if version_ == 'v2':
         query['filter']['fields'].append(
             {
                 "type": "in",

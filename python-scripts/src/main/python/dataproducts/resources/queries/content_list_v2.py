@@ -15,7 +15,7 @@ def init():
                 {
                     "type": "in",
                     "dimension": "mimeType",
-                    "values": "mimetype_filter"
+                    "values": []
                 },
                 {
                     "type": "in",
