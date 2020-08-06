@@ -448,7 +448,7 @@ def get_data_from_blob(result_loc_, backup=False):
                 container_name=container_name,
             )
         else:
-            container_name = os.environ['REPORT_CONTAINER']
+            container_name = os.environ['PRIVATE_REPORT_CONTAINER']
             download_file_from_store(
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
                 file_path=str(result_loc_),
@@ -503,7 +503,7 @@ def post_data_to_blob(result_loc_, backup=False):
                 file_path=str(result_loc_)
             )
         else:
-            container_name = os.environ['REPORT_CONTAINER']
+            container_name = os.environ['PRIVATE_REPORT_CONTAINER']
             azure_utils.post_data_to_store(
                 container_name=container_name,
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
