@@ -61,7 +61,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "user:*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
+      .expects(spark, Map("keys.pattern" -> "user:*","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userDF)
 
