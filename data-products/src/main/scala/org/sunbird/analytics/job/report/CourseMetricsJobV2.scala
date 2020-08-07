@@ -145,7 +145,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("keys.pattern" -> "user:*","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
+    loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
   }
 
@@ -187,7 +187,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       )
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userCourseDenormDF
-      .join(userDF, concat(lit("user:"), userCourseDenormDF.col("userid"))  === userDF.col("userid"), "inner")
+      .join(userDF, Seq("userid"), "inner")
       .withColumn(UserCache.externalid, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
       .withColumn(UserCache.schoolname, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
       .withColumn(UserCache.block, when(userCourseDenormDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
