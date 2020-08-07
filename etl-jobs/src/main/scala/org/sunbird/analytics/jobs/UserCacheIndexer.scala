@@ -1,15 +1,12 @@
 package org.sunbird.analytics.jobs
 
-import com.redislabs.provider.redis._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
-import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, first, lit, lower, _}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
-import org.sunbird.analytics.util.JSONUtils
 import org.apache.spark.sql.functions.to_json
 
-object UserCacheIndexer {
+object UserCacheIndexer extends Serializable {
 
   private val config: Config = ConfigFactory.load
 
@@ -22,8 +19,8 @@ object UserCacheIndexer {
       fromSpecificDate = args(1) // date in YYYY-MM-DD format
     }
     val sunbirdKeyspace = "sunbird"
-    val redisKeyProperty = "userid" // userid
 
+    val complexFieldTypes = Array("array", "map")
 
     val spark: SparkSession =
       SparkSession
@@ -37,21 +34,6 @@ object UserCacheIndexer {
         .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
         .config("spark.cassandra.read.timeoutMS", "300000")
         .getOrCreate()
-
-    def filterData(param: Seq[AnyRef]): Seq[(String, String)]
-    = {
-      param.map {
-        case (x, y) => (x.toString, if (!y.isInstanceOf[String]) {
-          if (null != y) {
-            JSONUtils.serialize(y.asInstanceOf[AnyRef])
-          } else {
-            ""
-          }
-        } else {
-          y.asInstanceOf[String]
-        })
-      }
-    }
 
     def filterUserData(userDF: DataFrame): DataFrame = {
       if (null != specificUserId && !StringUtils.equalsIgnoreCase(specificUserId, "null")) {
@@ -274,18 +256,15 @@ object UserCacheIndexer {
     }
 
     def populateToRedis(dataFrame: DataFrame, from: String): Unit = {
-      var filteredDF = dataFrame.filter(col("userid").isNotNull)
+      val filteredDF = dataFrame.filter(col("userid").isNotNull)
       val schema = filteredDF.schema
-      schema.fields.foreach(f => {
-        f.dataType.typeName match {
-          case "array" =>
-            filteredDF = filteredDF.withColumn(f.name, to_json(col(f.name)))
-          case "map" =>
-            filteredDF = filteredDF.withColumn(f.name, to_json(col(f.name)))
-          case _ =>
-        }
-      });
-      filteredDF.write
+      val complexFields = schema.fields.filter(field => complexFieldTypes.contains(field.dataType.typeName))
+
+      val resultDF = complexFields.foldLeft(filteredDF)((df, field) =>
+        df.withColumn(field.name, to_json(col(field.name)))
+      )
+
+      resultDF.write
         .format("org.apache.spark.sql.redis")
         .option("table", "user")
         .option("key.column", "userid")
