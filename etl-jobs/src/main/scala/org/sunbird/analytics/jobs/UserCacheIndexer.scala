@@ -5,8 +5,9 @@ import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, first, lit, lower, _}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.sunbird.analytics.util.JSONUtils
+import org.apache.spark.sql.functions.to_json
 
 object UserCacheIndexer {
 
@@ -273,13 +274,23 @@ object UserCacheIndexer {
     }
 
     def populateToRedis(dataFrame: DataFrame, from: String): Unit = {
-      val filteredDF = dataFrame.filter(col("userid").isNotNull)
-      val fieldNames = filteredDF.schema.fieldNames
-      val mappedData = filteredDF.rdd.map(row => fieldNames.map(field => field -> row.getAs(field)).toMap).collect().map(x => (x.getOrElse(redisKeyProperty, ""), x.toSeq))
-      mappedData.foreach(y => {
-        println(s"$from INSERTED " + y._1)
-        spark.sparkContext.toRedisHASH(spark.sparkContext.parallelize(filterData(y._2)), y._1)
-      })
+      var filteredDF = dataFrame.filter(col("userid").isNotNull)
+      val schema = filteredDF.schema
+      schema.fields.foreach(f => {
+        f.dataType.typeName match {
+          case "array" =>
+            filteredDF = filteredDF.withColumn(f.name, to_json(col(f.name)))
+          case "map" =>
+            filteredDF = filteredDF.withColumn(f.name, to_json(col(f.name)))
+          case _ =>
+        }
+      });
+      filteredDF.write
+        .format("org.apache.spark.sql.redis")
+        .option("table", "user")
+        .option("key.column", "userid")
+        .mode(SaveMode.Append)
+        .save()
     }
 
     denormUserData()
