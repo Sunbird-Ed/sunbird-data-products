@@ -136,7 +136,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis", schema)
+    loadData(spark, Map("keys.pattern" -> "user:*","infer.schema" -> "true"), "org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
   }
 
@@ -160,7 +160,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         col("active"))
 
     val userDenormDF = userCoursesDF
-      .join(userDF, Seq("userid"), "inner")
+      .join(userDF, concat(lit("user:"), userCoursesDF.col("userid"))  === userDF.col("userid"), "inner")
       .withColumn(UserCache.externalid, when(userCoursesDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
       .withColumn(UserCache.schoolname, when(userCoursesDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
       .withColumn(UserCache.block, when(userCoursesDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
