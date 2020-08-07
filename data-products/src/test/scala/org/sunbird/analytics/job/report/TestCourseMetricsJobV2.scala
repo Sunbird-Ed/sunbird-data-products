@@ -198,24 +198,4 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     spark = getSparkSession()
   }
 
-
-  it should "run for batch 01308027519495372821" in {
-    spark.sparkContext.stop()
-
-    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "11.5.2.16","sparkElasticsearchConnectionHost": "'localhost","sparkRedisConnectionHost": "11.5.3.8","sparkUserDbRedisIndex": "12"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false};01308027519495372821""".stripMargin
-
-    CourseMetricsJobV2.main(strConfig)
-
-
-    //    implicit val fc = new FrameworkContext
-    //val conf = strConfig.split(";")
-    //    val batchIds = if(conf.length > 1) {
-    //      conf(1).split(",").toList
-    //    } else List()
-    //    val jobConfig = JSONUtils.deserialize[JobConfig](conf(0))
-    //
-    //    CourseMetricsJobV2.prepareReport(spark,StorageConfig("","","",Option("")),loadData,
-    //      jobConfig,batchIds)
-
-  }
 }
