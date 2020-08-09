@@ -58,12 +58,6 @@ object UserCacheIndexer extends Serializable {
         .withColumn("grade", explode_outer(col("framework.gradeLevel")))
         .withColumn("framework_id", explode_outer(col("framework.id")))
         .drop("framework"))
-      val selectedUserDF = userDF.select(
-        col("*"), // It populate all user data
-        col("framework_id").as("framework")
-      ).drop("framework_id").persist()
-
-      populateToRedis(selectedUserDF, "USER_DF") // Insert all userData Into redis
 
       val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_org").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
         .select(col("userid"), col("organisationid")).persist()
@@ -73,37 +67,14 @@ object UserCacheIndexer extends Serializable {
           col("locationids"), col("isrootorg")).persist()
 
       val locationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "location").option("keyspace", sunbirdKeyspace).load()
-      //.select(col("id"), col("name"), col("type")).persist()
 
       val externalIdentityDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "usr_external_identity").option("keyspace", sunbirdKeyspace).load()
         .select(col("provider"), col("idtype"), col("externalid"), col("userid")).persist()
       // Get CustodianOrgID
 
       val custRootOrgId = getCustodianOrgId()
-
       val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
-
-      val filteredCustoDian = custodianUserDF.select(
-        col("declared-school-name").as("schoolname"),
-        col("declared-ext-id").as("externalid"),
-        col("state_name").as("state"),
-        col("district"), col("block"),
-        col("declared-school-udise-code").as("schooludisecode"),
-        col("user_channel").as("userchannel"), col("userid"), col("usersignintype")
-      )
-      populateToRedis(filteredCustoDian.distinct(), "CUSTODIAN")
-
       val stateUserDF = generateStateOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF, userOrgDF)
-
-      val filteredStateDF = stateUserDF.select(
-        col("declared-school-name").as("schoolname"),
-        col("declared-ext-id").as("externalid"),
-        col("state_name").as("state"),
-        col("district"), col("block"),
-        col("declared-school-udise-code").as("schooludisecode"),
-        col("user_channel").as("userchannel"), col("userid"), col("usersignintype"))
-
-      populateToRedis(filteredStateDF.distinct(), "STATE")
 
       val userLocationResolvedDF = custodianUserDF.unionByName(stateUserDF) // UserLocation
       /**
@@ -126,10 +97,14 @@ object UserCacheIndexer extends Serializable {
       val resolvedOrgNameDF = userOrgDenormDF
         .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("rootorgid"), "left_outer")
         .groupBy("userid")
-        .agg(concat_ws(",", collect_set("orgname")).as("orgname_resolved"))
-      val filteredOrgDf = resolvedOrgNameDF.select(col("userid"), col("orgname_resolved").as("orgname"))
+        .agg(concat_ws(",", collect_set("orgname")).as("orgname"))
 
-      populateToRedis(filteredOrgDf, "ORG_NAME")
+      val userDataDF = userLocationResolvedDF
+        .join(resolvedOrgNameDF, Seq("userid"), "left")
+        .withColumn("framework", col("framework_id"))
+        .drop("framework_id")
+
+      populateToRedis(userDataDF)
 
       userOrgDF.unpersist()
       organisationDF.unpersist()
@@ -179,7 +154,7 @@ object UserCacheIndexer extends Serializable {
         .join(userDistrictDF, Seq("userid"), "left")
         .join(userBlockDF, Seq("userid"), "left")
         .select(userDF.col("*"),
-          col("state_name"),
+          col("state_name").as("state"),
           col("district"),
           col("block"))
           .withColumn("usersignintype", lit("Self-Signed-In"))
@@ -196,11 +171,16 @@ object UserCacheIndexer extends Serializable {
           col("declared-ext-id"),
           col("declared-school-name"),
           col("declared-school-udise-code"),
-          organisationDF.col("id").as("user_channel"))
+          organisationDF.col("id").as("userchannel"))
 
       val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
         .join(custodianUserPivotDF, Seq("userid"), "left")
-        .select("userLocDF.*", "declared-ext-id", "declared-school-name", "declared-school-udise-code", "user_channel")
+        .select(col("userLocDF.*"),
+          col("declared-ext-id"),
+          col("declared-school-name").as("schoolname"),
+          col("declared-school-udise-code").as("schooludisecode"),
+          col("userchannel"))
+
       custodianUserDF
     }
 
@@ -239,9 +219,9 @@ object UserCacheIndexer extends Serializable {
       val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
         .join(subOrgDF, Seq("userid"), "left")
         .select(userDF.col("*"),
-          subOrgDF.col("orgname").as("declared-school-name"),
-          subOrgDF.col("orgcode").as("declared-school-udise-code"),
-          subOrgDF.col("state_name"),
+          subOrgDF.col("orgname").as("schoolname"),
+          subOrgDF.col("orgcode").as("schooludisecode"),
+          subOrgDF.col("state_name").as("state"),
           subOrgDF.col("district"),
           subOrgDF.col("block"))
         .withColumn("usersignintype", lit("Validated"))
@@ -251,11 +231,16 @@ object UserCacheIndexer extends Serializable {
         .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
           && externalIdentityDF.col("provider") === col("state_user.channel")
           && externalIdentityDF.col("userid") === col("state_user.userid"), "left")
-        .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"), col("rootorgid").as("user_channel"))
+        .select(
+          col("state_user.*"),
+          externalIdentityDF.col("externalid").as("declared-ext-id"),
+          col("rootorgid").as("userchannel")
+        )
+      
       stateUserDF
     }
 
-    def populateToRedis(dataFrame: DataFrame, from: String): Unit = {
+    def populateToRedis(dataFrame: DataFrame): Unit = {
       val filteredDF = dataFrame.filter(col("userid").isNotNull)
       val schema = filteredDF.schema
       val complexFields = schema.fields.filter(field => complexFieldTypes.contains(field.dataType.typeName))
