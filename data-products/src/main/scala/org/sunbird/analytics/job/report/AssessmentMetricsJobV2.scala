@@ -136,7 +136,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"), "org.apache.spark.sql.redis", schema)
+    loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"), "org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
   }
 
