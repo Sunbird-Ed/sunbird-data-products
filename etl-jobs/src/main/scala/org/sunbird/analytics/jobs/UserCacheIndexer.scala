@@ -97,10 +97,12 @@ object UserCacheIndexer extends Serializable {
       val resolvedOrgNameDF = userOrgDenormDF
         .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("rootorgid"), "left_outer")
         .groupBy("userid")
-        .agg(concat_ws(",", collect_set("orgname")).as("orgname_resolved"))
+        .agg(concat_ws(",", collect_set("orgname")).as("orgname"))
 
       val userDataDF = userLocationResolvedDF
         .join(resolvedOrgNameDF, Seq("userid"), "left")
+        .withColumn("framework", col("framework_id"))
+        .drop("framework_id")
 
       populateToRedis(userDataDF)
 
@@ -152,7 +154,7 @@ object UserCacheIndexer extends Serializable {
         .join(userDistrictDF, Seq("userid"), "left")
         .join(userBlockDF, Seq("userid"), "left")
         .select(userDF.col("*"),
-          col("state_name"),
+          col("state_name").as("state"),
           col("district"),
           col("block"))
           .withColumn("usersignintype", lit("Self-Signed-In"))
@@ -169,11 +171,16 @@ object UserCacheIndexer extends Serializable {
           col("declared-ext-id"),
           col("declared-school-name"),
           col("declared-school-udise-code"),
-          organisationDF.col("id").as("user_channel"))
+          organisationDF.col("id").as("userchannel"))
 
       val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
         .join(custodianUserPivotDF, Seq("userid"), "left")
-        .select("userLocDF.*", "declared-ext-id", "declared-school-name", "declared-school-udise-code", "user_channel")
+        .select(col("userLocDF.*"),
+          col("declared-ext-id"),
+          col("declared-school-name").as("schoolname"),
+          col("declared-school-udise-code").as("schooludisecode"),
+          col("userchannel"))
+
       custodianUserDF
     }
 
@@ -212,9 +219,9 @@ object UserCacheIndexer extends Serializable {
       val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
         .join(subOrgDF, Seq("userid"), "left")
         .select(userDF.col("*"),
-          subOrgDF.col("orgname").as("declared-school-name"),
-          subOrgDF.col("orgcode").as("declared-school-udise-code"),
-          subOrgDF.col("state_name"),
+          subOrgDF.col("orgname").as("schoolname"),
+          subOrgDF.col("orgcode").as("schooludisecode"),
+          subOrgDF.col("state_name").as("state"),
           subOrgDF.col("district"),
           subOrgDF.col("block"))
         .withColumn("usersignintype", lit("Validated"))
@@ -224,7 +231,12 @@ object UserCacheIndexer extends Serializable {
         .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
           && externalIdentityDF.col("provider") === col("state_user.channel")
           && externalIdentityDF.col("userid") === col("state_user.userid"), "left")
-        .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"), col("rootorgid").as("user_channel"))
+        .select(
+          col("state_user.*"),
+          externalIdentityDF.col("externalid").as("declared-ext-id"),
+          col("rootorgid").as("userchannel")
+        )
+      
       stateUserDF
     }
 
