@@ -11,8 +11,7 @@ import time
 from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
 from dataproducts.resources.common import common_config
-from dataproducts.resources.queries import content_list, scan_counts, \
-    course_list, content_plays
+from dataproducts.resources.queries import content_list_v1, content_list_v2, scan_counts, course_list, content_plays
 from dataproducts.util import azure_utils
 from dataproducts.util.kafka_utils import push_metrics
 from datetime import datetime, timedelta
