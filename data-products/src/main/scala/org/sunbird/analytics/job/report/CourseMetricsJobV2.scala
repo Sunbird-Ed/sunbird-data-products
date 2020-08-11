@@ -78,7 +78,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])
-                      (implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
+                      (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
 
     implicit  val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
@@ -99,8 +99,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
 
     val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").collect
-    JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
+    val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").toDF()
+    JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
 
     activeBatchList
   }
@@ -116,28 +116,33 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
-    val activeBatches = getActiveBatches(loadData, batchList)
+    val batches = getActiveBatches(loadData, batchList)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
-    val activeBatchesCount = new AtomicInteger(activeBatches.length)
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+
+    val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
+    val filteredBatches = CourseUtils.getCourseInfo(spark, JSONUtils.serialize(batchFilters)).toDF()
+    val activeBatches = filteredBatches.join(batches, filteredBatches.col("identifier") === batches.col("courseid"))
+      .select(batches.col("*"),filteredBatches.col("channel")).collect()
+
+    val activeBatchesCount = new AtomicInteger(filteredBatches.count().toInt)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
-    val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
 
     for (index <- activeBatches.indices) {
       val row = activeBatches(index)
-      val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
-      if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
-        val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
-        val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
-          val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
-          reportDF.unpersist(true)
-        })
-        JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
-      }
+      val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), row.getString(4))
+      val result = CommonUtil.time({
+        val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
+        val totalRecords = reportDF.count()
+        recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
+        reportDF.unpersist(true)
+      })
+      JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
+
     }
     userData._2.unpersist(true)
 

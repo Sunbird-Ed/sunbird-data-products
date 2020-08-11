@@ -157,7 +157,7 @@ object CourseUtils {
     }
   }
 
-  def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
+  def getCourseInfo(spark: SparkSession, framework: String): List[CourseBatchInfo] = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
     val apiUrl = Constants.COMPOSITE_SEARCH_URL
@@ -165,7 +165,7 @@ object CourseUtils {
       s"""{
          |	"request": {
          |		"filters": {
-         |      "identifier": "$courseId"
+         |      "framework": "$framework"
          |		},
          |		"sort_by": {
          |			"createdOn": "desc"
@@ -176,7 +176,7 @@ object CourseUtils {
          |}""".stripMargin
     val response = RestUtil.post[CourseResponse](apiUrl, request)
     if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
-      response.result.content.head
-    } else CourseBatchInfo("","","","",List())
+      response.result.content
+    } else List[CourseBatchInfo]()
   }
 }

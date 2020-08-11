@@ -93,36 +93,39 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   }
 
   def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
-
     implicit val sparkSession: SparkSession = spark
     val batches = getBatchList(loadData, batchList)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
 
-    val activeBatchesCount = new AtomicInteger(batches.length)
-    metrics.put("userDFLoadTime", userData._1)
-    metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
     val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
 
-    for (index <- batches.indices) {
-      val row = batches(index)
-      val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
-      if(courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
-        val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
-        val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
-          val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
-          recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid), s"Time take to save the all the reports into azure -")
-        })
-        JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
-      }
+    val filteredBatches = CourseUtils.getCourseInfo(spark, JSONUtils.serialize(batchFilters)).toDF()
+    val activeBatches = filteredBatches.join(batches, filteredBatches.col("identifier") === batches.col("courseid"))
+      .select(batches.col("*"),filteredBatches.col("channel")).collect()
+
+    val activeBatchesCount = new AtomicInteger(filteredBatches.count().toInt)
+    metrics.put("userDFLoadTime", userData._1)
+    metrics.put("activeBatchesCount", activeBatchesCount.get())
+
+    for (index <- activeBatches.indices) {
+      val row = activeBatches(index)
+      val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), row.getString(4))
+      val result = CommonUtil.time({
+        val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
+        val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
+        recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid), s"Time take to save the all the reports into azure -")
+      })
+      JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
     }
   }
 
-  def getBatchList(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])(implicit spark: SparkSession): Array[Row] = {
+  def getBatchList(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])(implicit spark: SparkSession): DataFrame = {
     val courseBatchDF = if(batchList.nonEmpty) {
       loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
         .filter(batch => batchList.contains(batch.getString(1)))
@@ -138,10 +141,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
 
     val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").collect
-    JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
 
-    activeBatchList
+    activeBatches
   }
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
