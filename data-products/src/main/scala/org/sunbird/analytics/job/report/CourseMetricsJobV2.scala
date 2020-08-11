@@ -145,8 +145,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
+    val userDf = loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
+    userDf.persist()
+    userDf
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {

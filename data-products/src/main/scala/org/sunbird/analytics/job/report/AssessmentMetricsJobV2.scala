@@ -13,6 +13,8 @@ import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.util.Constants
+import org.joda.time.{DateTime, DateTimeZone}
+import org.joda.time.format.DateTimeFormat
 import org.sunbird.analytics.util.{CourseResponse, CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -124,20 +126,30 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val courseBatchDF = if(batchList.nonEmpty) {
       loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
         .filter(batch => batchList.contains(batch.getString(1)))
+        .select("courseid", "batchid", "enddate", "startdate")
     }
     else {
       loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
-
+        .select("courseid", "batchid", "enddate", "startdate")
     }
-    val batches = courseBatchDF.select("courseid", "batchid", "enddate", "startdate").collect()
-    JobLogger.log("Total No of batches for score report: " + batches.length, None, INFO)
-    batches
+    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
+
+    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
+
+    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
+    val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").collect
+    JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
+
+    activeBatchList
   }
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"), "org.apache.spark.sql.redis", schema)
+    val userDf = loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"), "org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
+    userDf.persist()
+    userDf
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
