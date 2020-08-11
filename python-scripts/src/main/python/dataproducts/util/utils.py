@@ -386,7 +386,7 @@ def file_missing_exception(raise_except=False):
         return Exception
 
 
-def download_file_from_store(blob_name, file_path, container_name, is_private=True):
+def download_file_from_store(blob_name, file_path, container_name, is_private=False):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
         azure_utils.get_data_from_store(container_name, blob_name, file_path, is_private)
@@ -396,7 +396,7 @@ def download_file_from_store(blob_name, file_path, container_name, is_private=Tr
         pass
 
 
-def upload_file_to_store(blob_name, file_path, container_name, is_private=True):
+def upload_file_to_store(blob_name, file_path, container_name, is_private=False):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
         azure_utils.post_data_to_store(container_name, blob_name, file_path, is_private)
