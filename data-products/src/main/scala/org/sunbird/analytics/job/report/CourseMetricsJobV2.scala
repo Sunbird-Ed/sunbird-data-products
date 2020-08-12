@@ -101,7 +101,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
 
     val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.select("courseid","batchid", "startdate", "enddate").toDF()
+    val activeBatchList = activeBatches.toDF().persist()
     JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
 
     activeBatchList
@@ -141,6 +141,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
 
     }
+    batches.unpersist()
     userData._2.unpersist(true)
 
   }

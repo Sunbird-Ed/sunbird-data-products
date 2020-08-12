@@ -120,6 +120,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       })
       JobLogger.log(s"Time taken to generate report for batch ${courseBatch.batchid} is ${result._1}. Remaining batches - ${batchCount.getAndDecrement()}", None, INFO)
     }
+    activeBatches.unpersist()
   }
 
   def getBatchList(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])(implicit spark: SparkSession): DataFrame = {
@@ -132,6 +133,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
         .select("courseid", "batchid", "enddate", "startdate")
     }
+    courseBatchDF.persist()
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
     val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
 
