@@ -141,7 +141,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val batchReportsCount = Option(new File(s"$outputLocation/$outputDir").list)
       .map(_.count(_.endsWith(".csv"))).getOrElse(0)
 
-    batchReportsCount should be (2)
+    batchReportsCount should be (6)
 
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$outputDir/report-$batch1.csv").as[BatchReportOutput].collectAsList().asScala
