@@ -117,7 +117,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
           val contentIds: List[String] = reportDF.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
           if (contentIds.nonEmpty) {
             val denormalizedDF = recordTime(denormAssessment(reportDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY), s"Time take to denorm the assessment - ")
-            recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid), s"Time take to save the all the reports into azure -")
+            val totalRecords = denormalizedDF.count()
+            if (totalRecords > 0) recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid), s"Time take to save the $totalRecords for batch ${batch.batchid} all the reports into azure -")
             denormalizedDF.unpersist(true)
           }
           reportDF.unpersist(true)
