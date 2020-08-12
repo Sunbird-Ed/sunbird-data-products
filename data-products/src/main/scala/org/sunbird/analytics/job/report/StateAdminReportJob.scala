@@ -16,7 +16,6 @@ import org.ekstep.analytics.framework.JobContext
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.OutputDispatcher
 import org.apache.spark.sql.functions._
-
 import org.sunbird.analytics.util.DecryptUtil
 
 case class ValidatedUserDistrictSummary(index: Int, districtName: String, blocks: Long, schools: Long, registered: Long)
@@ -79,27 +78,27 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val userExternalDataDF = loadData(sparkSession, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace), Some(usrExternalIdentityEncoder)).
             filter(col(colName = "idtype").isin("declared-email", "declared-phone", "declared-school-name", "declared-school-udise-code", "declared-ext-id", "declared-state", "declared-district").and(col("originalexternalid").isNotNull)).as[UsrExternalIdentity]
         val locationDF = locationData()
-        val orgExternalIdList: List[String] = loadOrganisationData().select("externalid").filter(col("externalid").isNotNull).map(_.getString(0)).collect().toList
-        
+        val orgExternalIdDf = loadOrganisationData().select("externalid").filter(col("externalid").isNotNull)
         //appending state and district values to user-external-identifier based on location ids
         val userExternalOriginalDataDF = userExternalDataDF.groupBy("userid", "originalprovider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
         val userExternalStateDF = userExternalOriginalDataDF.join(locationDF, userExternalOriginalDataDF.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
                 select(userExternalOriginalDataDF.col("*"), locationDF("locname").as("state"))
         var userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
             select(userExternalStateDF.col("*"), locationDF("locname").as("district"))
-        userExternalLocationDF = userExternalLocationDF.withColumn("Diksha Sub-Org ID", when(userExternalLocationDF.col("declared-school-udise-code").isin(orgExternalIdList:_*), userExternalLocationDF.col("declared-school-udise-code")))
+        userExternalLocationDF = userExternalLocationDF.join(orgExternalIdDf, col("declared-school-udise-code") === orgExternalIdDf.col("externalid"), "left_outer").
+            select(userExternalLocationDF.col("*"), orgExternalIdDf("externalid").as("Diksha Sub-Org ID"))
         //decrypting email and phone values
         val userDecrpytedDataDF = decryptDF(userExternalOriginalDataDF)
         //appending decrypted values to the user-external-identifier dataframe
         val userExternalDecryptData  = userExternalLocationDF.join(userDecrpytedDataDF, userExternalLocationDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
             select(userExternalLocationDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
-        val userIds = userExternalDecryptData.select("userid").map(_.getString(0)).collect.toList
         
         //loading user data with location-details based on the user's from the user-external-identifier table
-        val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
+        var userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
                 col("locationIds"),
-            concat_ws(" ", col("firstname"), col("lastname")).as("Name")).filter(col("id").isin(userIds:_*))
+            concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
+        userDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "left_semi");
         val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
         val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
