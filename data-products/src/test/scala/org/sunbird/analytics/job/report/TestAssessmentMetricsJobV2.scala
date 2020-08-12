@@ -5,7 +5,7 @@ import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.{EmbeddedES, UserData}
+import org.sunbird.analytics.util.{CourseUtils, EmbeddedES, UserData}
 import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.collection.mutable.Buffer
@@ -160,6 +160,11 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
   it should "return an empty list if no assessment names found for given content" in {
     val result = AssessmentMetricsJobV2.getAssessmentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
     result.collect().length should be(0)
+  }
+
+  it should "return empty list if no data found for batchFilters" in {
+    val courseInfo = CourseUtils.getCourseInfo(spark, "")
+    courseInfo.length should be (0)
   }
 
 }
