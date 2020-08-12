@@ -2,7 +2,7 @@ package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{col, explode}
-import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
@@ -165,7 +165,7 @@ object CourseUtils {
       s"""{
          |	"request": {
          |		"filters": {
-         |      "framework": "$framework"
+         |      "framework": $framework
          |		},
          |		"sort_by": {
          |			"createdOn": "desc"
@@ -178,5 +178,14 @@ object CourseUtils {
     if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
       response.result.content
     } else List[CourseBatchInfo]()
+  }
+
+  def getFilteredBatches(spark: SparkSession, activeBatches: DataFrame, batchFilters: String): Array[Row] = {
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+
+    val filteredBatches = CourseUtils.getCourseInfo(spark, batchFilters).toDF()
+    filteredBatches.join(activeBatches, filteredBatches.col("identifier") === activeBatches.col("courseid"))
+      .select(activeBatches.col("*"),filteredBatches.col("channel")).collect()
   }
 }

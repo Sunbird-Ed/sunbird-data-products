@@ -122,20 +122,15 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
-    implicit val sqlContext = new SQLContext(spark.sparkContext)
-    import sqlContext.implicits._
-
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
-    val filteredBatches = CourseUtils.getCourseInfo(spark, batchFilters).toDF()
-    val activeBatches = filteredBatches.join(batches, filteredBatches.col("identifier") === batches.col("courseid"))
-      .select(batches.col("*"),filteredBatches.col("channel")).collect()
+    val filteredBatches = CourseUtils.getFilteredBatches(spark, batches, batchFilters)
 
-    val activeBatchesCount = new AtomicInteger(filteredBatches.count().toInt)
+    val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
 
-    for (index <- activeBatches.indices) {
-      val row = activeBatches(index)
+    for (index <- filteredBatches.indices) {
+      val row = filteredBatches(index)
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), row.getString(4))
       val result = CommonUtil.time({
         val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")

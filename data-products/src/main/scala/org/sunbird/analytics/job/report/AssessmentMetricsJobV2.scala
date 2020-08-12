@@ -99,23 +99,19 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
-    implicit val sqlContext = new SQLContext(spark.sparkContext)
-    import sqlContext.implicits._
 
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
     val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
 
-    val batchDf = CourseUtils.getCourseInfo(spark, batchFilters).toDF()
-    val activeBatcheDF = batchDf.join(activeBatches, batchDf.col("identifier") === activeBatches.col("courseid"))
-      .select(activeBatches.col("*"), batchDf.col("channel")).collect()
+    val filteredBatchDf = CourseUtils.getFilteredBatches(spark, activeBatches, batchFilters)
 
-    val batchCount = new AtomicInteger(batchDf.count().toInt)
+    val batchCount = new AtomicInteger(filteredBatchDf.length)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", batchCount.get())
 
-    for (index <- activeBatcheDF.indices) {
-      val row = activeBatcheDF(index)
+    for (index <- filteredBatchDf.indices) {
+      val row = filteredBatchDf(index)
       val courseBatch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), row.getString(4))
       val result = CommonUtil.time({
         val reportDF = recordTime(getReportDF(courseBatch, userData._2, loadData), s"Time taken to generate DF for batch ${courseBatch.batchid} - ")
