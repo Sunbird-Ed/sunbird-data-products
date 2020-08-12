@@ -126,7 +126,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     import sqlContext.implicits._
 
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
-    val filteredBatches = CourseUtils.getCourseInfo(spark, JSONUtils.serialize(batchFilters)).toDF()
+    val filteredBatches = CourseUtils.getCourseInfo(spark, batchFilters).toDF()
     val activeBatches = filteredBatches.join(batches, filteredBatches.col("identifier") === batches.col("courseid"))
       .select(batches.col("*"),filteredBatches.col("channel")).collect()
 

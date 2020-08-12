@@ -95,7 +95,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
   def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
     implicit val sparkSession: SparkSession = spark
-    val batches = getBatchList(loadData, batchList)
+    val activeBatches = getBatchList(loadData, batchList)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
@@ -106,23 +106,23 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
 
-    val filteredBatches = CourseUtils.getCourseInfo(spark, JSONUtils.serialize(batchFilters)).toDF()
-    val activeBatches = filteredBatches.join(batches, filteredBatches.col("identifier") === batches.col("courseid"))
-      .select(batches.col("*"),filteredBatches.col("channel")).collect()
+    val batchDf = CourseUtils.getCourseInfo(spark, batchFilters).toDF()
+    val activeBatcheDF = batchDf.join(activeBatches, batchDf.col("identifier") === activeBatches.col("courseid"))
+      .select(activeBatches.col("*"), batchDf.col("channel")).collect()
 
-    val activeBatchesCount = new AtomicInteger(filteredBatches.count().toInt)
+    val batchCount = new AtomicInteger(batchDf.count().toInt)
     metrics.put("userDFLoadTime", userData._1)
-    metrics.put("activeBatchesCount", activeBatchesCount.get())
+    metrics.put("activeBatchesCount", batchCount.get())
 
-    for (index <- activeBatches.indices) {
-      val row = activeBatches(index)
-      val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), row.getString(4))
+    for (index <- activeBatcheDF.indices) {
+      val row = activeBatcheDF(index)
+      val courseBatch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), row.getString(4))
       val result = CommonUtil.time({
-        val reportDF = recordTime(getReportDF(batch, userData._2, loadData), s"Time taken to generate DF for batch ${batch.batchid} - ")
+        val reportDF = recordTime(getReportDF(courseBatch, userData._2, loadData), s"Time taken to generate DF for batch ${courseBatch.batchid} - ")
         val denormalizedDF = recordTime(denormAssessment(reportDF), s"Time take to denorm the assessment - ")
-        recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid), s"Time take to save the all the reports into azure -")
+        recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, courseBatch.batchid), s"Time take to save the all the reports into azure -")
       })
-      JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
+      JobLogger.log(s"Time taken to generate report for batch ${courseBatch.batchid} is ${result._1}. Remaining batches - ${batchCount.getAndDecrement()}", None, INFO)
     }
   }
 
