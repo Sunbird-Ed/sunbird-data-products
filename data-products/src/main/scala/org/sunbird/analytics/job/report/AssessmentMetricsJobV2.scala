@@ -8,6 +8,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Encoders, Row, SQLContext, SparkSession}
+import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
@@ -149,7 +150,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val schema = Encoders.product[UserData].schema
     val userDf = loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"), "org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
-    userDf.persist()
+    userDf.persist(StorageLevel.MEMORY_ONLY)
     userDf
   }
 

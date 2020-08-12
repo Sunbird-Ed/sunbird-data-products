@@ -1,11 +1,13 @@
 package org.sunbird.analytics.job.report
 
 import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql._
+import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
@@ -152,7 +154,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val schema = Encoders.product[UserData].schema
     val userDf = loadData(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .withColumn("username",concat_ws(" ", col("firstname"), col("lastname")))
-    userDf.persist()
+    userDf.persist(StorageLevel.MEMORY_ONLY)
     userDf
   }
 
