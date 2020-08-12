@@ -53,7 +53,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   private def execute(config: JobConfig, batchList: List[String])(implicit sc: SparkContext, fc: FrameworkContext) = {
-    val tempDir = AppConf.getConfig("course.metrics.temp.dir")
     val readConsistencyLevel: String = AppConf.getConfig("course.metrics.cassandra.input.consistency")
     val sparkConf = sc.getConf
       .set("es.write.operation", "upsert")
@@ -131,8 +130,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     for (index <- activeBatches.indices) {
       val row = activeBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
+      val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
-        val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
         val result = CommonUtil.time({
           val reportDF = recordTime(getReportDF(batch, userData._2, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
@@ -141,7 +140,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
       } else {
-        JobLogger.log(s"Constrains are not matching, skipping the courseId: ${row.getString(0)}", None, INFO)
+        JobLogger.log(s"Constrains are not matching, skipping the courseId: ${row.getString(0)}, batchId: ${batch.batchid} and Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
       }
     }
     userData._2.unpersist(true)
