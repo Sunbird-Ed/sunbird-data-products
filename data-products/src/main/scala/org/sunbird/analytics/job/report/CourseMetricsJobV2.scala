@@ -127,25 +127,25 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
-    val userEnrolmentData = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
+    val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
     for (index <- activeBatches.indices) {
       val row = activeBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
       if (courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, userEnrolmentData), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userData._2, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
           recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
       } else {
-        JobLogger.log(s"Skipping the courseId: ${row.getString(0)}", None, INFO)
+        JobLogger.log(s"Constrains are not matching, skipping the courseId: ${row.getString(0)}", None, INFO)
       }
     }
     userData._2.unpersist(true)
-    userEnrolmentData.unpersist(true)
+    userEnrolmentDF.unpersist(true)
 
   }
 
