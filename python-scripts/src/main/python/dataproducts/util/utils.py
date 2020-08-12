@@ -701,11 +701,11 @@ def get_tb_content_mapping(result_loc_, date_, content_search_):
 
 def get_batch_data_from_blob(result_loc_, prefix_, backup=False):
     try:
-        account_name = os.environ['AZURE_STORAGE_ACCOUNT']
-        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+        account_name = os.environ['PUBLIC_AZURE_STORAGE_ACCOUNT']
+        account_key = os.environ['PUBLIC_AZURE_STORAGE_ACCESS_KEY']
         block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
         if backup:
-            container_name = 'portal-reports-backup'
+            container_name = os.environ['REPORT_BACKUP_CONTAINER']
             blob_list = block_blob_service.list_blobs(container_name, prefix=prefix_)
             for blob in blob_list:
                 report_name, date_name, file_name = blob.name.split('/')
