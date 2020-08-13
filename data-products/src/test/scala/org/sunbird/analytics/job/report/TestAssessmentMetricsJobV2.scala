@@ -6,7 +6,7 @@ import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.{EmbeddedES, UserData}
+import org.sunbird.analytics.util.{CourseUtils, EmbeddedES, UserData}
 import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.collection.mutable.Buffer
@@ -195,6 +195,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .returning(assessmentProfileDF)
 
     AssessmentMetricsJobV2.prepareReport(spark, reporterMock.loadData, jobConf, List())
+    val contents = CourseUtils.filterContents(spark, """{"request": {"filters": {"channel": "0898765434567891"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}}""".stripMargin)
     val assessmentDF = AssessmentMetricsJobV2.getAssessmentProfileDF(reporterMock.loadData)
     val batch = CourseBatch("1006","","2018-12-01","in.ekstep")
     val reportDf = AssessmentMetricsJobV2.getReportDF(batch, userInfoDF, assessmentDF)
