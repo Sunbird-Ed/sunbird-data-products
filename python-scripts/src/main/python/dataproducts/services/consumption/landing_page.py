@@ -19,7 +19,8 @@ class LandingPageMetrics:
         self.data_store_location = Path(data_store_location)
         self.org_search = org_search
         self.current_time = None
-        self.report_container = os.environ['REPORT_CONTAINER']
+        self.private_report_container = os.environ['PRIVATE_REPORT_CONTAINER']
+        self.public_report_container = os.environ['PUBLIC_REPORT_CONTAINER']
 
 
     def generate_report(self):
@@ -36,17 +37,17 @@ class LandingPageMetrics:
                 os.makedirs(org_path, exist_ok=True)
 
                 download_file_from_store(
-                    container_name=self.report_container,
+                    container_name=self.private_report_container,
                     blob_name=org_path.name + '/daily_metrics.csv',
                     file_path=org_path.joinpath('daily_metrics.csv')
                     )
                 download_file_from_store(
-                    container_name=self.report_container,
+                    container_name=self.private_report_container,
                     blob_name=org_path.name + '/DCE_textbook_data.csv',
                     file_path=org_path.joinpath('DCE_textbook_data.csv')
                     )
                 download_file_from_store(
-                    container_name=self.report_container,
+                    container_name=self.private_report_container,
                     blob_name=org_path.name + '/content_creation.csv',
                     file_path=org_path.joinpath('content_creation.csv')
                     )
@@ -80,25 +81,25 @@ class LandingPageMetrics:
                     json.dump(result, f)
 
                 upload_file_to_store(
-                    container_name=self.report_container,
+                    container_name=self.public_report_container,
                     blob_name=org_path.name + '/landing_page_2018.json',
                     file_path=str(org_path.joinpath('landing_page_2018.json')),
                     is_private=False
                     )
                 upload_file_to_store(
-                    container_name=self.report_container,
+                    container_name=self.public_report_container,
                     blob_name=org_path.name + '/landing_page_2019.json',
                     file_path=str(org_path.joinpath('landing_page_2019.json')),
                     is_private=False
                     )
                 upload_file_to_store(
-                    container_name=self.report_container,
+                    container_name=self.public_report_container,
                     blob_name=org_path.name + '/landing_page_2020.json',
                     file_path=str(org_path.joinpath('landing_page_2020.json')),
                     is_private=False
                     )
                 upload_file_to_store(
-                    container_name=self.report_container,
+                    container_name=self.public_report_container,
                     blob_name=org_path.name + '/landing_page_creation_metrics.json',
                     file_path=str(org_path.joinpath('landing_page_creation_metrics.json')),
                     is_private=False

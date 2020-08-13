@@ -83,7 +83,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace))
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
