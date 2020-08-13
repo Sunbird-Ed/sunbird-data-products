@@ -188,17 +188,6 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
 
-  it should "test redis and cassandra connections" in {
-    implicit val fc = Option(mock[FrameworkContext])
-    spark.sparkContext.stop()
-
-    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
-    getReportingSparkContext(JSONUtils.deserialize[JobConfig](strConfig))
-    val conf = openSparkSession(JSONUtils.deserialize[JobConfig](strConfig))
-    conf.sparkContext.stop()
-    spark = getSparkSession()
-  }
-
   it should "process the filtered batches" in {
     implicit val fc = mock[FrameworkContext]
     val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4","contentFilters": {"request": {"filters": {"framework": "TPD"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}},"reportPath": "course-reports/"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
@@ -243,6 +232,17 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .returning(systemSettingDF)
 
     CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
+  }
+
+  it should "test redis and cassandra connections" in {
+    implicit val fc = Option(mock[FrameworkContext])
+    spark.sparkContext.stop()
+
+    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
+    getReportingSparkContext(JSONUtils.deserialize[JobConfig](strConfig))
+    val conf = openSparkSession(JSONUtils.deserialize[JobConfig](strConfig))
+    conf.sparkContext.stop()
+    spark = getSparkSession()
   }
 
 }
