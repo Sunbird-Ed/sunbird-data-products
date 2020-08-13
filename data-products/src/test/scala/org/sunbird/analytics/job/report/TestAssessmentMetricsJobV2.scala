@@ -1,5 +1,6 @@
 package org.sunbird.analytics.job.report
 
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
@@ -160,6 +161,49 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
   it should "return an empty list if no assessment names found for given content" in {
     val result = AssessmentMetricsJobV2.getAssessmentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
     result.collect().length should be(0)
+  }
+
+  it should "process the filtered batches for assessment" in {
+    implicit val mockFc = mock[FrameworkContext]
+    implicit val sc = spark
+    val conf = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.AssessmentMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4","contentFilters": {"request": {"filters": {"framework": "TPD"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}},"reportPath": "assessment-reports/"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Assessment Dashboard Metrics","deviceMapping": false}""".stripMargin
+    val jobConf = JSONUtils.deserialize[JobConfig](conf)
+    val mockStorageService = mock[BaseStorageService]
+
+    (mockFc.getStorageService(_: String, _: String, _: String)).expects(*, *, *).returns(mockStorageService).anyNumberOfTimes();
+    (mockStorageService.upload _).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
+    (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .returning(courseBatchDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .returning(userCoursesDF)
+      .anyNumberOfTimes()
+
+    val schema = Encoders.product[UserData].schema
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
+      .anyNumberOfTimes()
+      .returning(userInfoDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(assessmentProfileDF)
+
+    AssessmentMetricsJobV2.prepareReport(spark, reporterMock.loadData, jobConf, List())
+    val assessmentDF = AssessmentMetricsJobV2.getAssessmentProfileDF(reporterMock.loadData)
+    val batch = CourseBatch("1006","","2018-12-01","in.ekstep")
+    val reportDf = AssessmentMetricsJobV2.getReportDF(batch, userInfoDF, assessmentDF)
+    val contentIds: List[String] = reportDf.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
+
+    val denormDF = AssessmentMetricsJobV2.denormAssessment(reportDf, contentIds)
+    AssessmentMetricsJobV2.saveReport(denormDF, "/tmp/assessment-report","true","1006","assessment-reports/")
+
+    reportDf.count() should be(2)
   }
 
 }

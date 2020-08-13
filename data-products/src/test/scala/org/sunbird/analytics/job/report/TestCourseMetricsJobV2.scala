@@ -15,7 +15,7 @@ import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.UserData
+import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -197,6 +197,52 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val conf = openSparkSession(JSONUtils.deserialize[JobConfig](strConfig))
     conf.sparkContext.stop()
     spark = getSparkSession()
+  }
+
+  it should "process the filtered batches" in {
+    implicit val fc = mock[FrameworkContext]
+    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4","contentFilters": {"request": {"filters": {"framework": "TPD"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}},"reportPath": "course-reports/"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    val storageConfig = StorageConfig("local", "", "/tmp/course-metrics")
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .returning(courseBatchDF)
+
+    val schema = Encoders.product[UserData].schema
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
+      .anyNumberOfTimes()
+      .returning(userDF)
+
+    val convertMethod = udf((value: mutable.WrappedArray[String]) => {
+      if(null != value && value.nonEmpty)
+        value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
+      else null
+    }, new ArrayType(MapType(StringType, StringType), true))
+
+    val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(alteredUserCourseDf)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(userDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(externalIdentityDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(systemSettingDF)
+
+    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
   }
 
 }
