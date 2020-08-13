@@ -15,7 +15,7 @@ import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.{CourseUtils, UserData}
+import org.sunbird.analytics.util.UserData
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -25,6 +25,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
   var courseBatchDF: DataFrame = _
   var userCoursesDF: DataFrame = _
   var userDF: DataFrame = _
+  var userEnrolmentDF: DataFrame = _
   var locationDF: DataFrame = _
   var orgDF: DataFrame = _
   var userOrgDF: DataFrame = _
@@ -61,7 +62,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userDF)
 
@@ -129,8 +130,8 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
     batchInfo.map(batches => {
-      val reportDf = CourseMetricsJobV2.getReportDF(batches,userDF,reporterMock.loadData)
-      CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count())
+      val reportDf = CourseMetricsJobV2.getReportDF(batches, userDF, alteredUserCourseDf)
+      CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count(), "course-progress-reports/")
     })
 
     implicit val batchReportEncoder: Encoder[BatchReportOutput] = Encoders.product[BatchReportOutput]
@@ -185,61 +186,6 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     */
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
-  }
-
-  it should "run with filtered contents" in {
-    implicit val mockFc = mock[FrameworkContext]
-
-    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"contentFilters": {"request": {"filters": {"contentType": "Course"},"fields": ["identifier", "name"]}},"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
-    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-
-    val outputLocation = "/tmp/course-metrics"
-    val storageConfig = StorageConfig("local", "", outputLocation)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .returning(courseBatchDF)
-
-    val schema = Encoders.product[UserData].schema
-    (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
-      .anyNumberOfTimes()
-      .returning(userDF)
-
-    CourseMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", new StructType())
-    val query = """{"request": {"filters": {"contentType": "Courses"},"fields": ["identifier", "name"]}}""".stripMargin
-    val courseInfo = CourseUtils.filterContents(spark, query)
-    courseInfo should be (List())
-
-    val convertMethod = udf((value: mutable.WrappedArray[String]) => {
-      if(null != value && value.nonEmpty)
-        value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
-      else null
-    }, new ArrayType(MapType(StringType, StringType), true))
-
-    val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .anyNumberOfTimes()
-      .returning(alteredUserCourseDf)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .anyNumberOfTimes()
-      .returning(userDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .anyNumberOfTimes()
-      .returning(externalIdentityDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .anyNumberOfTimes()
-      .returning(systemSettingDF)
-
-    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
-
   }
 
   it should "test redis and cassandra connections" in {

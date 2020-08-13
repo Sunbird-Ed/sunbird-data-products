@@ -112,7 +112,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
@@ -145,40 +145,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
-      .anyNumberOfTimes()
-      .returning(userInfoDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .anyNumberOfTimes()
-      .returning(assessmentProfileDF)
-
-    AssessmentMetricsJobV2.prepareReport(spark, reporterMock.loadData, config, List("1006"))
-  }
-
-  it should "run with filtered contents" in {
-    implicit val mockFc = mock[FrameworkContext]
-    val mockStorageService = mock[BaseStorageService]
-    (mockFc.getStorageService(_: String, _: String, _: String)).expects(*, *, *).returns(mockStorageService).anyNumberOfTimes();
-    (mockStorageService.upload _).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
-    (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
-
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"contentFilters": {"request": {"filters": {"contentType": "Course"},"fields": ["identifier", "name"]}},"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
-    val config = JSONUtils.deserialize[JobConfig](strConfig)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .returning(courseBatchDF)
-
-    (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
-      .returning(userCoursesDF)
-      .anyNumberOfTimes()
-
-    val schema = Encoders.product[UserData].schema
-    (reporterMock.loadData _)
-      .expects(spark, Map("keys.pattern" -> "*","infer.schema" -> "true"),"org.apache.spark.sql.redis", schema)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userInfoDF)
 

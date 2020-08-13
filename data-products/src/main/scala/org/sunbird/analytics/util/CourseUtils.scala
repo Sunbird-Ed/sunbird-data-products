@@ -110,7 +110,7 @@ object CourseUtils {
     val fileParameters = config.getOrElse("fileParameters", List("")).asInstanceOf[List[String]]
     val dims = config.getOrElse("folderPrefix", List()).asInstanceOf[List[String]]
     val mergeConfig = reportConfig.mergeConfig
-   val deltaFiles = if (dims.nonEmpty) {
+    val deltaFiles = if (dims.nonEmpty) {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), Option(dims))
     } else {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), None)
@@ -187,5 +187,4 @@ object CourseUtils {
       response.result.content
     } else List[CourseBatchInfo]()
   }
-
 }
