@@ -156,8 +156,11 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val courseBatchInfo = CourseMetricsJobV2.getUserCourseInfo(reporterMock.loadData)
 
     val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
+    val userCourseDf = userDF.withColumn("course_completion", lit(""))
+        .withColumn("level1", lit(""))
+        .withColumn("l1completionPercentage", lit(""))
     batchInfo.map(batches => {
-      val reportDf = CourseMetricsJobV2.getReportDF(batches, userDF, alteredUserCourseDf)
+      val reportDf = CourseMetricsJobV2.getReportDF(batches, userCourseDf, alteredUserCourseDf)
       CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count())
     })
 

@@ -191,11 +191,12 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
     val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
-    val userCourseData = userCourses.join(userData._2, Seq("userid"), "inner")
+    val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
       .select(userData._2.col("*"),
         userCourses.col("completionPercentage").as("course_completion"),
         userCourses.col("level1"),
-        userCourses.col("l1completionPercentage")).persist(StorageLevel.MEMORY_ONLY)
+        userCourses.col("l1completionPercentage"))
+    userCourseData.persist(StorageLevel.MEMORY_ONLY)
 
     for (index <- activeBatches.indices) {
       val row = activeBatches(index)
