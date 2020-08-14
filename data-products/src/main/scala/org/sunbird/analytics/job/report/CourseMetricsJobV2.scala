@@ -1,6 +1,7 @@
 package org.sunbird.analytics.job.report
 
 import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
@@ -190,7 +191,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
     val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
-
     val userCourseData = userCourses.join(userData._2, Seq("userid"), "inner")
       .select(userData._2.col("*"),
         userCourses.col("completionPercentage").as("course_completion"),
@@ -233,11 +233,11 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-    /*
-     * courseBatchDF has details about the course and batch details for which we have to prepare the report
-     * courseBatchDF is the primary source for the report
-     * userCourseDF has details about the user details enrolled for a particular course/batch
-     */
+      /*
+       * courseBatchDF has details about the course and batch details for which we have to prepare the report
+       * courseBatchDF is the primary source for the report
+       * userCourseDF has details about the user details enrolled for a particular course/batch
+       */
     val userEnrolmentDF = userCourseDenormDF.where(col("batchid") === batch.batchid && lower(col("active")).equalTo("true"))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
