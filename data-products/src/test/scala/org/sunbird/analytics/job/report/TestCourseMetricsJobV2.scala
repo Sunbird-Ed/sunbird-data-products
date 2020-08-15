@@ -230,6 +230,16 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(userAggDF)
+
+    (reporterMock.loadData _)
+      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", new StructType())
+      .anyNumberOfTimes()
+      .returning(contentHierarchyDF)
+
+    (reporterMock.loadData _)
       .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
       .anyNumberOfTimes()
       .returning(userDF)

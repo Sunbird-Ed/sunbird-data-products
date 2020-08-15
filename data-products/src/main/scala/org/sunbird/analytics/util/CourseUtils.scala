@@ -1,14 +1,18 @@
 package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, explode}
+import org.apache.spark.sql.functions.{col, explode, lit, to_date}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
+import org.joda.time.{DateTime, DateTimeZone}
+import org.joda.time.format.DateTimeFormat
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
@@ -186,5 +190,29 @@ object CourseUtils {
     if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
       response.result.content
     } else List[CourseBatchInfo]()
+  }
+
+  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String], sunbirdCoursesKeyspace: String)
+                      (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    val courseBatchDF = if (batchList.nonEmpty) {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
+        .filter(batch => batchList.contains(batch.getString(1)))
+        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
+    }
+    else {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
+        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
+    }
+
+    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
+    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
+
+    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
+    val activeBatchList = activeBatches.toDF()
+    JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
+    courseBatchDF.unpersist(true)
+    activeBatchList
   }
 }

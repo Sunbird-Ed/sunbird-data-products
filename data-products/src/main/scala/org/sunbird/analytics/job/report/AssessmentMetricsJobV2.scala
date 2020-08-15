@@ -97,7 +97,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
-    val batches = getBatchList(loadData, batchList)
+    val batches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
@@ -141,26 +141,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     }
     assessmentProfileDF.unpersist(true)
     userData._2.unpersist(true)
-  }
-
-  def getBatchList(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])(implicit spark: SparkSession): DataFrame = {
-    val courseBatchDF = if (batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
-        .filter(batch => batchList.contains(batch.getString(1)))
-        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
-    }
-    else {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
-        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
-    }
-    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
-    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.toDF()
-    JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
-    courseBatchDF.unpersist(true)
-    activeBatchList
   }
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {

@@ -84,33 +84,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     }
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])
-                      (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-
-    implicit val sqlContext: SQLContext = spark.sqlContext
-
-    val courseBatchDF = if (batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .filter(batch => batchList.contains(batch.getString(1)))
-        .select("courseid", "batchid", "enddate", "startdate")
-    }
-    else {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .select("courseid", "batchid", "enddate", "startdate")
-    }
-
-    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-
-    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
-
-    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.toDF()
-    JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
-
-    activeBatchList
-  }
-
   def getUserCourseInfo(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
@@ -183,7 +156,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
-    val activeBatches = getActiveBatches(loadData, batchList)
+    val activeBatches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
     val modelParams = config.modelParams.get
     val contentFilters = modelParams.getOrElse("contentFilters", Map()).asInstanceOf[Map[String,AnyRef]]
     val reportPath = modelParams.getOrElse("reportPath","course-progress-reports/").asInstanceOf[String]
