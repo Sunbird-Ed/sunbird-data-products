@@ -122,7 +122,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       val row = filteredBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
-      if (courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
+      if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
           val reportDF = recordTime(getReportDF(batch, userData._2, assessmentProfileDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val contentIds: List[String] = reportDF.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
