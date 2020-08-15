@@ -84,33 +84,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     }
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])
-                      (implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
-
-    implicit val sqlContext: SQLContext = spark.sqlContext
-
-    val courseBatchDF = if (batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .filter(batch => batchList.contains(batch.getString(1)))
-        .select("courseid", "batchid", "enddate", "startdate")
-    }
-    else {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .select("courseid", "batchid", "enddate", "startdate")
-    }
-
-    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-
-    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
-
-    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.select("courseid", "batchid", "startdate", "enddate").collect
-    JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
-
-    activeBatchList
-  }
-
   def getUserCourseInfo(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
@@ -181,16 +154,29 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
-    val activeBatches = getActiveBatches(loadData, batchList)
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    import sqlContext.implicits._
+    val activeBatches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
+    val modelParams = config.modelParams.get
+    val contentFilters = modelParams.getOrElse("contentFilters", Map()).asInstanceOf[Map[String,AnyRef]]
+    val reportPath = modelParams.getOrElse("reportPath","course-progress-reports/").asInstanceOf[String]
+
+    val filteredBatches = if(contentFilters.nonEmpty) {
+      val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
+      activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
+        .select(activeBatches.col("*")).collect
+    } else activeBatches.collect
+
     val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
-    val activeBatchesCount = new AtomicInteger(activeBatches.length)
+    val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
-    val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
+    val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
     val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
+
     val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
       .select(userData._2.col("*"),
         userCourses.col("completionPercentage").as("course_completion"),
@@ -198,15 +184,15 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         userCourses.col("l1completionPercentage"))
     userCourseData.persist(StorageLevel.MEMORY_ONLY)
 
-    for (index <- activeBatches.indices) {
-      val row = activeBatches(index)
+    for (index <- filteredBatches.indices) {
+      val row = filteredBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
           val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
+          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
@@ -234,11 +220,11 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-      /*
-       * courseBatchDF has details about the course and batch details for which we have to prepare the report
-       * courseBatchDF is the primary source for the report
-       * userCourseDF has details about the user details enrolled for a particular course/batch
-       */
+    /*
+     * courseBatchDF has details about the course and batch details for which we have to prepare the report
+     * courseBatchDF is the primary source for the report
+     * userCourseDF has details about the user details enrolled for a particular course/batch
+     */
     val userEnrolmentDF = userCourseDenormDF.where(col("batchid") === batch.batchid && lower(col("active")).equalTo("true"))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
@@ -284,7 +270,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     reportDF
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
     reportDF
       .select(
         col(UserCache.externalid).as("External ID"),
@@ -307,7 +293,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
           .as("Course Progress - Level 1"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
-      .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
+      .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 
