@@ -274,6 +274,12 @@ if __name__ == '__main__':
         user_detail = UserDetailReport(args.data_store_location, args.states)
         user_detail.init()
 
+    elif args.cmd == "user_declared_detail":
+            from dataproducts.services.location.user_declaration_report import UserDeclarationReport
+
+            user_declared_detail = UserDeclarationReport(args.data_store_location, args.states)
+            user_declared_detail.init()
+
     elif args.cmd == "report_merger":
         from dataproducts.services.consumption.report_merger import ReportMerger
 
