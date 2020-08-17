@@ -33,10 +33,7 @@ class UserDeclarationReport:
             except Exception as e:
                 print("declared_user_detail not available for "+slug)
                 continue
-            try:
-                get_data_from_blob(state_result_loc.joinpath('declared_user_detail-state', '{}.csv'.format(slug)))
-            except Exception as e:
-                print("declared_user_detail-state not available for "+slug)
+                
             user_df = pd.read_csv(state_result_loc.joinpath('declared_user_detail', '{}.csv'.format(slug)))
             os.makedirs(state_result_loc.joinpath('personas'), exist_ok=True)
             for persona, user_data in user_df.groupby('Persona'):
