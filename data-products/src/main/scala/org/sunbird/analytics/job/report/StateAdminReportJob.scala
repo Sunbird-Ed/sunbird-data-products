@@ -194,34 +194,45 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         
         saveUserSummaryReport(shadowDataSummary, channelSlugDF, storageConfig)
         saveUserDetailsReport(shadowUserStatusDF, channelSlugDF, storageConfig)
-
+    
+        generateTenantUserReport(organisationDF.toDF());
+    }
+    
+    def generateTenantUserReport(organisationDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
+    
+        val custodianOrgId = getCustodianOrgId();
+        val claimedUserDF = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).where(col("rootorgid").isNotNull and !col("rootorgid").contains(custodianOrgId))
         // Only claimed used
-        val claimedShadowDataSummaryDF = claimedShadowUserDF.groupBy("channel")
-          .pivot("claimstatus").agg(count("claimstatus")).na.fill(0)
-
+        val claimedUserDataSummaryDF = claimedUserDF.groupBy("channel")
+            .pivot("id").agg(count("id")).na.fill(0)
         
         // We can directly write to the slug folder
         val subOrgDF: DataFrame = generateSubOrgData(organisationDF)
         val blockDataWithSlug:DataFrame = generateBlockLevelData(subOrgDF)
-        val userDistrictSummaryDF = claimedShadowUserDF.join(blockDataWithSlug, blockDataWithSlug.col("externalid") === (claimedShadowUserDF.col("orgextid")),"inner")
+        val userDistrictSummaryDF = claimedUserDF.join(blockDataWithSlug, blockDataWithSlug.col("id") === (claimedUserDF.col("rootorgid")),"inner")
         val validatedUsersWithDst = userDistrictSummaryDF.groupBy(col("slug"), col("Channels")).agg(countDistinct("District name").as("districts"),
-            countDistinct("Block id").as("blocks"), countDistinct(claimedShadowUserDF.col("orgextid")).as("schools"), count("userid").as("subOrgRegistered"))
-        val validatedShadowDataSummaryDF = claimedShadowDataSummaryDF.join(validatedUsersWithDst, claimedShadowDataSummaryDF.col("channel") === validatedUsersWithDst.col("Channels"))
+            countDistinct("Block id").as("blocks"), countDistinct(claimedUserDF.col("rootorgid")).as("schools"), count("userid").as("subOrgRegistered"))
+        val validatedShadowDataSummaryDF = claimedUserDataSummaryDF.join(validatedUsersWithDst, claimedUserDataSummaryDF.col("channel") === validatedUsersWithDst.col("Channels"))
         val validatedGeoSummaryDF = validatedShadowDataSummaryDF.withColumn("registered",
-          when(col("1").isNull, 0).otherwise(col("1"))).withColumn("rootOrgRegistered", col("registered")-col("subOrgRegistered")).drop("1", "channel", "Channels")
-
+            when(col("1").isNull, 0).otherwise(col("1"))).withColumn("rootOrgRegistered", col("registered")-col("subOrgRegistered")).drop("1", "channel", "Channels")
+    
         saveUserValidatedSummaryReport(validatedGeoSummaryDF, storageConfig)
-        val stateOrgDf = generateStateRootSubOrgDF(subOrgDF, claimedShadowDataSummaryDF, claimedShadowUserDF.toDF());
+        val stateOrgDf = generateStateRootSubOrgDF(subOrgDF, claimedUserDataSummaryDF, claimedUserDF.toDF());
         saveValidatedUserDetailsReport(userDistrictSummaryDF, storageConfig, "validated-user-detail")
         saveValidatedUserDetailsReport(stateOrgDf, storageConfig, "validated-user-detail-state")
-        
+    
         val districtUserResult = userDistrictSummaryDF.groupBy(col("slug"), col("District name").as("districtName")).
-            agg(countDistinct("Block id").as("blocks"),countDistinct(claimedShadowUserDF.col("orgextid")).as("schools"), count("userextid").as("registered"))
+            agg(countDistinct("Block id").as("blocks"),countDistinct(claimedUserDF.col("orgextid")).as("schools"), count("userextid").as("registered"))
         saveUserDistrictSummary(districtUserResult, storageConfig)
-        
+    
         districtUserResult
     }
-
+    
+    def getCustodianOrgId() (implicit sparkSession: SparkSession): String = {
+        val systemSettingDF = loadData(sparkSession, Map("table" -> "system_settings", "keyspace" -> "sunbirdKeyspace")).where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+        systemSettingDF.select(col("value")).persist().select("value").first().getString(0)
+    }
+    
     def saveValidatedUserDetailsReport(userDistrictSummaryDF: DataFrame, storageConfig: StorageConfig, reportId: String) : Unit = {
       val window = Window.partitionBy("slug").orderBy(asc("District name"))
       val userDistrictDetailDF = userDistrictSummaryDF.withColumn("Sl", row_number().over(window)).select( col("Sl"), col("District name"), col("District id").as("District ext. ID"),
