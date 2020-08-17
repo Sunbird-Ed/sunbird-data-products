@@ -103,7 +103,8 @@ class ReportMerger:
             download_file_from_store(
                 container_name=self.report_config['container'],
                 blob_name=delta_path,
-                file_path=str(self.base_path.joinpath(delta_path))
+                file_path=str(self.base_path.joinpath(delta_path)),
+                is_private=False
                 )
             delta_df = pd.read_csv(self.base_path.joinpath(delta_path))
             col_order = delta_df.columns.to_list()
@@ -119,7 +120,8 @@ class ReportMerger:
             download_file_from_store(
                 container_name=report_container,
                 blob_name=report_path,
-                file_path=str(file_path)
+                file_path=str(file_path),
+                is_private=False
             )
             report_df = pd.read_csv(file_path)
             col_order = report_df.columns.to_list()
@@ -152,12 +154,14 @@ class ReportMerger:
         upload_file_to_store(
                 container_name=report_container,
                 blob_name=file_path.parent.name + '/' + file_path.name,
-                file_path=str(file_path)
+                file_path=str(file_path),
+                is_private=False
                 )
         upload_file_to_store(
                 container_name=report_container,
                 blob_name=file_path.parent.name + '/' + file_path.name.replace('.csv', '.json'),
-                file_path=str(file_path).replace('.csv', '.json')
+                file_path=str(file_path).replace('.csv', '.json'),
+                is_private=False
                 )
 
 

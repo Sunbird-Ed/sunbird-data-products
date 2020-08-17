@@ -371,7 +371,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, loadData: (SparkSession, Map[String, String]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-    val userCourseDenormDF = loadData(spark, Map("table" -> "user_courses", "keyspace" -> sunbirdCoursesKeyspace))
+    val userCourseDenormDF = loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace))
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
       /*
