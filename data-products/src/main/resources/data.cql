@@ -449,3 +449,10 @@ CREATE TABLE IF NOT EXISTS sunbird.user_declarations(
    updatedby text,
    primary key(userid,orgid,persona)
 );
+
+CREATE TABLE IF NOT EXISTS sunbird.system_settings (
+id text PRIMARY KEY,
+field text,
+value text
+);
+CREATE INDEX inx_system_settings ON sunbird.system_settings (field);

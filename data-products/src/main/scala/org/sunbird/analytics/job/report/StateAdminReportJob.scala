@@ -209,10 +209,13 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         // We can directly write to the slug folder
         val subOrgDF: DataFrame = generateSubOrgData(organisationDF)
         val blockDataWithSlug:DataFrame = generateBlockLevelData(subOrgDF)
-        val userDistrictSummaryDF = tenantUserDF.join(blockDataWithSlug, blockDataWithSlug.col("id") === (tenantUserDF.col("rootorgid")),"inner")
+        val userDistrictSummaryDF = tenantUserDF.join(blockDataWithSlug, blockDataWithSlug.col("School id") === (tenantUserDF.col("rootorgid")),"inner")
+        userDistrictSummaryDF.show(10, false)
         val validatedUsersWithDst = userDistrictSummaryDF.groupBy(col("slug"), col("Channels")).agg(countDistinct("District name").as("districts"),
             countDistinct("Block id").as("blocks"), countDistinct(tenantUserDF.col("rootorgid")).as("schools"), count("userid").as("subOrgRegistered"))
+        validatedUsersWithDst.show(10, false)
         val validatedShadowDataSummaryDF = claimedUserDataSummaryDF.join(validatedUsersWithDst, claimedUserDataSummaryDF.col("channel") === validatedUsersWithDst.col("Channels"))
+        validatedShadowDataSummaryDF.show(10, false)
         val validatedGeoSummaryDF = validatedShadowDataSummaryDF.withColumn("registered",
             when(col("1").isNull, 0).otherwise(col("1"))).withColumn("rootOrgRegistered", col("registered")-col("subOrgRegistered")).drop("1", "channel", "Channels")
     
@@ -229,7 +232,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     def getCustodianOrgId() (implicit sparkSession: SparkSession): String = {
-        val systemSettingDF = loadData(sparkSession, Map("table" -> "system_settings", "keyspace" -> "sunbirdKeyspace")).where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+        val systemSettingDF = loadData(sparkSession, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace)).where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
         systemSettingDF.select(col("value")).persist().select("value").first().getString(0)
     }
     
