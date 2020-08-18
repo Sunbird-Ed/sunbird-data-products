@@ -73,6 +73,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
         import sparkSession.implicits._
         
+        var resulfDf : DataFrame = sparkSession.emptyDataFrame;
         val usrExternalIdentityEncoder = Encoders.product[UsrExternalIdentity].schema
         //loading usr_external_identity table details based on declared values and location details and appending org-external-id if present
         val userExternalDataDF = loadData(sparkSession, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace), Some(usrExternalIdentityEncoder)).
@@ -81,30 +82,35 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val orgExternalIdDf = loadOrganisationData().select("externalid").filter(col("externalid").isNotNull)
         //appending state and district values to user-external-identifier based on location ids
         val userExternalOriginalDataDF = userExternalDataDF.groupBy("userid", "originalprovider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
-        val userExternalStateDF = userExternalOriginalDataDF.join(locationDF, userExternalOriginalDataDF.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
+        if(userExternalOriginalDataDF.columns.contains("declared-state") == true) {
+            val userExternalStateDF = userExternalOriginalDataDF.join(locationDF, userExternalOriginalDataDF.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
                 select(userExternalOriginalDataDF.col("*"), locationDF("locname").as("state"))
-        var userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
-            select(userExternalStateDF.col("*"), locationDF("locname").as("district"))
-        userExternalLocationDF = userExternalLocationDF.join(orgExternalIdDf, col("declared-school-udise-code") === orgExternalIdDf.col("externalid"), "left_outer").
-            select(userExternalLocationDF.col("*"), orgExternalIdDf("externalid").as("Diksha Sub-Org ID"))
-        //decrypting email and phone values
-        val userDecrpytedDataDF = decryptDF(userExternalOriginalDataDF)
-        //appending decrypted values to the user-external-identifier dataframe
-        val userExternalDecryptData  = userExternalLocationDF.join(userDecrpytedDataDF, userExternalLocationDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
-            select(userExternalLocationDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
-        
-        //loading user data with location-details based on the user's from the user-external-identifier table
-        var userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
-            select(col(  "userid"),
-                col("locationIds"),
-            concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
-        userDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "left_semi");
-        val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
-            .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
-        val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
-       
-        //listing out the user details with location info, if location details found in user-external-identifier else pick from user dataframe
-        saveUserSelfDeclaredExternalInfo(userExternalDecryptData, userDenormLocationDF)
+            var userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") && locationDF.col("loctype") === "district", "left_outer").
+                select(userExternalStateDF.col("*"), locationDF("locname").as("district"))
+            userExternalLocationDF = userExternalLocationDF.join(orgExternalIdDf, col("declared-school-udise-code") === orgExternalIdDf.col("externalid"), "left_outer").
+                select(userExternalLocationDF.col("*"), orgExternalIdDf("externalid").as("Diksha Sub-Org ID"))
+            //decrypting email and phone values
+            val userDecrpytedDataDF = decryptDF(userExternalOriginalDataDF)
+            //appending decrypted values to the user-external-identifier dataframe
+            val userExternalDecryptData = userExternalLocationDF.join(userDecrpytedDataDF, userExternalLocationDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
+                select(userExternalLocationDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
+    
+            //loading user data with location-details based on the user's from the user-external-identifier table
+            var userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
+                select(col("userid"),
+                    col("locationIds"),
+                    concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
+            userDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "left_semi");
+            val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
+                .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
+            val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
+    
+            //listing out the user details with location info, if location details found in user-external-identifier else pick from user dataframe
+            resulfDf = saveUserSelfDeclaredExternalInfo(userExternalDecryptData, userDenormLocationDF)
+        } else {
+            JobLogger.log(s"StateAdminReportJob: generateExternalIdReport not triggered since no-one is self-declared", None, INFO)
+        }
+        resulfDf
     }
     
     private def decryptDF(userExternalOriginalDataDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) : DataFrame = {
