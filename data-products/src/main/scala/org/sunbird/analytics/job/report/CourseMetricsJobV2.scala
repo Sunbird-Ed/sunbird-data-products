@@ -182,6 +182,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
       .select(userData._2.col("*"),
+        userCourses.col("courseid"),
         userCourses.col("completionPercentage").as("course_completion"),
         userCourses.col("level1"),
         userCourses.col("l1completionPercentage"))
@@ -253,7 +254,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userEnrolmentDF
-      .join(userDF, Seq("userid"), "inner")
+      .join(userDF, userEnrolmentDF.col("userid")===userDF.col("userid") &&
+        userEnrolmentDF.col("courseid")===userDF.col("courseid"), "inner")
       .withColumn(UserCache.externalid, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
       .withColumn(UserCache.schoolname, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
       .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
