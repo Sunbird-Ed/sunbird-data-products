@@ -26,11 +26,15 @@ trait ReportGeneratorV2 {
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
+case class CourseData(courseid: String, leafNodesCount: String, level1: String, l1leafNodesCount: String)
+case class UserAggData(user_id: String, activity_id: String, completedCount: Int)
+
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
 
   implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJobV2"
   val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
   val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
+  val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
@@ -80,31 +84,63 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     }
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])
-                      (implicit spark: SparkSession, fc: FrameworkContext): Array[Row] = {
-
+  def getUserCourseInfo(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
+    import sqlContext.implicits._
 
-    val courseBatchDF = if (batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .filter(batch => batchList.contains(batch.getString(1)))
-        .select("courseid", "batchid", "enddate", "startdate")
+    val userAgg = loadData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
+      .select("user_id","activity_id","agg").map(row => {
+      UserAggData(row.getString(0),row.getString(1),row.get(2).asInstanceOf[Map[String,Int]]("completedCount"))
+    }).toDF()
+
+    val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", new StructType())
+      .select("identifier","hierarchy")
+
+    val hierarchyDf = hierarchyData.rdd.map(row => {
+      val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(1))
+      val courseInfo = parseCourseHierarchy(List(hierarchy),0, List[String]())
+      CourseData(courseInfo.lift(0).getOrElse(""), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
+    }).toDF()
+
+    val dataDf = hierarchyDf.join(userAgg,hierarchyDf.col("courseid") === userAgg.col("activity_id"), "left")
+      .withColumn("completionPercentage", (userAgg.col("completedCount")/hierarchyDf.col("leafNodesCount")*100).cast("int"))
+      .select(userAgg.col("user_id").as("userid"),
+        hierarchyDf.col("courseid"),
+        col("completionPercentage"),
+        hierarchyDf.col("level1"),
+        hierarchyDf.col("l1leafNodesCount"))
+
+    val resDf = dataDf.join(userAgg, dataDf.col("level1") === userAgg.col("activity_id"),"left")
+      .withColumn("l1completionPercentage", (userAgg.col("completedCount")/dataDf.col("l1leafNodesCount")*100).cast("int"))
+      .select(col("userid"),
+        col("courseid"),
+        col("completionPercentage"),
+        col("level1"),
+        col("l1completionPercentage"))
+    resDf
+  }
+
+  def parseCourseHierarchy(data: List[Map[String,AnyRef]], levelCount: Int, prevData: List[String]): List[String] = {
+    var courseData = prevData
+    if(levelCount < 2) {
+      data.map(childNodes => {
+        val mimeType = childNodes.getOrElse("mimeType","").asInstanceOf[String]
+        val visibility = childNodes.getOrElse("visibility","").asInstanceOf[String]
+        val contentType = childNodes.getOrElse("contentType","").asInstanceOf[String]
+
+        if(levelCount == 0 || (mimeType.equals("collection") && visibility.equals("Default") && contentType.equals("Course"))) {
+          val identifier = childNodes.getOrElse("identifier","").asInstanceOf[String]
+          val leafNodesCount = childNodes.getOrElse("leafNodesCount",0).asInstanceOf[Int]
+          val courseInfo = List(identifier, leafNodesCount.toString)
+          courseData = courseData ++ courseInfo
+          val children = childNodes.getOrElse("children",List()).asInstanceOf[List[Map[String,AnyRef]]]
+          if(null != children && children.nonEmpty) {
+            courseData = parseCourseHierarchy(children, levelCount+1, courseData)
+          }
+        }
+      })
     }
-    else {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .select("courseid", "batchid", "enddate", "startdate")
-    }
-
-    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-
-    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
-
-    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.select("courseid", "batchid", "startdate", "enddate").collect
-    JobLogger.log("Total number of active batches:" + activeBatchList.length, None, INFO)
-
-    activeBatchList
+    courseData
   }
 
   def recordTime[R](block: => R, msg: String): R = {
@@ -118,24 +154,45 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
-    val activeBatches = getActiveBatches(loadData, batchList)
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    import sqlContext.implicits._
+    val activeBatches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
+    val modelParams = config.modelParams.get
+    val contentFilters = modelParams.getOrElse("contentFilters", Map()).asInstanceOf[Map[String,AnyRef]]
+    val reportPath = modelParams.getOrElse("reportPath","course-progress-reports/").asInstanceOf[String]
+
+    val filteredBatches = if(contentFilters.nonEmpty) {
+      val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
+      activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
+        .select(activeBatches.col("*")).collect
+    } else activeBatches.collect
+
+    val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
-    val activeBatchesCount = new AtomicInteger(activeBatches.length)
+    val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
-    val batchFilters = JSONUtils.serialize(config.modelParams.get("batchFilters"))
+    val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
     val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
-    for (index <- activeBatches.indices) {
-      val row = activeBatches(index)
+
+    val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
+      .select(userData._2.col("*"),
+        userCourses.col("completionPercentage").as("course_completion"),
+        userCourses.col("level1"),
+        userCourses.col("l1completionPercentage"))
+    userCourseData.persist(StorageLevel.MEMORY_ONLY)
+
+    for (index <- filteredBatches.indices) {
+      val row = filteredBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
-      if (courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
+      if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
+          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
@@ -145,7 +202,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     }
     userData._2.unpersist(true)
     userEnrolmentDF.unpersist(true)
-
+    userCourses.unpersist(true)
+    userCourseData.unpersist(true)
   }
 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -157,38 +215,29 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
-        , col("completionpercentage"), col("enrolleddate"), col("completedon"))
+        , col("enrolleddate"), col("completedon"))
   }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
-      /*
-       * courseBatchDF has details about the course and batch details for which we have to prepare the report
-       * courseBatchDF is the primary source for the report
-       * userCourseDF has details about the user details enrolled for a particular course/batch
-       */
+    /*
+     * courseBatchDF has details about the course and batch details for which we have to prepare the report
+     * courseBatchDF is the primary source for the report
+     * userCourseDF has details about the user details enrolled for a particular course/batch
+     */
     val userEnrolmentDF = userCourseDenormDF.where(col("batchid") === batch.batchid && lower(col("active")).equalTo("true"))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
       .withColumn("channel", lit(batch.courseChannel))
-      .withColumn(
-        "course_completion",
-        when(col("completionpercentage").isNull, 0)
-          .when(col("completionpercentage") > 100, 100)
-          .otherwise(col("completionpercentage")).cast("int"))
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
       .withColumn("certificate_status", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
       .select(
         col("batchid"),
         col("userid"),
-        col("completionpercentage"),
-        col("enddate"),
-        col("startdate"),
         col("enrolleddate"),
         col("completedon"),
         col("active"),
         col("courseid"),
-        col("course_completion"),
         col("generatedOn"),
         col("certificate_status"),
         col("channel")
@@ -213,12 +262,15 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col(UserCache.district),
         col(UserCache.schooludisecode),
         col(UserCache.block),
-        col(UserCache.state)
+        col(UserCache.state),
+        col("course_completion"),
+        col("level1"),
+        col("l1completionPercentage")
       ).persist(StorageLevel.MEMORY_ONLY)
     reportDF
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
     reportDF
       .select(
         col(UserCache.externalid).as("External ID"),
@@ -233,11 +285,15 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col(UserCache.schoolname).as("School Name"),
         col(UserCache.block).as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
+        col("courseid").as("Course ID"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
+        col("level1").as("Course ID - Level 1"),
+        concat(col("l1completionPercentage").cast("string"), lit("%"))
+          .as("Course Progress - Level 1"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
-      .saveToBlobStore(storageConfig, "csv", "course-progress-reports/" + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
+      .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 

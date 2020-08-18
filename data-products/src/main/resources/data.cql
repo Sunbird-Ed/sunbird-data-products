@@ -434,3 +434,18 @@ CREATE TABLE IF NOT EXISTS sunbird.usr_external_identity (
     AND min_index_interval = 128
     AND read_repair_chance = 0.0
     AND speculative_retry = '99PERCENTILE';
+
+
+CREATE TABLE IF NOT EXISTS sunbird.user_declarations(
+   userid text,
+   orgid text,
+   persona text,
+   userinfo map<text,text>,
+   status text,
+   errortype text,
+   createdon timestamp,
+   createdby text,
+   updatedon timestamp,
+   updatedby text,
+   primary key(userid,orgid,persona)
+);

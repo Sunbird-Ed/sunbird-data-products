@@ -2,9 +2,9 @@ package org.sunbird.analytics.job.report
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{col, lit, _}
+import org.apache.spark.sql.functions.{col, lit, when, _}
 import org.apache.spark.sql.{DataFrame, _}
-import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.sunbird.cloud.storage.conf.AppConf
 import org.ekstep.analytics.framework.IJob
@@ -15,8 +15,7 @@ import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.JobContext
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.OutputDispatcher
-import org.apache.spark.sql.functions._
-
+import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.sunbird.analytics.util.DecryptUtil
 
 case class ValidatedUserDistrictSummary(index: Int, districtName: String, blocks: Long, schools: Long, registered: Long)
@@ -33,8 +32,8 @@ case class ShadowUserData(channel: String, userextid: String, addedby: String, c
                           createdon: java.sql.Timestamp, email: String, name: String, orgextid: String, processid: String,
                           phone: String, updatedon: java.sql.Timestamp, userid: String, userids: List[String], userstatus: Int)
 
-case class UsrExternalIdentity(userid: String, idtype: String, provider: String, createdby: String, createdon: java.sql.Timestamp, externalid: String,
-                               lastupdatedby: String,lastupdatedon: java.sql.Timestamp, originalexternalid: String, originalidtype: String, originalprovider: String)
+case class UserSelfDeclared(userid: String, orgid: String, persona: String, errortype: String,
+                            status: String, userinfo: Map[String, String])
 
 // Shadow user summary in the json will have this POJO
 case class UserSummary(accounts_validated: Long, accounts_rejected: Long, accounts_unclaimed: Long, accounts_failed: Long)
@@ -66,46 +65,65 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
 
         generateReport();
         JobLogger.end("StateAdminReportJob completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
-        
-        generateExternalIdReport();
+    
+        val resultDf = generateExternalIdReport();
         JobLogger.end("ExternalIdReportJob completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
+        generateSelfUserDeclaredZip(resultDf, config)
+        JobLogger.end("ExternalIdReportJob zip completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
     }
     
     def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
         import sparkSession.implicits._
         
-        val usrExternalIdentityEncoder = Encoders.product[UsrExternalIdentity].schema
-        //loading usr_external_identity table details based on declared values and location details and appending org-external-id if present
-        val userExternalDataDF = loadData(sparkSession, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace), Some(usrExternalIdentityEncoder)).
-            filter(col(colName = "idtype").isin("declared-email", "declared-phone", "declared-school-name", "declared-school-udise-code", "declared-ext-id", "declared-state", "declared-district").and(col("originalexternalid").isNotNull)).as[UsrExternalIdentity]
+        val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
+        //loading user_declarations table details based on declared values and location details and appending org-external-id if present
+        var userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+        userSelfDeclaredDataDF = userSelfDeclaredDataDF.select(col("*"), col("userinfo").getItem("declared-email").as("declared-email"), col("userinfo").getItem("declared-phone").as("declared-phone"),
+            col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
         val locationDF = locationData()
-        val orgExternalIdList: List[String] = loadOrganisationData().select("externalid").filter(col("externalid").isNotNull).map(_.getString(0)).collect().toList
-        
-        //appending state and district values to user-external-identifier based on location ids
-        val userExternalOriginalDataDF = userExternalDataDF.groupBy("userid", "originalprovider").pivot("idtype").agg(first("originalexternalid").alias("originalexternalid"))
-        val userExternalStateDF = userExternalOriginalDataDF.join(locationDF, userExternalOriginalDataDF.col("declared-state") === locationDF.col("locid") && locationDF.col("loctype") === "state", "left_outer").
-                select(userExternalOriginalDataDF.col("*"), locationDF("locname").as("state"))
-        var userExternalLocationDF = userExternalStateDF.join(locationDF, userExternalOriginalDataDF.col("declared-district") === locationDF.col("locid") &&locationDF.col("loctype") === "district", "left_outer").
-            select(userExternalStateDF.col("*"), locationDF("locname").as("district"))
-        userExternalLocationDF = userExternalLocationDF.withColumn("Diksha Sub-Org ID", when(userExternalLocationDF.col("declared-school-udise-code").isin(orgExternalIdList:_*), userExternalLocationDF.col("declared-school-udise-code")))
+        //to-do later check if externalid is necessary not-null check is necessary
+        val orgExternalIdDf = loadOrganisationData().select("externalid","channel", "id","locationIds","orgName").filter(col("channel").isNotNull)
+        userSelfDeclaredDataDF = userSelfDeclaredDataDF.join(orgExternalIdDf, userSelfDeclaredDataDF.col("orgid") === orgExternalIdDf.col("id"), "leftouter").
+            select(userSelfDeclaredDataDF.col("*"), orgExternalIdDf.col("*"))
+        userSelfDeclaredDataDF = userSelfDeclaredDataDF.withColumn("Diksha Sub-Org ID", when(userSelfDeclaredDataDF.col("declared-school-udise-code") === orgExternalIdDf.col("externalid"), userSelfDeclaredDataDF.col("declared-school-udise-code")).otherwise(lit("")))
         //decrypting email and phone values
-        val userDecrpytedDataDF = decryptDF(userExternalOriginalDataDF)
+        val userDecrpytedDataDF = decryptDF(userSelfDeclaredDataDF)
         //appending decrypted values to the user-external-identifier dataframe
-        val userExternalDecryptData  = userExternalLocationDF.join(userDecrpytedDataDF, userExternalLocationDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
-            select(userExternalLocationDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
-        val userIds = userExternalDecryptData.select("userid").map(_.getString(0)).collect.toList
-        
+        val userExternalDecryptData  = userSelfDeclaredDataDF.join(userDecrpytedDataDF, userSelfDeclaredDataDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
+            select(userSelfDeclaredDataDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
+    
         //loading user data with location-details based on the user's from the user-external-identifier table
-        val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
+        var userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
                 col("locationIds"),
-            concat_ws(" ", col("firstname"), col("lastname")).as("Name")).filter(col("id").isin(userIds:_*))
+                concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
+        userDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "left_semi");
         val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
         val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
-       
         //listing out the user details with location info, if location details found in user-external-identifier else pick from user dataframe
         saveUserSelfDeclaredExternalInfo(userExternalDecryptData, userDenormLocationDF)
+        
+    }
+    
+    def generateSelfUserDeclaredZip(blockData: DataFrame, jobConfig: JobConfig): Unit = {
+        val params = jobConfig.modelParams.getOrElse(Map())
+        val virtualEnvDirectory = params.getOrElse("adhoc_scripts_virtualenv_dir", "/mount/venv")
+        val scriptOutputDirectory = params.getOrElse("adhoc_scripts_output_dir", "/mount/portal_data")
+        
+        val channels = blockData.select(col("Channel")).distinct().collect.map(_.getString(0)).mkString(",")
+        val userDeclaredDetailReportCommand = Seq("bash", "-c",
+            s"source $virtualEnvDirectory/bin/activate; " +
+                s"dataproducts user_declared_detail --data_store_location='$scriptOutputDirectory' --states='$channels'")
+        JobLogger.log(s"User self-declared detail persona zip report command:: $userDeclaredDetailReportCommand", None, INFO)
+        val userDeclaredDetailReportExitCode = ScriptDispatcher.dispatch(userDeclaredDetailReportCommand)
+        
+        if (userDeclaredDetailReportExitCode == 0) {
+            JobLogger.log(s"Self-Declared user level zip generation::Success", None, INFO)
+        } else {
+            JobLogger.log(s"Self-Declared user level zip generation failed with exit code $userDeclaredDetailReportExitCode", None, ERROR)
+            throw new Exception(s"Self-Declared user level zip generation failed with exit code $userDeclaredDetailReportExitCode")
+        }
     }
     
     private def decryptDF(userExternalOriginalDataDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) : DataFrame = {
@@ -133,16 +151,20 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val resultDf = userExternalDecryptData.join(userDenormLocationDF, userExternalDecryptData.col("userid") === userDenormLocationDF.col("userid"), "left_outer").
             select(col("Name"),
                 userExternalDecryptData.col("userid").as("Diksha UUID"),
-                when(userExternalDecryptData.col("state").isNotNull, userExternalDecryptData.col("state")).otherwise(userDenormLocationDF.col("state")).as("State"),
-                when(userExternalDecryptData.col("district").isNotNull, userExternalDecryptData.col("district")).otherwise(userDenormLocationDF.col("district")).as("District"),
+                when(userDenormLocationDF.col("state").isNotNull, userDenormLocationDF.col("state")).otherwise(lit("")).as("State"),
+                when(userDenormLocationDF.col("district").isNotNull, userDenormLocationDF.col("district")).otherwise(lit("")).as("District"),
                 col("declared-school-name"). as("School Name"),
                 col("declared-school-udise-code").as("School UDISE ID"),
                 col("declared-ext-id").as("State provided ext. ID"),
                 col("decrypted-phone").as("Phone number"),
                 col("decrypted-email").as("Email ID"),
+                col("persona").as("Persona"),
+                col("orgid").as("Organisation Id"),
+                col("status").as("Status"),
+                col("errortype").as("Error Type"),
                 col("Diksha Sub-Org ID"),
-                col("originalprovider").as("Channel"),
-                col("originalprovider").as("provider"))
+                col("channel").as("Channel"),
+                col("channel").as("provider"))
         resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
         resultDf
     }
