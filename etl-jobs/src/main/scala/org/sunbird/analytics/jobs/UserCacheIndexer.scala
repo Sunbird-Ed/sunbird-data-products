@@ -1,11 +1,14 @@
 package org.sunbird.analytics.jobs
 
-import com.typesafe.config.{ Config, ConfigFactory }
+import com.redislabs.provider.redis._
+import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
-import org.apache.spark.sql.functions.{ col, collect_set, concat_ws, explode_outer, first, lit, lower, _ }
-import org.apache.spark.sql.{ DataFrame, SaveMode, SparkSession }
-import org.apache.spark.sql.functions.to_json
+import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, first, lit, lower, to_json, _}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.storage.StorageLevel
+import org.sunbird.analytics.util.JSONUtils
+
+case class AnonymousData(userid:String, usersignintype: String, userlogintype: String)
 
 object UserCacheIndexer extends Serializable {
 
@@ -15,9 +18,11 @@ object UserCacheIndexer extends Serializable {
 
     var specificUserId: String = null
     var fromSpecificDate: String = null
+    var populateAnonymousData: String = "false"
     if (!args.isEmpty) {
       specificUserId = args(0) // userid
       fromSpecificDate = args(1) // date in YYYY-MM-DD format
+      populateAnonymousData = args(2) // populate anonymous data
     }
     val sunbirdKeyspace = "sunbird"
 
@@ -284,11 +289,38 @@ object UserCacheIndexer extends Serializable {
         .save()
     }
 
-    val res1 = time(populateUserData())
-    val res2 = time(denormUserData())
-    val totalTimeTaken = (res1._1 + res2._1).toDouble/1000
-    Console.println("Time taken for individual steps:", "stage1", res1._1, "stage2", res2._1)
-    Console.println("Time taken for complete script:", totalTimeTaken);
+    if (!populateAnonymousData.equalsIgnoreCase("true")) {
+      val res1 = time(populateUserData())
+      val res2 = time(denormUserData())
+      val totalTimeTaken = (res1._1 + res2._1).toDouble/1000
+      Console.println("Time taken for individual steps:", "stage1", res1._1, "stage2", res2._1)
+      Console.println("Time taken for complete script:", totalTimeTaken);
+    } else {
+      val sqlContext = new SQLContext(spark.sparkContext)
+      import sqlContext.implicits._
+
+      val anonymousDataRDD = spark.sparkContext.fromRedisKV("*").persist(StorageLevel.MEMORY_ONLY)
+      val filteredData = anonymousDataRDD.map{f => (f._1, JSONUtils.deserialize[Map[String, AnyRef]](f._2))}.filter(f => f._2.getOrElse("usersignintype", "").equals("Anonymous"))
+
+      val anonymousDataDF = filteredData.map{f =>
+        AnonymousData(f._1, f._2.getOrElse("usersignintype", "Anonymous").toString, f._2.getOrElse("userlogintype", "").toString)
+      }.toDF()
+
+      val res1 = time(populateAnonymousUserToRedis(anonymousDataDF)) // Insert all userData Into redis
+      Console.println("Time taken to insert anonymous records", res1._1)
+    }
+
+    def populateAnonymousUserToRedis(dataFrame: DataFrame): Unit = {
+      dataFrame.write
+        .format("org.apache.spark.sql.redis")
+        .option("host", config.getString("redis.host"))
+        .option("port", config.getString("redis.port"))
+        .option("dbNum", config.getString("redis.user.hashmap.output.index"))
+        .option("table", "user")
+        .option("key.column", "userid")
+        .mode(SaveMode.Append)
+        .save()
+    }
   }
 
   def time[R](block: => R): (Long, R) = {
