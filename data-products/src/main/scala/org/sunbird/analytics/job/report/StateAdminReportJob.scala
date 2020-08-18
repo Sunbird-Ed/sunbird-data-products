@@ -201,28 +201,28 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     def generateTenantUserReport(organisationDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
     
         val custodianOrgId = getCustodianOrgId();
-        val claimedUserDF = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).where(col("rootorgid").isNotNull and !col("rootorgid").contains(custodianOrgId))
+        val tenantUserDF = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).where(col("rootorgid").isNotNull and !col("rootorgid").contains(custodianOrgId))
         // Only claimed used
-        val claimedUserDataSummaryDF = claimedUserDF.groupBy("channel")
+        val claimedUserDataSummaryDF = tenantUserDF.groupBy("channel")
             .pivot("id").agg(count("id")).na.fill(0)
         
         // We can directly write to the slug folder
         val subOrgDF: DataFrame = generateSubOrgData(organisationDF)
         val blockDataWithSlug:DataFrame = generateBlockLevelData(subOrgDF)
-        val userDistrictSummaryDF = claimedUserDF.join(blockDataWithSlug, blockDataWithSlug.col("id") === (claimedUserDF.col("rootorgid")),"inner")
+        val userDistrictSummaryDF = tenantUserDF.join(blockDataWithSlug, blockDataWithSlug.col("id") === (tenantUserDF.col("rootorgid")),"inner")
         val validatedUsersWithDst = userDistrictSummaryDF.groupBy(col("slug"), col("Channels")).agg(countDistinct("District name").as("districts"),
-            countDistinct("Block id").as("blocks"), countDistinct(claimedUserDF.col("rootorgid")).as("schools"), count("userid").as("subOrgRegistered"))
+            countDistinct("Block id").as("blocks"), countDistinct(tenantUserDF.col("rootorgid")).as("schools"), count("userid").as("subOrgRegistered"))
         val validatedShadowDataSummaryDF = claimedUserDataSummaryDF.join(validatedUsersWithDst, claimedUserDataSummaryDF.col("channel") === validatedUsersWithDst.col("Channels"))
         val validatedGeoSummaryDF = validatedShadowDataSummaryDF.withColumn("registered",
             when(col("1").isNull, 0).otherwise(col("1"))).withColumn("rootOrgRegistered", col("registered")-col("subOrgRegistered")).drop("1", "channel", "Channels")
     
         saveUserValidatedSummaryReport(validatedGeoSummaryDF, storageConfig)
-        val stateOrgDf = generateStateRootSubOrgDF(subOrgDF, claimedUserDataSummaryDF, claimedUserDF.toDF());
+        val stateOrgDf = generateStateRootSubOrgDF(subOrgDF, claimedUserDataSummaryDF, tenantUserDF.toDF());
         saveValidatedUserDetailsReport(userDistrictSummaryDF, storageConfig, "validated-user-detail")
         saveValidatedUserDetailsReport(stateOrgDf, storageConfig, "validated-user-detail-state")
     
         val districtUserResult = userDistrictSummaryDF.groupBy(col("slug"), col("District name").as("districtName")).
-            agg(countDistinct("Block id").as("blocks"),countDistinct(claimedUserDF.col("orgextid")).as("schools"), count("userextid").as("registered"))
+            agg(countDistinct("Block id").as("blocks"),countDistinct(tenantUserDF.col("orgextid")).as("schools"), count("userextid").as("registered"))
         saveUserDistrictSummary(districtUserResult, storageConfig)
     
         districtUserResult
