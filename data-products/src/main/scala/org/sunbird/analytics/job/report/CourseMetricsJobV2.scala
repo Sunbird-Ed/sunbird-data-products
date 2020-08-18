@@ -99,7 +99,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val hierarchyDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(1))
       val courseInfo = parseCourseHierarchy(List(hierarchy),0, List[String]())
-      CourseData(courseInfo.lift(0).getOrElse(""), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
+      CourseData(courseInfo.lift(0).getOrElse(null), courseInfo.lift(1).getOrElse(null), courseInfo.lift(2).getOrElse(null), courseInfo.lift(3).getOrElse(null))
     }).toDF()
 
     val dataDf = hierarchyDf.join(userAgg,hierarchyDf.col("courseid") === userAgg.col("activity_id"), "left")
@@ -192,7 +192,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         val result = CommonUtil.time({
           val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
+          val resDF = reportDF.select("level1","l1completionPercentage").selectExpr(reportDF.first().getValuesMap[String](Array("level1","l1completionPercentage")).filter(_._2 != null).keys.toSeq: _*)
+          val finalDf = reportDF.alias("t1").select(col("*"), resDF.col("*"))
+            .drop($"t1.level1").drop($"t1.l1completionPercentage")
+          recordTime(saveReportToBlobStore(batch, finalDf, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
@@ -250,50 +253,34 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
       .withColumn(UserCache.schooludisecode, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
       .select(
-        userEnrolmentDF.col("*"),
-        col("channel"),
-        col(UserCache.firstname),
-        col(UserCache.lastname),
-        col(UserCache.maskedemail),
-        col(UserCache.maskedphone),
-        col(UserCache.externalid),
-        col(UserCache.orgname),
-        col(UserCache.schoolname),
-        col(UserCache.district),
-        col(UserCache.schooludisecode),
-        col(UserCache.block),
-        col(UserCache.state),
-        col("course_completion"),
-        col("level1"),
-        col("l1completionPercentage")
-      ).persist(StorageLevel.MEMORY_ONLY)
-    reportDF
-  }
-
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
-    reportDF
-      .select(
         col(UserCache.externalid).as("External ID"),
-        col(UserCache.userid).as("User ID"),
+        userEnrolmentDF.col(UserCache.userid).as("User ID"),
         concat_ws(" ", col(UserCache.firstname), col(UserCache.lastname)).as("User Name"),
         col(UserCache.maskedemail).as("Email ID"),
         col(UserCache.maskedphone).as("Mobile Number"),
         col(UserCache.orgname).as("Organisation Name"),
         col(UserCache.state).as("State Name"),
         col(UserCache.district).as("District Name"),
-        col(UserCache.schooludisecode).as("School UDISE Code"),
-        col(UserCache.schoolname).as("School Name"),
         col(UserCache.block).as("Block Name"),
+        col(UserCache.schoolname).as("School Name"),
+        col(UserCache.schooludisecode).as("School UDISE Code"),
         col("enrolleddate").as("Enrolment Date"),
         col("courseid").as("Course ID"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
-        col("level1").as("Course ID - Level 1"),
-        concat(col("l1completionPercentage").cast("string"), lit("%"))
-          .as("Course Progress - Level 1"),
+        col("level1"),
+        concat(col("l1completionPercentage").cast("string"), lit("%")).as("l1completionPercentage"),
         col("completedon").as("Completion Date"),
-        col("certificate_status").as("Certificate Status"))
+        col("certificate_status").as("Certificate Status")
+      ).persist(StorageLevel.MEMORY_ONLY)
+    reportDF
+  }
+
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
+    val labels = Map("level1"-> "Course ID - Level 1", "l1completionPercentage" -> "Course Progress - Level 1")
+    reportDF.select(reportDF.columns.map(c => reportDF.col(c).as(labels.getOrElse(c, c))): _*)
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
+
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 
