@@ -168,9 +168,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     } else activeBatches.collect
 
     val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
-    userCourses.show(false)
-    JobLogger.log(s"user courses length: ${userCourses.count()} ", None, INFO)
-
     val userData = CommonUtil.time({
       recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
@@ -187,9 +184,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         userCourses.col("level1"),
         userCourses.col("l1completionPercentage"))
     userCourseData.persist(StorageLevel.MEMORY_ONLY)
-
-    userCourseData.show(false)
-    JobLogger.log(s"course data length: ${userCourseData.count()} ", None, INFO)
 
     for (index <- filteredBatches.indices) {
       val row = filteredBatches(index)
@@ -249,13 +243,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("certificate_status"),
         col("channel")
       )
-    userEnrolmentDF.show(false)
-    JobLogger.log(s"user enrollment data length: ${userEnrolmentDF.count()} ", None, INFO)
 
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userEnrolmentDF
-      .join(userDF, userEnrolmentDF.col("userid")===userDF.col("userid") &&
-        userEnrolmentDF.col("courseid")===userDF.col("courseid"), "inner")
+      .join(userDF, Seq("userid", "courseid"), "inner")
       .withColumn(UserCache.externalid, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
       .withColumn(UserCache.schoolname, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
       .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
@@ -278,10 +269,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("level1"),
         col("l1completionPercentage")
       ).persist(StorageLevel.MEMORY_ONLY)
-    reportDF.show(false)
-
-    JobLogger.log(s"reportDF data length: ${reportDF.count()} ", None, INFO)
-
     reportDF
   }
 
