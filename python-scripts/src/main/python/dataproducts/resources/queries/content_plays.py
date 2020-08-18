@@ -42,19 +42,9 @@ def init():
                     "value": "play"
                 },
                 {
-                    "type": "or",
-                    "fields": [
-                        {
-                            "type": "selector",
-                            "dimension": "dimensions_pdata_id",
-                            "value": "$app"
-                        },
-                        {
-                            "type": "selector",
-                            "dimension": "dimensions_pdata_id",
-                            "value": "$portal"
-                        }
-                    ]
+                    "type": "in",
+                    "dimension": "dimensions_pdata_id",
+                    "values": ["$app", "$portal"]
                 }
             ]
         }
