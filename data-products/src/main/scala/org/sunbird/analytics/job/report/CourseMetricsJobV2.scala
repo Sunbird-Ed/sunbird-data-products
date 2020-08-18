@@ -194,7 +194,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
           val totalRecords = reportDF.count()
           val resDF = reportDF.select("level1","l1completionPercentage").selectExpr(reportDF.first().getValuesMap[String](Array("level1","l1completionPercentage")).filter(_._2 != null).keys.toSeq: _*)
           val finalDf = reportDF.alias("t1").select(col("*"), resDF.col("*"))
-            .drop($"t1.level1").drop($"t1.l1completionPercentage")
+            .drop($"t1.level1").drop($"t1.l1completionPercentage").dropDuplicates()
           recordTime(saveReportToBlobStore(batch, finalDf, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
         })
