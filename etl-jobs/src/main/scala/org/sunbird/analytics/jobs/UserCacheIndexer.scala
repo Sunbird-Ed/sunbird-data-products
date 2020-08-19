@@ -284,6 +284,9 @@ object UserCacheIndexer extends Serializable {
 
       resultDF.write
         .format("org.apache.spark.sql.redis")
+        .option("host", config.getString("redis.host"))
+        .option("port", config.getString("redis.port"))
+        .option("dbNum", config.getString("redis.user.database.index"))
         .option("table", "user")
         .option("key.column", "userid")
         .mode(SaveMode.Append)
@@ -297,6 +300,11 @@ object UserCacheIndexer extends Serializable {
       Console.println("Time taken for individual steps:", "stage1", res1._1, "stage2", res2._1)
       Console.println("Time taken for complete script:", totalTimeTaken);
     } else {
+      val res = time(populateAnonymousUserData())
+      Console.println("Time taken for complete script:", res._1);
+    }
+
+    def populateAnonymousUserData(): Unit = {
       val sqlContext = new SQLContext(spark.sparkContext)
       import sqlContext.implicits._
 
@@ -307,20 +315,8 @@ object UserCacheIndexer extends Serializable {
         AnonymousData(f._1, f._2.getOrElse("usersignintype", "Anonymous").toString, f._2.getOrElse("userlogintype", "").toString)
       }.toDF()
 
-      val res1 = time(populateAnonymousUserToRedis(anonymousDataDF)) // Insert all userData Into redis
+      val res1 = time(populateToRedis(anonymousDataDF)) // Insert all userData Into redis
       Console.println("Time taken to insert anonymous records", res1._1)
-    }
-
-    def populateAnonymousUserToRedis(dataFrame: DataFrame): Unit = {
-      dataFrame.write
-        .format("org.apache.spark.sql.redis")
-        .option("host", config.getString("redis.host"))
-        .option("port", config.getString("redis.port"))
-        .option("dbNum", config.getString("redis.user.database.index"))
-        .option("table", "user")
-        .option("key.column", "userid")
-        .mode(SaveMode.Append)
-        .save()
     }
   }
 
