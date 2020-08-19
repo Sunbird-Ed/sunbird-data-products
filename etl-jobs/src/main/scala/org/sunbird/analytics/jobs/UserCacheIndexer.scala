@@ -314,6 +314,7 @@ object UserCacheIndexer extends Serializable {
       val anonymousDataDF = filteredData.map{f =>
         AnonymousData(f._1, f._2.getOrElse("usersignintype", "Anonymous").toString, f._2.getOrElse("userlogintype", "").toString)
       }.toDF()
+      Console.println("Anonymous data user count: " + anonymousDataDF.count())
 
       val res1 = time(populateToRedis(anonymousDataDF)) // Insert all userData Into redis
       Console.println("Time taken to insert anonymous records", res1._1)
