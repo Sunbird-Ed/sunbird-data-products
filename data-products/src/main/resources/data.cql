@@ -455,7 +455,7 @@ id text PRIMARY KEY,
 field text,
 value text
 );
-CREATE INDEX inx_system_settings ON sunbird.system_settings (field);
+CREATE INDEX IF NOT EXISTS inx_system_settings ON sunbird.system_settings (field);
 
 CREATE TABLE IF NOT EXISTS sunbird.user_organisation (
   userid text,
