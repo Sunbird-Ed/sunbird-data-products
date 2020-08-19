@@ -27,6 +27,7 @@ object UserCacheIndexer extends Serializable {
     val sunbirdKeyspace = "sunbird"
 
     val complexFieldTypes = Array("array", "map")
+    val redisIndex = if (!populateAnonymousData.equalsIgnoreCase("true")) config.getString("redis.user.database.index") else config.getString("redis.user.input.index")
 
     val spark: SparkSession =
       SparkSession
@@ -36,7 +37,7 @@ object UserCacheIndexer extends Serializable {
         .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
         .config("spark.redis.host", config.getString("redis.host"))
         .config("spark.redis.port", config.getString("redis.port"))
-        .config("spark.redis.db", config.getString("redis.user.database.index"))
+        .config("spark.redis.db", redisIndex)
         .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
         .config("spark.cassandra.read.timeoutMS", "300000")
         .getOrCreate()
@@ -299,7 +300,7 @@ object UserCacheIndexer extends Serializable {
       val sqlContext = new SQLContext(spark.sparkContext)
       import sqlContext.implicits._
 
-      val anonymousDataRDD = spark.sparkContext.fromRedisKV("*").persist(StorageLevel.MEMORY_ONLY)
+      val anonymousDataRDD = spark.sparkContext.fromRedisKV("*")
       val filteredData = anonymousDataRDD.map{f => (f._1, JSONUtils.deserialize[Map[String, AnyRef]](f._2))}.filter(f => f._2.getOrElse("usersignintype", "").equals("Anonymous"))
 
       val anonymousDataDF = filteredData.map{f =>
@@ -315,7 +316,7 @@ object UserCacheIndexer extends Serializable {
         .format("org.apache.spark.sql.redis")
         .option("host", config.getString("redis.host"))
         .option("port", config.getString("redis.port"))
-        .option("dbNum", config.getString("redis.user.hashmap.output.index"))
+        .option("dbNum", config.getString("redis.user.database.index"))
         .option("table", "user")
         .option("key.column", "userid")
         .mode(SaveMode.Append)
