@@ -99,7 +99,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val hierarchyDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(1))
       val courseInfo = parseCourseHierarchy(List(hierarchy),0, List[String]())
-      CourseData(courseInfo.lift(0).getOrElse(""), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
+      CourseData(row.getString(0), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
     }).toDF()
 
     val dataDf = hierarchyDf.join(userAgg,hierarchyDf.col("courseid") === userAgg.col("activity_id"), "left")
