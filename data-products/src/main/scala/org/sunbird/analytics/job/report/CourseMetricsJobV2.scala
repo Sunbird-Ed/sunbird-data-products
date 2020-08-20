@@ -249,7 +249,9 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val contextId = s"cb:${batch.batchid}"
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userEnrolmentDF
-      .join(userDF, userDF.col("contextid") === contextId && Seq("courseid","userid"), "inner")
+      .join(userDF, userDF.col("contextid") === contextId &&
+        userEnrolmentDF.col("courseid") === userDF.col("courseid") &&
+        userEnrolmentDF.col("userid") === userDF.col("userid"), "inner")
       .withColumn(UserCache.externalid, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
       .withColumn(UserCache.schoolname, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
       .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
