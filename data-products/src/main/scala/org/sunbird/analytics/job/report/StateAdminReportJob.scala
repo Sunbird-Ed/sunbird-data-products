@@ -160,7 +160,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("decrypted-phone").as("Phone number"),
                 col("decrypted-email").as("Email ID"),
                 col("persona").as("Persona"),
-                col("orgid").as("Organisation Id"),
+                col("orgid").as("Org ID"),
                 col("status").as("Status"),
                 col("errortype").as("Error Type"),
                 col("Diksha Sub-Org ID"),
