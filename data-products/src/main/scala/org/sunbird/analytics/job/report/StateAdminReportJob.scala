@@ -82,7 +82,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
         val locationDF = locationData()
         //to-do later check if externalid is necessary not-null check is necessary
-        val orgExternalIdDf = loadOrganisationData().select("externalid","channel", "id","locationIds","orgName").filter(col("channel").isNotNull)
+        val orgExternalIdDf = loadOrganisationData().select("externalid","channel", "id","orgName").filter(col("channel").isNotNull)
         userSelfDeclaredDataDF = userSelfDeclaredDataDF.join(orgExternalIdDf, userSelfDeclaredDataDF.col("orgid") === orgExternalIdDf.col("id"), "leftouter").
             select(userSelfDeclaredDataDF.col("*"), orgExternalIdDf.col("*"))
         userSelfDeclaredDataDF = userSelfDeclaredDataDF.withColumn("Diksha Sub-Org ID", when(userSelfDeclaredDataDF.col("declared-school-udise-code") === orgExternalIdDf.col("externalid"), userSelfDeclaredDataDF.col("declared-school-udise-code")).otherwise(lit("")))
@@ -97,16 +97,17 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             select(col(  "userid"),
                 col("locationIds"),
                 concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
-        userDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "left_semi");
+        userDf = userExternalDecryptData.join(userDf, userExternalDecryptData.col("userid") === userDf.col("userid"), "left_outer").
+            select(userDf.col("*"))
         val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
         val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
         //listing out the user details with location info, if location details found in user-external-identifier else pick from user dataframe
         saveUserSelfDeclaredExternalInfo(userExternalDecryptData, userDenormLocationDF)
-        
     }
     
     def generateSelfUserDeclaredZip(blockData: DataFrame, jobConfig: JobConfig): Unit = {
+        JobLogger.log(s"generateSelfUserDeclaredZip:: Self-Declared user level zip generation::starts", None, INFO)
         val params = jobConfig.modelParams.getOrElse(Map())
         val virtualEnvDirectory = params.getOrElse("adhoc_scripts_virtualenv_dir", "/mount/venv")
         val scriptOutputDirectory = params.getOrElse("adhoc_scripts_output_dir", "/mount/portal_data")
@@ -165,7 +166,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("Diksha Sub-Org ID"),
                 col("channel").as("Channel"),
                 col("channel").as("provider"))
-        resultDf.toDF.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
+        resultDf.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
         resultDf
     }
     
