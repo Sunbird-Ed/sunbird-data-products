@@ -2,6 +2,7 @@ package org.sunbird.analytics.job.report
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
@@ -130,7 +131,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         val visibility = childNodes.getOrElse("visibility","").asInstanceOf[String]
         val contentType = childNodes.getOrElse("contentType","").asInstanceOf[String]
 
-        if(levelCount == 0 || (mimeType.equals("collection") && visibility.equals("Default") && contentType.equals("Course"))) {
+        if(levelCount == 0 || (StringUtils.equalsIgnoreCase(mimeType,"application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility,"Default") && StringUtils.equalsIgnoreCase(contentType,"Course"))) {
           val identifier = childNodes.getOrElse("identifier","").asInstanceOf[String]
           val leafNodesCount = childNodes.getOrElse("leafNodesCount",0).asInstanceOf[Int]
           val courseInfo = List(identifier, leafNodesCount.toString)
