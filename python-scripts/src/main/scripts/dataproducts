@@ -156,6 +156,13 @@ if __name__ == '__main__':
     parser_ud.add_argument("--states", type=str,
                            help="State slugs in array")
 
+    parser_udd = subparsers.add_parser('user_declared_detail',
+                                      help='User declared details')
+    parser_udd.add_argument("--data_store_location", type=str,
+                           help="The path to local data folder")
+    parser_udd.add_argument("--states", type=str,
+                           help="State slugs in array")
+
     parser_report_merger = subparsers.add_parser('report_merger',
                                                  help='Report Merger')
     parser_report_merger.add_argument("--report_config", type=json.loads,
@@ -275,10 +282,10 @@ if __name__ == '__main__':
         user_detail.init()
 
     elif args.cmd == "user_declared_detail":
-            from dataproducts.services.location.user_declaration_report import UserDeclarationReport
+        from dataproducts.services.location.user_declaration_report import UserDeclarationReport
 
-            user_declared_detail = UserDeclarationReport(args.data_store_location, args.states)
-            user_declared_detail.init()
+        user_declared_detail = UserDeclarationReport(args.data_store_location, args.states)
+        user_declared_detail.init()
 
     elif args.cmd == "report_merger":
         from dataproducts.services.consumption.report_merger import ReportMerger
