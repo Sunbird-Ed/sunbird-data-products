@@ -97,9 +97,9 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             select(col(  "userid"),
                 col("locationIds"),
                 concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
-        userDf = userExternalDecryptData.join(userDf, userExternalDecryptData.col("userid") === userDf.col("userid"), "left_outer").
+        val commonUserDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "inner").
             select(userDf.col("*"))
-        val userDenormDF = userDf.withColumn("exploded_location", explode_outer(col("locationids")))
+        val userDenormDF = commonUserDf.withColumn("exploded_location", explode_outer(col("locationids")))
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
         val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
         //listing out the user details with location info, if location details found in user-external-identifier else pick from user dataframe
