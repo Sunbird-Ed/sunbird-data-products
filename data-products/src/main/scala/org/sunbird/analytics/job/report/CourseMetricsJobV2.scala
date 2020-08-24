@@ -112,7 +112,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         hierarchyDf.col("level1"),
         hierarchyDf.col("l1leafNodesCount"))
 
-    val resDf = dataDf.join(userAgg, dataDf.col("level1") === userAgg.col("activity_id"),"left")
+    val resDf = dataDf.join(userAgg, dataDf.col("level1") === userAgg.col("activity_id") &&
+      userAgg.col("context_id") === dataDf.col("contextid"),"left")
       .withColumn("l1completionPercentage", (userAgg.col("completedCount")/dataDf.col("l1leafNodesCount")*100).cast("int"))
       .select(col("userid"),
         col("courseid"),
