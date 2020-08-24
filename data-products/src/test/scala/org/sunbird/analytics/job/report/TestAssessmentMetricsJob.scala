@@ -41,6 +41,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = getSparkSession();
+    sc = spark.sparkContext
 
     /*
      * Data created with 31 active batch from batchid = 1000 - 1031
