@@ -264,17 +264,19 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
+
 		<dependency>
 			<groupId>com.microsoft.azure</groupId>
 			<artifactId>azure-storage</artifactId>
 			<version>3.0.0</version>
 		</dependency>
-		
+
 		<dependency>
 			<groupId>ing.wbaa.druid</groupId>
-			<artifactId>scruid_2.11</artifactId>
-			<version>2.3.0</version>
-			<scope>provided</scope>
+			<artifactId>scruid_${scala.maj.version}</artifactId>
+			<version>2.4.0</version>
+			<scope>system</scope>
+			<systemPath>${project.basedir}/lib/scruid_2.11-2.4.0.jar</systemPath>
 		</dependency>
 		<dependency>
 		    <groupId>pl.allegro.tech</groupId>
