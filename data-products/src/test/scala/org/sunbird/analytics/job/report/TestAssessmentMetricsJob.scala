@@ -7,6 +7,7 @@ import ing.wbaa.druid._
 import ing.wbaa.druid.client.DruidClient
 import io.circe._
 import io.circe.parser._
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.{JSONUtils, RestUtil}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig}
@@ -21,6 +22,7 @@ import scala.concurrent.Future
 class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
 
   implicit var spark: SparkSession = _
+  implicit var sc: SparkContext = _
 
   var courseBatchDF: DataFrame = _
   var userCoursesDF: DataFrame = _

@@ -28,8 +28,7 @@ object CourseConsumptionModel extends BaseCourseMetrics[Empty, BaseCourseMetrics
 
     val druidConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(config.get("reportConfig").get)).metrics.map(_.druidQuery)
     val druidResponse = DruidDataFetcher.getDruidData(druidConfig(0))
-    val coursePlays = druidResponse.map{f => JSONUtils.deserialize[CoursePlays](f)}
-    val coursePlaysRDD = sc.parallelize(coursePlays)
+    val coursePlaysRDD = druidResponse.map{f => JSONUtils.deserialize[CoursePlays](f)}
 
     val courseBatchDetailsWKeys = events.map(f => (CourseKeys(f.courseId, f.batchId), f))
     val coursePlaysDetailsWKeys = coursePlaysRDD.map(f => (CourseKeys(f.courseId,f.batchId), f))
