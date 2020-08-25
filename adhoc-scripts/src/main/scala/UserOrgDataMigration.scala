@@ -14,7 +14,7 @@ object UserOrgDataMigration extends Serializable {
         .builder()
         .appName("UserOrgDataMigration")
         .config("spark.master", "local[*]")
-        .config("spark.cassandra.connection.host", "{cassandra ip}")
+        .config("spark.cassandra.connection.host", "127.0.0.1")
         .config("spark.cassandra.output.batch.size.rows", "10000")
         .config("spark.cassandra.read.timeoutMS", "60000")
         .getOrCreate()
