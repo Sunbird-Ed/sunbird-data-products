@@ -288,7 +288,12 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
-    reportDF
+    val transposeDF = reportDF.groupBy("courseid","batchid","userid")
+      .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(concat(first("l1completionPercentage").cast("string"), lit("%")))
+    val reportData = transposeDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
+      .drop("l1identifier","l1completionPercentage")
+
+    reportData
       .select(
         col(UserCache.externalid).as("External ID"),
         col(UserCache.userid).as("User ID"),
@@ -305,11 +310,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("courseid").as("Course ID"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
-        col("l1identifier").as("Course ID - Level 1"),
-        concat(col("l1completionPercentage").cast("string"), lit("%"))
-          .as("Course Progress - Level 1"),
+        transposeDF.col("*"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
+      .drop("userid", "courseid", "batchid")
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }

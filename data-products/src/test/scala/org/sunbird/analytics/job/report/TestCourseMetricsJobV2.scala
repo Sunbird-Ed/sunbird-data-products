@@ -157,7 +157,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
     val userCourseDf = userDF.withColumn("course_completion", lit(""))
-        .withColumn("level1", lit(""))
+        .withColumn("l1identifier", lit(""))
         .withColumn("l1completionPercentage", lit(""))
         .withColumnRenamed("batchid","contextid")
         .withColumnRenamed("course_id","courseid")
