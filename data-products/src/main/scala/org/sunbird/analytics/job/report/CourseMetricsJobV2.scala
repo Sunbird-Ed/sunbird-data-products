@@ -27,7 +27,8 @@ trait ReportGeneratorV2 {
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
-case class CourseData(courseid: String, leafNodesCount: String, level1: String, l1leafNodesCount: String)
+case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
+case class Level1Data(l1identifier: String, l1leafNodesCount: String)
 case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
@@ -97,11 +98,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", new StructType())
       .select("identifier","hierarchy")
 
-    val hierarchyDf = hierarchyData.rdd.map(row => {
+    val hierarchyDataDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(1))
-      val courseInfo = parseCourseHierarchy(List(hierarchy),0, List[String]())
-      CourseData(row.getString(0), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
+      parseCourseHierarchy(List(hierarchy),0, CourseData(row.getString(0),"0",List()))
     }).toDF()
+
+    val hierarchyDf = hierarchyDataDf.select($"courseid",$"leafNodesCount",$"level1Data", explode_outer($"level1Data").as("exploded_level1Data"))
+      .select("courseid","leafNodesCount","exploded_level1Data.*")
 
     val dataDf = hierarchyDf.join(userAgg,hierarchyDf.col("courseid") === userAgg.col("activity_id"), "left")
       .withColumn("completionPercentage", (userAgg.col("completedCount")/hierarchyDf.col("leafNodesCount")*100).cast("int"))
@@ -109,42 +112,47 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         userAgg.col("context_id").as("contextid"),
         hierarchyDf.col("courseid"),
         col("completionPercentage"),
-        hierarchyDf.col("level1"),
+        hierarchyDf.col("l1identifier"),
         hierarchyDf.col("l1leafNodesCount"))
 
-    val resDf = dataDf.join(userAgg, dataDf.col("level1") === userAgg.col("activity_id") &&
+    val resDf = dataDf.join(userAgg, dataDf.col("l1identifier") === userAgg.col("activity_id") &&
       userAgg.col("context_id") === dataDf.col("contextid"),"left")
       .withColumn("l1completionPercentage", (userAgg.col("completedCount")/dataDf.col("l1leafNodesCount")*100).cast("int"))
       .select(col("userid"),
         col("courseid"),
         col("contextid"),
         col("completionPercentage"),
-        col("level1"),
+        col("l1identifier"),
         col("l1completionPercentage"))
     resDf
   }
 
-  def parseCourseHierarchy(data: List[Map[String,AnyRef]], levelCount: Int, prevData: List[String]): List[String] = {
-    var courseData = prevData
+  def parseCourseHierarchy(data: List[Map[String,AnyRef]], levelCount: Int, prevData: CourseData): CourseData = {
     if(levelCount < 2) {
-      data.map(childNodes => {
+      val list = data.map(childNodes => {
         val mimeType = childNodes.getOrElse("mimeType","").asInstanceOf[String]
         val visibility = childNodes.getOrElse("visibility","").asInstanceOf[String]
         val contentType = childNodes.getOrElse("contentType","").asInstanceOf[String]
-
-        if(levelCount == 0 || (StringUtils.equalsIgnoreCase(mimeType,"application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility,"Default") && StringUtils.equalsIgnoreCase(contentType,"Course"))) {
+        if((StringUtils.equalsIgnoreCase(mimeType,"application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility,"Default") && StringUtils.equalsIgnoreCase(contentType,"Course"))) {
           val identifier = childNodes.getOrElse("identifier","").asInstanceOf[String]
           val leafNodesCount = childNodes.getOrElse("leafNodesCount",0).asInstanceOf[Int]
-          val courseInfo = List(identifier, leafNodesCount.toString)
-          courseData = courseData ++ courseInfo
+          val courseData = if (levelCount == 0) {
+            CourseData(prevData.courseid, leafNodesCount.toString, List())
+          } else if (levelCount == 1) {
+            val prevL1List = prevData.level1Data
+            CourseData(identifier, prevData.leafNodesCount, (prevL1List ::: List(Level1Data(identifier, leafNodesCount.toString))))
+          } else prevData
           val children = childNodes.getOrElse("children",List()).asInstanceOf[List[Map[String,AnyRef]]]
           if(null != children && children.nonEmpty) {
-            courseData = parseCourseHierarchy(children, levelCount+1, courseData)
-          }
-        }
+            parseCourseHierarchy(children, levelCount+1, courseData)
+          } else courseData
+        } else prevData
       })
-    }
-    courseData
+      val courseId = list.head.courseid
+      val leafNodeCount = list.head.leafNodesCount
+      val level1Data = list.map(x => x.level1Data).flatten.toList
+      CourseData(courseId, leafNodeCount, level1Data)
+    } else prevData
   }
 
   def recordTime[R](block: => R, msg: String): R = {
