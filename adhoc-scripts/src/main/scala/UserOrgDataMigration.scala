@@ -8,13 +8,13 @@ case class UserOrganisation(userid: String, organisationid: String, addedby: Opt
                             isrejected: Option[Boolean], orgjoindate: Option[String], orgleftdate: Option[String], position: Option[String],
                             roles: List[String], updatedby: Option[String], updateddate: Option[String])
 object UserOrgDataMigration extends Serializable {
-  def main(args: Array[String]): Unit = {
+  def main(cassandraHost: String): Unit = {
     implicit val spark: SparkSession =
       SparkSession
         .builder()
         .appName("UserOrgDataMigration")
         .config("spark.master", "local[*]")
-        .config("spark.cassandra.connection.host", "127.0.0.1")
+        .config("spark.cassandra.connection.host", cassandraHost)
         .config("spark.cassandra.output.batch.size.rows", "10000")
         .config("spark.cassandra.read.timeoutMS", "60000")
         .getOrCreate()
