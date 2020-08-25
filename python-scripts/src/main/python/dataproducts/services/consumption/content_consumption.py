@@ -45,7 +45,7 @@ class ContentConsumption:
         tenant_info.set_index('id', inplace=True)
         content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
         content_model['channel'] = content_model['channel'].astype(str)
-        content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
+        # content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
         content_model = content_model[
             ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'contentType', 'identifier', 'name', 'creator',
              'mimeType', 'createdOn', 'lastPublishedOn', 'tb_id', 'tb_name', 'me_totalRatings', 'me_averageRating']]
@@ -153,7 +153,7 @@ class ContentConsumption:
         tenant_info.set_index('id', inplace=True)
         content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
         content_model['channel'] = content_model['channel'].astype(str)
-        content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
+        # content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
         content_model = content_model[
             ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'contentType', 'identifier', 'name', 'creator',
              'mimeType', 'createdOn', 'lastPublishedOn', 'tb_id', 'tb_name', 'me_totalRatings', 'me_averageRating']]

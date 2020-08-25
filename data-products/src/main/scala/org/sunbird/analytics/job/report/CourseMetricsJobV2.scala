@@ -2,6 +2,7 @@ package org.sunbird.analytics.job.report
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, unix_timestamp, _}
@@ -27,7 +28,7 @@ trait ReportGeneratorV2 {
 }
 
 case class CourseData(courseid: String, leafNodesCount: String, level1: String, l1leafNodesCount: String)
-case class UserAggData(user_id: String, activity_id: String, completedCount: Int)
+case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
 
@@ -89,8 +90,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     import sqlContext.implicits._
 
     val userAgg = loadData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-      .select("user_id","activity_id","agg").map(row => {
-      UserAggData(row.getString(0),row.getString(1),row.get(2).asInstanceOf[Map[String,Int]]("completedCount"))
+      .select("user_id","activity_id","agg","context_id").map(row => {
+      UserAggData(row.getString(0),row.getString(1),row.get(2).asInstanceOf[Map[String,Int]]("completedCount"),row.getString(3))
     }).toDF()
 
     val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", new StructType())
@@ -99,21 +100,24 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val hierarchyDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(1))
       val courseInfo = parseCourseHierarchy(List(hierarchy),0, List[String]())
-      CourseData(courseInfo.lift(0).getOrElse(""), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
+      CourseData(row.getString(0), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
     }).toDF()
 
     val dataDf = hierarchyDf.join(userAgg,hierarchyDf.col("courseid") === userAgg.col("activity_id"), "left")
       .withColumn("completionPercentage", (userAgg.col("completedCount")/hierarchyDf.col("leafNodesCount")*100).cast("int"))
       .select(userAgg.col("user_id").as("userid"),
+        userAgg.col("context_id").as("contextid"),
         hierarchyDf.col("courseid"),
         col("completionPercentage"),
         hierarchyDf.col("level1"),
         hierarchyDf.col("l1leafNodesCount"))
 
-    val resDf = dataDf.join(userAgg, dataDf.col("level1") === userAgg.col("activity_id"),"left")
+    val resDf = dataDf.join(userAgg, dataDf.col("level1") === userAgg.col("activity_id") &&
+      userAgg.col("context_id") === dataDf.col("contextid"),"left")
       .withColumn("l1completionPercentage", (userAgg.col("completedCount")/dataDf.col("l1leafNodesCount")*100).cast("int"))
       .select(col("userid"),
         col("courseid"),
+        col("contextid"),
         col("completionPercentage"),
         col("level1"),
         col("l1completionPercentage"))
@@ -128,7 +132,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         val visibility = childNodes.getOrElse("visibility","").asInstanceOf[String]
         val contentType = childNodes.getOrElse("contentType","").asInstanceOf[String]
 
-        if(levelCount == 0 || (mimeType.equals("collection") && visibility.equals("Default") && contentType.equals("Course"))) {
+        if(levelCount == 0 || (StringUtils.equalsIgnoreCase(mimeType,"application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility,"Default") && StringUtils.equalsIgnoreCase(contentType,"Course"))) {
           val identifier = childNodes.getOrElse("identifier","").asInstanceOf[String]
           val leafNodesCount = childNodes.getOrElse("leafNodesCount",0).asInstanceOf[Int]
           val courseInfo = List(identifier, leafNodesCount.toString)
@@ -179,6 +183,8 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
       .select(userData._2.col("*"),
+        userCourses.col("courseid"),
+        userCourses.col("contextid"),
         userCourses.col("completionPercentage").as("course_completion"),
         userCourses.col("level1"),
         userCourses.col("l1completionPercentage"))
@@ -242,9 +248,12 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("certificate_status"),
         col("channel")
       )
+    val contextId = s"cb:${batch.batchid}"
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userEnrolmentDF
-      .join(userDF, Seq("userid"), "inner")
+      .join(userDF, userDF.col("contextid") === contextId &&
+        userEnrolmentDF.col("courseid") === userDF.col("courseid") &&
+        userEnrolmentDF.col("userid") === userDF.col("userid"), "inner")
       .withColumn(UserCache.externalid, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
       .withColumn(UserCache.schoolname, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
       .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))

@@ -74,7 +74,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
         import sparkSession.implicits._
-        
         val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
         //loading user_declarations table details based on declared values and location details and appending org-external-id if present
         var userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
