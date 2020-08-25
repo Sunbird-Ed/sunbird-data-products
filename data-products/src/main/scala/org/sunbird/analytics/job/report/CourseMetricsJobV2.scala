@@ -310,7 +310,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("courseid").as("Course ID"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
-        if (transposeDF.col("*") != null) {transposeDF.col("*")},
+        transposeDF.col("*"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
       .drop("userid", "courseid", "batchid","null").distinct()
