@@ -116,7 +116,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         hierarchyDf.col("l1leafNodesCount"))
 
     val resDf = dataDf.join(userAgg, dataDf.col("l1identifier") === userAgg.col("activity_id") &&
-      userAgg.col("context_id") === dataDf.col("contextid"),"left")
+      userAgg.col("context_id") === dataDf.col("contextid") && userAgg.col("user_id") === dataDf.col("userid"),"left")
       .withColumn("l1completionPercentage", (userAgg.col("completedCount")/dataDf.col("l1leafNodesCount")*100).cast("int"))
       .select(col("userid"),
         col("courseid"),
@@ -313,7 +313,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         if (transposeDF.col("*") != null) {transposeDF.col("*")},
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
-      .drop("userid", "courseid", "batchid").distinct()
+      .drop("userid", "courseid", "batchid","null").distinct()
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
