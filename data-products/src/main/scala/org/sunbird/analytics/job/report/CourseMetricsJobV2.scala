@@ -310,10 +310,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("courseid").as("Course ID"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
-        transposeDF.col("*"),
+        if (transposeDF.col("*") != null) {transposeDF.col("*")},
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
-      .drop("userid", "courseid", "batchid")
+      .drop("userid", "courseid", "batchid").distinct()
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
