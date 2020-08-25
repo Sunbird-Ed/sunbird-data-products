@@ -1,24 +1,39 @@
-import com.datastax.spark.connector._
-import org.apache.spark.SparkContext
-
+import org.apache.spark.sql.functions.{col, _}
+import org.apache.spark.sql.{ SparkSession }
+import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.storage.StorageLevel
 case class UserOrganisation(userid: String, organisationid: String, addedby: Option[String], addedbyname: Option[String], approvaldate: Option[String],
-                                  approvedby: Option[String], hashtagid: Option[String], id: String, isapproved: Option[Boolean],isdeleted: Option[Boolean],
-                                  isrejected: Option[Boolean], orgjoindate: Option[String], orgleftdate: Option[String], position: Option[String],
-                                  roles: java.util.ArrayList[String], updatedby: Option[String], updateddate: Option[String])
-/**
- * Job to migrate data from user_org to user_organisation tables
- *
- * Before running the job, set `spark.cassandra.connection.host=<cassandraIp>`
- * start spaerk shell with these settings
- * --packages com.datastax.spark:spark-cassandra-connector_2.11:2.5.0 --conf spark.cassandra.connection.host=<cassandraIp>
- * 
- */
-object UserOrgDataMigration {
-    def migrateuserOrgdata(sc: SparkContext) = {
-        val data = sc.cassandraTable[UserOrganisation]("sunbird", "user_org")
-        println("user_org data Count : " + data.count())
-        val filteredData = data.filter(f => (null != f.userid && null != f.organisationid))
-        filteredData.saveToCassandra("sunbird", "user_organisation")
-        println("user_organistaion count post migration: " + filteredData.count())
-    }
+                            approvedby: Option[String], hashtagid: Option[String], id: String, isapproved: Option[Boolean], isdeleted: Option[Boolean],
+                            isrejected: Option[Boolean], orgjoindate: Option[String], orgleftdate: Option[String], position: Option[String],
+                            roles: List[String], updatedby: Option[String], updateddate: Option[String])
+object UserOrgDataMigration extends Serializable {
+  def main(args: Array[String]): Unit = {
+    implicit val spark: SparkSession =
+      SparkSession
+        .builder()
+        .appName("UserOrgDataMigration")
+        .config("spark.master", "local[*]")
+        .config("spark.cassandra.connection.host", "{cassandra ip}")
+        .config("spark.cassandra.output.batch.size.rows", "10000")
+        .config("spark.cassandra.read.timeoutMS", "60000")
+        .getOrCreate()
+    val res = time(migrateData());
+    Console.println("Time taken to execute script", res._1);
+    spark.stop();
+  }
+  def migrateData()(implicit spark: SparkSession) {
+    val schema = Encoders.product[UserOrganisation].schema
+    val data = spark.read.format("org.apache.spark.sql.cassandra").schema(schema).option("keyspace", "sunbird").option("table", "user_org").load().persist(StorageLevel.MEMORY_ONLY)
+    println("user_org data Count : " + data.count())
+    val filteredData = data.where(col("userid").isNotNull && col("organisationid").isNotNull)
+    filteredData.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_organisation").mode(SaveMode.Append).save()
+    println("user_organistaion count post migration: " + filteredData.count())
+  }
+  def time[R](block: => R): (Long, R) = {
+    val t0 = System.currentTimeMillis()
+    val result = block // call-by-name
+    val t1 = System.currentTimeMillis()
+    ((t1 - t0), result)
+  }
 }
