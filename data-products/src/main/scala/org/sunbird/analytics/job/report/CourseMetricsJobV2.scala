@@ -138,10 +138,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
           val leafNodesCount = childNodes.getOrElse("leafNodesCount",0).asInstanceOf[Int]
           val courseData = if (levelCount == 0) {
             CourseData(prevData.courseid, leafNodesCount.toString, List())
-          } else if (levelCount == 1) {
+          } else {
             val prevL1List = prevData.level1Data
             CourseData(prevData.courseid, prevData.leafNodesCount, (prevL1List ::: List(Level1Data(identifier, leafNodesCount.toString))))
-          } else prevData
+          }
           val children = childNodes.getOrElse("children",List()).asInstanceOf[List[Map[String,AnyRef]]]
           if(null != children && children.nonEmpty) {
             parseCourseHierarchy(children, levelCount+1, courseData)

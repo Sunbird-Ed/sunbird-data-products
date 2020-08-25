@@ -276,6 +276,19 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
   }
 
+  it should "parse and return level 1 data for given course hierarchy" in {
+    val contentHierarchy = """{"channel": "b00bc992ef25f1a9a8d63291e20efc8d","mimeType": "application/vnd.ekstep.content-collection","leafNodes": ["do_1130314841730334721104", "do_1130314849898332161107", "do_1130314847650037761106", "do_1130314845426565121105"],"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "Course","identifier": "do_1130934418641469441813","visibility": "Default","leafNodesCount": 2}, {"mimeType": "application/vnd.ekstep.content-collection","children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1130934459053342721817","visibility": "Parent","framework": "NCFCOPY","leafNodesCount": 2}],"contentType": "Course","identifier": "do_1130934445218283521816","visibility": "Default","framework": "NCFCOPY","leafNodesCount": 2,"index": 2,"parent": "do_1130934466492252161819"}],"contentType": "Course","identifier": "do_1130934466492252161819","visibility": "Default","prevState": "Review","name": "Report - Course - NC","status": "Live","prevStatus": "Processing","framework": "NCFCOPY","leafNodesCount": 4}""".stripMargin
+    val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](contentHierarchy)
+
+    val courseData = CourseMetricsJobV2.parseCourseHierarchy(List(hierarchy),0, CourseData("do_120853345678987611","0",List()))
+    courseData.courseid should be("do_120853345678987611")
+    courseData.leafNodesCount should be("4")
+    courseData.level1Data.length should be(2)
+
+    val hierarchyData = CourseMetricsJobV2.parseCourseHierarchy(List(hierarchy),4, CourseData("do_120853345678987611","0",List()))
+    hierarchyData.level1Data.length should be(0)
+  }
+
   it should "test redis and cassandra connections" in {
     implicit val fc = Option(mock[FrameworkContext])
     spark.sparkContext.stop()
