@@ -194,7 +194,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         userCourses.col("courseid"),
         userCourses.col("contextid"),
         userCourses.col("completionPercentage").as("course_completion"),
-        userCourses.col("level1"),
+        userCourses.col("l1identifier"),
         userCourses.col("l1completionPercentage"))
     userCourseData.persist(StorageLevel.MEMORY_ONLY)
 
@@ -281,7 +281,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col(UserCache.block),
         col(UserCache.state),
         col("course_completion"),
-        col("level1"),
+        col("l1identifier"),
         col("l1completionPercentage")
       ).persist(StorageLevel.MEMORY_ONLY)
     reportDF
@@ -305,7 +305,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("courseid").as("Course ID"),
         concat(col("course_completion").cast("string"), lit("%"))
           .as("Course Progress"),
-        col("level1").as("Course ID - Level 1"),
+        col("l1identifier").as("Course ID - Level 1"),
         concat(col("l1completionPercentage").cast("string"), lit("%"))
           .as("Course Progress - Level 1"),
         col("completedon").as("Completion Date"),
