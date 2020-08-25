@@ -434,3 +434,45 @@ CREATE TABLE IF NOT EXISTS sunbird.usr_external_identity (
     AND min_index_interval = 128
     AND read_repair_chance = 0.0
     AND speculative_retry = '99PERCENTILE';
+
+
+CREATE TABLE IF NOT EXISTS sunbird.user_declarations(
+   userid text,
+   orgid text,
+   persona text,
+   userinfo map<text,text>,
+   status text,
+   errortype text,
+   createdon timestamp,
+   createdby text,
+   updatedon timestamp,
+   updatedby text,
+   primary key(userid,orgid,persona)
+);
+
+CREATE TABLE IF NOT EXISTS sunbird.system_settings (
+id text PRIMARY KEY,
+field text,
+value text
+);
+CREATE INDEX IF NOT EXISTS inx_system_settings ON sunbird.system_settings (field);
+
+CREATE TABLE IF NOT EXISTS sunbird.user_organisation (
+  userid text,
+  organisationid text,
+  addedby text,
+  addedbyname text,
+  approvaldate text,
+  approvedby text,
+  hashtagid text,
+  id text,
+  isapproved boolean,
+  isdeleted boolean,
+  isrejected boolean,
+  orgjoindate text,
+  orgleftdate text,
+  position text,
+ roles list<text>,
+ updatedby text,
+ updateddate text,
+PRIMARY KEY (userid, organisationid));

@@ -1,11 +1,8 @@
 package org.sunbird.analytics.job.report
 
-import java.io.File
-
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
-import org.apache.spark.sql.functions.col
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.util.HadoopFileUtil
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.{DecryptUtil, EmbeddedCassandra}
 import org.sunbird.cloud.storage.conf.AppConf
@@ -47,7 +44,20 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
     assert(reportDF.columns.contains("State provided ext. ID") === true)
     assert(reportDF.columns.contains("Phone number") === true)
     assert(reportDF.columns.contains("Email ID") === true)
+    assert(reportDF.columns.contains("Status") === true)
+    assert(reportDF.columns.contains("Persona") === true)
     val userName = reportDF.select("Name").collect().map(_ (0)).toList
-    assert(userName(0) === "localuser115f localuser115l")
+    assert(userName(0) === "localuser118f localuser118l")
+  }
+  
+  "StateSelfUserExternalIDWithZip" should "execute with zip failed to generate" in {
+    implicit val fc = new FrameworkContext()
+    try {
+      DecryptUtil.initialise()
+      val reportDF = StateAdminReportJob.generateExternalIdReport()(spark, fc)
+      StateAdminReportJob.generateSelfUserDeclaredZip(reportDF, JSONUtils.deserialize[JobConfig]("""{"model":"Test"}"""))
+    } catch {
+      case ex: Exception => assert(ex.getMessage === "Self-Declared user level zip generation failed with exit code 127");
+    }
   }
 }
