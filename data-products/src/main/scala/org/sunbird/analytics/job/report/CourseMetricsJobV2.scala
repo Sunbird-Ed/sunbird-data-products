@@ -289,9 +289,9 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
     val transposeDF = reportDF.groupBy("courseid","batchid","userid")
-      .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(concat(first("l1completionPercentage").cast("string"), lit("%")))
-    val reportData = transposeDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
+      .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
       .drop("l1identifier","l1completionPercentage")
+    val reportData = transposeDF.join(reportDF.drop("l1identifier","l1completionPercentage"), Seq("courseid", "batchid", "userid"), "inner")
 
     reportData
       .select(
@@ -308,8 +308,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col(UserCache.block).as("Block Name"),
         col("enrolleddate").as("Enrolment Date"),
         col("courseid").as("Course ID"),
-        concat(col("course_completion").cast("string"), lit("%"))
-          .as("Course Progress"),
+        col("course_completion").as("Course Progress"),
         transposeDF.col("*"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
