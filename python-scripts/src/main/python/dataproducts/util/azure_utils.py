@@ -4,7 +4,7 @@ from azure.storage.blob import BlockBlobService
 from pathlib import Path
 
 
-def get_data_from_store(container_name, blob_name, file_path, is_private=True):
+def get_data_from_store(container_name, blob_name, file_path, is_private=False):
     try:
         if is_private:
             account_name = os.environ['AZURE_STORAGE_ACCOUNT']
@@ -26,7 +26,7 @@ def get_data_from_store(container_name, blob_name, file_path, is_private=True):
         raise Exception('Could not read from blob!' + str(e))
 
 
-def post_data_to_store(container_name, blob_name, file_path, is_private=True):
+def post_data_to_store(container_name, blob_name, file_path, is_private=False):
     try:
         if is_private:
             account_name = os.environ['AZURE_STORAGE_ACCOUNT']
