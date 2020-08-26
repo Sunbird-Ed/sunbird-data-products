@@ -45,7 +45,7 @@ class ContentConsumption:
         tenant_info.set_index('id', inplace=True)
         content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
         content_model['channel'] = content_model['channel'].astype(str)
-        content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
+        # content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
         content_model = content_model[
             ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'contentType', 'identifier', 'name', 'creator',
              'mimeType', 'createdOn', 'lastPublishedOn', 'tb_id', 'tb_name', 'me_totalRatings', 'me_averageRating']]
@@ -58,7 +58,7 @@ class ContentConsumption:
             else:
                 end_date = date_
             get_content_plays(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d')), start_date_=start_date,
-                              end_date_=end_date, druid_=druid_rollup_, config_=config)
+                              end_date_=end_date, druid_=druid_rollup_, config_=config, version_='v1')
             start_date = end_date
         spark = SparkSession.builder.appName('content_consumption').master("local[*]").getOrCreate()
         content_plays = spark.read.csv(str(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_plays_*.csv')),
@@ -153,7 +153,7 @@ class ContentConsumption:
         tenant_info.set_index('id', inplace=True)
         content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
         content_model['channel'] = content_model['channel'].astype(str)
-        content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
+        # content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
         content_model = content_model[
             ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'contentType', 'identifier', 'name', 'creator',
              'mimeType', 'createdOn', 'lastPublishedOn', 'tb_id', 'tb_name', 'me_totalRatings', 'me_averageRating']]
@@ -161,7 +161,7 @@ class ContentConsumption:
         result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
         start_date = date_ - timedelta(days=7)
         get_content_plays(result_loc_=result_loc_.joinpath(date_.strftime('%Y-%m-%d')), start_date_=start_date,
-                          end_date_=date_, druid_=druid_rollup_, config_=config)
+                          end_date_=date_, druid_=druid_rollup_, config_=config, version_='v2')
         content_plays = pd.read_csv(
             result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_plays_{}.csv'.format(date_.strftime('%Y-%m-%d'))))
         content_plays = content_plays.groupby(['object_id', 'dimensions_pdata_id'])[
@@ -285,7 +285,8 @@ class ContentConsumption:
             self.config = json.loads(f.read())
         get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
         print("Success::Tenant info")
-        get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date)
+        get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date, config_=self.config,
+                          version_='v2')
         print("Success::content model snapshot")
         get_tb_content_mapping(result_loc_=result_loc, date_=execution_date, content_search_=content_search)
         print("Success::TB Content Map")

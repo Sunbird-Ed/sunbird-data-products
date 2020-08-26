@@ -11,8 +11,7 @@ import time
 from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
 from dataproducts.resources.common import common_config
-from dataproducts.resources.queries import content_list, scan_counts, \
-    course_list, content_plays
+from dataproducts.resources.queries import content_list_v1, content_list_v2, scan_counts, course_list, content_plays
 from dataproducts.util import azure_utils
 from dataproducts.util.kafka_utils import push_metrics
 from datetime import datetime, timedelta
@@ -258,13 +257,15 @@ def verify_state_district(loc_map_path_, state_, df_):
     return df_
 
 
-def get_content_model(result_loc_, druid_, date_, status_=["Live"]):
+def get_content_model(result_loc_, druid_, date_, config_, version_, status_=["Live"]):
     """
     get current content model snapshot
     :param result_loc_: pathlib.Path object to store resultant CSV at
     :param druid_: host ip and port for druid broker
     :param date_: datetime object to pass in path
-    :status_: status of the content which has to retrieved
+    :param config_: pass the mime type filters
+    :param version_: differentiate between versions of query. values in ['v1', 'v2']
+    :param status_: status of the content which has to retrieved
     :return: None
     """
     try:
@@ -272,8 +273,13 @@ def get_content_model(result_loc_, druid_, date_, status_=["Live"]):
             'Content-Type': "application/json"
         }
         url = "{}druid/v2/".format(druid_)
-        qr = content_list.init()
+        if version_ == 'v1':
+            qr = content_list_v1.init()
+        elif version_ == 'v2':
+            qr = content_list_v2.init()
         qr = json.loads(qr)
+        if version_ == 'v2':
+            qr['filter']['fields'][1]['values'] = config_['content']['mimeType']
         qr['filter']['fields'][2]['values'] = status_
         response = requests.request("POST", url, data=json.dumps(qr), headers=headers)
         result = response.json()
@@ -281,6 +287,8 @@ def get_content_model(result_loc_, druid_, date_, status_=["Live"]):
         for segment in result:
             response_list.append(pd.DataFrame(segment['events']))
         content_model = pd.concat(response_list)
+        if version_ == 'v2':
+            content_model['mimeType'].replace(config_['rename_mimetype'], inplace=True)
         content_model.to_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'),
                              index=False, encoding='utf-8-sig')
         post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'), backup=True)
@@ -378,20 +386,20 @@ def file_missing_exception(raise_except=False):
         return Exception
 
 
-def download_file_from_store(blob_name, file_path, container_name):
+def download_file_from_store(blob_name, file_path, container_name, is_private=False):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
-        azure_utils.get_data_from_store(container_name, blob_name, file_path)
+        azure_utils.get_data_from_store(container_name, blob_name, file_path, is_private)
     elif storage_provider == "S3":
         pass
     elif storage_provider == "GCP":
         pass
 
 
-def upload_file_to_store(blob_name, file_path, container_name):
+def upload_file_to_store(blob_name, file_path, container_name, is_private=False):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
-        azure_utils.post_data_to_store(container_name, blob_name, file_path)
+        azure_utils.post_data_to_store(container_name, blob_name, file_path, is_private)
     elif storage_provider == "S3":
         pass
     elif storage_provider == "GCP":
@@ -429,7 +437,7 @@ def get_data_from_blob(result_loc_, backup=False):
     try:
         result_loc_.parent.mkdir(exist_ok=True)
         if backup:
-            container_name = 'portal-reports-backup'
+            container_name = os.environ['REPORT_BACKUP_CONTAINER']
             file_name = result_loc_.name
             date_name = result_loc_.parent.name
             report_name = result_loc_.parent.parent.name
@@ -439,7 +447,7 @@ def get_data_from_blob(result_loc_, backup=False):
                 container_name=container_name,
             )
         else:
-            container_name = 'reports'
+            container_name = os.environ['PRIVATE_REPORT_CONTAINER']
             download_file_from_store(
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
                 file_path=str(result_loc_),
@@ -484,7 +492,7 @@ def post_data_to_blob(result_loc_, backup=False):
     """
     try:
         if backup:
-            container_name = 'portal-reports-backup'
+            container_name = os.environ['REPORT_BACKUP_CONTAINER']
             file_name = result_loc_.name
             date_name = result_loc_.parent.name
             report_name = result_loc_.parent.parent.name
@@ -494,7 +502,7 @@ def post_data_to_blob(result_loc_, backup=False):
                 file_path=str(result_loc_)
             )
         else:
-            container_name = 'reports'
+            container_name = os.environ['PRIVATE_REPORT_CONTAINER']
             azure_utils.post_data_to_store(
                 container_name=container_name,
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
@@ -528,7 +536,7 @@ def get_courses(result_loc_, druid_, date_):
     post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'courses.csv'), backup=True)
 
 
-def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_):
+def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_, version_):
     """
     Get content plays and timespent by content id.
     :param result_loc_: local path to store resultant csv
@@ -536,6 +544,7 @@ def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_):
     :param end_date_: datetime object used for druid query
     :param druid_: druid broker ip and port in http://ip:port/ format
     :param config_: Platform cofigs for druid query
+    :param version_: to differentiate version of query. value in ['v1', 'v2']
     :return: None
     """
     headers = {
@@ -547,7 +556,16 @@ def get_content_plays(result_loc_, start_date_, end_date_, druid_, config_):
     query = query.replace('$end_date', end_date_.strftime('%Y-%m-%dT00:00:00+00:00'))
     query = query.replace('$app', config_['context']['pdata']['id']['app'])
     query = query.replace('$portal', config_['context']['pdata']['id']['portal'])
-    response = requests.post(url, data=query, headers=headers)
+    query = json.loads(query)
+    if version_ == 'v2':
+        query['filter']['fields'].append(
+            {
+                "type": "in",
+                "dimension": "content_mimetype",
+                "values": config_['content']['mimeType']
+            },
+        )
+    response = requests.post(url, data=json.dumps(query), headers=headers)
     result = response.json()
     data = pd.DataFrame([x['event'] for x in result])
     data.to_csv(result_loc_.joinpath(end_date_.strftime('content_plays_%Y-%m-%d.csv')), index=False)
@@ -682,11 +700,11 @@ def get_tb_content_mapping(result_loc_, date_, content_search_):
 
 def get_batch_data_from_blob(result_loc_, prefix_, backup=False):
     try:
-        account_name = os.environ['AZURE_STORAGE_ACCOUNT']
-        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
+        account_name = os.environ['PUBLIC_AZURE_STORAGE_ACCOUNT']
+        account_key = os.environ['PUBLIC_AZURE_STORAGE_ACCESS_KEY']
         block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
         if backup:
-            container_name = 'portal-reports-backup'
+            container_name = os.environ['REPORT_BACKUP_CONTAINER']
             blob_list = block_blob_service.list_blobs(container_name, prefix=prefix_)
             for blob in blob_list:
                 report_name, date_name, file_name = blob.name.split('/')

@@ -13,6 +13,21 @@ INSERT INTO sunbird.organisation (id,channel,datetime,hashtagid,isrootorg,locati
 INSERT INTO sunbird.organisation (id,channel,datetime,hashtagid,isrootorg,locationid,locationids,orgname,provider,rootorgid,slug,status,externalid) VALUES ('012306545106337792301','otherTenant',1531047600000,'Ext8',false,null,['9','12','13'],'BALA VEDAMMALAI N & P','tamilnadutesttenant','org6','OtherSlug1',1,'orgext8');
 INSERT INTO sunbird.organisation (id,channel,datetime,hashtagid,isrootorg,locationid,locationids,orgname,provider,rootorgid,slug,status,externalid) VALUES ('b00bc992ef25f1a9a8d63291e20efc8d1','otherTenant',1531047600000,'Ext8',false,null,['9','12','13'],'BALA VEDAMMALAI N & P','tamilnadutesttenant','org6','DelhiSlug',1,'orgext8');
 INSERT INTO sunbird.organisation (id,channel,datetime,hashtagid,isrootorg,locationid,locationids,orgname,provider,rootorgid,slug,status,externalid) VALUES ('ORG_001','otherTenant',1531047600000,'Ext8',false,null,['9','12','13'],'BALA VEDAMMALAI N & P','tamilnadutesttenant','org6','sunbird',1,'orgext8');
+
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('56c2d9a3-fae9-4341-9862-4eeeead2e9a1', '56c2d9a3-fae9-4341-9862-4eeeead2e9a1','org30','user1f','user1l','tn',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('66c2d9a4-gae0-5342-9862-4eeeead2e9a2', '66c2d9a4-gae0-5342-9862-4eeeead2e9a2','org30','user2f','user2l','tn',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('76c2d9a5-hae1-6343-9862-4eeeead2e9a3', '76c2d9a5-hae1-6343-9862-4eeeead2e9a3','org30','user3f','user3l','tn',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('86c2d9a5-hae1-6343-9862-4eeeead2e9a4', '86c2d9a5-hae1-6343-9862-4eeeead2e9a4','org1','user4f','user4l','ap',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('96c2d9a5-hae1-6343-9862-4eeeead2e9a5', '96c2d9a5-hae1-6343-9862-4eeeead2e9a5','org1','user5f','user5l','ap',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('06c2d9a5-hae1-6343-9862-4eeeead2e9a6', '06c2d9a5-hae1-6343-9862-4eeeead2e9a6','org1','user6f','user6l','ap',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('16c2d9a5-hae1-6343-9862-4eeeead2e9a7', '16c2d9a5-hae1-6343-9862-4eeeead2e9a7','org1','user7f','user7l','ap',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('8eaa1621-ac15-42a4-9e26-9c846963f331', '8eaa1621-ac15-42a4-9e26-9c846963f331','org1','user8f','user8l','ap',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('7faa1621-bc14-32c4-9e26-4b846963g339', '7faa1621-bc14-32c4-9e26-4b846963g339','org6','user9f','user9l','otherTenant',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('3150aa06-333e-4d6d-8d81-3d8e14e7b245', '3150aa06-333e-4d6d-8d81-3d8e14e7b245','org6','user10f','user10l','otherTenant',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('6d8269de-c6ca-4106-9b63-305382d46175', '6d8269de-c6ca-4106-9b63-305382d46175','org6','user11f','user11l','otherTenant',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('7d8269df-c6ca-5216-9b63-305382d46175', '7d8269df-c6ca-5216-9b63-305382d46175','org6','user12f','user12l','otherTenant',False);
+INSERT INTO sunbird.user (id,userid,rootorgid, firstname, lastname, channel,isdeleted) VALUES ('6d8296df-c6ca-5216-9b63-405382d46176', '6d8296df-c6ca-5216-9b63-405382d46176','org6','user13f','user13l','otherTenant',False);
+
 INSERT INTO sunbird.shadow_user (channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus) VALUES ('tn','tnext1',null,null,0,null,'abc1@123.com','emp1Name','orgext4','1234567890','anyProcessId',null,null,null,0);
 INSERT INTO sunbird.shadow_user (channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus) VALUES ('tn','tnext2',null,null,4,null,'abc2@123.com','emp2Name','orgext5','1234567809','anyProcessId2',null,null,null,0);
 INSERT INTO sunbird.shadow_user (channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus) VALUES ('tn','tnext3',null,null,5,null,'abc2@123.com','emp3Name','orgext5','1234567809','anyProcessId2',null,null,null,0);
@@ -26,6 +41,7 @@ INSERT INTO sunbird.shadow_user (channel,userextid,addedby,claimedon,claimstatus
 INSERT INTO sunbird.shadow_user (channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus) VALUES ('otherTenant','othext3',null,null,1,null,'abc@123.com','emp9Name','orgext8','1234567890','anyProcessId',null,null,null,0);
 INSERT INTO sunbird.shadow_user (channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus) VALUES ('otherTenant','othext4',null,null,2,null,'abc@123.com','emp10Name','orgext8','1234567890','anyProcessId',null,null,null,0);
 INSERT INTO sunbird.shadow_user (channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus) VALUES ('otherTenant','othext5',null,null,6,null,'abc@123.com','emp11Name','orgext6','1234567890','anyProcessId',null,null,null,0);
+
 INSERT INTO sunbird.location (id,code,name,parentid,type) VALUES ('1','1916080007','DAKSHIN MANASRI ORIENT.P',null,'state');
 INSERT INTO sunbird.location (id,code,name,parentid,type) VALUES ('2','1922090001','GULBARGA','1','district');
 INSERT INTO sunbird.location (id,code,name,parentid,type) VALUES ('3','206040024','GSSS SERA','2','block');
@@ -39,7 +55,48 @@ INSERT INTO sunbird.location (id,code,name,parentid,type) VALUES ('11','50408000
 INSERT INTO sunbird.location (id,code,name,parentid,type) VALUES ('12','2926100328','MALANGI-1','9','district');
 INSERT INTO sunbird.location (id,code,name,parentid,type) VALUES ('13','504080003','MOTANA-1','10','block');
 INSERT INTO sunbird.location (id,code,name,parentid,type) VALUES ('14','1922090001','GULBARGA-2','1','district');
+
+INSERT INTO sunbird.system_settings (id, field, value) VALUES ('custodianOrgId', 'custodianOrgId', '0130107621805015045');
+
 INSERT INTO sunbird_courses.course_batch (courseid,batchid,cert_templates,createdby,createddate,createdfor,description,enddate,enrollmentenddate,enrollmenttype,mentors,name,startdate ,status,updateddate) VALUES ('do_112470675618004992181','0127419590263029761308',null,'3d5778a6-0447-4bb1-acb2-51bcf4f587f3','2019-02-06 17:46:55:776+0000',null,null,null,null,'open',null,'testCourseBatch','2019-02-06',1,null);
 INSERT INTO sunbird_courses.course_batch (courseid,batchid,cert_templates,createdby,createddate,createdfor,description,enddate,enrollmentenddate,enrollmenttype,mentors,name,startdate ,status,updateddate) VALUES ('do_112736824142061568168','01273776766975180837',null,'3d5778a6-0447-4bb1-acb2-51bcf4f587f3','2019-02-06 17:46:50:338+0000',null,null,null,null,'invite-only',null,'testCourseBatch','2019-02-06',1,null);
 INSERT INTO sunbird_courses.course_batch (courseid,batchid,cert_templates,createdby,createddate,createdfor,description,enddate,enrollmentenddate,enrollmenttype,mentors,name,startdate ,status,updateddate) VALUES ('do_112470675618004992181','0127462617892044804',null,'af472a9b-62a1-4bb8-b214-74878cc7d033','2019-02-06 17:48:38:817+0000',['0126933015519068165'],null,null,null,'invite-only',['af472a9b-62a1-4bb8-b214-74878cc7d033'],'testCourseBatch','2019-02-06',1,'2019-02-06 17:48:40:223+0000');
 INSERT INTO sunbird_courses.course_batch (courseid,batchid,cert_templates,createdby,createddate,createdfor,description,enddate,enrollmentenddate,enrollmenttype,mentors,name,startdate ,status,updateddate) VALUES ('do_112736824142061568168','01269330655838208011',null,'3d5778a6-0447-4bb1-acb2-51bcf4f587f3','2019-02-06 17:45:48:030+0000',null,null,null,null,'open',null,'testCourseBatch','2019-02-06',1,null);
+
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000001', '56c2d9a3-fae9-4341-9862-4eeeead2e9a1','org4');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000002', '66c2d9a4-gae0-5342-9862-4eeeead2e9a2','org5');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000003', '76c2d9a5-hae1-6343-9862-4eeeead2e9a3','org5');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000004', '86c2d9a5-hae1-6343-9862-4eeeead2e9a4','org1');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000005', '96c2d9a5-hae1-6343-9862-4eeeead2e9a5','org2');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000006', '06c2d9a5-hae1-6343-9862-4eeeead2e9a6','org3');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000007', '16c2d9a5-hae1-6343-9862-4eeeead2e9a7','org3');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000008', '8eaa1621-ac15-42a4-9e26-9c846963f331','org9');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('000000000009', '7faa1621-bc14-32c4-9e26-4b846963g339','org6');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000010', '3150aa06-333e-4d6d-8d81-3d8e14e7b245','org8');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000011', '6d8269de-c6ca-4106-9b63-305382d46175','org8');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000012', '7d8269df-c6ca-5216-9b63-305382d46175','org8');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000013', '6d8296df-c6ca-5216-9b63-405382d46176','org6');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000014', '56c2d9a3-fae9-4341-9862-4eeeead2e9a1','org30');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000015', '66c2d9a4-gae0-5342-9862-4eeeead2e9a2','org30');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000016', '76c2d9a5-hae1-6343-9862-4eeeead2e9a3','org30');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000017', '96c2d9a5-hae1-6343-9862-4eeeead2e9a5','org1');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000018', '06c2d9a5-hae1-6343-9862-4eeeead2e9a6','org1');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000019', '16c2d9a5-hae1-6343-9862-4eeeead2e9a7','org1');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000020', '8eaa1621-ac15-42a4-9e26-9c846963f331','org1');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000021', '3150aa06-333e-4d6d-8d81-3d8e14e7b245','org6');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000022', '6d8269de-c6ca-4106-9b63-305382d46175','org6');
+INSERT INTO sunbird.user_organisation (id,userid,organisationid) VALUES ('0000000000023', '7d8269df-c6ca-5216-9b63-305382d46175','org6');
+
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('56c2d9a3-fae9-4341-9862-4eeeead2e9a1', 'tn', 'tn', 'usrext1', 'tn');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('66c2d9a4-gae0-5342-9862-4eeeead2e9a2', 'tn', 'tn', 'usrext2', 'tn');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('76c2d9a5-hae1-6343-9862-4eeeead2e9a3', 'tn', 'tn', 'usrext3', 'tn');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('86c2d9a5-hae1-6343-9862-4eeeead2e9a4', 'ap', 'ap', 'usrext4', 'ap');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('96c2d9a5-hae1-6343-9862-4eeeead2e9a5', 'ap', 'ap', 'usrext5', 'ap');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('06c2d9a5-hae1-6343-9862-4eeeead2e9a6', 'ap', 'ap', 'usrext6', 'ap');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('16c2d9a5-hae1-6343-9862-4eeeead2e9a7', 'ap', 'ap', 'usrext7', 'ap');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('8eaa1621-ac15-42a4-9e26-9c846963f331', 'ap', 'ap', 'usrext8', 'ap');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('7faa1621-bc14-32c4-9e26-4b846963g339', 'otherTenant', 'otherTenant', 'usrext9', 'otherTenant');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('3150aa06-333e-4d6d-8d81-3d8e14e7b245', 'otherTenant', 'otherTenant', 'usrext10', 'otherTenant');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('6d8269de-c6ca-4106-9b63-305382d46175', 'otherTenant', 'otherTenant', 'usrext11', 'otherTenant');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('7d8269df-c6ca-5216-9b63-305382d46175', 'otherTenant', 'otherTenant', 'usrext12', 'otherTenant');
+INSERT INTO sunbird.usr_external_identity (userid, idtype, provider, originalexternalid, originalprovider ) VALUES('6d8296df-c6ca-5216-9b63-405382d46176', 'otherTenant', 'otherTenant', 'usrext13', 'otherTenant');
