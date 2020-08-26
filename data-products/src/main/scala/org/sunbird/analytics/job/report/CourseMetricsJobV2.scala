@@ -312,7 +312,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         transposeDF.col("*"),
         col("completedon").as("Completion Date"),
         col("certificate_status").as("Certificate Status"))
-      .drop("userid", "courseid", "batchid","null").distinct()
+      .drop("userid", "courseid", "batchid","null")
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
