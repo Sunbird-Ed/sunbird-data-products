@@ -288,31 +288,25 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
-    val transposeDF = reportDF.groupBy("courseid","batchid","userid")
+    val reportData = reportDF.groupBy("courseid", "batchid", "userid", "enrolleddate", "completedon",
+      "active", "generatedOn", "certificate_status", "channel", "firstname", "lastname", "maskedemail",
+      "maskedphone", "externalid", "orgname", "schoolname", "district", "schooludisecode", "block", "state", "course_completion")
       .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
-      .drop("l1identifier","l1completionPercentage")
-    val reportData = transposeDF.join(reportDF.drop("l1identifier","l1completionPercentage"), Seq("courseid", "batchid", "userid"), "inner")
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
+      .drop("firstname", "lastname","null")
 
-    reportData
-      .select(
-        col(UserCache.externalid).as("External ID"),
-        col(UserCache.userid).as("User ID"),
-        concat_ws(" ", col(UserCache.firstname), col(UserCache.lastname)).as("User Name"),
-        col(UserCache.maskedemail).as("Email ID"),
-        col(UserCache.maskedphone).as("Mobile Number"),
-        col(UserCache.orgname).as("Organisation Name"),
-        col(UserCache.state).as("State Name"),
-        col(UserCache.district).as("District Name"),
-        col(UserCache.schooludisecode).as("School UDISE Code"),
-        col(UserCache.schoolname).as("School Name"),
-        col(UserCache.block).as("Block Name"),
-        col("enrolleddate").as("Enrolment Date"),
-        col("courseid").as("Course ID"),
-        col("course_completion").as("Course Progress"),
-        transposeDF.col("*"),
-        col("completedon").as("Completion Date"),
-        col("certificate_status").as("Certificate Status"))
-      .drop("userid", "courseid", "batchid","null")
+    val fields = reportData.schema.fieldNames
+    val colMapping = Map(UserCache.externalid ->  "External ID", UserCache.userid -> "User ID",
+      "username" -> "User Name",UserCache.maskedemail -> "Email ID", UserCache.maskedphone -> "Mobile Number",
+      UserCache.orgname -> "Organisation Name", UserCache.state -> "State Name", UserCache.district -> "District Name",
+      UserCache.schooludisecode -> "School UDISE Code", UserCache.schoolname -> "School Name", UserCache.block -> "Block Name",
+    "enrolleddate" -> "Enrolment Date", "courseid" -> "Course ID", "course_completion" -> "Course Progress",
+    "completedon" -> "Completion Date", "certificate_status" -> "Certificate Status")
+
+    val colNames = for (e <- fields) yield colMapping.getOrElse(e, e)
+//    val dynamicFields = fields.toList.filter(e => !colMapping.keySet.contains(e))
+
+    reportData.toDF(colNames: _*)
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
