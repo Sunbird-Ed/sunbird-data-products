@@ -7,6 +7,7 @@ import ing.wbaa.druid._
 import ing.wbaa.druid.client.DruidClient
 import io.circe._
 import io.circe.parser._
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.{JSONUtils, RestUtil}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig}
@@ -21,6 +22,7 @@ import scala.concurrent.Future
 class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
 
   implicit var spark: SparkSession = _
+  implicit var sc: SparkContext = _
 
   var courseBatchDF: DataFrame = _
   var userCoursesDF: DataFrame = _
@@ -39,6 +41,7 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = getSparkSession();
+    sc = spark.sparkContext
 
     /*
      * Data created with 31 active batch from batchid = 1000 - 1031
@@ -156,12 +159,12 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null);
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc));
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
@@ -252,12 +255,12 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null);
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc));
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
@@ -327,12 +330,12 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null);
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc));
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
@@ -411,12 +414,12 @@ class TestAssessmentMetricsJob extends BaseReportSpec with MockFactory {
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null);
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc));
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
     assessmentProfileDF = spark
       .read

@@ -1,8 +1,9 @@
 package org.sunbird.analytics.model.report
 
 import java.time.{ZoneOffset, ZonedDateTime}
+
 import cats.syntax.either._
-import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResult, QueryType}
+import ing.wbaa.druid._
 import ing.wbaa.druid.client.DruidClient
 import io.circe.Json
 import io.circe.parser.parse
@@ -112,12 +113,12 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc))
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     val resultRDD = ETBMetricsModel.execute(sc.emptyRDD, Option(jobConfig))
@@ -150,12 +151,12 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc))
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     the[Exception] thrownBy {
@@ -193,12 +194,12 @@ class TestETBMetricsJobModel extends SparkSpec with Matchers with MockFactory {
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc))
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     val report = TextBookUtils.generateDCEDialCodeReport(hierarchyData,textBookData)

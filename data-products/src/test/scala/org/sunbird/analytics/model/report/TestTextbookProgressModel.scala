@@ -31,7 +31,6 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
   "TextbookProgressModel" should "execute the model without any error" in {
     val config = """{"search":{"type":"none"},"model":"org.sunbird.analytics.model.report.TextBookProgressModel","modelParams":{"reportConfig":{"id":"content_progress_metrics","metrics":[],"labels":{"board":"Board","medium":"Medium","gradeLevel":"Grade","subject":"Subject","resourceType":"Content Type","live":"Live","review":"Review","draft":"Draft","application_ecml":"Created on Diksha","vedio_youtube":"YouTube Content","video_mp4":"Uploaded Videos","application_pdf":"Text Content","application_html":"Uploaded Interactive Content","creator":"Created By","status":"Status"},"output":[{"type":"csv","dims":[]}],"mergeConf":{"frequency":"WEEK","basePath":"","rollup":0,"reportPath":"content_progress_metrics.csv"}},"filter":{"tenantId":"ORG_001","slugName":""},"store":"local","format":"csv","key":"druid-reports/","filePath":"druid-reports/","container":"dev-data-store","folderPrefix":["slug","reportName"],"sparkCassandraConnectionHost":"localhost","sparkElasticsearchConnectionHost":"localhost"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Textbook Progress Metrics Model","deviceMapping":false}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](config).modelParams
-
     implicit val mockFc = mock[FrameworkContext]
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
@@ -44,8 +43,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc))
-    val druidResponse = DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -71,8 +70,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc))
-    val druidResponse = DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -98,8 +97,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc))
-    val druidResponse = DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -125,8 +124,8 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc))
-    val druidResponse = DruidResult.apply(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC), doc)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc)
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]

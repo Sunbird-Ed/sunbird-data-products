@@ -35,7 +35,7 @@ object TBConstants {
 
 object TextBookUtils {
 
-  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient)(implicit fc: FrameworkContext): List[TextbookData] = {
+  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient)(implicit sc:SparkContext,fc: FrameworkContext): List[TextbookData] = {
     val request = JSONUtils.serialize(config.get("druidConfig").get)
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
     val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
@@ -43,7 +43,7 @@ object TextBookUtils {
     val result = druidResponse.map(f => {
       JSONUtils.deserialize[TextbookData](f)
     })
-    result
+    result.collect().toList
   }
 
   def getTextbookHierarchy(config: Map[String, AnyRef], textbookInfo: List[TextbookData],tenantInfo: RDD[TenantInfo],restUtil: HTTPClient)(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
@@ -251,7 +251,7 @@ object TextBookUtils {
       druidResponse.map(f => {
         val report = JSONUtils.deserialize[DialcodeScans](f)
         WeeklyDialCodeScans(report.date,report.dialcode,report.scans,"dialcode_scans","dialcode_counts")
-      })
+      }).collect().toList
     } else List[WeeklyDialCodeScans]()
     result
   }
@@ -377,13 +377,13 @@ object TextBookUtils {
     (qrLinkedContent,contentNotLinked,leafNodeswithoutContent,totalLeafNodes)
   }
 
-  def getContentDataList(tenantId: String)(implicit fc: FrameworkContext): List[TBContentResult] = {
+  def getContentDataList(tenantId: String)(implicit sc:SparkContext, fc: FrameworkContext): List[TBContentResult] = {
     val request = s"""{"queryType": "groupBy","dataSource": "content-model-snapshot","intervals": "1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00","aggregations": [{"name": "count","type": "count"}],"dimensions": [{"fieldName": "channel","aliasName": "channel"}, {"fieldName": "identifier","aliasName": "identifier","type": "Extraction","outputType": "STRING","extractionFn": [{"type": "javascript","fn": "function(str){return str == null ? null: str.split('.')[0]}"}]}, {"fieldName": "name","aliasName": "name"}, {"fieldName": "pkgVersion","aliasName": "pkgVersion"}, {"fieldName": "contentType","aliasName": "contentType"}, {"fieldName": "lastSubmittedOn","aliasName": "lastSubmittedOn"}, {"fieldName": "mimeType","aliasName": "mimeType"}, {"fieldName": "resourceType","aliasName": "resourceType"}, {"fieldName": "createdFor","aliasName": "createdFor"}, {"fieldName": "createdOn","aliasName": "createdOn"}, {"fieldName": "lastPublishedOn","aliasName": "lastPublishedOn"}, {"fieldName": "creator","aliasName": "creator"}, {"fieldName": "board","aliasName": "board"}, {"fieldName": "medium","aliasName": "medium"}, {"fieldName": "gradeLevel","aliasName": "gradeLevel"}, {"fieldName": "subject","aliasName": "subject"}, {"fieldName": "status","aliasName": "status"}],"filters": [{"type": "equals","dimension": "contentType","value": "Resource"}, {"type": "in","dimension": "status","values": ["Live", "Draft", "Review", "Unlisted"]}, {"type": "equals","dimension": "createdFor","value": "$tenantId"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}}""".stripMargin
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
     val druidResponse = DruidDataFetcher.getDruidData(druidQuery, queryAsStream = true)
     
     val result = druidResponse.map(f => JSONUtils.deserialize[TBContentResult](f))
-    result
+    result.collect().toList
   }
 
   def getString(data: Object): String = {
