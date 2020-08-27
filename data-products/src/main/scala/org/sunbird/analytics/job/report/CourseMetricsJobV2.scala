@@ -27,7 +27,8 @@ trait ReportGeneratorV2 {
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
 }
 
-case class CourseData(courseid: String, leafNodesCount: String, level1: String, l1leafNodesCount: String)
+case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
+case class Level1Data(l1identifier: String, l1leafNodesCount: String)
 case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
 
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
@@ -37,6 +38,16 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
   val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
+
+  val finalColumnMapping = Map(UserCache.externalid ->  "External ID", UserCache.userid -> "User ID",
+    "username" -> "User Name",UserCache.maskedemail -> "Email ID", UserCache.maskedphone -> "Mobile Number",
+    UserCache.orgname -> "Organisation Name", UserCache.state -> "State Name", UserCache.district -> "District Name",
+    UserCache.schooludisecode -> "School UDISE Code", UserCache.schoolname -> "School Name", UserCache.block -> "Block Name",
+    "enrolleddate" -> "Enrolment Date", "courseid" -> "Course ID", "course_completion" -> "Course Progress",
+    "completedon" -> "Completion Date", "certificate_status" -> "Certificate Status")
+  val finalColumnOrder = List("External ID","User ID","User Name","Email ID","Mobile Number","Organisation Name",
+    "State Name","District Name","School UDISE Code","School Name","Block Name","Enrolment Date","Course ID",
+    "Course Progress","Completion Date","Certificate Status")
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def name(): String = "CourseMetricsJobV2"
@@ -97,11 +108,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", new StructType())
       .select("identifier","hierarchy")
 
-    val hierarchyDf = hierarchyData.rdd.map(row => {
+    val hierarchyDataDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](row.getString(1))
-      val courseInfo = parseCourseHierarchy(List(hierarchy),0, List[String]())
-      CourseData(row.getString(0), courseInfo.lift(1).getOrElse(""), courseInfo.lift(2).getOrElse(""), courseInfo.lift(3).getOrElse(""))
+      parseCourseHierarchy(List(hierarchy),0, CourseData(row.getString(0),"0",List()))
     }).toDF()
+
+    val hierarchyDf = hierarchyDataDf.select($"courseid",$"leafNodesCount",$"level1Data", explode_outer($"level1Data").as("exploded_level1Data"))
+      .select("courseid","leafNodesCount","exploded_level1Data.*")
 
     val dataDf = hierarchyDf.join(userAgg,hierarchyDf.col("courseid") === userAgg.col("activity_id"), "left")
       .withColumn("completionPercentage", (userAgg.col("completedCount")/hierarchyDf.col("leafNodesCount")*100).cast("int"))
@@ -109,42 +122,47 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         userAgg.col("context_id").as("contextid"),
         hierarchyDf.col("courseid"),
         col("completionPercentage"),
-        hierarchyDf.col("level1"),
+        hierarchyDf.col("l1identifier"),
         hierarchyDf.col("l1leafNodesCount"))
 
-    val resDf = dataDf.join(userAgg, dataDf.col("level1") === userAgg.col("activity_id") &&
-      userAgg.col("context_id") === dataDf.col("contextid"),"left")
+    val resDf = dataDf.join(userAgg, dataDf.col("l1identifier") === userAgg.col("activity_id") &&
+      userAgg.col("context_id") === dataDf.col("contextid") && userAgg.col("user_id") === dataDf.col("userid"),"left")
       .withColumn("l1completionPercentage", (userAgg.col("completedCount")/dataDf.col("l1leafNodesCount")*100).cast("int"))
       .select(col("userid"),
         col("courseid"),
         col("contextid"),
         col("completionPercentage"),
-        col("level1"),
+        col("l1identifier"),
         col("l1completionPercentage"))
     resDf
   }
 
-  def parseCourseHierarchy(data: List[Map[String,AnyRef]], levelCount: Int, prevData: List[String]): List[String] = {
-    var courseData = prevData
+  def parseCourseHierarchy(data: List[Map[String,AnyRef]], levelCount: Int, prevData: CourseData): CourseData = {
     if(levelCount < 2) {
-      data.map(childNodes => {
+      val list = data.map(childNodes => {
         val mimeType = childNodes.getOrElse("mimeType","").asInstanceOf[String]
         val visibility = childNodes.getOrElse("visibility","").asInstanceOf[String]
         val contentType = childNodes.getOrElse("contentType","").asInstanceOf[String]
-
-        if(levelCount == 0 || (StringUtils.equalsIgnoreCase(mimeType,"application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility,"Default") && StringUtils.equalsIgnoreCase(contentType,"Course"))) {
+        if((StringUtils.equalsIgnoreCase(mimeType,"application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility,"Default") && StringUtils.equalsIgnoreCase(contentType,"Course"))) {
           val identifier = childNodes.getOrElse("identifier","").asInstanceOf[String]
           val leafNodesCount = childNodes.getOrElse("leafNodesCount",0).asInstanceOf[Int]
-          val courseInfo = List(identifier, leafNodesCount.toString)
-          courseData = courseData ++ courseInfo
+          val courseData = if (levelCount == 0) {
+            CourseData(prevData.courseid, leafNodesCount.toString, List())
+          } else {
+            val prevL1List = prevData.level1Data
+            CourseData(prevData.courseid, prevData.leafNodesCount, (prevL1List ::: List(Level1Data(identifier, leafNodesCount.toString))))
+          }
           val children = childNodes.getOrElse("children",List()).asInstanceOf[List[Map[String,AnyRef]]]
           if(null != children && children.nonEmpty) {
-            courseData = parseCourseHierarchy(children, levelCount+1, courseData)
-          }
-        }
+            parseCourseHierarchy(children, levelCount+1, courseData)
+          } else courseData
+        } else prevData
       })
-    }
-    courseData
+      val courseId = list.head.courseid
+      val leafNodeCount = list.head.leafNodesCount
+      val level1Data = list.map(x => x.level1Data).flatten.toList
+      CourseData(courseId, leafNodeCount, level1Data)
+    } else prevData
   }
 
   def recordTime[R](block: => R, msg: String): R = {
@@ -173,7 +191,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
-      recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
+      recordTime(getUserData(spark, loadData), "Time taken to get generate the userData: ")
     })
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
@@ -186,7 +204,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         userCourses.col("courseid"),
         userCourses.col("contextid"),
         userCourses.col("completionPercentage").as("course_completion"),
-        userCourses.col("level1"),
+        userCourses.col("l1identifier"),
         userCourses.col("l1completionPercentage"))
     userCourseData.persist(StorageLevel.MEMORY_ONLY)
 
@@ -196,9 +214,9 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} : ")
           val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
+          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} : ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
@@ -273,35 +291,26 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col(UserCache.block),
         col(UserCache.state),
         col("course_completion"),
-        col("level1"),
+        col("l1identifier"),
         col("l1completionPercentage")
       ).persist(StorageLevel.MEMORY_ONLY)
     reportDF
   }
 
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
-    reportDF
-      .select(
-        col(UserCache.externalid).as("External ID"),
-        col(UserCache.userid).as("User ID"),
-        concat_ws(" ", col(UserCache.firstname), col(UserCache.lastname)).as("User Name"),
-        col(UserCache.maskedemail).as("Email ID"),
-        col(UserCache.maskedphone).as("Mobile Number"),
-        col(UserCache.orgname).as("Organisation Name"),
-        col(UserCache.state).as("State Name"),
-        col(UserCache.district).as("District Name"),
-        col(UserCache.schooludisecode).as("School UDISE Code"),
-        col(UserCache.schoolname).as("School Name"),
-        col(UserCache.block).as("Block Name"),
-        col("enrolleddate").as("Enrolment Date"),
-        col("courseid").as("Course ID"),
-        concat(col("course_completion").cast("string"), lit("%"))
-          .as("Course Progress"),
-        col("level1").as("Course ID - Level 1"),
-        concat(col("l1completionPercentage").cast("string"), lit("%"))
-          .as("Course Progress - Level 1"),
-        col("completedon").as("Completion Date"),
-        col("certificate_status").as("Certificate Status"))
+    val reportData = reportDF.groupBy("courseid", "batchid", "userid", "enrolleddate", "completedon",
+      "certificate_status", "firstname", "lastname", "maskedemail", "maskedphone", "externalid", "orgname",
+      "schoolname", "district", "schooludisecode", "block", "state", "course_completion")
+      .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
+      .drop("batchid","firstname", "lastname","null")
+
+    val fields = reportData.schema.fieldNames
+    val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
+    val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
+    val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
+
+    reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
