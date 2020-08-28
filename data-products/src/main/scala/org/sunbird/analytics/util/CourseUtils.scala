@@ -215,4 +215,21 @@ object CourseUtils {
     courseBatchDF.unpersist(true)
     activeBatchList
   }
+
+  def recordTime[R](block: => R, msg: String): R = {
+    val t0 = System.currentTimeMillis()
+    val result = block
+    val t1 = System.currentTimeMillis()
+    JobLogger.log(msg + (t1 - t0), None, INFO)
+    result
+  }
+
+  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType, columnNames:Seq[String]): DataFrame = {
+    if (schema.nonEmpty) {
+      spark.read.schema(schema).format(url).options(settings).load().select(columnNames.map(c => col(c)): _*)
+    }
+    else {
+      spark.read.format(url).options(settings).load().select(columnNames.map(c => col(c)): _*)
+    }
+  }
 }

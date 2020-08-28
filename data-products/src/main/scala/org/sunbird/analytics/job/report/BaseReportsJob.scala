@@ -7,7 +7,15 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.sunbird.cloud.storage.conf.AppConf
 
+import scala.collection.mutable
+
 trait BaseReportsJob {
+
+  val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
+  val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
+  val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
+  val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
+  val cassandraUrl = "org.apache.spark.sql.cassandra"
 
   def loadData(spark: SparkSession, settings: Map[String, String], schema: Option[StructType] = None): DataFrame = {
     val dataFrameReader = spark.read.format("org.apache.spark.sql.cassandra").options(settings)
