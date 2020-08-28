@@ -103,6 +103,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     })
     val modelParams = config.modelParams.get
     val contentFilters = modelParams.getOrElse("contentFilters",Map()).asInstanceOf[Map[String,AnyRef]]
+    val applyPrivacyPolicy = modelParams.getOrElse("applyPrivacyPolicy", true).asInstanceOf[Boolean]
     val reportPath = modelParams.getOrElse("reportPath", AppConf.getConfig("assessment.metrics.cloud.objectKey")).asInstanceOf[String]
 
     val filteredBatches = if(contentFilters.nonEmpty) {
@@ -124,7 +125,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, assessmentProfileDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userData._2, assessmentProfileDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val contentIds: List[String] = reportDF.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
           if (contentIds.nonEmpty) {
             val denormalizedDF = recordTime(denormAssessment(reportDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY), s"Time take to denorm the assessment - ")
@@ -188,7 +189,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     reportDF
   }
 
-  def getReportDF(batch: CourseBatch, userDF: DataFrame, assessmentProfileDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getReportDF(batch: CourseBatch, userDF: DataFrame, assessmentProfileDF: DataFrame, applyPrivacyPolicy: Boolean)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
     val filteredAssessmentProfileDF = assessmentProfileDF.where(col("batchid") === batch.batchid)
       .withColumn("enddate", lit(batch.endDate))
@@ -197,7 +198,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       .select(col("batchid"),
         col("enddate"),
         col("startdate"),
-        col("channel"),
+        col("channel").as("course_channel"),
         col("userid"),
         col("courseid"),
         col("active"),
@@ -206,9 +207,10 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         col("grand_total"),
         col("total_sum_score")
       )
-    filteredAssessmentProfileDF
+    val reportDF = filteredAssessmentProfileDF
       .join(userDF, Seq("userid"), "inner")
       .select(filteredAssessmentProfileDF.col("*"),
+        col(UserCache.userchannel),
         col(UserCache.firstname),
         col(UserCache.lastname),
         col(UserCache.maskedemail),
@@ -221,6 +223,13 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         col(UserCache.orgname),
         col("username")).persist(StorageLevel.MEMORY_ONLY)
       .filter(col("content_id").isNotNull)
+
+    if(applyPrivacyPolicy) {
+      reportDF.withColumn(UserCache.externalid, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.externalid)).otherwise(""))
+        .withColumn(UserCache.schoolname, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schoolname)).otherwise(""))
+        .withColumn(UserCache.block, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.block)).otherwise(""))
+        .withColumn(UserCache.schooludisecode, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schooludisecode)).otherwise(""))
+    } else reportDF
   }
 
 
