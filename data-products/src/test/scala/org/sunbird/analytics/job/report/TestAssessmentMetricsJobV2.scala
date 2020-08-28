@@ -198,7 +198,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val contents = CourseUtils.filterContents(spark, """{"request": {"filters": {"channel": "0898765434567891"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}}""".stripMargin)
     val assessmentDF = AssessmentMetricsJobV2.getAssessmentProfileDF(reporterMock.loadData)
     val batch = CourseBatch("1006","","2018-12-01","in.ekstep")
-    val reportDf = AssessmentMetricsJobV2.getReportDF(batch, userInfoDF, assessmentDF, true)
+    val reportDf = AssessmentMetricsJobV2.getReportDF(batch, userInfoDF, assessmentDF, false)
     val contentIds: List[String] = reportDf.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
 
     val denormDF = AssessmentMetricsJobV2.denormAssessment(reportDf, contentIds)
