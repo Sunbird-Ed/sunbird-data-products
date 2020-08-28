@@ -427,7 +427,7 @@ def get_data_batch_from_blob(result_loc_, prefix=None, backup=False):
         raise AzureMissingResourceHttpError("Missing resource!", 404)
 
 
-def get_data_from_blob(result_loc_, backup=False):
+def get_data_from_blob(result_loc_, backup=False, is_private=False):
     """
     read a blob storage file
     :param result_loc_: pathlib.Path object to store the file at. the last two names in path structure is used to locate
@@ -445,13 +445,15 @@ def get_data_from_blob(result_loc_, backup=False):
                 blob_name=report_name + '/' + date_name + '/' + file_name,
                 file_path=str(result_loc_),
                 container_name=container_name,
+                is_private=is_private
             )
         else:
             container_name = os.environ['PRIVATE_REPORT_CONTAINER']
             download_file_from_store(
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
                 file_path=str(result_loc_),
-                container_name=container_name
+                container_name=container_name,
+                is_private=is_private
             )
     except file_missing_exception():
         raise file_missing_exception(raise_except=True)
@@ -483,7 +485,7 @@ def get_dqp_data_from_blob(file_path, result_loc_):
         raise Exception('Could not read from blob!' + str(e))
 
 
-def post_data_to_blob(result_loc_, backup=False):
+def post_data_to_blob(result_loc_, backup=False, is_private=False):
     """
     write a local file to blob storage.
     :param result_loc_: pathlib.Path object to read CSV from
@@ -499,20 +501,23 @@ def post_data_to_blob(result_loc_, backup=False):
             azure_utils.post_data_to_store(
                 container_name=container_name,
                 blob_name=report_name + '/' + date_name + '/' + file_name,
-                file_path=str(result_loc_)
+                file_path=str(result_loc_),
+                is_private=is_private
             )
         else:
             container_name = os.environ['PRIVATE_REPORT_CONTAINER']
             azure_utils.post_data_to_store(
                 container_name=container_name,
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
-                file_path=str(result_loc_)
+                file_path=str(result_loc_),
+                is_private=is_private
             )
             if result_loc_.parent.joinpath(result_loc_.name.replace('.csv', '.json')).exists():
                 azure_utils.post_data_to_store(
                     container_name=container_name,
                     blob_name=result_loc_.parent.name + '/' + result_loc_.name.replace('.csv', '.json'),
-                    file_path=str(result_loc_).replace('.csv', '.json')
+                    file_path=str(result_loc_).replace('.csv', '.json'),
+                    is_private=is_private
                 )
     except Exception:
         raise Exception('Failed to post to blob!')

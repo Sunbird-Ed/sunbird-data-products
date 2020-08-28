@@ -39,6 +39,16 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
 
+  val finalColumnMapping = Map(UserCache.externalid ->  "External ID", UserCache.userid -> "User ID",
+    "username" -> "User Name",UserCache.maskedemail -> "Email ID", UserCache.maskedphone -> "Mobile Number",
+    UserCache.orgname -> "Organisation Name", UserCache.state -> "State Name", UserCache.district -> "District Name",
+    UserCache.schooludisecode -> "School UDISE Code", UserCache.schoolname -> "School Name", UserCache.block -> "Block Name",
+    "enrolleddate" -> "Enrolment Date", "courseid" -> "Course ID", "course_completion" -> "Course Progress",
+    "completedon" -> "Completion Date", "certificate_status" -> "Certificate Status")
+  val finalColumnOrder = List("External ID","User ID","User Name","Email ID","Mobile Number","Organisation Name",
+    "State Name","District Name","School UDISE Code","School Name","Block Name","Enrolment Date","Course ID",
+    "Course Progress","Completion Date","Certificate Status")
+
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def name(): String = "CourseMetricsJobV2"
 
@@ -182,7 +192,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
-      recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
+      recordTime(getUserData(spark, loadData), "Time taken to get generate the userData: ")
     })
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
@@ -205,9 +215,9 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} : ")
           val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
+          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} : ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
@@ -291,32 +301,19 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
-    val transposeDF = reportDF.groupBy("courseid","batchid","userid")
-      .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(concat(first("l1completionPercentage").cast("string"), lit("%")))
-    val reportData = transposeDF.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
-      .drop("l1identifier","l1completionPercentage")
+    val reportData = reportDF.groupBy("courseid", "batchid", "userid", "enrolleddate", "completedon",
+      "certificate_status", "firstname", "lastname", "maskedemail", "maskedphone", "externalid", "orgname",
+      "schoolname", "district", "schooludisecode", "block", "state", "course_completion")
+      .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
+      .drop("batchid","firstname", "lastname","null")
 
-    reportData
-      .select(
-        col(UserCache.externalid).as("External ID"),
-        col(UserCache.userid).as("User ID"),
-        concat_ws(" ", col(UserCache.firstname), col(UserCache.lastname)).as("User Name"),
-        col(UserCache.maskedemail).as("Email ID"),
-        col(UserCache.maskedphone).as("Mobile Number"),
-        col(UserCache.orgname).as("Organisation Name"),
-        col(UserCache.state).as("State Name"),
-        col(UserCache.district).as("District Name"),
-        col(UserCache.schooludisecode).as("School UDISE Code"),
-        col(UserCache.schoolname).as("School Name"),
-        col(UserCache.block).as("Block Name"),
-        col("enrolleddate").as("Enrolment Date"),
-        col("courseid").as("Course ID"),
-        concat(col("course_completion").cast("string"), lit("%"))
-          .as("Course Progress"),
-        transposeDF.col("*"),
-        col("completedon").as("Completion Date"),
-        col("certificate_status").as("Certificate Status"))
-      .drop("userid", "courseid", "batchid","null").distinct()
+    val fields = reportData.schema.fieldNames
+    val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
+    val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
+    val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
+
+    reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
