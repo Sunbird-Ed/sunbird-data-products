@@ -162,7 +162,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
         .withColumnRenamed("batchid","contextid")
         .withColumnRenamed("course_id","courseid")
     batchInfo.map(batches => {
-      val reportDf = CourseMetricsJobV2.getReportDF(batches, userCourseDf, alteredUserCourseDf)
+      val reportDf = CourseMetricsJobV2.getReportDF(batches, userCourseDf, alteredUserCourseDf, true)
       CourseMetricsJobV2.saveReportToBlobStore(batches, reportDf, storageConfig, reportDf.count(), "course-progress-reports/")
     })
 
