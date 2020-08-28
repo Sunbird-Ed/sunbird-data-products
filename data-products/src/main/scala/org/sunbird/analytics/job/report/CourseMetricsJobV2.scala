@@ -262,10 +262,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       .join(userDF, userDF.col("contextid") === contextId &&
         userEnrolmentDF.col("courseid") === userDF.col("courseid") &&
         userEnrolmentDF.col("userid") === userDF.col("userid"), "inner")
-      .withColumn(UserCache.externalid, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
-      .withColumn(UserCache.schoolname, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
-      .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
-      .withColumn(UserCache.schooludisecode, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
       .select(
         userEnrolmentDF.col("*"),
         col("channel"),

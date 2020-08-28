@@ -208,10 +208,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       )
     filteredAssessmentProfileDF
       .join(userDF, Seq("userid"), "inner")
-      .withColumn(UserCache.externalid, when(filteredAssessmentProfileDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
-      .withColumn(UserCache.schoolname, when(filteredAssessmentProfileDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
-      .withColumn(UserCache.block, when(filteredAssessmentProfileDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
-      .withColumn(UserCache.schooludisecode, when(filteredAssessmentProfileDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
       .select(filteredAssessmentProfileDF.col("*"),
         col(UserCache.firstname),
         col(UserCache.lastname),
