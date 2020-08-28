@@ -171,6 +171,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val activeBatches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
     val modelParams = config.modelParams.get
     val contentFilters = modelParams.getOrElse("contentFilters", Map()).asInstanceOf[Map[String,AnyRef]]
+    val applyPrivacyPolicy = modelParams.getOrElse("applyPrivacyPolicy", true).asInstanceOf[Boolean]
     val reportPath = modelParams.getOrElse("reportPath","course-progress-reports/").asInstanceOf[String]
 
     val filteredBatches = if(contentFilters.nonEmpty) {
@@ -204,7 +205,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val totalRecords = reportDF.count()
           recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} - ")
           reportDF.unpersist(true)
@@ -232,7 +233,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         , col("enrolleddate"), col("completedon"))
   }
 
-  def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame, applyPrivacyPolicy: Boolean)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
     /*
      * courseBatchDF has details about the course and batch details for which we have to prepare the report
@@ -280,7 +281,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("l1identifier"),
         col("l1completionPercentage")
       ).persist(StorageLevel.MEMORY_ONLY)
-    reportDF
+
+    if(applyPrivacyPolicy) {
+      reportDF.withColumn(UserCache.externalid, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
+        .withColumn(UserCache.schoolname, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
+        .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
+        .withColumn(UserCache.schooludisecode, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
+    } else reportDF
   }
 
   def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
