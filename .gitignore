@@ -10,3 +10,4 @@ data-products/.settings
 data-products/data-products.iml
 python-scripts/.pybuilder
 etl-jobs/.settings
+adhoc-scripts/adhoc-scripts.iml
