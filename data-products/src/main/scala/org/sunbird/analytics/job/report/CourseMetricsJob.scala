@@ -81,6 +81,7 @@ object CourseMetricsJob extends optional.Application with IJob with ReportGenera
                       (implicit spark: SparkSession, fc: FrameworkContext): Array[CourseBatch] = {
 
     implicit  val sqlContext: SQLContext = spark.sqlContext
+      implicit  val sc: SparkContext = spark.sparkContext
     import sqlContext.implicits._
 
     val courseBatchDF = loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace))
