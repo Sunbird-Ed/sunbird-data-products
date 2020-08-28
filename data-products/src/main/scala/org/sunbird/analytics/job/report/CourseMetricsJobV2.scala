@@ -255,7 +255,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         col("courseid"),
         col("generatedOn"),
         col("certificate_status"),
-        col("channel")
+        col("channel").as("course_channel")
       )
     val contextId = s"cb:${batch.batchid}"
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
@@ -265,7 +265,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
         userEnrolmentDF.col("userid") === userDF.col("userid"), "inner")
       .select(
         userEnrolmentDF.col("*"),
-        col("channel"),
+        col(UserCache.userchannel),
         col(UserCache.firstname),
         col(UserCache.lastname),
         col(UserCache.maskedemail),
@@ -283,10 +283,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       ).persist(StorageLevel.MEMORY_ONLY)
 
     if(applyPrivacyPolicy) {
-      reportDF.withColumn(UserCache.externalid, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.externalid)).otherwise(""))
-        .withColumn(UserCache.schoolname, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schoolname)).otherwise(""))
-        .withColumn(UserCache.block, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.block)).otherwise(""))
-        .withColumn(UserCache.schooludisecode, when(userEnrolmentDF.col("channel") === userDF.col(UserCache.userchannel), userDF.col(UserCache.schooludisecode)).otherwise(""))
+      reportDF.withColumn(UserCache.externalid, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.externalid)).otherwise(""))
+        .withColumn(UserCache.schoolname, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schoolname)).otherwise(""))
+        .withColumn(UserCache.block, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.block)).otherwise(""))
+        .withColumn(UserCache.schooludisecode, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schooludisecode)).otherwise(""))
     } else reportDF
   }
 
