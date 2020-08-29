@@ -159,13 +159,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
 
     val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
-      CourseUtils.recordTime(getUserData(spark, loadData), "Time taken to get generate the userData: ")
+      CourseUtils.recordTime(CourseUtils.getUserData(spark, loadData), "Time taken to get generate the userData: ")
     })
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
-    val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
+    val userEnrolmentDF = CourseUtils.getUserEnrollmentDF(loadData, sunbirdCoursesKeyspace).persist(StorageLevel.MEMORY_ONLY)
 
     val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
       .select(userData._2.col("*"),
@@ -198,15 +198,9 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     userCourseData.unpersist(true)
   }
 
-  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame): DataFrame = {
-    val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
-      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
-  }
-
-  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon")))
-  }
+//  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+//    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon")))
+//  }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame, applyPrivacyPolicy: Boolean)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)

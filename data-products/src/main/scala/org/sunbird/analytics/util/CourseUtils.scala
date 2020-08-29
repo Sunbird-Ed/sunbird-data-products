@@ -1,9 +1,9 @@
 package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, explode, lit, to_date}
+import org.apache.spark.sql.functions.{col, concat_ws, explode, lit, lower, to_date}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
@@ -13,6 +13,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfi
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
+import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.cassandraUrl
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
@@ -215,6 +216,17 @@ object CourseUtils {
     courseBatchDF.unpersist(true)
     activeBatchList
   }
+  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame): DataFrame = {
+    val schema = Encoders.product[UserData].schema
+    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
+  }
+
+  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, keyspace:String)(implicit spark: SparkSession): DataFrame = {
+    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> keyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
+      .filter(lower(col("active")).equalTo("true"))
+  }
+
 
   def recordTime[R](block: => R, msg: String): R = {
     val t0 = System.currentTimeMillis()
