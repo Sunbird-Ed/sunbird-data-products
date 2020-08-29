@@ -37,9 +37,9 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
   var userAggDF: DataFrame = _
   var contentHierarchyDF: DataFrame = _
   var reporterMock: ReportGeneratorV2 = mock[ReportGeneratorV2]
-  val sunbirdCoursesKeyspace = "sunbird_courses"
-  val sunbirdHierarchyStore = "dev_hierarchy_store"
-  val sunbirdKeyspace = "sunbird"
+  override val sunbirdCoursesKeyspace = "sunbird_courses"
+  override val sunbirdHierarchyStore = "dev_hierarchy_store"
+  override val sunbirdKeyspace = "sunbird"
 
   override def beforeAll(): Unit = {
 

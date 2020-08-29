@@ -34,11 +34,6 @@ case class UserAggData(user_id: String, activity_id: String, completedCount: Int
 object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
 
   implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJobV2"
-  val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
-  val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
-  val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
-  val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
-
   val finalColumnMapping = Map(UserCache.externalid ->  "External ID", UserCache.userid -> "User ID",
     "username" -> "User Name",UserCache.maskedemail -> "Email ID", UserCache.maskedphone -> "Mobile Number",
     UserCache.orgname -> "Organisation Name", UserCache.state -> "State Name", UserCache.district -> "District Name",
@@ -164,15 +159,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       CourseData(courseId, leafNodeCount, level1Data)
     } else prevData
   }
-
-  def recordTime[R](block: => R, msg: String): R = {
-    val t0 = System.currentTimeMillis()
-    val result = block
-    val t1 = System.currentTimeMillis()
-    JobLogger.log(msg + (t1 - t0), None, INFO)
-    result
-  }
-
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
@@ -192,7 +178,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
 
     val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
-      recordTime(getUserData(spark, loadData), "Time taken to get generate the userData: ")
+      CourseUtils.recordTime(getUserData(spark, loadData), "Time taken to get generate the userData: ")
     })
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
@@ -215,9 +201,9 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userCourseData, userEnrolmentDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} : ")
+          val reportDF = CourseUtils.recordTime(getReportDF(batch, userCourseData, userEnrolmentDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} : ")
           val totalRecords = reportDF.count()
-          recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} : ")
+          CourseUtils.recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} : ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)

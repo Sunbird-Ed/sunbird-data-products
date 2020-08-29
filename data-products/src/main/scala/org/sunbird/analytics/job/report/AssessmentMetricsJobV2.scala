@@ -26,12 +26,6 @@ case class CourseBatchOutput(courseid: String, batchid: String, startdate: Strin
 object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseReportsJob {
 
   implicit val className = "org.ekstep.analytics.job.AssessmentMetricsJobV2"
-
-  val metrics = scala.collection.mutable.Map[String, BigInt]();
-  val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
-  val sunbirdCoursesKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
-  val cassandraUrl = "org.apache.spark.sql.cassandra"
-
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def name(): String = "AssessmentMetricsJobV2"
 
@@ -64,15 +58,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     JobLogger.end("AssessmentReport Generation Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
     spark.stop()
     fc.closeContext()
-  }
-
-  // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def recordTime[R](block: => R, msg: String): (R) = {
-    val t0 = System.currentTimeMillis()
-    val result = block
-    val t1 = System.currentTimeMillis()
-    JobLogger.log(msg + (t1 - t0), None, INFO)
-    result;
   }
 
   /**
@@ -125,12 +110,12 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = recordTime(getReportDF(batch, userData._2, assessmentProfileDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = CourseUtils.recordTime(getReportDF(batch, userData._2, assessmentProfileDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val contentIds: List[String] = reportDF.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
           if (contentIds.nonEmpty) {
-            val denormalizedDF = recordTime(denormAssessment(reportDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY), s"Time take to denorm the assessment - ")
+            val denormalizedDF = CourseUtils.recordTime(denormAssessment(reportDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY), s"Time take to denorm the assessment - ")
             val totalRecords = denormalizedDF.count()
-            if (totalRecords > 0) recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid, reportPath), s"Time take to save the $totalRecords for batch ${batch.batchid} all the reports into azure -")
+            if (totalRecords > 0) CourseUtils.recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid, reportPath), s"Time take to save the $totalRecords for batch ${batch.batchid} all the reports into azure -")
             denormalizedDF.unpersist(true)
           }
           reportDF.unpersist(true)
@@ -355,7 +340,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
       .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
     try {
-      recordTime(saveToAzure(reportData, url, batchId, transposedData, reportPath), s"Time taken to save the $batchId into azure -")
+      CourseUtils.recordTime(saveToAzure(reportData, url, batchId, transposedData, reportPath), s"Time taken to save the $batchId into azure -")
     } catch {
       case e: Exception => JobLogger.log("File upload is failed due to " + e, None, ERROR)
     }
