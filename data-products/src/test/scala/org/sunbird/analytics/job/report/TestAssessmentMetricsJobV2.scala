@@ -103,22 +103,22 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
       .returning(userCoursesDF)
       .anyNumberOfTimes()
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema),None)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
       .anyNumberOfTimes()
       .returning(assessmentProfileDF)
 
@@ -136,22 +136,22 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra",Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra",Some(new StructType()),Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
       .returning(userCoursesDF)
       .anyNumberOfTimes()
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema),None)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
       .anyNumberOfTimes()
       .returning(assessmentProfileDF)
 
@@ -175,22 +175,22 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
       .returning(userCoursesDF)
       .anyNumberOfTimes()
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema),None)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
       .anyNumberOfTimes()
       .returning(assessmentProfileDF)
 

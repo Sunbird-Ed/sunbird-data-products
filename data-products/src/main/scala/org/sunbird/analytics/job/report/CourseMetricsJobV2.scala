@@ -20,12 +20,7 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
 
-//trait ReportGeneratorV2 {
-//
-//  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame
-//
-//  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
-//}
+
 
 case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
 case class Level1Data(l1identifier: String, l1leafNodesCount: String)
@@ -83,16 +78,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     fc.closeContext()
   }
 
-  // $COVERAGE-ON$ Enabling scoverage for all other functions
-//  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
-//    if (schema.nonEmpty) {
-//      spark.read.schema(schema).format(url).options(settings).load()
-//    }
-//    else {
-//      spark.read.format(url).options(settings).load()
-//    }
-//  }
-
   def getUserCourseInfo(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
@@ -101,10 +86,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
       spark,
       Map("table" -> "user_activity_agg",
         "keyspace" -> sunbirdCoursesKeyspace),
-      "org.apache.spark.sql.cassandra",
-      Some(new StructType()),Some(Seq("user_id","activity_id","agg","context_id")) )
+    "org.apache.spark.sql.cassandra",
+      Some(new StructType()), Some(Seq("user_id","activity_id","agg","context_id")) )
       .map(row => {
-      UserAggData(row.getString(0),row.getString(1),row.get(2).asInstanceOf[Map[String,Int]]("completedCount"),row.getString(3))
+        println("row.get(2)" + row.get(2))
+        println("row.get(0)" + row.getString(0))
+        println("row.get(1)" + row.getString(1))
+      UserAggData(row.getString(0),row.getString(1), row.get(2).asInstanceOf[Map[String,Int]]("completedCount"),row.getString(3))
     }).toDF()
 
     val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("identifier","hierarchy")))
@@ -308,7 +296,4 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 
-//  override type _1 = this.type
-//
-//  override def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = ???
 }

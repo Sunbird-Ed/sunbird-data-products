@@ -196,7 +196,7 @@ object CourseUtils {
                       (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     val courseBatchDF = if (batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("courseid", "batchid", "enddate", "startdate")))
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
         .filter(batch => batchList.contains(batch.getString(1)))
         .persist(StorageLevel.MEMORY_ONLY)
     }

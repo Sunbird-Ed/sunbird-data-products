@@ -73,22 +73,22 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
   "TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), None)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("user_id","activity_id","agg","context_id")))
       .anyNumberOfTimes()
       .returning(userAggDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("identifier","hierarchy")))
       .anyNumberOfTimes()
       .returning(contentHierarchyDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema),None)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
 
@@ -103,12 +103,12 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon")))
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
 
@@ -190,32 +190,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     batch2Results.map {res => res.`School UDISE Code`}.toList should contain theSameElementsAs List(null)
     batch2Results.map {res => res.`School Name`}.toList should contain theSameElementsAs List(null)
     batch2Results.map {res => res.`Block Name`}.toList should contain theSameElementsAs List(null)
-    /*
-    // TODO: Add assertions here
-    EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").foreach(f => {
-      f.contains("lastUpdatedOn") should be (true)
-    })
-    EmbeddedES.getAllDocuments("cbatch").foreach(f => {
-      f.contains("reportUpdatedOn") should be (true)
-    })
-    */
 
-    /*
-    val esOutput = JSONUtils.deserialize[ESOutput](EmbeddedES.getAllDocuments("cbatchstats-08-07-2018-16-30").head)
-    esOutput.name should be ("Rajesh Kapoor")
-    esOutput.id should be ("user012:1002")
-    esOutput.batchId should be ("1002")
-    esOutput.courseId should be ("do_112726725832507392141")
-    esOutput.rootOrgName should be ("MPPS BAYYARAM")
-    esOutput.subOrgUDISECode should be ("")
-    esOutput.blockName should be ("")
-    esOutput.maskedEmail should be ("*****@gmail.com")
-
-  val esOutput_cbatch = JSONUtils.deserialize[ESOutputCBatch](EmbeddedES.getAllDocuments("cbatch").head)
-    esOutput_cbatch.id should be ("1004")
-    esOutput_cbatch.participantCount should be ("4")
-    esOutput_cbatch.completedCount should be ("0")
-    */
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
@@ -227,22 +202,22 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val storageConfig = StorageConfig("local", "", "/tmp/course-metrics")
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("user_id","activity_id","agg","context_id")))
       .anyNumberOfTimes()
       .returning(userAggDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(List("identifier", "hierarchy")))
       .anyNumberOfTimes()
       .returning(contentHierarchyDF)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema),None)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
 
@@ -254,12 +229,12 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon")))
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
     (reporterMock.loadData _)
-      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+      .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
 
