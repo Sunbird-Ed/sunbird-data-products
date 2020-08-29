@@ -2,18 +2,19 @@ package org.sunbird.analytics.job.report
 
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.sunbird.cloud.storage.conf.AppConf
 
 trait StateAdminReportHelper extends BaseReportsJob {
   val tempDir = AppConf.getConfig("admin.metrics.temp.dir")
-  val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
+  override val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
   val summaryDir = s"$tempDir/summary"
   val renamedDir = s"$tempDir/renamed"
   val detailDir = s"$tempDir/detail"
   
   def locationData() (implicit sparkSession: SparkSession) = {
-    val locationDF = loadData(sparkSession, Map("table" -> "location", "keyspace" -> sunbirdKeyspace), None).select(
+    val locationDF = loadData(sparkSession, Map("table" -> "location", "keyspace" -> sunbirdKeyspace), cassandraUrl, Some(new StructType())).select(
       col("id").as("locid"),
       col("code").as("loccode"),
       col("name").as("locname"),
@@ -66,7 +67,7 @@ trait StateAdminReportHelper extends BaseReportsJob {
   }
   
   def loadOrganisationData()(implicit sparkSession: SparkSession) = {
-    loadData(sparkSession, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace), None).select(
+    loadData(sparkSession, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace), cassandraUrl, Some(new StructType())).select(
       col("id").as("id"),
       col("isrootorg").as("isrootorg"),
       col("rootorgid").as("rootorgid"),

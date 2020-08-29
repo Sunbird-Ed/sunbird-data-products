@@ -17,14 +17,14 @@ trait BaseReportsJob {
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
   val cassandraUrl = "org.apache.spark.sql.cassandra"
 
-  def loadData(spark: SparkSession, settings: Map[String, String], schema: Option[StructType] = None): DataFrame = {
-    val dataFrameReader = spark.read.format("org.apache.spark.sql.cassandra").options(settings)
-    if (schema.nonEmpty) {
-      schema.map(schema => dataFrameReader.schema(schema)).getOrElse(dataFrameReader).load()
-    } else {
-      dataFrameReader.load()
+  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: Option[StructType] = None): DataFrame = {
+    val dataSchema = schema.getOrElse(new StructType())
+    if (dataSchema.nonEmpty) {
+      spark.read.schema(dataSchema).format(url).options(settings).load()
     }
-
+    else {
+      spark.read.format(url).options(settings).load()
+    }
   }
 
   def getReportingFrameworkContext()(implicit fc: Option[FrameworkContext]): FrameworkContext = {

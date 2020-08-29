@@ -22,8 +22,8 @@ object AssessmentMetricsJob extends optional.Application with IJob with BaseRepo
   implicit val className = "org.ekstep.analytics.job.AssessmentMetricsJob"
 
   private val indexName: String = AppConf.getConfig("assessment.metrics.es.index.prefix") + DateTimeFormat.forPattern("dd-MM-yyyy-HH-mm").print(DateTime.now())
-  val metrics = scala.collection.mutable.Map[String, BigInt]();
-  val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
+//  val metrics = scala.collection.mutable.Map[String, BigInt]();
+//  val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
 
   def name(): String = "AssessmentMetricsJob"
 

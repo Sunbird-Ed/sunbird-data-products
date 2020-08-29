@@ -35,9 +35,9 @@ trait ReportGenerator {
 object CourseMetricsJob extends optional.Application with IJob with ReportGenerator with BaseReportsJob {
 
   implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJob"
-  val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
-  val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
-  val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
+//  val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
+//  val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
+//  val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
 
   def name(): String = "CourseMetricsJob"
 

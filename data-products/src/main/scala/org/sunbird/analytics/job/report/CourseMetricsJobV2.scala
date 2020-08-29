@@ -20,26 +20,28 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
 
-trait ReportGeneratorV2 {
-
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame
-
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
-}
+//trait ReportGeneratorV2 {
+//
+//  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame
+//
+//  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchTable: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit
+//}
 
 case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
 case class Level1Data(l1identifier: String, l1leafNodesCount: String)
 case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
 
-object CourseMetricsJobV2 extends optional.Application with IJob with ReportGeneratorV2 with BaseReportsJob {
+object CourseMetricsJobV2 extends optional.Application with IJob with BaseReportsJob {
 
   implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJobV2"
+
   val finalColumnMapping = Map(UserCache.externalid ->  "External ID", UserCache.userid -> "User ID",
     "username" -> "User Name",UserCache.maskedemail -> "Email ID", UserCache.maskedphone -> "Mobile Number",
     UserCache.orgname -> "Organisation Name", UserCache.state -> "State Name", UserCache.district -> "District Name",
     UserCache.schooludisecode -> "School UDISE Code", UserCache.schoolname -> "School Name", UserCache.block -> "Block Name",
     "enrolleddate" -> "Enrolment Date", "courseid" -> "Course ID", "course_completion" -> "Course Progress",
     "completedon" -> "Completion Date", "certificate_status" -> "Certificate Status")
+
   val finalColumnOrder = List("External ID","User ID","User Name","Email ID","Mobile Number","Organisation Name",
     "State Name","District Name","School UDISE Code","School Name","Block Name","Enrolment Date","Course ID",
     "Course Progress","Completion Date","Certificate Status")
@@ -82,25 +84,30 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
   }
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
-    if (schema.nonEmpty) {
-      spark.read.schema(schema).format(url).options(settings).load()
-    }
-    else {
-      spark.read.format(url).options(settings).load()
-    }
-  }
+//  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
+//    if (schema.nonEmpty) {
+//      spark.read.schema(schema).format(url).options(settings).load()
+//    }
+//    else {
+//      spark.read.format(url).options(settings).load()
+//    }
+//  }
 
-  def getUserCourseInfo(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getUserCourseInfo(loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
 
-    val userAgg = loadData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
+    val userAgg = loadData(
+      spark,
+      Map("table" -> "user_activity_agg",
+        "keyspace" -> sunbirdCoursesKeyspace),
+      "org.apache.spark.sql.cassandra",
+      Some(new StructType()))
       .select("user_id","activity_id","agg","context_id").map(row => {
       UserAggData(row.getString(0),row.getString(1),row.get(2).asInstanceOf[Map[String,Int]]("completedCount"),row.getString(3))
     }).toDF()
 
-    val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", new StructType())
+    val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", Some(new StructType()))
       .select("identifier","hierarchy")
 
     val hierarchyDataDf = hierarchyData.rdd.map(row => {
@@ -159,7 +166,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
       CourseData(courseId, leafNodeCount, level1Data)
     } else prevData
   }
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
+  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
@@ -217,14 +224,14 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     userCourseData.unpersist(true)
   }
 
-  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
+  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", schema)
+    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema))
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
   }
 
-  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
+  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()))
       .select(col("batchid"), col("userid"), col("courseid"), col("active"), col("certificates")
         , col("enrolleddate"), col("completedon"))
   }
@@ -304,4 +311,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
 
+//  override type _1 = this.type
+//
+//  override def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = ???
 }

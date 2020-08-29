@@ -60,31 +60,31 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     fc.closeContext()
   }
 
-  /**
-   * Generic method used to load data by passing configurations
-   *
-   * @param spark    - Spark Sessions
-   * @param settings - Cassandra/Redis configs
-   * @param url      - Cassandra/Redis url
-   * @return
-   */
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
-    if (schema.nonEmpty) {
-      spark.read.schema(schema).format(url).options(settings).load()
-    }
-    else {
-      spark.read.format(url).options(settings).load()
-    }
-  }
+//  /**
+//   * Generic method used to load data by passing configurations
+//   *
+//   * @param spark    - Spark Sessions
+//   * @param settings - Cassandra/Redis configs
+//   * @param url      - Cassandra/Redis url
+//   * @return
+//   */
+//  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
+//    if (schema.nonEmpty) {
+//      spark.read.schema(schema).format(url).options(settings).load()
+//    }
+//    else {
+//      spark.read.format(url).options(settings).load()
+//    }
+//  }
 
-  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
+  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
     val batches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
     val userData = CommonUtil.time({
-      recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
+      CourseUtils.recordTime(getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
     val modelParams = config.modelParams.get
     val contentFilters = modelParams.getOrElse("contentFilters",Map()).asInstanceOf[Map[String,AnyRef]]
@@ -129,22 +129,22 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     userData._2.unpersist(true)
   }
 
-  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
+  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", schema)
+    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema))
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
   }
 
-  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
+  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()))
       .filter(lower(col("active")).equalTo("true"))
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"))
   }
 
-  def getAssessmentProfileDF(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getAssessmentProfileDF(loadData: (SparkSession, Map[String, String], String, Option[StructType]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()))
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total").persist(StorageLevel.MEMORY_ONLY)
     val assessmentDF = getAssessmentData(assessmentProfileDF)
 
