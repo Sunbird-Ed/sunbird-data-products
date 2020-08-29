@@ -1,10 +1,10 @@
 package org.sunbird.analytics.job.report
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.util.CommonUtil
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
@@ -17,15 +17,18 @@ trait BaseReportsJob {
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
   val cassandraUrl = "org.apache.spark.sql.cassandra"
 
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: Option[StructType] = None): DataFrame = {
+  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: Option[StructType] = None, columnNames: Option[Seq[String]] = None): DataFrame = {
     val dataSchema = schema.getOrElse(new StructType())
+    import org.apache.spark.sql.functions.col
+    val selectedCols = columnNames.getOrElse(Seq("*"))
     if (dataSchema.nonEmpty) {
-      spark.read.schema(dataSchema).format(url).options(settings).load()
+      spark.read.schema(dataSchema).format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
     }
     else {
-      spark.read.format(url).options(settings).load()
+      spark.read.format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
     }
   }
+
 
   def getReportingFrameworkContext()(implicit fc: Option[FrameworkContext]): FrameworkContext = {
     fc match {
