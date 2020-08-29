@@ -60,7 +60,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
       .load("src/test/resources/assessment-metrics-updaterv2/assessment.csv")
       .cache()
 
-    AssessmentMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", Some(new StructType()))
+    //AssessmentMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", Some(new StructType()))
     /*
      * Data created with 35 participants mapped to only batch from 1001 - 1010 (10), so report
      * should be created for these 10 batch (1001 - 1010) and 34 participants (1 user is not active in the course)

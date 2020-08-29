@@ -82,17 +82,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
 
-    val userAgg = loadData(
-      spark,
-      Map("table" -> "user_activity_agg",
-        "keyspace" -> sunbirdCoursesKeyspace),
-    "org.apache.spark.sql.cassandra",
-      Some(new StructType()), Some(Seq("user_id","activity_id","agg","context_id")) )
-      .map(row => {
+    val userAgg1 = loadData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("user_id", "activity_id", "agg", "context_id")))
+    println("UserAFF1" + userAgg1.show(false))
+    val userAgg = userAgg1.map(row => {
         println("row.get(2)" + row.get(2))
         println("row.get(0)" + row.getString(0))
         println("row.get(1)" + row.getString(1))
-      UserAggData(row.getString(0),row.getString(1), row.get(2).asInstanceOf[Map[String,Int]]("completedCount"),row.getString(3))
+      UserAggData(row.getString(0), row.getString(1), row.get(2).asInstanceOf[Map[String,Int]]("completedCount"),row.getString(3))
     }).toDF()
 
     val hierarchyData = loadData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("identifier","hierarchy")))
