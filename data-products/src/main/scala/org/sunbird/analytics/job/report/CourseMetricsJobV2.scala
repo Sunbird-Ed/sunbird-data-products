@@ -165,7 +165,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
-    val userEnrolmentDF = CourseUtils.getUserEnrollmentDF(loadData, sunbirdCoursesKeyspace).persist(StorageLevel.MEMORY_ONLY)
+    val userEnrolmentDF = loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon"))).persist(StorageLevel.MEMORY_ONLY)
 
     val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
       .select(userData._2.col("*"),
@@ -198,9 +198,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     userCourseData.unpersist(true)
   }
 
-//  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-//    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon")))
-//  }
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame, applyPrivacyPolicy: Boolean)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)

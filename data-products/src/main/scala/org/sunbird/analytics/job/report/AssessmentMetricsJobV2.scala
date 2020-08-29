@@ -115,13 +115,11 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
 
   def getAssessmentProfileDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-    val userEnrolmentDF = CourseUtils.getUserEnrollmentDF(loadData, keyspace = sunbirdCoursesKeyspace).persist(StorageLevel.MEMORY_ONLY)
+    val userEnrolmentDF = loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
+      .filter(lower(col("active")).equalTo("true")).persist(StorageLevel.MEMORY_ONLY)
     val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
     val assessmentDF = getAssessmentData(assessmentProfileDF)
 
-    /**
-     * Compute the sum of all the worksheet contents score.
-     */
     val assessmentAggDf = Window.partitionBy("user_id", "batch_id", "course_id")
     val aggregatedAssessmentDF = assessmentDF
       .withColumn("agg_score", sum("total_score") over assessmentAggDf)

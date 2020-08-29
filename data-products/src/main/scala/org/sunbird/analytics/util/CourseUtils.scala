@@ -222,10 +222,10 @@ object CourseUtils {
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
   }
 
-  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, keyspace:String)(implicit spark: SparkSession): DataFrame = {
-    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> keyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
-      .filter(lower(col("active")).equalTo("true"))
-  }
+//  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, keyspace:String)(implicit spark: SparkSession): DataFrame = {
+//    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> keyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
+//      .filter(lower(col("active")).equalTo("true"))
+//  }
 
 
   def recordTime[R](block: => R, msg: String): R = {
