@@ -4,21 +4,16 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{col, unix_timestamp, _}
-import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.{col, _}
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.joda.time.format.DateTimeFormat
-import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
-
-import scala.collection.mutable
 
 
 
@@ -83,11 +78,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     import sqlContext.implicits._
 
     val userAgg1 = loadData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("user_id", "activity_id", "agg", "context_id")))
-    println("UserAFF1" + userAgg1.show(false))
     val userAgg = userAgg1.map(row => {
-        println("row.get(2)" + row.get(2))
-        println("row.get(0)" + row.getString(0))
-        println("row.get(1)" + row.getString(1))
       UserAggData(row.getString(0), row.getString(1), row.get(2).asInstanceOf[Map[String,Int]]("completedCount"),row.getString(3))
     }).toDF()
 

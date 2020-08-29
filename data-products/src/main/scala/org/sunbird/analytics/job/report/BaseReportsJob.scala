@@ -20,10 +20,7 @@ trait BaseReportsJob {
   def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: Option[StructType] = None, columnNames: Option[Seq[String]] = None): DataFrame = {
     val dataSchema = schema.getOrElse(new StructType())
     import org.apache.spark.sql.functions.col
-    println("columnNames==" + columnNames)
-    println("schema==" + schema)
     val selectedCols = columnNames.getOrElse(Seq("*"))
-    println("selectedCols" + selectedCols)
     if (dataSchema.nonEmpty) {
       spark.read.schema(dataSchema).format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
     }
