@@ -202,7 +202,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val contentIds: List[String] = reportDf.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
 
     val denormDF = AssessmentMetricsJobV2.denormAssessment(reportDf, contentIds)
-    AssessmentMetricsJobV2.saveReport(denormDF, "/tmp/assessment-report","true","1006","assessment-reports/")
+    AssessmentMetricsJobV2.saveReport(denormDF, "true","1006","assessment-reports/")
 
     reportDf.count() should be(2)
   }

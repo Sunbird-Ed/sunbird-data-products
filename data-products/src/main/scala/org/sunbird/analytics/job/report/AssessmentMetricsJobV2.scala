@@ -95,7 +95,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
           if (contentIds.nonEmpty) {
             val denormalizedDF = CourseUtils.recordTime(denormAssessment(reportDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY), s"Time take to denorm the assessment - ")
             val totalRecords = denormalizedDF.count()
-            if (totalRecords > 0) CourseUtils.recordTime(saveReport(denormalizedDF, tempDir, uploadToAzure, batch.batchid, reportPath), s"Time take to save the $totalRecords for batch ${batch.batchid} all the reports into azure -")
+            if (totalRecords > 0) CourseUtils.recordTime(saveReport(denormalizedDF, uploadToAzure, batch.batchid, reportPath), s"Time take to save the $totalRecords for batch ${batch.batchid} all the reports into azure -")
             denormalizedDF.unpersist(true)
           }
           reportDF.unpersist(true)
@@ -213,13 +213,13 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   /**
    * This method is used to upload the report the azure cloud service
    */
-  def saveReport(reportDF: DataFrame, url: String, uploadToAzure: String, batchid: String, reportPath: String)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
+  def saveReport(reportDF: DataFrame, uploadToAzure: String, batchid: String, reportPath: String)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), reportPath)
     if (StringUtils.isNotBlank(uploadToAzure) && StringUtils.equalsIgnoreCase("true", uploadToAzure)) {
       val transposedData = transposeDF(reportDF)
       val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
         .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
-      getFinalDF(reportData, finalColumnMapping, finalColumnOrder).join(transposedData).drop(UserCache.userid, "courseid", "batchid")
+      getFinalDF(reportData, finalColumnMapping, finalColumnOrder).join(transposedData, Seq("userid", "courseid", "batchid")).drop(UserCache.userid, "courseid", "batchid")
         .saveToBlobStore(storageConfig, "csv", "report-" + batchid, Option(Map("header" -> "true")), None);
     } else {
       JobLogger.log("Skipping uploading reports into to azure", None, INFO)
