@@ -40,6 +40,7 @@ object UserCacheIndexer extends Serializable {
         .config("spark.redis.db", redisIndex)
         .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
         .config("spark.cassandra.read.timeoutMS", "300000")
+        .config("spark.redis.scan.count", config.getString("redis.scan.count"))
         .getOrCreate()
 
     def filterUserData(userDF: DataFrame): DataFrame = {
