@@ -22,10 +22,6 @@ import scala.concurrent.Future
 
 case class UserAgg(activity_type:String,activity_id:String, user_id:String,context_id:String, agg: Map[String,Int],agg_last_updated:String)
 case class ContentHierarchy(identifier: String, hierarchy: String)
-case class BatchReportOutput(`User ID`: String, `School Name`: String, `Mobile Number`: String, `Certificate Status`: String,
-                            `Completion Date`: String, `District Name`: String, `User Name`: String, `External ID`: String,
-                            `State Name`: String, `Enrolment Date`: String, `Email ID`: String, `Course Progress`: String,
-                            `Organisation Name`: String, `Block Name`: String, `School UDISE Code`: String)
 
 class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseReportsJob {
   var spark: SparkSession = _
