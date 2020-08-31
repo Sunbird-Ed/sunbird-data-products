@@ -97,6 +97,8 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
             val totalRecords = denormalizedDF.count()
             if (totalRecords > 0) CourseUtils.recordTime(saveReport(denormalizedDF, uploadToAzure, batch.batchid, reportPath), s"Time take to save the $totalRecords for batch ${batch.batchid} all the reports into azure -")
             denormalizedDF.unpersist(true)
+          }else{
+            JobLogger.log("empty content id", None, INFO)
           }
           reportDF.unpersist(true)
         })
@@ -222,7 +224,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
       val finalDF = getFinalDF(reportData, finalColumnMapping, finalColumnOrder)
       println("finalDF===" + finalDF.show(false))
-      JobLogger.log(s"Report is uploading: report-$batchid")
+      JobLogger.log(s"Report is uploading: report-$batchid", None, INFO)
       finalDF.saveToBlobStore(storageConfig, "csv", "report-" + batchid, Option(Map("header" -> "true")), None);
     } else {
       JobLogger.log("Skipping uploading reports into to azure", None, INFO)
