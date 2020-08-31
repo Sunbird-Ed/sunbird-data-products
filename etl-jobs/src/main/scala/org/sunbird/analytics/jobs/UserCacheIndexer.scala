@@ -3,7 +3,7 @@ package org.sunbird.analytics.jobs
 import com.redislabs.provider.redis._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
-import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, first, lit, lower, to_json, _}
+import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, lit, lower, to_json, _}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.sunbird.analytics.util.JSONUtils
@@ -72,7 +72,7 @@ object UserCacheIndexer extends Serializable {
       val res1 = time(populateToRedis(userDF)) // Insert all userData Into redis
       Console.println("Time taken to insert user records", res1._1)
 
-      val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_org").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
+      val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_organisation").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
         .select(col("userid"), col("organisationid"))
 
       val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
@@ -80,8 +80,8 @@ object UserCacheIndexer extends Serializable {
           col("locationids"), col("isrootorg"))
 
       /**
-       * Get a union of RootOrg and SubOrg information for a User
-       */
+        * Get a union of RootOrg and SubOrg information for a User
+        */
       val userRootOrgDF = userDF
         .join(userOrgDF, userOrgDF.col("userid") === userDF.col("userid") && userOrgDF.col("organisationid") === userDF.col("rootorgid"))
         .select(userDF.col("userid"), col("rootorgid"), col("organisationid"), userDF.col("channel"))
@@ -92,10 +92,10 @@ object UserCacheIndexer extends Serializable {
 
       val rootOnlyOrgDF = userRootOrgDF.join(userSubOrgDF, Seq("userid"), "leftanti").select(userRootOrgDF.col("*"))
       val userOrgDenormDF = rootOnlyOrgDF.union(userSubOrgDF)
-      
+
       /**
-       * Resolve organization name for a RootOrg
-       */
+        * Resolve organization name for a RootOrg
+        */
       val resolvedOrgNameDF = userOrgDenormDF
         .join(organisationDF, organisationDF.col("id") === userOrgDenormDF.col("rootorgid"), "left_outer")
         .groupBy("userid")
@@ -113,7 +113,7 @@ object UserCacheIndexer extends Serializable {
         .filter(col("userid").isNotNull))
         .select("userid", "locationids", "rootorgid","channel").persist(StorageLevel.MEMORY_ONLY)
 
-      val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_org").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
+      val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_organisation").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
         .select(col("userid"), col("organisationid")).persist(StorageLevel.MEMORY_ONLY)
 
       val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
@@ -124,20 +124,24 @@ object UserCacheIndexer extends Serializable {
       val externalIdentityDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "usr_external_identity").option("keyspace", sunbirdKeyspace).load()
         .select(col("provider"), col("idtype"), col("externalid"), col("userid"))
 
+      val userDeclarationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_declarations").option("keyspace", sunbirdKeyspace).load()
+        .filter(f => f.getAs[String]("persona").equalsIgnoreCase("teacher"))
+        .select(col("userid"), col("userinfo"), col("orgid"))
+
       // Get CustodianOrgID
       val custRootOrgId = getCustodianOrgId()
       Console.println("#### custRootOrgId ####", custRootOrgId)
 
-      val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF)
+      val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, userDeclarationDF)
 
       val filteredCustoDian = custodianUserDF.select(
-        col("declared-school-name").as("schoolname"),
-        col("declared-ext-id").as("externalid"),
+        col("schoolname"),
+        col("externalid"),
         col("state_name").as("state"),
         col("district"), col("block"),
-        col("declared-school-udise-code").as("schooludisecode"),
+        col("schooludisecode"),
         col("user_channel").as("userchannel"), col("userid"), col("usersignintype"))
-        
+
       val res1 = time(populateToRedis(filteredCustoDian.distinct()))
       Console.println("Time taken to insert custodian details", res1._1)
 
@@ -164,11 +168,11 @@ object UserCacheIndexer extends Serializable {
     }
 
     def generateCustodianOrgUserData(custodianOrgId: String, userDF: DataFrame, organisationDF: DataFrame,
-                                     locationDF: DataFrame, externalIdentityDF: DataFrame): DataFrame = {
+                                     locationDF: DataFrame, userDeclarationDF: DataFrame): DataFrame = {
       /**
-       * Resolve the state, district and block information for CustodianOrg Users
-       * CustodianOrg Users will have state, district and block (optional) information
-       */
+        * Resolve the state, district and block information for CustodianOrg Users
+        * CustodianOrg Users will have state, district and block (optional) information
+        */
 
       val userExplodedLocationDF = userDF
         .withColumn("exploded_location", explode_outer(col("locationids")))
@@ -187,8 +191,8 @@ object UserCacheIndexer extends Serializable {
         .select(userExplodedLocationDF.col("userid"), col("name").as("block"))
 
       /**
-       * Join with the userDF to get one record per user with district and block information
-       */
+        * Join with the userDF to get one record per user with district and block information
+        */
 
       val custodianOrguserLocationDF = userDF.filter(col("rootorgid") === lit(custodianOrgId))
         .join(userStateDF, Seq("userid"), "inner")
@@ -203,22 +207,22 @@ object UserCacheIndexer extends Serializable {
       // .drop(col("locationids"))
 
       val custodianUserPivotDF = custodianOrguserLocationDF
-        .join(externalIdentityDF, externalIdentityDF.col("userid") === custodianOrguserLocationDF.col("userid"), "left")
-        .join(organisationDF, externalIdentityDF.col("provider") === organisationDF.col("channel")
+        .join(userDeclarationDF, userDeclarationDF.col("userid") === custodianOrguserLocationDF.col("userid"), "left")
+        .join(organisationDF, userDeclarationDF.col("orgid") === organisationDF.col("id")
           && organisationDF.col("isrootorg").equalTo(true), "left")
-        .groupBy(custodianOrguserLocationDF.col("userid"), organisationDF.col("id"))
-        .pivot("idtype", Seq("declared-ext-id", "declared-school-name", "declared-school-udise-code"))
-        .agg(first(col("externalid")))
+        .withColumn("externalid", col("userinfo.declared-ext-id"))
+        .withColumn("schoolname", col("userinfo.declared-school-name"))
+        .withColumn("schooludisecode", col("userinfo.declared-school-udise-code"))
         .select(
           custodianOrguserLocationDF.col("userid"),
-          col("declared-ext-id"),
-          col("declared-school-name"),
-          col("declared-school-udise-code"),
+          col("externalid"),
+          col("schoolname"),
+          col("schooludisecode"),
           organisationDF.col("id").as("user_channel"))
 
       val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
         .join(custodianUserPivotDF, Seq("userid"), "left")
-        .select("userLocDF.*", "declared-ext-id", "declared-school-name", "declared-school-udise-code", "user_channel")
+        .select("userLocDF.*", "externalid", "schoolname", "schooludisecode", "user_channel")
       custodianUserDF
     }
 
@@ -267,8 +271,8 @@ object UserCacheIndexer extends Serializable {
       // .drop(col("locationids"))
 
       val stateUserDF = stateUserLocationResolvedDF.as("state_user")
-        .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.channel")
-          && externalIdentityDF.col("provider") === col("state_user.channel")
+        .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.rootorgid")
+          && externalIdentityDF.col("provider") === col("state_user.rootorgid")
           && externalIdentityDF.col("userid") === col("state_user.userid"), "left")
         .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"), col("rootorgid").as("user_channel"))
       stateUserDF
