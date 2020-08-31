@@ -219,7 +219,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       val transposedData = transposeDF(reportDF)
       val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
         .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
-      getFinalDF(reportData, finalColumnMapping, finalColumnOrder).join(transposedData, Seq("userid", "courseid", "batchid")).drop(UserCache.userid, "courseid", "batchid")
+      getFinalDF(reportData, finalColumnMapping, finalColumnOrder)
         .saveToBlobStore(storageConfig, "csv", "report-" + batchid, Option(Map("header" -> "true")), None);
     } else {
       JobLogger.log("Skipping uploading reports into to azure", None, INFO)
