@@ -223,8 +223,6 @@ object UserCacheIndexer extends Serializable {
       val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
         .join(custodianUserPivotDF, Seq("userid"), "left")
         .select("userLocDF.*", "externalid", "schoolname", "schooludisecode", "user_channel")
-      println("custodian user df: ")
-      custodianUserDF.show()
       custodianUserDF
     }
 
