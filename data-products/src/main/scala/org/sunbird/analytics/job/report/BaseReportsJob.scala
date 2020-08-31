@@ -33,11 +33,17 @@ trait BaseReportsJob {
     val dataSchema = schema.getOrElse(new StructType())
     import org.apache.spark.sql.functions.col
     val selectedCols = columnNames.getOrElse(Seq("*"))
+    println("selectedCols" + selectedCols)
+    println("columnNames==" + columnNames)
     if (dataSchema.nonEmpty) {
-      spark.read.schema(dataSchema).format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
+     val result =  spark.read.schema(dataSchema).format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
+      println("=====result===" + result.show(false))
+      result
     }
     else {
-      spark.read.format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
+      val res = spark.read.format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
+      println("=====result===" + res.show(false))
+      res
     }
   }
 
