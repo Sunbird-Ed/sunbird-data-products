@@ -81,8 +81,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
     val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
-    val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
-    val reportPath = modelParams.getOrElse("reportPath", "course-progress-reports/").asInstanceOf[String]
+    val reportPath = modelParams.getOrElse("reportPath", AppConf.getConfig("assessment.metrics.cloud.objectKey")).asInstanceOf[String]
     val assessmentProfileDF = getAssessmentProfileDF(fetchData).persist(StorageLevel.MEMORY_ONLY)
     for (index <- filteredBatches.indices) {
       val row = filteredBatches(index)
@@ -219,11 +218,9 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), reportPath)
     if (StringUtils.isNotBlank(uploadToAzure) && StringUtils.equalsIgnoreCase("true", uploadToAzure)) {
       val transposedData = transposeDF(reportDF)
-      println("transposedData==" + transposedData.show(false))
       val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
-        .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
+        .dropDuplicates("userid", "courseid", "batchid").drop("content_name", "courseid", "batchid", "grand_total")
       val finalDF = getFinalDF(reportData, finalColumnMapping, finalColumnOrder)
-      println("finalDF===" + finalDF.show(false))
       JobLogger.log(s"Report is uploading: report-$batchid", None, INFO)
       finalDF.saveToBlobStore(storageConfig, "csv", "report-" + batchid, Option(Map("header" -> "true")), None);
     } else {
