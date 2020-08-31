@@ -50,7 +50,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     } else List()
     val jobConfig = JSONUtils.deserialize[JobConfig](conf(0))
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig)
-
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     execute(jobConfig, batchIds)
@@ -58,16 +57,11 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
 
   private def execute(config: JobConfig, batchList: List[String])(implicit sc: SparkContext, fc: FrameworkContext) = {
     val readConsistencyLevel: String = AppConf.getConfig("course.metrics.cassandra.input.consistency")
-    val sparkConf = sc.getConf
-      .set("es.write.operation", "upsert")
+    val sparkConf = sc.getConf.set("es.write.operation", "upsert")
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
-
-    val container = AppConf.getConfig("cloud.container.reports")
-    val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
-    val storageConfig = getStorageConfig(container, objectKey)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, storageConfig, fetchData, config, batchList)
+      prepareReport(spark, getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("course.metrics.cloud.objectKey")), fetchData, config, batchList)
     })
     metrics.put("totalExecutionTime", time._1)
     JobLogger.end("CourseMetrics Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
@@ -77,7 +71,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
   def getUserCourseInfo(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
-
     val userAgg1 = fetchData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("user_id", "activity_id", "agg", "context_id")))
     val userAgg = userAgg1.map(row => {
       UserAggData(row.getString(0), row.getString(1), row.get(2).asInstanceOf[Map[String, Int]]("completedCount"), row.getString(3))
@@ -187,7 +180,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     userCourses.unpersist(true)
     userCourseData.unpersist(true)
   }
-
 
   def getReportDF(batch: CourseBatch, userDF: DataFrame, userCourseDenormDF: DataFrame, applyPrivacyPolicy: Boolean)(implicit spark: SparkSession): DataFrame = {
     JobLogger.log("Creating report for batch " + batch.batchid, None, INFO)
