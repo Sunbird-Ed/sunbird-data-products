@@ -1,20 +1,18 @@
 package org.sunbird.analytics.util
 
-import org.apache.spark
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, concat_ws, explode, lit, lower, to_date}
+import org.apache.spark.sql.functions.{col, concat_ws, lit, to_date}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Encoders, Row, SQLContext, SparkSession}
+import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
-import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
-import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.{cassandraUrl, sunbirdCoursesKeyspace}
+import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
@@ -88,7 +86,7 @@ object CourseUtils {
 
   def getTenantInfo(spark: SparkSession, loadData: (SparkSession, Map[String, String]) => DataFrame): DataFrame = {
     val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
-    loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace)).select("slug","id")
+    loadData(spark, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace)).select("slug", "id")
   }
 
   def postDataToBlob(data: DataFrame, outputConfig: OutputConfig, config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext) = {
@@ -103,7 +101,7 @@ object CourseUtils {
     val filteredDf = data.select(fieldsList.head, fieldsList.tail: _*)
     val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*).na.fill("unknown")
     val reportFinalId = if (outputConfig.label.nonEmpty && outputConfig.label.get.nonEmpty) reportConfig.id + "/" + outputConfig.label.get else reportConfig.id
-    val finalDf = renamedDf.na.replace("Status", Map("0"->BatchStatus(0).toString, "1"->BatchStatus(1).toString, "2"->BatchStatus(2).toString))
+    val finalDf = renamedDf.na.replace("Status", Map("0" -> BatchStatus(0).toString, "1" -> BatchStatus(1).toString, "2" -> BatchStatus(2).toString))
     saveReport(finalDf, config ++ Map("dims" -> dimsLabels, "reportId" -> reportFinalId, "fileParameters" -> outputConfig.fileParameters), reportConfig)
   }
 
@@ -121,10 +119,10 @@ object CourseUtils {
     } else {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), None)
     }
-    if(mergeConfig.nonEmpty) {
+    if (mergeConfig.nonEmpty) {
       val mergeConf = mergeConfig.get
       val reportPath = mergeConf.reportPath
-      val fileList = getDeltaFileList(deltaFiles,reportId,reportPath,storageConfig)
+      val fileList = getDeltaFileList(deltaFiles, reportId, reportPath, storageConfig)
       val mergeScriptConfig = MergeScriptConfig(reportId, mergeConf.frequency, mergeConf.basePath, mergeConf.rollup,
         mergeConf.rollupAge, mergeConf.rollupCol, mergeConf.rollupRange, MergeFiles(fileList, List("Date")), container, mergeConf.postContainer)
       mergeReport(mergeScriptConfig)
@@ -134,13 +132,13 @@ object CourseUtils {
   }
 
   def getDeltaFileList(deltaFiles: List[String], reportId: String, reportPath: String, storageConfig: StorageConfig): List[Map[String, String]] = {
-    if("content_progress_metrics".equals(reportId) || "etb_metrics".equals(reportId)) {
-      deltaFiles.map{f =>
+    if ("content_progress_metrics".equals(reportId) || "etb_metrics".equals(reportId)) {
+      deltaFiles.map { f =>
         val reportPrefix = f.split(reportId)(1)
         Map("reportPath" -> reportPrefix, "deltaPath" -> f.substring(f.indexOf(storageConfig.fileName, 0)))
       }
     } else {
-      deltaFiles.map{f =>
+      deltaFiles.map { f =>
         val reportPrefix = f.substring(0, f.lastIndexOf("/")).split(reportId)(1)
         Map("reportPath" -> (reportPrefix + "/" + reportPath), "deltaPath" -> f.substring(f.indexOf(storageConfig.fileName, 0)))
       }
@@ -165,7 +163,6 @@ object CourseUtils {
 
   def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
-    import sqlContext.implicits._
     val apiUrl = Constants.COMPOSITE_SEARCH_URL
     val request =
       s"""{
@@ -183,7 +180,7 @@ object CourseUtils {
     val response = RestUtil.post[CourseResponse](apiUrl, request)
     if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
       response.result.content.head
-    } else CourseBatchInfo("","","","",List())
+    } else CourseBatchInfo("", "", "", "", List())
   }
 
   def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
@@ -217,19 +214,20 @@ object CourseUtils {
     courseBatchDF.unpersist(true)
     activeBatchList
   }
+
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
+    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname")))
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
   }
 
-  def getFilteredBatches(spark:SparkSession, activeBatches:DataFrame, config:JobConfig): Array[Row] ={
+  def getFilteredBatches(spark: SparkSession, activeBatches: DataFrame, config: JobConfig): Array[Row] = {
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
     val modelParams = config.modelParams.get
-    val contentFilters = modelParams.getOrElse("contentFilters",Map()).asInstanceOf[Map[String,AnyRef]]
-    val filteredBatches = if(contentFilters.nonEmpty) {
+    val contentFilters = modelParams.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
+    val filteredBatches = if (contentFilters.nonEmpty) {
       val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
       activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
         .select(activeBatches.col("*")).collect
@@ -243,5 +241,31 @@ object CourseUtils {
     val t1 = System.currentTimeMillis()
     JobLogger.log(msg + (t1 - t0), None, INFO)
     result
+  }
+
+  def getContentNames(spark: SparkSession, content: List[String], contentType: String): DataFrame = {
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+    val apiUrl = Constants.COMPOSITE_SEARCH_URL
+    val contentList = JSONUtils.serialize(content)
+    val request =
+      s"""
+         |{
+         |  "request": {
+         |    "filters": {
+         |      "contentType": "$contentType",
+         |       "identifier": $contentList
+         |    },
+         |    "sort_by": {"createdOn":"desc"},
+         |    "limit": 10000,
+         |    "fields": ["name","identifer","contentType"]
+         |  }
+         |}
+       """.stripMargin
+    val response = RestUtil.post[CourseResponse](apiUrl, request)
+    val assessmentInfo = if (null != response && response.responseCode.equalsIgnoreCase("ok") && response.result.count > 0) {
+      response.result.content
+    } else List()
+    assessmentInfo.toDF().select("name", "identifier")
   }
 }

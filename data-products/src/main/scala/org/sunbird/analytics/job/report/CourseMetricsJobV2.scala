@@ -12,8 +12,7 @@ import org.ekstep.analytics.framework.Level._
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.sunbird.analytics.job.report.CourseMetricsJobV2.{finalColumnMapping, finalColumnOrder}
-import org.sunbird.analytics.util.{CourseUtils, UserCache, UserData}
+import org.sunbird.analytics.util.{CourseUtils, UserCache}
 import org.sunbird.cloud.storage.conf.AppConf
 
 
@@ -144,16 +143,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
   }
 
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
-
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
-    import sqlContext.implicits._
-    val activeBatches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
     val modelParams = config.modelParams.get
-    val contentFilters = modelParams.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
-    val applyPrivacyPolicy = modelParams.getOrElse("applyPrivacyPolicy", true).asInstanceOf[Boolean]
-    val reportPath = modelParams.getOrElse("reportPath", "course-progress-reports/").asInstanceOf[String]
-    val filteredBatches = CourseUtils.getFilteredBatches(spark, activeBatches, config)
+    val filteredBatches = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace), config)
     val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
       CourseUtils.recordTime(CourseUtils.getUserData(spark, loadData), "Time taken to get generate the userData: ")
@@ -179,9 +172,9 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = CourseUtils.recordTime(getReportDF(batch, userCourseData, userEnrolmentDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} : ")
+          val reportDF = CourseUtils.recordTime(getReportDF(batch, userCourseData, userEnrolmentDF, modelParams.getOrElse("applyPrivacyPolicy", true).asInstanceOf[Boolean]), s"Time taken to generate DF for batch ${batch.batchid} : ")
           val totalRecords = reportDF.count()
-          CourseUtils.recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath), s"Time taken to save report in blobstore for batch ${batch.batchid} : ")
+          CourseUtils.recordTime(saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, modelParams.getOrElse("reportPath", "course-progress-reports/").asInstanceOf[String]), s"Time taken to save report in blobstore for batch ${batch.batchid} : ")
           reportDF.unpersist(true)
         })
         JobLogger.log(s"Time taken to generate report for batch ${batch.batchid} is ${result._1}. Remaining batches - ${activeBatchesCount.getAndDecrement()}", None, INFO)
@@ -209,21 +202,13 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
       .withColumn("channel", lit(batch.courseChannel))
       .withColumn("generatedOn", date_format(from_utc_timestamp(current_timestamp.cast(DataTypes.TimestampType), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
       .withColumn("certificate_status", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
-      .select(
-        col("batchid"),
-        col("userid"),
-        col("enrolleddate"),
-        col("completedon"),
-        col("active"),
-        col("courseid"),
-        col("generatedOn"),
-        col("certificate_status"),
+      .select(col("batchid"), col("userid"), col("enrolleddate"), col("completedon"),
+        col("active"), col("courseid"), col("generatedOn"), col("certificate_status"),
         col("channel").as("course_channel")
       )
-    val contextId = s"cb:${batch.batchid}"
     // userCourseDenormDF lacks some of the user information that need to be part of the report here, it will add some more user details
     val reportDF = userEnrolmentDF
-      .join(userDF, userDF.col("contextid") === contextId &&
+      .join(userDF, userDF.col("contextid") === s"cb:${batch.batchid}" &&
         userEnrolmentDF.col("courseid") === userDF.col("courseid") &&
         userEnrolmentDF.col("userid") === userDF.col("userid"), "inner")
       .select(

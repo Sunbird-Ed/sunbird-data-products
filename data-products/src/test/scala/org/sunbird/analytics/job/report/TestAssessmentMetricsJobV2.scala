@@ -159,7 +159,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
   }
 
   it should "return an empty list if no assessment names found for given content" in {
-    val result = AssessmentMetricsJobV2.getAssessmentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
+    val result = CourseUtils.getContentNames(spark, List("do_1126458775024025601296","do_1126458775024025"), "Resource")
     result.collect().length should be(0)
   }
 
