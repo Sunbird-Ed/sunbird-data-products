@@ -217,10 +217,13 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), reportPath)
     if (StringUtils.isNotBlank(uploadToAzure) && StringUtils.equalsIgnoreCase("true", uploadToAzure)) {
       val transposedData = transposeDF(reportDF)
+      println("transposedData==" + transposedData.show(false))
       val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
         .dropDuplicates("userid", "courseid", "batchid").drop("content_name")
-      getFinalDF(reportData, finalColumnMapping, finalColumnOrder)
-        .saveToBlobStore(storageConfig, "csv", "report-" + batchid, Option(Map("header" -> "true")), None);
+      val finalDF = getFinalDF(reportData, finalColumnMapping, finalColumnOrder)
+      println("finalDF===" + finalDF.show(false))
+      JobLogger.log(s"Report is uploading: report-$batchid")
+      finalDF.saveToBlobStore(storageConfig, "csv", "report-" + batchid, Option(Map("header" -> "true")), None);
     } else {
       JobLogger.log("Skipping uploading reports into to azure", None, INFO)
     }
