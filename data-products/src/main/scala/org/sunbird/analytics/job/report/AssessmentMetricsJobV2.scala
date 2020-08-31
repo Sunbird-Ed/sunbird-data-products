@@ -26,6 +26,15 @@ case class CourseBatchOutput(courseid: String, batchid: String, startdate: Strin
 object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseReportsJob {
 
   implicit val className = "org.ekstep.analytics.job.AssessmentMetricsJobV2"
+
+  val finalColumnMapping = Map(UserCache.externalid ->  "External ID", UserCache.userid -> "User ID",
+    "username" -> "User Name",UserCache.maskedemail -> "Email ID", UserCache.maskedphone -> "Mobile Number",
+    UserCache.orgname -> "Organisation Name", UserCache.state -> "State Name", UserCache.district -> "District Name",
+    UserCache.schooludisecode -> "School UDISE Code", UserCache.schoolname -> "School Name", "total_sum_score" -> "Total Score")
+
+  val finalColumnOrder = List("External ID","User ID","User Name","Email ID","Mobile Number","Organisation Name",
+    "State Name","District Name","School UDISE Code","School Name", "Total Score")
+
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def name(): String = "AssessmentMetricsJobV2"
 
@@ -70,22 +79,14 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       CourseUtils.recordTime(CourseUtils.getUserData(spark, loadData), "Time taken to get generate the userData- ")
     })
     val modelParams = config.modelParams.get
-    val contentFilters = modelParams.getOrElse("contentFilters",Map()).asInstanceOf[Map[String,AnyRef]]
-    val applyPrivacyPolicy = modelParams.getOrElse("applyPrivacyPolicy", true).asInstanceOf[Boolean]
-    val reportPath = modelParams.getOrElse("reportPath", AppConf.getConfig("assessment.metrics.cloud.objectKey")).asInstanceOf[String]
-
-    val filteredBatches = if(contentFilters.nonEmpty) {
-      val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
-      batches.join(filteredContents, batches.col("courseid") === filteredContents.col("identifier"), "inner")
-        .select(batches.col("*")).collect
-    } else batches.collect
-
+    val filteredBatches = CourseUtils.getFilteredBatches(spark, batches, config)
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
     val uploadToAzure = AppConf.getConfig("course.upload.reports.enabled")
     val tempDir = AppConf.getConfig("assessment.metrics.temp.dir")
+    val reportPath = modelParams.getOrElse("reportPath","course-progress-reports/").asInstanceOf[String]
     val assessmentProfileDF = getAssessmentProfileDF(loadData).persist(StorageLevel.MEMORY_ONLY)
     for (index <- filteredBatches.indices) {
       val row = filteredBatches(index)
@@ -93,7 +94,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       val batch = CourseBatch(row.getString(1), row.getString(2), row.getString(3), courses.channel);
       if (null != courses.framework && courses.framework.nonEmpty && batchFilters.toLowerCase.contains(courses.framework.toLowerCase)) {
         val result = CommonUtil.time({
-          val reportDF = CourseUtils.recordTime(getReportDF(batch, userData._2, assessmentProfileDF, applyPrivacyPolicy), s"Time taken to generate DF for batch ${batch.batchid} - ")
+          val reportDF = CourseUtils.recordTime(getReportDF(batch, userData._2, assessmentProfileDF, modelParams.getOrElse("applyPrivacyPolicy", true).asInstanceOf[Boolean]), s"Time taken to generate DF for batch ${batch.batchid} - ")
           val contentIds: List[String] = reportDF.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
           if (contentIds.nonEmpty) {
             val denormalizedDF = CourseUtils.recordTime(denormAssessment(reportDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY), s"Time take to denorm the assessment - ")
@@ -283,26 +284,34 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       .getItem(1))), lit("%")))
   }
 
-  def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame, reportPath: String): String = {
+  def saveToAzure(reportDF: DataFrame, url: String, batchId: String, transposedData: DataFrame, reportPath: String): Unit = {
     val storageConfig = getStorageConfig(AppConf.getConfig("cloud.container.reports"), reportPath)
-    val azureData = reportDF.select(
-      reportDF.col(UserCache.externalid).as("External ID"),
-      reportDF.col(UserCache.userid).as("User ID"),
-      reportDF.col("username").as("User Name"),
-      reportDF.col(UserCache.maskedemail).as("Email ID"),
-      reportDF.col(UserCache.maskedphone).as("Mobile Number"),
-      reportDF.col(UserCache.orgname).as("Organisation Name"),
-      reportDF.col(UserCache.state).as("State Name"),
-      reportDF.col(UserCache.district).as("District Name"),
-      reportDF.col(UserCache.schooludisecode).as("School UDISE Code"),
-      reportDF.col(UserCache.schoolname).as("School Name"),
-      transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
-      reportDF.col("total_sum_score").as("Total Score"))
-      .drop(UserCache.userid, "courseid", "batchid")
-    azureData.saveToBlobStore(storageConfig, "csv", "report-" + batchId, Option(Map("header" -> "true")), None);
-    s"${AppConf.getConfig("cloud.container.reports")}/${AppConf.getConfig("assessment.metrics.cloud.objectKey")}/report-$batchId.csv"
+    val finalDF = getFinalDF(reportDF, finalColumnMapping, finalColumnOrder)
+        .join(transposedData).drop(UserCache.userid, "courseid", "batchid")
+    println("transposedData" + transposedData.show(false))
+    println("FinalDF" + finalDF.show(false))
+    finalDF.saveToBlobStore(storageConfig, "csv", "report-" + batchId, Option(Map("header" -> "true")), None);
 
-  }
+
+
+    //    val azureData = reportDF.select(
+//      reportDF.col(UserCache.externalid).as("External ID"),
+//      reportDF.col(UserCache.userid).as("User ID"),
+//      reportDF.col("username").as("User Name"),
+//      reportDF.col(UserCache.maskedemail).as("Email ID"),
+//      reportDF.col(UserCache.maskedphone).as("Mobile Number"),
+//      reportDF.col(UserCache.orgname).as("Organisation Name"),
+//      reportDF.col(UserCache.state).as("State Name"),
+//      reportDF.col(UserCache.district).as("District Name"),
+//      reportDF.col(UserCache.schooludisecode).as("School UDISE Code"),
+//      reportDF.col(UserCache.schoolname).as("School Name"),
+//      transposedData.col("*"), // Since we don't know the content name column so we are using col("*")
+//      reportDF.col("total_sum_score").as("Total Score"))
+//      .drop(UserCache.userid, "courseid", "batchid")
+//    azureData.saveToBlobStore(storageConfig, "csv", "report-" + batchId, Option(Map("header" -> "true")), None);
+//    s"${AppConf.getConfig("cloud.container.reports")}/${AppConf.getConfig("assessment.metrics.cloud.objectKey")}/report-$batchId.csv"
+//
+ }
 
   def save(reportDF: DataFrame, url: String, spark: SparkSession, batchId: String, reportPath: String)(implicit fc: FrameworkContext): Unit = {
     val transposedData = transposeDF(reportDF)

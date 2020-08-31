@@ -1,10 +1,13 @@
 package org.sunbird.analytics.job.report
 
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.functions.{col, concat, concat_ws, first, lit}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.ekstep.analytics.framework.util.CommonUtil
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
+import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.util.{CommonUtil, JobLogger}
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext, StorageConfig}
+import org.sunbird.analytics.job.report.CourseMetricsJobV2.finalColumnMapping
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
@@ -97,7 +100,15 @@ trait BaseReportsJob {
     } else {
       org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(provider), Option(provider));
     }
-
   }
+
+  def getFinalDF(reportDF: DataFrame, finalColumnMapping: Map[String, String], finalColumnOrder: List[String]): DataFrame = {
+    val fields = reportDF.schema.fieldNames
+    val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
+    val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
+    val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
+    reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
+  }
+
 
 }

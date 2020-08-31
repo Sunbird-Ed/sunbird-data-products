@@ -1,19 +1,20 @@
 package org.sunbird.analytics.util
 
+import org.apache.spark
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{col, concat_ws, explode, lit, lower, to_date}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoders, Row, SQLContext, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
-import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.cassandraUrl
+import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.{cassandraUrl, sunbirdCoursesKeyspace}
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
@@ -222,11 +223,19 @@ object CourseUtils {
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
   }
 
-//  def getUserEnrollmentDF(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, keyspace:String)(implicit spark: SparkSession): DataFrame = {
-//    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> keyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
-//      .filter(lower(col("active")).equalTo("true"))
-//  }
-
+  def getFilteredBatches(spark:SparkSession, activeBatches:DataFrame, config:JobConfig): Array[Row] ={
+    implicit val sparkSession: SparkSession = spark
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+    val modelParams = config.modelParams.get
+    val contentFilters = modelParams.getOrElse("contentFilters",Map()).asInstanceOf[Map[String,AnyRef]]
+    val filteredBatches = if(contentFilters.nonEmpty) {
+      val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
+      activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
+        .select(activeBatches.col("*")).collect
+    } else activeBatches.collect
+    filteredBatches
+  }
 
   def recordTime[R](block: => R, msg: String): R = {
     val t0 = System.currentTimeMillis()
