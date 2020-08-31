@@ -78,27 +78,27 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
   }
 
   "TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
     val schema = Encoders.product[UserData].schema
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("user_id","activity_id","agg","context_id")))
       .anyNumberOfTimes()
       .returning(userAggDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("identifier","hierarchy")))
       .anyNumberOfTimes()
       .returning(contentHierarchyDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
 
-    CourseMetricsJobV2.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
+    CourseMetricsJobV2.fetchData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
 
 
     val convertMethod = udf((value: mutable.WrappedArray[String]) => {
@@ -108,22 +108,22 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     }, new ArrayType(MapType(StringType, StringType), true))
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon")))
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
       .anyNumberOfTimes()
       .returning(externalIdentityDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
       .anyNumberOfTimes()
       .returning(systemSettingDF)
@@ -156,10 +156,10 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
-    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List())
+    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.fetchData, config, List())
 
     implicit val sc = spark
-    val courseBatchInfo = CourseMetricsJobV2.getUserCourseInfo(reporterMock.loadData)
+    val courseBatchInfo = CourseMetricsJobV2.getUserCourseInfo(reporterMock.fetchData)
 
     val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
     val userCourseDf = userDF.withColumn("course_completion", lit(""))
@@ -207,22 +207,22 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val storageConfig = StorageConfig("local", "", "/tmp/course-metrics")
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
     val schema = Encoders.product[UserData].schema
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("user_id","activity_id","agg","context_id")))
       .anyNumberOfTimes()
       .returning(userAggDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(List("identifier", "hierarchy")))
       .anyNumberOfTimes()
       .returning(contentHierarchyDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
@@ -234,27 +234,27 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     }, new ArrayType(MapType(StringType, StringType), true))
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("batchid","userid","courseid","active","certificates","enrolleddate","completedon")))
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("firstname","lastname")))
       .anyNumberOfTimes()
       .returning(userDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
       .anyNumberOfTimes()
       .returning(externalIdentityDF)
 
-    (reporterMock.loadData _)
+    (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),None)
       .anyNumberOfTimes()
       .returning(systemSettingDF)
 
-    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
+    CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.fetchData, jobConfig, List())
   }
 
   it should "parse and return level 1 data for given course hierarchy" in {
