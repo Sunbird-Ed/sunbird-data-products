@@ -8,10 +8,7 @@ import org.scalatest.BeforeAndAfterAll
 
 class BaseReportSpec extends BaseSpec with BeforeAndAfterAll {
 
-  case class BatchReportOutput(`User ID`: String, `School Name`: String, `Mobile Number`: String, `Certificate Status`: String,
-                            `Completion Date`: String, `District Name`: String, `User Name`: String, `External ID`: String,
-                            `State Name`: String, `Enrolment Date`: String, `Email ID`: String, `Course Progress`: String,
-                            `Organisation Name`: String, `Block Name`: String, `School UDISE Code`: String)
+
 
   override def beforeAll() {
     DateTimeUtils.setCurrentMillisFixed(1531047600000L)
