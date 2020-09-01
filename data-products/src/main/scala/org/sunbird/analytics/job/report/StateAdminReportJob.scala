@@ -81,19 +81,18 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
         val locationDF = locationData()
         //to-do later check if externalid is necessary not-null check is necessary
-        val orgExternalIdDf = loadOrganisationData().select("externalid","channel", "id","orgName").filter(col("channel").isNotNull)
-        val userSelfDeclaredExtIdDF = userSelfDeclaredDataDF.join(orgExternalIdDf, userSelfDeclaredDataDF.col("orgid") === orgExternalIdDf.col("id"), "leftouter").
-            select(userSelfDeclaredDataDF.col("*"), orgExternalIdDf.col("*"))
-        val userSelfDeclaredWithSubOrgDF = userSelfDeclaredExtIdDF.withColumn("Diksha Sub-Org ID", when(userSelfDeclaredExtIdDF.col("declared-school-udise-code") === orgExternalIdDf.col("externalid"), userSelfDeclaredExtIdDF.col("declared-school-udise-code")).otherwise(lit("")))
+        val orgExternalIdDf = loadOrganisationData().select("externalid","channel", "id","orgName","rootorgid").filter(col("channel").isNotNull)
+        val userSelfDeclaredExtIdDF = userSelfDeclaredDataDF.join(orgExternalIdDf, userSelfDeclaredDataDF.col("orgid") === orgExternalIdDf.col("rootorgid") and userSelfDeclaredDataDF.col("declared-school-udise-code") === orgExternalIdDf.col("externalid"), "leftouter").
+            select(userSelfDeclaredDataDF.col("*"), orgExternalIdDf.col("externalid").as("Diksha Sub-Org ID"), col("channel"))
         //decrypting email and phone values
         //check declared-email and declared-phone positions in the DF while decrypting
-        val userDecrpytedDataDF = decryptDF(userSelfDeclaredWithSubOrgDF)
+        val userDecrpytedDataDF = decryptDF(userSelfDeclaredExtIdDF)
         //appending decrypted values to the user-external-identifier dataframe
-        val userExternalDecryptData  = userSelfDeclaredWithSubOrgDF.join(userDecrpytedDataDF, userSelfDeclaredWithSubOrgDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
-            select(userSelfDeclaredWithSubOrgDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
+        val userExternalDecryptData  = userSelfDeclaredExtIdDF.join(userDecrpytedDataDF, userSelfDeclaredExtIdDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
+            select(userSelfDeclaredExtIdDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
     
         //loading user data with location-details based on the user's from the user-external-identifier table
-        var userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
+        val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
                 col("locationIds"),
                 concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
