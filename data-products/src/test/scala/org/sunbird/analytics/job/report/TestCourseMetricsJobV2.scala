@@ -141,13 +141,13 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       """.stripMargin
 
     val doc: Json = parse(json).getOrElse(Json.Null)
-    val results = List(DruidResult.apply(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC), doc));
-    val druidResponse = DruidResponse.apply(results, QueryType.GroupBy)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc));
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
 
     implicit val mockDruidConfig: DruidConfig = DruidConfig.DefaultConfig
 
     val mockDruidClient = mock[DruidClient]
-    (mockDruidClient.doQuery(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, config, List())
@@ -157,7 +157,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
 
     val batchInfo = List(CourseBatch("01303150537737011211","2020-05-29","2030-06-30","b00bc992ef25f1a9a8d63291e20efc8d"), CourseBatch("0130334873750159361","2020-06-11","2030-06-30","013016492159606784174"))
     val userCourseDf = userDF.withColumn("course_completion", lit(""))
-        .withColumn("level1", lit(""))
+        .withColumn("l1identifier", lit(""))
         .withColumn("l1completionPercentage", lit(""))
         .withColumnRenamed("batchid","contextid")
         .withColumnRenamed("course_id","courseid")
@@ -274,6 +274,19 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .returning(systemSettingDF)
 
     CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
+  }
+
+  it should "parse and return level 1 data for given course hierarchy" in {
+    val contentHierarchy = """{"channel": "b00bc992ef25f1a9a8d63291e20efc8d","mimeType": "application/vnd.ekstep.content-collection","leafNodes": ["do_1130314841730334721104", "do_1130314849898332161107", "do_1130314847650037761106", "do_1130314845426565121105"],"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "Course","identifier": "do_1130934418641469441813","visibility": "Default","leafNodesCount": 2}, {"mimeType": "application/vnd.ekstep.content-collection","children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1130934459053342721817","visibility": "Parent","framework": "NCFCOPY","leafNodesCount": 2}],"contentType": "Course","identifier": "do_1130934445218283521816","visibility": "Default","framework": "NCFCOPY","leafNodesCount": 2,"index": 2,"parent": "do_1130934466492252161819"}],"contentType": "Course","identifier": "do_1130934466492252161819","visibility": "Default","prevState": "Review","name": "Report - Course - NC","status": "Live","prevStatus": "Processing","framework": "NCFCOPY","leafNodesCount": 4}""".stripMargin
+    val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](contentHierarchy)
+
+    val courseData = CourseMetricsJobV2.parseCourseHierarchy(List(hierarchy),0, CourseData("do_120853345678987611","0",List()))
+    courseData.courseid should be("do_120853345678987611")
+    courseData.leafNodesCount should be("4")
+    courseData.level1Data.length should be(2)
+
+    val hierarchyData = CourseMetricsJobV2.parseCourseHierarchy(List(hierarchy),4, CourseData("do_120853345678987611","0",List()))
+    hierarchyData.level1Data.length should be(0)
   }
 
   it should "test redis and cassandra connections" in {

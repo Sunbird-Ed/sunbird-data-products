@@ -17,9 +17,10 @@ from dataproducts.util.utils import create_json, get_data_from_blob, \
                             post_data_to_blob, push_metric_event
 
 class UserDeclarationReport:
-    def __init__(self, data_store_location, states):
+    def __init__(self, data_store_location, states, is_private):
         self.data_store_location = Path(data_store_location)
         self.states = states
+        self.is_private = is_private
 
 
     def init(self):
@@ -29,7 +30,7 @@ class UserDeclarationReport:
             state_result_loc = result_loc.joinpath(slug)
             os.makedirs(state_result_loc, exist_ok=True)
             try:
-                get_data_from_blob(state_result_loc.joinpath('declared_user_detail', '{}.csv'.format(slug)))
+                get_data_from_blob(state_result_loc.joinpath('declared_user_detail', '{}.csv'.format(slug)), is_private=self.is_private)
             except Exception as e:
                 print("declared_user_detail not available for "+slug)
                 continue
@@ -42,4 +43,4 @@ class UserDeclarationReport:
             shutil.make_archive(str(state_result_loc.joinpath('declared_user_detail', slug)),
                                 'zip',
                                 str(state_result_loc.joinpath('personas')))
-            post_data_to_blob(state_result_loc.joinpath('declared_user_detail', '{}.zip'.format(slug)))
+            post_data_to_blob(state_result_loc.joinpath('declared_user_detail', '{}.zip'.format(slug)), is_private=self.is_private)

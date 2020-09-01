@@ -150,11 +150,13 @@ if __name__ == '__main__':
                             help="DD/MM/YYYY, optional argument for backfill jobs")
 
     parser_ud = subparsers.add_parser('user_detail',
-                                      help='Pulse of nation learning')
+                                      help='User detail')
     parser_ud.add_argument("--data_store_location", type=str,
                            help="The path to local data folder")
     parser_ud.add_argument("--states", type=str,
                            help="State slugs in array")
+    parser_ud.add_argument("--is_private", action='store_true',
+                            help="Upload report to private blob", default=False)
 
     parser_udd = subparsers.add_parser('user_declared_detail',
                                       help='User declared details')
@@ -162,6 +164,8 @@ if __name__ == '__main__':
                            help="The path to local data folder")
     parser_udd.add_argument("--states", type=str,
                            help="State slugs in array")
+    parser_udd.add_argument("--is_private", action='store_true',
+                            help="Upload report to private blob", default=False)
 
     parser_report_merger = subparsers.add_parser('report_merger',
                                                  help='Report Merger')
@@ -278,13 +282,13 @@ if __name__ == '__main__':
     elif args.cmd == "user_detail":
         from dataproducts.services.location.user_detail_report import UserDetailReport
 
-        user_detail = UserDetailReport(args.data_store_location, args.states)
+        user_detail = UserDetailReport(args.data_store_location, args.states, args.is_private)
         user_detail.init()
 
     elif args.cmd == "user_declared_detail":
         from dataproducts.services.location.user_declaration_report import UserDeclarationReport
 
-        user_declared_detail = UserDeclarationReport(args.data_store_location, args.states)
+        user_declared_detail = UserDeclarationReport(args.data_store_location, args.states, args.is_private)
         user_declared_detail.init()
 
     elif args.cmd == "report_merger":
