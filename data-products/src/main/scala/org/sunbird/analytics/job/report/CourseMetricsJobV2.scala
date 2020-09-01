@@ -71,12 +71,12 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
   def getUserCourseInfo(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
-    val userAgg1 = fetchData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("user_id", "activity_id", "agg", "context_id")))
+    val userAgg1 = fetchData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("user_id", "activity_id", "agg", "context_id")))
     val userAgg = userAgg1.map(row => {
       UserAggData(row.getString(0), row.getString(1), row.get(2).asInstanceOf[Map[String, Int]]("completedCount"), row.getString(3))
     }).toDF()
 
-    val hierarchyData = fetchData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("identifier", "hierarchy")))
+    val hierarchyData = fetchData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), cassandraUrl, Some(new StructType()), Some(Seq("identifier", "hierarchy")))
 
     val hierarchyDataDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
@@ -135,11 +135,15 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     } else prevData
   }
 
-  def prepareReport(spark: SparkSession, storageConfig: StorageConfig, fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
+  def prepareReport(spark: SparkSession,
+                    storageConfig: StorageConfig,
+                    fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame,
+                    config: JobConfig, batchList: List[String]
+                   )(implicit fc: FrameworkContext): Unit = {
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     val modelParams = config.modelParams.get
-    val filteredBatches = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fetchData, batchList, sunbirdCoursesKeyspace), config)
+    val filteredBatches = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fetchData, cassandraUrl,  batchList, sunbirdCoursesKeyspace), config)
     val userCourses = getUserCourseInfo(fetchData).persist(StorageLevel.MEMORY_ONLY)
     val userData = CommonUtil.time({
       CourseUtils.recordTime(CourseUtils.getUserData(spark, fetchData), "Time taken to get generate the userData: ")
@@ -148,8 +152,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
-    val userEnrolmentDF = fetchData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon"))).persist(StorageLevel.MEMORY_ONLY)
-
+    val userEnrolmentDF = fetchData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon"))).persist(StorageLevel.MEMORY_ONLY)
     val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
       .select(userData._2.col("*"),
         userCourses.col("courseid"),
@@ -158,7 +161,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
         userCourses.col("l1identifier"),
         userCourses.col("l1completionPercentage"))
     userCourseData.persist(StorageLevel.MEMORY_ONLY)
-
     for (index <- filteredBatches.indices) {
       val row = filteredBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
@@ -222,6 +224,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
         col("l1completionPercentage")
       ).persist(StorageLevel.MEMORY_ONLY)
 
+    println("CourseReportDF" + reportDF.show(false))
     if (applyPrivacyPolicy) {
       reportDF.withColumn(UserCache.externalid, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.externalid)).otherwise(""))
         .withColumn(UserCache.schoolname, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schoolname)).otherwise(""))

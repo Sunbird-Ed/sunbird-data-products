@@ -113,7 +113,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
@@ -146,7 +146,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
@@ -185,7 +185,7 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
 
     val schema = Encoders.product[UserData].schema
     (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 

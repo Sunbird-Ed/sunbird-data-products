@@ -191,16 +191,16 @@ object CourseUtils {
     } else List[CourseBatchInfo]()
   }
 
-  def getActiveBatches(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, batchList: List[String], sunbirdCoursesKeyspace: String)
+  def getActiveBatches(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, url:String, batchList: List[String], sunbirdCoursesKeyspace: String)
                       (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     val courseBatchDF = if (batchList.nonEmpty) {
-      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
         .filter(batch => batchList.contains(batch.getString(1)))
         .persist(StorageLevel.MEMORY_ONLY)
     }
     else {
-      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
         .persist(StorageLevel.MEMORY_ONLY)
     }
 

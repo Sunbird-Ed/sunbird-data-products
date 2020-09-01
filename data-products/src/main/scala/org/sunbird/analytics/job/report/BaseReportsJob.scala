@@ -19,6 +19,7 @@ trait BaseReportsJob {
   val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
   val cassandraUrl = "org.apache.spark.sql.cassandra"
+  val redisUrl = "org.apache.spark.sql.redis"
 
   def loadData(spark: SparkSession, settings: Map[String, String], schema: Option[StructType] = None): DataFrame = {
     val dataFrameReader = spark.read.format("org.apache.spark.sql.cassandra").options(settings)

@@ -94,7 +94,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .returning(contentHierarchyDF)
 
     (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userDF)
 
@@ -222,7 +222,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       .returning(contentHierarchyDF)
 
     (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname","lastname")))
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userDF)
 
