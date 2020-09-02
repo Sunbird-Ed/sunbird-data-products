@@ -1,5 +1,6 @@
 package org.sunbird.learner.jobs
 
+import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.sql.{Encoders, SaveMode, SparkSession}
 import org.apache.spark.storage.StorageLevel
 
@@ -12,16 +13,17 @@ case class GroupMember(groupid: String, role: String, userid: String, createdby:
                        status: Boolean, updatedby: Option[String], updatedon: java.sql.Timestamp)
 
 object GroupsServiceTablesMigration extends Serializable {
-    def main(cassandraHost: String): Unit = {
+    private val config: Config = ConfigFactory.load
+    
+    def main(args: Array[String): Unit = {
         implicit val spark: SparkSession =
             SparkSession
                 .builder()
                 .appName("GroupsServiceTablesMigration")
                 .config("spark.master", "local[*]")
-                .config("spark.cassandra.connection.host", cassandraHost)
-                .config("spark.cassandra.output.batch.size.rows", "10000")
-                .config("spark.cassandra.read.timeoutMS", "60000")
-                //.config("spark.cassandra.input.consistency.level", "ONE")
+                .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
+                .config("spark.cassandra.output.batch.size.rows", config.getString("spark.cassandra.output.batch.size.rows"))
+                .config("spark.cassandra.read.timeoutMS", config.getString("spark.cassandra.output.batch.size.rows"))
                 .getOrCreate()
         val res = time(migrateGroupsData());
         Console.println("Time taken to execute script", res._1);
@@ -64,7 +66,7 @@ object GroupsServiceTablesMigration extends Serializable {
     
     def time[R](block: => R): (Long, R) = {
         val t0 = System.currentTimeMillis()
-        val result = block // call-by-name
+        val result = block
         val t1 = System.currentTimeMillis()
         ((t1 - t0), result)
     }
