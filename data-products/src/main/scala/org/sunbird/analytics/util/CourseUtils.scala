@@ -1,9 +1,10 @@
 package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, concat_ws, lit, to_date}
+import org.apache.spark.sql.functions.{col, concat_ws, desc, lit, row_number, to_date}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
@@ -13,6 +14,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfi
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.cassandraUrl
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
@@ -267,5 +269,12 @@ object CourseUtils {
       response.result.content
     } else List()
     assessmentInfo.toDF().select("name", "identifier")
+  }
+
+  def filterAssessmentDF(assesmentDF:DataFrame): DataFrame = {
+    val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
+    val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
+    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
+    assesmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum").persist(StorageLevel.MEMORY_ONLY)
   }
 }

@@ -13,6 +13,7 @@ import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
+import org.sunbird.analytics.util.CourseUtils.filterAssessmentDF
 import org.sunbird.analytics.util.{CourseUtils, UserCache}
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -114,8 +115,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     val userEnrolmentDF = fetchData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid", "userid", "courseid", "active", "completionpercentage", "enrolleddate", "completedon")))
       .filter(lower(col("active")).equalTo("true")).persist(StorageLevel.MEMORY_ONLY)
     val assessmentProfileDF = fetchData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
-    val assessmentDF = getAssessmentData(assessmentProfileDF)
-
+    val assessmentDF = filterAssessmentDF(assessmentProfileDF)
     val assessmentAggDf = Window.partitionBy("user_id", "batch_id", "course_id")
     val aggregatedAssessmentDF = assessmentDF
       .withColumn("agg_score", sum("total_score") over assessmentAggDf)
@@ -173,29 +173,12 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         col(UserCache.orgname),
         col("username")).persist(StorageLevel.MEMORY_ONLY)
       .filter(col("content_id").isNotNull)
-
-    println("AssessmentReportDF" + reportDF.show(false))
     if (applyPrivacyPolicy) {
       reportDF.withColumn(UserCache.externalid, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.externalid)).otherwise(""))
         .withColumn(UserCache.schoolname, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schoolname)).otherwise(""))
         .withColumn(UserCache.schooludisecode, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schooludisecode)).otherwise(""))
     } else reportDF
   }
-
-
-  /**
-   * Get the Either last updated assessment question or Best attempt assessment
-   *
-   * @param reportDF - Dataframe, Report df.
-   * @return DataFrame
-   */
-  def getAssessmentData(reportDF: DataFrame): DataFrame = {
-    val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
-    val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
-    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
-    reportDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum").persist(StorageLevel.MEMORY_ONLY)
-  }
-
   /**
    * De-norming the assessment report - Adding content name column to the content id
    *
