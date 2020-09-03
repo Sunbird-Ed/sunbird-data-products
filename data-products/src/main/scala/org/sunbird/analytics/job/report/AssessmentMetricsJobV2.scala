@@ -71,18 +71,21 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
 
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext = new SQLContext(spark.sparkContext)
-    val batches = CourseUtils.getActiveBatches(fetchData, cassandraUrl, batchList, sunbirdCoursesKeyspace)
+
     val userData = CommonUtil.time({
       CourseUtils.recordTime(CourseUtils.getUserData(spark, fetchData), "Time taken to get generate the userData- ")
     })
+
     val modelParams = config.modelParams.get
-    val filteredBatches = CourseUtils.getFilteredBatches(spark, batches, config)
+    val filteredBatches = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fetchData, cassandraUrl, batchList, sunbirdCoursesKeyspace), config)
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
+
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
 
     val assessmentProfileDF = getAssessmentProfileDF(fetchData).persist(StorageLevel.MEMORY_ONLY)
+
     for (index <- filteredBatches.indices) {
       val row = filteredBatches(index)
       val courses = CourseUtils.getCourseInfo(spark, row.getString(0))
@@ -204,7 +207,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       val transposedData = transposeDF(reportDF)
       val reportData = transposedData.join(reportDF, Seq("courseid", "batchid", "userid"), "inner")
         .dropDuplicates("userid", "courseid", "batchid").drop("content_name", "courseid", "batchid", "grand_total")
-      val finalDF = getFinalDF(reportData, finalColumnMapping, finalColumnOrder)
+      val finalDF = CustomizeDF(reportData, finalColumnMapping, finalColumnOrder)
       JobLogger.log(s"Report is uploading: report-$batchid", None, INFO)
       finalDF.saveToBlobStore(storageConfig, "csv", "report-" + batchid, Option(Map("header" -> "true")), None);
     } else {

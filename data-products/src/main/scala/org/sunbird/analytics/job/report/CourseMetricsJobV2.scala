@@ -138,16 +138,24 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
   def prepareReport(spark: SparkSession,
                     storageConfig: StorageConfig,
                     fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame,
-                    config: JobConfig, batchList: List[String]
+                    config: JobConfig,
+                    batchList: List[String]
                    )(implicit fc: FrameworkContext): Unit = {
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     val modelParams = config.modelParams.get
-    val filteredBatches = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fetchData, cassandraUrl,  batchList, sunbirdCoursesKeyspace), config)
+
+    val filteredBatches =
+      CourseUtils.getFilteredBatches(spark,
+      CourseUtils.getActiveBatches(fetchData, cassandraUrl,  batchList, sunbirdCoursesKeyspace),
+      config)
+
     val userCourses = getUserCourseInfo(fetchData).persist(StorageLevel.MEMORY_ONLY)
+
     val userData = CommonUtil.time({
       CourseUtils.recordTime(CourseUtils.getUserData(spark, fetchData), "Time taken to get generate the userData: ")
     })
+
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
@@ -240,7 +248,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
       .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
       .drop("batchid", "firstname", "lastname", "null")
-    getFinalDF(reportData, finalColumnMapping, finalColumnOrder)
+    CustomizeDF(reportData, finalColumnMapping, finalColumnOrder)
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
