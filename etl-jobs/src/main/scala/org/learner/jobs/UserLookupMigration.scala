@@ -89,7 +89,7 @@ def migrateData()(implicit spark: SparkSession) {
 
     //Update value as email@orgId, phone@orgId, username@orgId, externalid@orgId
 
-    val stateUserLookupDF = filteredStateUserData.select(col("externalid"),col("userid"),col("provider")).withColumn("type",lit("externalid")).withColumn("value",concat(col("externalid"),lit("@"),col("provider"))).withColumn("userid",col("userid")).select(col("type"),col("value"),col("userid"));
+    val stateUserLookupDF = filteredStateUserData.select(col("externalId"),col("userid"),col("provider")).withColumn("type",lit("externalid")).withColumn("value",concat(col("externalid"),lit("@"),col("provider"))).withColumn("userid",col("userid")).select(col("type"),col("value"),col("userid"));
 
     val emailUserLookupDF = filteredUserData.select(col("email"),col("id")).withColumn("type",lit("email")).withColumn("value",concat(col("email"),lit("@"),translationMap(col("id")))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid"));
 
