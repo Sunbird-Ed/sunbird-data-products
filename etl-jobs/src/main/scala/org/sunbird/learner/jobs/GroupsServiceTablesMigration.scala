@@ -15,7 +15,7 @@ case class GroupMember(groupid: String, role: String, userid: String, createdby:
 object GroupsServiceTablesMigration extends Serializable {
     private val config: Config = ConfigFactory.load
     
-    def main(args: Array[String): Unit = {
+    def main(args: Array[String]): Unit = {
         implicit val spark: SparkSession =
             SparkSession
                 .builder()
