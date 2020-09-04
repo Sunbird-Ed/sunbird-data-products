@@ -7,7 +7,7 @@ import org.joda.time.DateTimeUtils
 import org.scalatest.BeforeAndAfterAll
 
 class BaseReportSpec extends BaseSpec with BeforeAndAfterAll {
-  
+
   override def beforeAll() {
     DateTimeUtils.setCurrentMillisFixed(1531047600000L)
     super.beforeAll()

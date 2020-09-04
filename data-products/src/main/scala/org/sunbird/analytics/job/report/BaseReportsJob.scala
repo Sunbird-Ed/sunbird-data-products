@@ -112,6 +112,9 @@ trait BaseReportsJob {
     }
   }
 
+  /**
+   * Method to rename the column names and ordering of the dataframe columns
+   */
   def customizeDF(reportDF: DataFrame, finalColumnMapping: Map[String, String], finalColumnOrder: List[String]): DataFrame = {
     val fields = reportDF.schema.fieldNames
     val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
