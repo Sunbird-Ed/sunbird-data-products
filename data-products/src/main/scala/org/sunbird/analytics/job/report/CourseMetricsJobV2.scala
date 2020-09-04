@@ -248,7 +248,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
       .pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
       .drop("batchid", "firstname", "lastname", "null")
-    CustomizeDF(reportData, finalColumnMapping, finalColumnOrder)
+    customizeDF(reportData, finalColumnMapping, finalColumnOrder)
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
   }
