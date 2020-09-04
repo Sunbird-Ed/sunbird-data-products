@@ -70,7 +70,7 @@ def migrateData()(implicit spark: SparkSession) {
     //Total records upon loading from db
     println("User Table records:"+ userdata.count() );
     println("User Org Table records:"+ userOrgData.count() );
-    println("State Users Table Records:"+ stateUserExternalIdData.count());
+    println("State Users Table records:"+ stateUserExternalIdData.count());
     
     // Filter out the user records where all of email, phone, username are null.
 
@@ -123,7 +123,7 @@ def migrateData()(implicit spark: SparkSession) {
     println("Email Record Count:"+emailUserLookupDFwithoutNull.count())
     println("Phone Record Count:"+phoneUserLookupDFwithoutNull.count())
     println("Username Record Count:"+usernameUserLookupDFwithoutNull.count())
-    println("Username Record Count:"+stateUserLookupDF.count())
+    println("Stat User Record Count:"+stateUserLookupDF.count())
 
     //Save records to the user_lookup table
 
