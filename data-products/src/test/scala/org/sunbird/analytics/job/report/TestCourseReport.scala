@@ -36,12 +36,12 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
     import sqlContext.implicits._
 
     courseBatchDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updaterv2/course_batch_data.csv").cache()
+      .load("src/test/resources/course-metrics-updater-v3/course_batch_data.csv").cache()
 
     userCoursesDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updaterv2/user_courses_data.csv").cache()
+      .load("src/test/resources/course-metrics-updater-v3/user_courses_data.csv").cache()
 
-    userDF = spark.read.json("src/test/resources/course-metrics-updaterv2/user_data.json").cache()
+    userDF = spark.read.json("src/test/resources/course-metrics-updater-v3/user_data.json").cache()
 
     userActivityAgg = List(
       UserAgg("Course", "do_1130314965721088001129", "c7ef3848-bbdb-4219-8344-817d5b8103fa", "cb:0130561083009187841", Map("completedCount" -> 1), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
@@ -52,8 +52,9 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
     contentHierarchyDF = List(ContentHierarchy("do_1130314965721088001129", """{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "collection","contentType": "Course","visibility": "Default","identifier": "do_1125105431453532161282","leafNodesCount": 3}, {"contentType": "Course","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_1130314965721088001129","visibility": "Default","leafNodesCount": 9}"""),
       ContentHierarchy("do_13456760076615812", """{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282"}, {"contentType": "CourseUnit","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_13456760076615812","visibility": "Default","leafNodesCount": 4}""")).toDF()
 
+
     assessmentProfileDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/assessment-metrics-updaterv2/assessment.csv").cache()
+      .load("src/test/resources/course-metrics-updater-v3/assessment.csv").cache()
   }
 
   "CourseReportJob" should "Generate report for both assessmenUserAggt and course" in {
@@ -107,8 +108,15 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
+//    println("user_enrolments" + alteredUserCourseDf.show(20, false))
+//    println("user" + userDF.show(20, false))
+//    println("content_hierarchy" + contentHierarchyDF.show(20, false))
+//    println("user_activity_agg" + userActivityAgg.show(20, false))
+//    println("course_batch" + courseBatchDF.show(20, false))
+//    println("assessment_aggregator" + assessmentProfileDF.show(20, false))
+
     CourseReport.generateReports(null, JSONUtils.deserialize[Map[String, AnyRef]](strConfig), fetchData = reporterMock.fetchData)
-    println("CourseMetricsReport===")
+
 
   }
 
