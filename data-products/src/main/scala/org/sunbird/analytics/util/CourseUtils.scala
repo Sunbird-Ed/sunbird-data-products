@@ -274,7 +274,7 @@ object CourseUtils {
   def filterAssessmentDF(assesmentDF:DataFrame): DataFrame = {
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
-    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
+    val df = Window.partitionBy("userid", "batchid", "courseid", "content_id").orderBy(desc(columnName))
     assesmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum").persist(StorageLevel.MEMORY_ONLY)
   }
 }
