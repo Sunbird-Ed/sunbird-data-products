@@ -43,9 +43,9 @@ object UserLookupMigration extends Serializable {
         .builder()
         .appName("UserLookupMigration")
         .config("spark.master", "local[*]")
-        .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))
-        .config("spark.cassandra.output.batch.size.rows", config.getString("spark.cassandra.output.batch.size.rows"))
-        .config("spark.cassandra.read.timeoutMS", config.getString("spark.cassandra.read.timeoutMS"))
+        .config("spark.cassandra.connection.host", config.getString("spark.cassandra.connection.host"))  //"127.0.0.1"
+        .config("spark.cassandra.output.batch.size.rows", config.getString("spark.cassandra.output.batch.size.rows")) //10000
+        .config("spark.cassandra.read.timeoutMS",config.getString("spark.cassandra.read.timeoutMS")) //60000
         .getOrCreate()
 
      
@@ -67,6 +67,11 @@ def migrateData()(implicit spark: SparkSession) {
     val userOrgData = spark.read.format("org.apache.spark.sql.cassandra").schema(userOrgSchema).option("keyspace","sunbird").option("table","user_org").load();
     val stateUserExternalIdData = spark.read.format("org.apache.spark.sql.cassandra").schema(stateUserSchema).option("keyspace","sunbird").option("table","usr_external_identity").load();
 
+    //Total records upon loading from db
+    println("User Table records:"+ userdata.count() );
+    println("User Org Table records:"+ userOrgData.count() );
+    println("State Users Table Records:"+ stateUserExternalIdData.count());
+    
     // Filter out the user records where all of email, phone, username are null.
 
     val filteredUserData = userdata.where(col("id").isNotNull && col("username").isNotNull || col("email").isNotNull || col("phone").isNotNull).persist(StorageLevel.MEMORY_ONLY);
@@ -86,16 +91,29 @@ def migrateData()(implicit spark: SparkSession) {
     val userLookupSchema = Encoders.product[UserLookup].schema;
     val userLookupDF =  spark.read.format("org.apache.spark.sql.cassandra").schema(userLookupSchema).option("keyspace", "sunbird").option("table", "user_lookup").load();
     
+    //Extract email, phone, username user records 
 
+     val emailRecords = filteredUserData.select(col("email"),col("id")).where(col("email").isNotNull);
+     val phoneRecords = filteredUserData.select(col("phone"),col("id")).where(col("phone").isNotNull);
+     val usernameRecords = filteredUserData.select(col("username"),col("id")).where(col("username").isNotNull);
+
+    //Remove Duplication
+    val uniqueEmailRecords = emailRecords.dropDuplicates(Seq("email"))
+    val uniquePhoneRecords = phoneRecords.dropDuplicates(Seq("phone"))
+    val uniqueUsernameRecords = usernameRecords.dropDuplicates(Seq("username"))
+
+    //Join records
+  
+   
     //Update value as email@orgId, phone@orgId, username@orgId, externalid@orgId
 
     val stateUserLookupDF = filteredStateUserData.select(col("externalId"),col("userid"),col("provider")).withColumn("type",lit("externalid")).withColumn("value",concat(col("externalid"),lit("@"),col("provider"))).withColumn("userid",col("userid")).select(col("type"),col("value"),col("userid"));
 
-    val emailUserLookupDF = filteredUserData.select(col("email"),col("id")).withColumn("type",lit("email")).withColumn("value",concat(col("email"),lit("@"),translationMap(col("id")))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid"));
+    val emailUserLookupDF = emailRecords.withColumn("type",lit("email")).withColumn("value",concat(col("email"),lit("@"),translationMap(col("id")))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid"));
 
-    val phoneUserLookupDF = filteredUserData.select(col("phone"),col("id")).withColumn("type",lit("phone")).withColumn("value",concat(col("phone"),lit("@"),translationMap(col("id")))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid"));
+    val phoneUserLookupDF = phoneRecords.withColumn("type",lit("phone")).withColumn("value",concat(col("phone"),lit("@"),translationMap(col("id")))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid"));
 
-    val usernameUserLookupDF = filteredUserData.select(col("username"),col("id")).withColumn("type",lit("username")).withColumn("value",concat(col("username"),lit("@"),translationMap(col("id")))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid"));
+    val usernameUserLookupDF = usernameRecords.withColumn("type",lit("username")).withColumn("value",concat(col("username"),lit("@"),translationMap(col("id")))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid"));
 
    
     val emailUserLookupDFwithoutNull = emailUserLookupDF.where(col("value").isNotNull)
@@ -107,7 +125,7 @@ def migrateData()(implicit spark: SparkSession) {
     println("Username Record Count:"+usernameUserLookupDFwithoutNull.count())
     println("Username Record Count:"+stateUserLookupDF.count())
 
-    //Save reecords to the user_lookup table
+    //Save records to the user_lookup table
 
     stateUserLookupDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
     emailUserLookupDFwithoutNull.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
@@ -115,7 +133,14 @@ def migrateData()(implicit spark: SparkSession) {
     usernameUserLookupDFwithoutNull.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
 
     val newTableRecords = spark.read.format("org.apache.spark.sql.cassandra").schema(userLookupschema).option("keyspace", "sunbird").option("table", "user_lookup").load().count();
+    println("Total Duplicate Emails: "+(emailRecords.count() - uniqueEmailRecords.count()));
+    println("Total Duplicate phone: "+(phoneRecords.count() - uniquePhoneRecords.count()))
+    println("Total Duplicate username: "+(usernameRecords.count() - uniqueUsernameRecords.count()))
+
+ 
     println("user_lookup count post migration: " + newTableRecords);
+
+
   }
 
 
