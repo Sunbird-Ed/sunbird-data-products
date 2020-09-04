@@ -232,7 +232,6 @@ object CourseMetricsJobV2 extends optional.Application with IJob with BaseReport
         col("l1completionPercentage")
       ).persist(StorageLevel.MEMORY_ONLY)
 
-    println("CourseReportDF" + reportDF.show(false))
     if (applyPrivacyPolicy) {
       reportDF.withColumn(UserCache.externalid, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.externalid)).otherwise(""))
         .withColumn(UserCache.schoolname, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schoolname)).otherwise(""))

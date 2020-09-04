@@ -8,7 +8,6 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 trait StateAdminReportHelper extends BaseReportsJob {
   val tempDir = AppConf.getConfig("admin.metrics.temp.dir")
-  override val sunbirdKeyspace = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
   val summaryDir = s"$tempDir/summary"
   val renamedDir = s"$tempDir/renamed"
   val detailDir = s"$tempDir/detail"
