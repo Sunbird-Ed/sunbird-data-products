@@ -14,7 +14,7 @@ trait StateAdminReportHelper extends BaseReportsJob {
   val detailDir = s"$tempDir/detail"
   
   def locationData() (implicit sparkSession: SparkSession) = {
-    val locationDF = loadData(sparkSession, Map("table" -> "location", "keyspace" -> sunbirdKeyspace)).select(
+    val locationDF = loadData(sparkSession, Map("table" -> "location", "keyspace" -> sunbirdKeyspace), None).select(
       col("id").as("locid"),
       col("code").as("loccode"),
       col("name").as("locname"),

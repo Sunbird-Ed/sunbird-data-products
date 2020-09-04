@@ -22,7 +22,6 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
     spark = getSparkSession();
     EmbeddedCassandra.loadData("src/test/resources/reports/user_self_test_data.cql") // Load test data in embedded cassandra server
   }
-
   override def afterAll() : Unit = {
     super.afterAll();
     (new HadoopFileUtil()).delete(spark.sparkContext.hadoopConfiguration, "src/test/resources/admin-user-reports")
@@ -49,7 +48,6 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
     val userName = reportDF.select("Name").collect().map(_ (0)).toList
     assert(userName(0) === "localuser118f localuser118l")
   }
-
   "StateSelfUserExternalIDWithZip" should "execute with zip failed to generate" in {
     implicit val fc = new FrameworkContext()
     try {

@@ -239,7 +239,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     def getCustodianOrgId() (implicit sparkSession: SparkSession): String = {
-        val systemSettingDF = loadData(sparkSession, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace), None).where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+        val systemSettingDF = loadData(sparkSession, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace)).where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
         systemSettingDF.select(col("value")).persist().select("value").first().getString(0)
     }
     
