@@ -5,10 +5,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.transposeDF
 import org.sunbird.analytics.util.CourseUtils.filterAssessmentDF
@@ -58,7 +59,6 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
       .withColumn("certificate_status", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
       .persist(StorageLevel.MEMORY_ONLY)
 
-
     val assessmentDF = CourseUtils.filterAssessmentDF(
       fetchData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),
         cassandraUrl,
@@ -68,8 +68,8 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
         .withColumnRenamed("batch_id", "batchid")
         .withColumnRenamed("course_id", "courseid")
     )
-
-
+    val userCourseInfoDF = getUserCourseInfo(fetchData).join(userDF, Seq("userid"), "inner")
+    println("userCourseInfoDF" + userCourseInfoDF)
     val filteredBatches: Array[Row] = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fetchData, cassandraUrl, List(), sunbirdCoursesKeyspace), JSONUtils.deserialize[JobConfig](JSONUtils.serialize(config)))
     val totalNumOfBatches = new AtomicInteger(filteredBatches.length)
     println("totalNuofBatches" + totalNumOfBatches)
@@ -77,19 +77,45 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
       val row = filteredBatches(index)
       val coursesBatchInfo: CourseBatchInfo = CourseUtils.getCourseInfo(spark, row.getString(0))
       val batch = CourseBatchMap(row.getString(1), row.getString(2), row.getString(3), coursesBatchInfo.channel, "")
-      if (null != coursesBatchInfo.framework && coursesBatchInfo.framework.nonEmpty) {
-        val responseDF = customizeDF(getAssessmentReport(batch = batch, userDF = userDF, assessmentProfileDF = assessmentDF, userEnrollmentDF = userEnrolmentDF), reportFieldMapping, reportFieldMapping.values.toList)
-      } else {
-        null
-      }
+      //val assessmentRes = getAssessmentReport(batch = batch, userDF = userDF, assessmentProfileDF = assessmentDF, userEnrollmentDF = userEnrolmentDF)
+      //println("assessmentRes" + assessmentRes.show(false))
+      val courseResponse = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF)
+      //      if (null != coursesBatchInfo.framework && coursesBatchInfo.framework.nonEmpty) {
+      //        val assessmentRes = getAssessmentReport(batch = batch, userDF = userDF, assessmentProfileDF = assessmentDF, userEnrollmentDF = userEnrolmentDF)
+      //      } else {
+      //        val courseResponse = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF)
+      //      }
     }
   }
 
-  //    def getCourseReport(courseBatch: CourseBatchMap, userCourseData: DataFrame, userEnrolmentDF: DataFrame): DataFrame = {
-  //
-  //    }
+
+  def getCourseReport(batch: CourseBatchMap, userCourseDF: DataFrame, userEnrollmentDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+    val userEnrolmentDF = userEnrollmentDF.where(col("batchid") === batch.batchid)
+      .withColumn("enddate", lit(batch.endDate))
+      .withColumn("startdate", lit(batch.startDate))
+      .select(col("batchid"), col("userid"), col("enrolleddate"), col("completedon"), col("courseid"), col("certificate_status")
+      )
+    println("userEnrolmentDF" + userEnrolmentDF.show(20, false))
+    println("userCourseDF" + userCourseDF.show(20, false))
+
+    val reportDF = userEnrolmentDF
+      .join(userCourseDF, userCourseDF.col("contextid") === s"cb:${batch.batchid}" &&
+        userEnrolmentDF.col("courseid") === userCourseDF.col("courseid") &&
+        userEnrolmentDF.col("userid") === userCourseDF.col("userid"), "inner")
+      .select(
+        userEnrolmentDF.col("*"),
+        col(UserCache.firstname), col(UserCache.lastname),
+        col(UserCache.district), col(UserCache.state),
+        col("completionPercentage").as("course_completion"),
+        col("l1identifier"), col("l1completionPercentage")
+      ).persist(StorageLevel.MEMORY_ONLY)
+    println("======")
+    println("reportDF" + reportDF.show(false))
+    reportDF
+  }
 
   def getAssessmentReport(batch: CourseBatchMap, userDF: DataFrame, assessmentProfileDF: DataFrame, userEnrollmentDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+
     val assessmentAggDf = Window.partitionBy("userid", "batchid", "courseid")
     val assessDF = filterAssessmentDF(assessmentProfileDF)
       .withColumn("agg_score", sum("total_score") over assessmentAggDf)
@@ -103,6 +129,7 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
       .select(col("batchid"), col("enddate"), col("userid"), col("courseid"),
         col("content_id"), col("total_score"), col("grand_total"), col("total_sum_score")
       )
+
     val assessmentDF = filteredAssessmentProfileDF
       .join(userDF, Seq("userid"), "inner")
       .select(filteredAssessmentProfileDF.col("*"), col(UserCache.district),
@@ -115,7 +142,6 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
     val transposedDF = transposeDF(denormedDF)
     val reportData = transposedDF.join(denormedDF, Seq("courseid", "batchid", "userid"), "inner")
       .dropDuplicates("userid", "courseid", "batchid").drop("content_name", "courseid", "batchid", "grand_total")
-
     println("reportData" + reportData.show(false))
     denormedDF
   }
