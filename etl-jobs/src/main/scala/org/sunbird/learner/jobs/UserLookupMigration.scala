@@ -106,19 +106,19 @@ def migrateData()(implicit spark: SparkSession) {
     println("Phone Record Count:"+emailUserLookupDF.count())
     println("Username Record Count:"+usernameUserLookupDF.count())
     println("Stat User Record Count:"+stateUserLookupDF.count())
-
-    //Save records to the user_lookup table
-
-    stateUserLookupDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
-    emailUserLookupDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
-    phoneUserLookupDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
-    usernameUserLookupDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
-
-    val newTableRecords = spark.read.format("org.apache.spark.sql.cassandra").schema(userLookupschema).option("keyspace", "sunbird").option("table", "user_lookup").load().count();
+    
     println("Total Duplicate Emails: "+(emailRecords.count() - uniqueEmailRecords.count()));
     println("Total Duplicate phone: "+(phoneRecords.count() - uniquePhoneRecords.count()))
     println("Total Duplicate username: "+(usernameRecords.count() - uniqueUsernameRecords.count()))
  
+     //Merge records
+    val userLookupDF= stateUserLookupDF.union(emailUserLookupDF).union(phoneUserLookupDF).union(usernameUserLookupDF)
+
+    //Save records to the user_lookup table
+    userLookupDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
+ 
+    val newTableRecords = spark.read.format("org.apache.spark.sql.cassandra").schema(userLookupschema).option("keyspace", "sunbird").option("table", "user_lookup").load().count();
+   
     println("user_lookup count post migration: " + newTableRecords);
 
 
