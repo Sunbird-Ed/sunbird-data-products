@@ -10,7 +10,7 @@ case class Group(id: String, activities: Set[Map[String, String]], createdby: St
 case class UserGroup(userid: String, groupid: Set[String])
 
 case class GroupMember(groupid: String, role: String, userid: String, createdby: String, createdon: java.sql.Timestamp, removedby: String, removedon: java.sql.Timestamp,
-                       status: Boolean, updatedby: Option[String], updatedon: java.sql.Timestamp)
+                       status: String, updatedby: Option[String], updatedon: java.sql.Timestamp)
 
 object GroupsServiceTablesMigration extends Serializable {
     private val config: Config = ConfigFactory.load
@@ -57,7 +57,7 @@ object GroupsServiceTablesMigration extends Serializable {
     }
     
     def migrateGroupMember() (implicit spark: SparkSession): Unit = {
-        val groupMemberSchema = Encoders.product[UserGroup].schema
+        val groupMemberSchema = Encoders.product[GroupMember].schema
         val sunbirdGroupMember = spark.read.format("org.apache.spark.sql.cassandra").schema(groupMemberSchema).option("keyspace", "sunbird").option("table", "group_member").load().persist(StorageLevel.MEMORY_ONLY)
         println("group_member data Count : " + sunbirdGroupMember.count())
         sunbirdGroupMember.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird_groups").option("table", "group_member").mode(SaveMode.Append).save()
