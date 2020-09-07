@@ -95,11 +95,11 @@ def migrateData()(implicit spark: SparkSession) {
 
     val stateUserLookupDF = filteredStateUserData.select(col("externalId"),col("userid"),col("provider")).withColumn("type",lit("externalid")).withColumn("value",concat(col("externalid"),lit("@"),col("provider"))).withColumn("userid",col("userid")).select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
 
-    val emailUserLookupDF = emailRecords.withColumn("type",lit("email")).withColumn("value",concat(col("email"),lit("@"),col("rootorgid"))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
+    val emailUserLookupDF = emailRecords.withColumn("type",lit("email")).withColumn("value",col("email")).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
 
-    val phoneUserLookupDF = phoneRecords.withColumn("type",lit("phone")).withColumn("value",concat(col("phone"),lit("@"),col("rootorgid"))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
+    val phoneUserLookupDF = phoneRecords.withColumn("type",lit("phone")).withColumn("value",col("phone")).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
 
-    val usernameUserLookupDF = usernameRecords.withColumn("type",lit("username")).withColumn("value",concat(col("username"),lit("@"),col("rootorgid"))).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
+    val usernameUserLookupDF = usernameRecords.withColumn("type",lit("username")).withColumn("value",col("username")).withColumnRenamed("id","userid").select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
 
 
     println("Email Record Count:"+emailUserLookupDF.count())
