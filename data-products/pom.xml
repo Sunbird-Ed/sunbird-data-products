@@ -181,11 +181,11 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
-		<dependency>
+<!--		<dependency>
 			<groupId>com.pygmalios</groupId>
 			<artifactId>reactiveinflux-spark_2.11</artifactId>
 			<version>1.4.0.10.0.4.1</version>
-		</dependency>
+		</dependency>-->
 		<dependency>
 			<groupId>com.typesafe.netty</groupId>
 			<artifactId>netty-http-pipelining</artifactId>
