@@ -132,6 +132,7 @@ def migrateData()(implicit spark: SparkSession) {
      val tenantUser = userdata.where(col("rootorgid").isNotNull && !col("rootorgid").contains(custodianOrgId) && col("flagsvalue").isNotNull)
 
      val stateNonVerifiedData = tenantUser.where(col("flagsvalue") < 4)
+     println("Total SB-20446 Issue Impacted User: "+stateNonVerifiedData.count())
      stateNonVerifiedData.coalesce(1).write.format("com.databricks.spark.csv").option("header", "true").save("state_user_record.csv")
      */
   }
