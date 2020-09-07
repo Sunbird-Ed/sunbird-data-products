@@ -2,7 +2,7 @@ package org.sunbird.analytics.job.report
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext, StorageConfig}
 import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.cassandraUrl
@@ -10,11 +10,16 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
 
-case class AssessmentAggData()
+case class AssessmentAggData(course_id: String, batch_id: String, user_id: String, content_id: String, attempt_id: String,
+                             created_on: String, grand_total: String, last_attempted_on: String, question: List[QuestionData],
+                             total_max_score: String, total_score: String, updated_on: String)
+case class QuestionData(id: String, assess_ts: String, max_score: String, score: Double, `type`: String,
+                        title: String, resvalues: List[Map[String, String]], params: List[Map[String, String]],
+                        description: String, duration: String)
 
-object QuestionResponseReport extends optional.Application with BaseReportsJob {
+object QuestionResponseExhaust extends optional.Application with BaseReportsJob {
 
-  implicit val className: String = "org.ekstep.analytics.job.QuestionResponseReport"
+  implicit val className: String = "org.ekstep.analytics.job.QuestionResponseExhaust"
   val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
   val baseCourseReport = new BaseCourseReport
@@ -56,12 +61,13 @@ object QuestionResponseReport extends optional.Application with BaseReportsJob {
 
   def prepareReport(spark: SparkSession, storageConfig: StorageConfig, loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame,
                     config: JobConfig, batchIds: List[String]): Unit = {
-
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType())
+    val assessmentSchema = Encoders.product[AssessmentAggData].schema
+    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, assessmentSchema)
     println("assessmentDF")
     assessmentProfileDF.show()
-    assessmentProfileDF.foreach(f => println("foreach: " + JSONUtils.deserialize[List[Map[String,AnyRef]]](f.getString(8))))
-
+    val data = assessmentProfileDF.rdd.map{f =>
+      println("assessment: " + f)
+    }
 
   }
 
