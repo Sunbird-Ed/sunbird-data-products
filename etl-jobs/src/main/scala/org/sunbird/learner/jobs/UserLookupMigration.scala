@@ -3,7 +3,7 @@ package org.sunbird.learner.jobs
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.{col, _}
-import org.apache.spark.sql.{ SparkSession }
+import org.apache.spark.sql.{ DataFrame, SparkSession }
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.storage.StorageLevel
@@ -24,10 +24,9 @@ import org.apache.spark.sql.Column
 *   UserLookup: Schema for user_lookup table   
 */
 
-case class User(id: String, username: Option[String], phone: Option[String], email: Option[String],rootorgid: String)
+case class User(id: String, username: Option[String], phone: Option[String], email: Option[String],rootorgid: String,flagsvalue: Int)
 case class UserExternalIdentity(userid: String, externalid: String, idtype: String, provider: String)
 case class UserLookup(`type`: String, value: String, userid: String)
-
 
 
 
@@ -84,14 +83,10 @@ def migrateData()(implicit spark: SparkSession) {
      val phoneRecords = filteredUserData.select(col("phone"),col("id"),col("rootorgid")).where(col("phone").isNotNull);
      val usernameRecords = filteredUserData.select(col("username"),col("id"),col("rootorgid")).where(col("username").isNotNull);
 
-    //Remove Duplication
-    val uniqueEmailRecords = emailRecords.dropDuplicates(Seq("email"))
-    val uniquePhoneRecords = phoneRecords.dropDuplicates(Seq("phone"))
-    val uniqueUsernameRecords = usernameRecords.dropDuplicates(Seq("username"))
-
+    
     //Join records
    
-    //Update value as email@orgId, phone@orgId, username@orgId, externalid@orgId
+    //Update value as email, phone, username, externalid@orgId
 
     val stateUserLookupDF = filteredStateUserData.select(col("externalId"),col("userid"),col("provider")).withColumn("type",lit("externalid")).withColumn("value",concat(col("externalid"),lit("@"),col("provider"))).withColumn("userid",col("userid")).select(col("type"),col("value"),col("userid")).where(col("value").isNotNull);
 
@@ -106,22 +101,53 @@ def migrateData()(implicit spark: SparkSession) {
     println("Phone Record Count:"+emailUserLookupDF.count())
     println("Username Record Count:"+usernameUserLookupDF.count())
     println("Stat User Record Count:"+stateUserLookupDF.count())
-    
-    println("Total Duplicate Emails: "+(emailRecords.count() - uniqueEmailRecords.count()));
-    println("Total Duplicate phone: "+(phoneRecords.count() - uniquePhoneRecords.count()))
-    println("Total Duplicate username: "+(usernameRecords.count() - uniqueUsernameRecords.count()))
+
+
+
  
      //Merge records
     val userLookupDF= stateUserLookupDF.union(emailUserLookupDF).union(phoneUserLookupDF).union(usernameUserLookupDF)
 
     //Save records to the user_lookup table
+    println("user_lookup count  migration: " + userLookupDF.count());
+
     userLookupDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_lookup").mode(SaveMode.Append).save();
  
     val newTableRecords = spark.read.format("org.apache.spark.sql.cassandra").schema(userLookupschema).option("keyspace", "sunbird").option("table", "user_lookup").load().count();
    
     println("user_lookup count post migration: " + newTableRecords);
 
+    /* Needed only to check SB-20446 issue
+    //Remove Duplication
+    val uniqueEmailRecords = emailRecords.dropDuplicates(Seq("email"))
+    val uniquePhoneRecords = phoneRecords.dropDuplicates(Seq("phone"))
+    val uniqueUsernameRecords = usernameRecords.dropDuplicates(Seq("username"))
 
+    
+    println("Total Duplicate Emails: "+(emailRecords.count() - uniqueEmailRecords.count()))
+    println("Total Duplicate phone: "+(phoneRecords.count() - uniquePhoneRecords.count()))
+    println("Total Duplicate username: "+(usernameRecords.count() - uniqueUsernameRecords.count()))
+
+     val custodianOrgId = getCustodianOrgId();
+     val tenantUser = userdata.where(col("rootorgid").isNotNull && !col("rootorgid").contains(custodianOrgId) && col("flagsvalue").isNotNull)
+
+     val stateNonVerifiedData = tenantUser.where(col("flagsvalue") < 4)
+     stateNonVerifiedData.coalesce(1).write.format("com.databricks.spark.csv").option("header", "true").save("state_user_record.csv")
+     */
+  }
+
+
+  def getCustodianOrgId() (implicit sparkSession: SparkSession): String = {
+        val systemSettingDF = loadData(sparkSession, Map("table" -> "system_settings", "keyspace" -> "sunbird")).where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
+        systemSettingDF.select(col("value")).persist().select("value").first().getString(0)
+  }
+
+  def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame = {
+    spark
+      .read
+      .format("org.apache.spark.sql.cassandra")
+      .options(settings)
+      .load()
   }
 
 
