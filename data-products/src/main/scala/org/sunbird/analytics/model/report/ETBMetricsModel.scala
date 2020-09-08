@@ -139,8 +139,8 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     import sqlContext.implicits._
 
     //dce_qr_content_status_grade.csv
-    val dceContentStatus = dceDf.select($"contentLinkedQR",$"withoutContentQR",explode_outer(split('gradeLevel,",")).as("Class"))
-      .groupBy("Class").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content"))
+    val dceContentStatus = dceDf.select($"slug",$"reportName",$"contentLinkedQR",$"withoutContentQR",explode_outer(split('gradeLevel,",")).as("Class"))
+      .groupBy("Class","slug","reportName").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content"))
       .orderBy("Class")
     var reportMap = updateReportPath(aggConf(2), aggConf(1), "dce_qr_content_status_grade.csv")
     CourseUtils.postDataToBlob(dceContentStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
