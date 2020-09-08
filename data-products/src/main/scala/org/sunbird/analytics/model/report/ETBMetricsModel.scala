@@ -162,7 +162,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
     //etb_qr_content_status_subject.csv
     val etbContentStatus = etbDf.select($"slug",$"reportName",$"totalQRLinked",$"totalQRNotLinked",explode_outer(split('subject,",")).as("Subject"))
-      .groupBy("Subject","slug","reportName",).agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content"))
+      .groupBy("Subject","slug","reportName").agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content"))
       .orderBy("Subject")
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_qr_content_status_subject.csv")
     CourseUtils.postDataToBlob(etbContentStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
