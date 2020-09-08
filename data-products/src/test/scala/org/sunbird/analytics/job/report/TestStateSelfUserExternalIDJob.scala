@@ -47,7 +47,9 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
     assert(reportDF.columns.contains("Status") === true)
     assert(reportDF.columns.contains("Persona") === true)
     val userName = reportDF.select("Name").collect().map(_ (0)).toList
+    val subOrgLst = reportDF.select("Diksha Sub-Org ID").collect().map(_ (0)).toList
     assert(userName(0) === "localuser118f localuser118l")
+    assert(subOrgLst(1) === "orgext2")
   }
   
   "StateSelfUserExternalIDWithZip" should "execute with zip failed to generate" in {
