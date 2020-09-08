@@ -22,11 +22,7 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
 
-trait ReportGeneratorV2Copy {
 
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame
-
-}
 
 
 case class ReportLocations(requestId : String, locations :List[String])
@@ -34,7 +30,7 @@ case class  ContentBatch(courseId : String, batchId: String, startDate: String, 
 case class Reports(requestId: String, reportPath: String, batchIds : List[ContentBatch])
 
 
-object CourseMetricsJobV2Copy extends scala.App with ReportOnDemandModelTemplate[Reports,ReportLocations,ReportLocations] with ReportGeneratorV2Copy with IJob  with BaseReportsJob  {
+object CourseMetricsJobV2Copy extends scala.App with ReportOnDemandModelTemplate[Reports,ReportLocations,ReportLocations] with IJob  with BaseReportsJob  {
 
   implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJobV2"
   val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")
@@ -73,22 +69,26 @@ object CourseMetricsJobV2Copy extends scala.App with ReportOnDemandModelTemplate
         val batchList =List()
         println(sunbirdCoursesKeyspace)
         val reportEncoder = Encoders.product[Reports]
-        val activeBatches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
-        val filteredReports = reportConfigs.as[ReportConfigs].map(f=>{
+        val activeBatches = CourseUtils.getActiveBatches(fc.loadData, batchList, sunbirdCoursesKeyspace)
+        val filteredReports = reportConfigs.as[ReportConfigs].collect.map(f=>{
             val contentFilters = config.getOrElse("contentFilters", Map()).asInstanceOf[Map[String,AnyRef]]
             val applyPrivacyPolicy = true
             val reportPath = "course-progress-reports/"
 
             val filteredBatches = if(contentFilters.nonEmpty) {
-
                 val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
                 activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
                   .select(activeBatches.col("*")).map(f => ContentBatch(f.getString(0),f.getString(1),f.getString(2),f.getString(3)))collect
-            } else activeBatches.map(f => ContentBatch(f.getString(0),f.getString(1),f.getString(2),f.getString(3))).collect
+            } else {
+                println(activeBatches)
+                activeBatches.show(false)
+                activeBatches.map(f => ContentBatch(f.getString(0),f.getString(1),f.getString(2),f.getString(3))).collect
+            }
             Reports(f.requestId,reportPath,filteredBatches.toList)
-        })(reportEncoder)
 
-        filteredReports
+        })
+
+        spark.createDataset(filteredReports)
     }
 
     override def generateReports(filteredReports: Dataset[Reports], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Dataset[ReportLocations] = {
@@ -106,18 +106,19 @@ object CourseMetricsJobV2Copy extends scala.App with ReportOnDemandModelTemplate
         val container = AppConf.getConfig("cloud.container.reports")
         val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
         val storageConfig = getStorageConfig(container, objectKey)
-        val filteredBatches = filteredReports.select("batchIds").rdd.flatMap(r => r(0).asInstanceOf[List[ContentBatch]]).collect()
-        val userCourses = getUserCourseInfo(loadData).persist(StorageLevel.MEMORY_ONLY)
+        //val filteredBatches = filteredReports.select("batchIds").rdd.flatMap(r => r(0).asInstanceOf[List[ContentBatch]]).collect()
+        //val filteredBatches =   filteredReports.select("batchIds").collectAsList().get(0).asInstanceOf[List[ContentBatch]]
+        val userCourses = getUserCourseInfo(fc.loadData).persist(StorageLevel.MEMORY_ONLY)
         val userData = CommonUtil.time({
-            recordTime(getUserData(spark, loadData), "Time taken to get generate the userData: ")
+            recordTime(getUserData(spark, fc.loadData), "Time taken to get generate the userData: ")
         })
         val applyPrivacyPolicy =true
         val reportPath= "course-report-path/"
-        val activeBatchesCount = new AtomicInteger(filteredBatches.length)
-        metrics.put("userDFLoadTime", userData._1)
-        metrics.put("activeBatchesCount", activeBatchesCount.get())
+        //val activeBatchesCount = new AtomicInteger(filteredBatches.length)
+        //metrics.put("userDFLoadTime", userData._1)
+        //metrics.put("activeBatchesCount", activeBatchesCount.get())
         val batchFilters = JSONUtils.serialize("[\"TBD\"]")
-        val userEnrolmentDF = getUserEnrollmentDF(loadData).persist(StorageLevel.MEMORY_ONLY)
+        val userEnrolmentDF = getUserEnrollmentDF(fc.loadData).persist(StorageLevel.MEMORY_ONLY)
 
         val userCourseData = userCourses.join(userData._2, userCourses.col("userid") === userData._2.col("userid"), "inner")
           .select(userData._2.col("*"),
@@ -150,12 +151,5 @@ object CourseMetricsJobV2Copy extends scala.App with ReportOnDemandModelTemplate
         generatedreports
     }
 
-    override def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
-        if (schema.nonEmpty) {
-            spark.read.schema(schema).format(url).options(settings).load()
-        }
-        else {
-            spark.read.format(url).options(settings).load()
-        }
-    }
+
 }

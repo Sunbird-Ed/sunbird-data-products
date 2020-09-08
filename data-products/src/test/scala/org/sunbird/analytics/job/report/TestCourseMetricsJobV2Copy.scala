@@ -20,8 +20,8 @@ import org.sunbird.analytics.util.{CourseUtils, UserData}
 import scala.collection.mutable
 import scala.concurrent.Future
 
-case class UserAgg(activity_type:String,activity_id:String, user_id:String,context_id:String, agg: Map[String,Int],agg_last_updated:String)
-case class ContentHierarchy(identifier: String, hierarchy: String)
+//case class UserAgg(activity_type:String,activity_id:String, user_id:String,context_id:String, agg: Map[String,Int],agg_last_updated:String)
+//case class ContentHierarchy(identifier: String, hierarchy: String)
 
 class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with BaseReportsJob  {
   implicit var spark: SparkSession = _
@@ -46,7 +46,7 @@ class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with Ba
    super.beforeAll()
     spark = getSparkSession()
 
-        courseBatchDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
+       courseBatchDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
           .load("src/test/resources/course-metrics-updaterv2/course_batch_data.csv").cache()
 
         externalIdentityDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
@@ -72,8 +72,80 @@ class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with Ba
   }
   "TestSHoudl" should "test functinoaliyt" in {
       implicit val fc=mock[FrameworkContext]
-    val conf ="""{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val conf ="""{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
 
+    //(mockDruidClient.doQueryAsStream(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Source(results)).anyNumberOfTimes();
+    //fc.loadData(_,_,_,_).expects(*).returns(mockDruidClient).anyNumberOfTimes();
+      courseBatchDF.show(false)
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+        .returning(courseBatchDF)
+
+      val schema = Encoders.product[UserData].schema
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+        .anyNumberOfTimes()
+        .returning(userAggDF)
+
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore),"org.apache.spark.sql.cassandra", new StructType())
+        .anyNumberOfTimes()
+        .returning(contentHierarchyDF)
+
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema)
+        .anyNumberOfTimes()
+        .returning(userDF)
+
+      val convertMethod = udf((value: mutable.WrappedArray[String]) => {
+          if(null != value && value.nonEmpty)
+              value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
+          else null
+      }, new ArrayType(MapType(StringType, StringType), true))
+
+      val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")) )
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+        .anyNumberOfTimes()
+        .returning(alteredUserCourseDf)
+
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "user", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+        .anyNumberOfTimes()
+        .returning(userDF)
+
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+        .anyNumberOfTimes()
+        .returning(externalIdentityDF)
+
+      (fc.loadData _)
+        .expects(spark, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace),"org.apache.spark.sql.cassandra", new StructType())
+        .anyNumberOfTimes()
+        .returning(systemSettingDF)
+
+      val outputLocation = "/tmp/course-metrics"
+      val outputDir = "course-progress-reports"
+      val storageConfig = StorageConfig("local", "", outputLocation)
+
+      val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"batchFilters":["TPD"],"applyPrivacyPolicy":false,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+      val config = JSONUtils.deserialize[JobConfig](strConfig)
+
+      //mocking for DruidDataFetcher
+      import scala.concurrent.ExecutionContext.Implicits.global
+      val json: String =
+          """
+            |{
+            |  "identifier": "do_1130264512015646721166",
+            |  "channel": "01274266675936460840172"
+            |}
+          """.stripMargin
+
+
+
+//      implicit val sc = spark
+
+      //CourseMetricsJobV2Copy.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", new StructType())
     CourseMetricsJobV2Copy.execute(Some(JSONUtils.deserialize[Map[String,AnyRef]](conf)))
   }
 

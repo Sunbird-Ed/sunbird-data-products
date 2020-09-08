@@ -300,7 +300,7 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     } else reportDF
   }
 
-  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): Unit = {
+  def saveReportToBlobStore(batch: CourseBatch, reportDF: DataFrame, storageConfig: StorageConfig, totalRecords: Long, reportPath: String): List[String] = {
     val reportData = reportDF.groupBy("courseid", "batchid", "userid", "enrolleddate", "completedon",
       "certificate_status", "firstname", "lastname", "maskedemail", "maskedphone", "externalid", "orgname",
       "schoolname", "district", "schooludisecode", "block", "state", "course_completion")
@@ -313,9 +313,10 @@ object CourseMetricsJobV2 extends optional.Application with IJob with ReportGene
     val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
 
-    reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
+    val files = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
       .saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
     JobLogger.log(s"CourseMetricsJob: records stats before cloud upload: { batchId: ${batch.batchid}, totalNoOfRecords: $totalRecords }} ", None, INFO)
+      files
   }
 
 }
