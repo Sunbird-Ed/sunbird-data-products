@@ -1,65 +1,49 @@
 package org.sunbird.analytics.job.report
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import org.apache.commons.lang3.StringUtils
+import org.apache.spark.SparkContext
+import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataTypes, StructType}
-import org.apache.spark.sql._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.Level.INFO
-import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
-import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.{finalColumnMapping, transposeDF}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils}
+import org.ekstep.analytics.framework.{FrameworkContext, IJob, ReportConfigs, ReportOnDemandModelTemplate}
+import org.sunbird.analytics.job.report.CourseMetricsJobV2.saveReportToBlobStore
 import org.sunbird.analytics.util.CourseUtils.filterAssessmentDF
 import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
 
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+case class ReportLocations(requestId: String, locations: List[String])
 
-object CourseReport extends optional.Application with ReportOnDemandModelTemplate with BaseReportsJob {
+case class CourseBatchMap(batchid: String, startDate: String, endDate: String, courseChannel: String, filteres: String, courseName: String, batchName: String)
 
-  case class CourseBatchMap(batchid: String, startDate: String, endDate: String, courseChannel: String, filteres: String, courseName: String, batchName: String)
-  case class  ContentBatch(courseId : String, batchId: String, startDate: String, endDate: String)
-  case class Reports(requestId: String, reportPath: String, batchIds : List[ContentBatch])
+case class ContentBatch(courseId: String, batchId: String, startDate: String, endDate: String)
 
+case class Reports(requestId: String, reportPath: String, batchIds: List[ContentBatch])
+
+
+object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, ReportLocations, ReportLocations] with IJob with BaseReportsJob {
   val columnsOrder = List("Batch Id", "Batch Name", "Collection Id", "Collection Name", "DIKSHA UUID", "User Name", "State", "District", "Enrolment Date", "Completion Date", "Certificate Status", "Course Progress", "Total Score")
+
   val reportFieldMapping = Map("courseid" -> "Collection Id", "courseName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "DIKSHA UUID", "username" -> "User Name",
     "state" -> "State", "district" -> "District", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "course_completion" -> "Course Progress", "total_sum_score" -> "Total Score", "certificate_status" -> "Certificate Status"
   )
 
-  override def filterReports(reportConfigs: DataFrame, config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = ???
-//    val sunbirdCoursesKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdCoursesKeyspace")
-//    val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
-//    val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
-//
-//
-//    import spark.implicits._
-//    reportConfigs.show(false)
-//    val batchList = List()
-//    println(sunbirdCoursesKeyspace)
-//    val reportEncoder = Encoders.product[Reports]
-//    val activeBatches = CourseUtils.getActiveBatches(loadData, batchList, sunbirdCoursesKeyspace)
-//    val filteredReports = reportConfigs.as[ReportConfigs].map(f => {
-//      val contentFilters = config.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
-//      val applyPrivacyPolicy = true
-//      val reportPath = "course-progress-reports/"
-//
-//      val filteredBatches = if (contentFilters.nonEmpty) {
-//
-//        val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
-//        activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
-//          .select(activeBatches.col("*")).map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))) collect
-//      } else activeBatches.map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))).collect
-//      Reports(f.requestId, reportPath, filteredBatches.toList)
-//    })(reportEncoder)
-//
-//    filteredReports
-//  }
+  override def filterReports(reportConfigs: Dataset[ReportConfigs], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Dataset[Reports] = {
+    import spark.implicits._
+    reportConfigs.show(false)
+    val filteredReports = reportConfigs.as[ReportConfigs].collect.map(f => {
+      val contentFilters = config.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
+      val reportPath = "course-progress-reports/"
+      val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
+      Reports(f.requestId, reportPath, filteredContents.select(col("*")).map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))).collect().toList)
+    })
+    spark.createDataset(filteredReports)
+  }
 
-  override def generateReports(filteredReports: DataFrame, config: Map[String, AnyRef], fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
+  override def generateReports(filteredReports: Dataset[Reports], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Dataset[ReportLocations] = {
+    import spark.implicits._
     val schema = Encoders.product[UserData].schema
 
     val userDF = fetchData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"),
@@ -78,20 +62,27 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
         cassandraUrl,
         Some(new StructType()),
         Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
-        .withColumnRenamed("user_id", "userid")
-        .withColumnRenamed("batch_id", "batchid")
-        .withColumnRenamed("course_id", "courseid")
     )
+    val container = AppConf.getConfig("cloud.container.reports")
+    val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
+    val storageConfig = getStorageConfig(container, objectKey)
+    val reportPath= "course-report-path/"
     val userCourseInfoDF = getUserCourseInfo(fetchData).join(userDF, Seq("userid"), "inner")
-    val filteredBatches: Array[Row] = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fetchData, cassandraUrl, List(), sunbirdCoursesKeyspace), JSONUtils.deserialize[JobConfig](JSONUtils.serialize(config)))
-    for (index <- filteredBatches.indices) {
-      val row = filteredBatches(index)
-      val coursesBatchInfo: CourseBatchInfo = CourseUtils.getCourseInfo(spark, row.getString(0))
-      println("coursesBatchInfo" + coursesBatchInfo)
-      val batchName: String = coursesBatchInfo.batches.find(x => row.getString(1) == x.batchId).map(x => x.name).getOrElse("")
-      val batch = CourseBatchMap(row.getString(1), row.getString(2), row.getString(3), coursesBatchInfo.channel, "", coursesBatchInfo.name, batchName)
-      val courseResponse = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF)
-    }
+    filteredReports.flatMap(f => {
+      val reportLocation: List[ReportLocations] = f.batchIds.map(row => {
+        val coursesBatchInfo: CourseBatchInfo = CourseUtils.getCourseInfo(spark, row.courseId)
+        val batchName: String = coursesBatchInfo.batches.find(x => row.batchId == x.batchId).map(x => x.name).getOrElse("")
+        val batch = CourseBatchMap(row.batchId, row.startDate, row.endDate, coursesBatchInfo.channel, "", coursesBatchInfo.name, batchName);
+        val result = CommonUtil.time({
+          val reportDF = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF)
+          reportDF.unpersist(true)
+          val totalRecords = reportDF.count()
+          ReportLocations(f.requestId, saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath))
+        })
+        result._2
+      })
+      reportLocation
+    })
   }
 
 
@@ -190,8 +181,6 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
   }
 
   def parseCourseHierarchy(data: List[Map[String, AnyRef]], levelCount: Int, prevData: CourseData): CourseData = {
-    val levelMapping = new ListBuffer[String]()
-    ///levelMapping.insert(1)
     if (levelCount < 2) {
       val list = data.map(childNodes => {
         val mimeType = childNodes.getOrElse("mimeType", "").asInstanceOf[String]
@@ -221,16 +210,11 @@ object CourseReport extends optional.Application with ReportOnDemandModelTemplat
 
   def denormAssessment(report: DataFrame, contentIds: List[String])(implicit spark: SparkSession): DataFrame = {
     val contentMetaDataDF = CourseUtils.getContentNames(spark, contentIds, AppConf.getConfig("assessment.metrics.supported.contenttype"))
-    println("contentMetaDataDF" + contentMetaDataDF.show(20, false))
     report.join(contentMetaDataDF, report.col("content_id") === contentMetaDataDF.col("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
       .select("*")
   }
 
-  /**
-   * .
-   * 1. Saving Reports to Blob
-   * 2. Generate Metrics
-   * 3. Return Map list of blobs to RequestIds as per the request
-   */
-  override def saveReports(generatedreports: DataFrame, config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = ???
+  override def saveReports(generatedreports: Dataset[ReportLocations], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext) = ???
+
+  override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = ???
 }

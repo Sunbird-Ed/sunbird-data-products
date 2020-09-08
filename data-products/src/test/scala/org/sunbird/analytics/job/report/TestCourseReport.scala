@@ -3,11 +3,10 @@ package org.sunbird.analytics.job.report
 import org.apache.spark.sql.functions.{split, udf}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
+import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.{EmbeddedES, UserData}
-import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.collection.mutable
 
@@ -16,7 +15,7 @@ case class UserAgg(activity_type: String, activity_id: String, user_id: String, 
 case class ContentHierarchy(identifier: String, hierarchy: String)
 
 class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJob {
-  var spark: SparkSession = _
+  implicit var spark: SparkSession = _
   var courseBatchDF: DataFrame = _
   var userCoursesDF: DataFrame = _
   var assessmentProfileDF: DataFrame = _
@@ -51,29 +50,11 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
 
     contentHierarchyDF = List(ContentHierarchy("do_1130314965721088001129", """{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "collection","contentType": "Course","visibility": "Default","identifier": "do_1125105431453532161282","leafNodesCount": 3}, {"contentType": "Course","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_1130314965721088001129","visibility": "Default","leafNodesCount": 9}"""),
       ContentHierarchy("do_13456760076615812", """{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282"}, {"contentType": "CourseUnit","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_13456760076615812","visibility": "Default","leafNodesCount": 4}""")).toDF()
-
-
-    assessmentProfileDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
-      .load("src/test/resources/course-metrics-updater-v3/assessment.csv").cache()
-
-    EmbeddedES.loadData("compositesearch", "cs", mutable.Buffer(
-          """{"contentType":"SelfAssess","name":"My content 1","identifier":"do_112835335135993856149"}""",
-          """{"contentType":"SelfAssess","name":"My content 2","identifier":"do_112835336280596480151"}""",
-          """{"contentType":"SelfAssess","name":"My content 3","identifier":"do_112832394979106816112"}""",
-          """{"contentType":"Resource","name":"My content 4","identifier":"do_112832394979106816114"}"""
-        ))
   }
 
-  "CourseReportJob" should "Generate report for both assessmenUserAggt and course" in {
-    implicit val sc = spark
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
-
-    implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val mockStorageService = mock[BaseStorageService]
-    (mockFc.getStorageService(_: String, _: String, _: String)).expects(*, *, *).returns(mockStorageService).anyNumberOfTimes()
-    (mockStorageService.upload _).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes()
-
-    (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
+  "CourseReportJob" should "Generate report with required columns" in {
+    implicit val fc = mock[FrameworkContext]
+    val conf = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
 
     val convertMethod = udf((value: mutable.WrappedArray[String]) => {
       if (null != value && value.nonEmpty)
@@ -115,7 +96,7 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
-    CourseReport.generateReports(null, JSONUtils.deserialize[Map[String, AnyRef]](strConfig), fetchData = reporterMock.fetchData)
+    CourseReport.execute(Some(JSONUtils.deserialize[Map[String, AnyRef]](conf)))
 
 
   }
