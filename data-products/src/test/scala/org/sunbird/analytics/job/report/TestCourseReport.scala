@@ -6,7 +6,7 @@ import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.UserData
+import org.sunbird.analytics.util.{EmbeddedES, UserData}
 import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.collection.mutable
@@ -44,9 +44,9 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
     userDF = spark.read.json("src/test/resources/course-metrics-updater-v3/user_data.json").cache()
 
     userActivityAgg = List(
-      UserAgg("Course", "do_1130314965721088001129", "c7ef3848-bbdb-4219-8344-817d5b8103fa", "cb:0130561083009187841", Map("completedCount" -> 1), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
-      UserAgg("Course", "do_13456760076615812", "f3dd58a4-a56f-4c1d-95cf-3231927a28e9", "cb:0130561083009187841", Map("completedCount" -> 1), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
-      UserAgg("Course", "do_1125105431453532161282", "be28a4-a56f-4c1d-95cf-3231927a28e9", "cb:0130561083009187841", Map("completedCount" -> 5), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}")).toDF()
+      UserAgg("Course", "do_1130314965721088001129", "c7ef3848-bbdb-4219-8344-817d5b8103fa", "cb:01303150537737011211", Map("completedCount" -> 1), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
+      UserAgg("Course", "do_13456760076615812", "f3dd58a4-a56f-4c1d-95cf-3231927a28e9", "cb:0130334873750159361", Map("completedCount" -> 1), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
+      UserAgg("Course", "do_1130314965721088001129", "c7ef3848-bbdb-4219-8344-817d5b8103fa", "cb:0130334873750159361", Map("completedCount" -> 5), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}")).toDF()
       .select("user_id", "activity_id", "agg", "context_id")
 
     contentHierarchyDF = List(ContentHierarchy("do_1130314965721088001129", """{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "collection","contentType": "Course","visibility": "Default","identifier": "do_1125105431453532161282","leafNodesCount": 3}, {"contentType": "Course","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_1130314965721088001129","visibility": "Default","leafNodesCount": 9}"""),
@@ -55,6 +55,13 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
 
     assessmentProfileDF = spark.read.format("com.databricks.spark.csv").option("header", "true")
       .load("src/test/resources/course-metrics-updater-v3/assessment.csv").cache()
+
+    EmbeddedES.loadData("compositesearch", "cs", mutable.Buffer(
+          """{"contentType":"SelfAssess","name":"My content 1","identifier":"do_112835335135993856149"}""",
+          """{"contentType":"SelfAssess","name":"My content 2","identifier":"do_112835336280596480151"}""",
+          """{"contentType":"SelfAssess","name":"My content 3","identifier":"do_112832394979106816112"}""",
+          """{"contentType":"Resource","name":"My content 4","identifier":"do_112832394979106816114"}"""
+        ))
   }
 
   "CourseReportJob" should "Generate report for both assessmenUserAggt and course" in {
@@ -107,13 +114,6 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
       .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon")))
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
-
-//    println("user_enrolments" + alteredUserCourseDf.show(20, false))
-//    println("user" + userDF.show(20, false))
-//    println("content_hierarchy" + contentHierarchyDF.show(20, false))
-//    println("user_activity_agg" + userActivityAgg.show(20, false))
-//    println("course_batch" + courseBatchDF.show(20, false))
-//    println("assessment_aggregator" + assessmentProfileDF.show(20, false))
 
     CourseReport.generateReports(null, JSONUtils.deserialize[Map[String, AnyRef]](strConfig), fetchData = reporterMock.fetchData)
 

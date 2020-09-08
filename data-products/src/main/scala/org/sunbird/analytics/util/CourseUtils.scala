@@ -2,7 +2,7 @@ package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{col, concat_ws, desc, lit, row_number, to_date}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.storage.StorageLevel
@@ -19,13 +19,18 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
 case class CourseDetails(result: Result)
+
 case class Result(content: List[CourseInfo])
+
 case class CourseInfo(channel: String, identifier: String, name: String)
 
 case class CourseResponse(result: CourseResult, responseCode: String)
+
 case class CourseResult(count: Int, content: List[CourseBatchInfo])
+
 case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
-case class BatchInfo(batchId: String, startDate: String, endDate: String)
+
+case class BatchInfo(batchId: String, startDate: String, endDate: String, name:String)
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), maskedemail: Option[String] = Option(""), maskedphone: Option[String] = Option(""),
@@ -49,8 +54,11 @@ object UserCache {
 
 trait CourseReport {
   def getCourse(config: Map[String, AnyRef])(sc: SparkContext): DataFrame
+
   def loadData(spark: SparkSession, settings: Map[String, String]): DataFrame
+
   def getCourseBatchDetails(spark: SparkSession, loadData: (SparkSession, Map[String, String]) => DataFrame): DataFrame
+
   def getTenantInfo(spark: SparkSession, loadData: (SparkSession, Map[String, String]) => DataFrame): DataFrame
 }
 
@@ -193,7 +201,7 @@ object CourseUtils {
     } else List[CourseBatchInfo]()
   }
 
-  def getActiveBatches(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, url:String, batchList: List[String], sunbirdCoursesKeyspace: String)
+  def getActiveBatches(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
                       (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     val courseBatchDF = if (batchList.nonEmpty) {
@@ -219,7 +227,7 @@ object CourseUtils {
 
   def getUserData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    fetchData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
+    fetchData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid", "state", "district", "userchannel", "orgname", "maskedemail", "maskedphone", "block", "externalid", "schoolname", "schooludisecode")))
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
   }
 
@@ -248,30 +256,33 @@ object CourseUtils {
   def getContentNames(spark: SparkSession, content: List[String], contentType: String): DataFrame = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
-    val apiUrl = Constants.COMPOSITE_SEARCH_URL
-    val contentList = JSONUtils.serialize(content)
-    val request =
-      s"""
-         |{
-         |  "request": {
-         |    "filters": {
-         |      "contentType": "$contentType",
-         |       "identifier": $contentList
-         |    },
-         |    "sort_by": {"createdOn":"desc"},
-         |    "limit": 10000,
-         |    "fields": ["name","identifer","contentType"]
-         |  }
-         |}
+    var assessmentInfo: List[CourseBatchInfo] = List()
+    if (content.nonEmpty) {
+      val apiUrl = Constants.COMPOSITE_SEARCH_URL
+      val contentList = JSONUtils.serialize(content)
+      val request =
+        s"""
+           |{
+           |  "request": {
+           |    "filters": {
+           |      "contentType": "$contentType",
+           |       "identifier": $contentList
+           |    },
+           |    "sort_by": {"createdOn":"desc"},
+           |    "limit": 10000,
+           |    "fields": ["name","identifer","contentType"]
+           |  }
+           |}
        """.stripMargin
-    val response = RestUtil.post[CourseResponse](apiUrl, request)
-    val assessmentInfo = if (null != response && response.responseCode.equalsIgnoreCase("ok") && response.result.count > 0) {
-      response.result.content
-    } else List()
+      val response = RestUtil.post[CourseResponse](apiUrl, request)
+      assessmentInfo = if (null != response && response.responseCode.equalsIgnoreCase("ok") && response.result.count > 0) {
+        response.result.content
+      } else List()
+    }
     assessmentInfo.toDF().select("name", "identifier")
   }
 
-  def filterAssessmentDF(assesmentDF:DataFrame): DataFrame = {
+  def filterAssessmentDF(assesmentDF: DataFrame): DataFrame = {
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
     val df = Window.partitionBy("userid", "batchid", "courseid", "content_id").orderBy(desc(columnName))
