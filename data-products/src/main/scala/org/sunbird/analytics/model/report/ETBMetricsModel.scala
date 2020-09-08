@@ -10,11 +10,13 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{AlgoOutput, DataFetcher, Empty, FrameworkContext, IBatchModelTemplate, JobConfig, Level, Output}
-import org.ekstep.analytics.model.ReportConfig
+import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
 import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.sunbird.analytics.util.{CourseUtils, TextBookUtils}
 import org.sunbird.cloud.storage.conf.AppConf
+import org.apache.spark.sql.functions._
+
 
 case class TenantInfo(id: String, slug: String)
 case class TenantResponse(result: TenantResult)
@@ -102,6 +104,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
           .orderBy('medium,split(split('gradeLevel,",")(0)," ")(1).cast("int"),'subject)
         reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("dcetextbook.filename"))
         CourseUtils.postDataToBlob(dceDf,f,config.updated("reportConfig",reportMap))
+        generateAggReports(etbDf, dceDf, f, List(config, reportConfig, mergeConf))
 
         val dialdceDF = dceDialcodeReport.toDF()
         val dialcodeDCE = dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
@@ -129,6 +132,76 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
       case x => x
     }
     if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
+  }
+
+  def generateAggReports(etbDf: DataFrame, dceDf: DataFrame, outputConf: OutputConfig, aggConf: List[Map[String, AnyRef]])(implicit sc: SparkContext, fc: FrameworkContext): Unit = {
+    implicit val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    //dce_qr_content_status_grade.csv
+    val dceContentStatus = dceDf.select($"contentLinkedQR",$"withoutContentQR",explode_outer(split('gradeLevel,",")).as("Class"))
+      .groupBy("Class").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content"))
+      .orderBy("Class")
+    var reportMap = updateReportPath(aggConf(2), aggConf(1), "dce_qr_content_status_grade.csv")
+    CourseUtils.postDataToBlob(dceContentStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //dce_qr_content_status_subject.csv
+    dceDf.select($"contentLinkedQR",$"withoutContentQR",explode_outer(split('subject,",")).as("Subject"))
+      .groupBy("Subject").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content"))
+      .orderBy("Subject").show
+
+    //dce_qr_content_status.csv
+    dceDf.agg(sum("contentLinkedQR").alias("Count")).withColumn("Status",lit("QR Code With Content"))
+      .select("Status","Count").union(dceDf.agg(sum("withoutContentQR").alias("Count")).withColumn("Status",lit("QR Code Without Content"))
+      .select("Status","Count")).show(false)
+
+    //etb_qr_content_status_grade.csv
+    etbDf.select($"totalQRLinked",$"totalQRNotLinked",explode_outer(split('gradeLevel,",")).as("Class"))
+      .groupBy("Class").agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content"))
+      .orderBy("Class").show
+
+    //etb_qr_content_status_subject.csv
+    etbDf.select($"totalQRLinked",$"totalQRNotLinked",explode_outer(split('subject,",")).as("Subject"))
+      .groupBy("Subject").agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content"))
+      .orderBy("Subject").show
+
+    //etb_qr_content_status.csv
+    etbDf.agg(sum("totalQRLinked").alias("Count")).withColumn("Status",lit("QR Code With Content"))
+      .select("Status","Count").union(etbDf.agg(sum("totalQRNotLinked").alias("Count")).withColumn("Status",lit("QR Code Without Content"))
+      .select("Status","Count")).show(false)
+
+    //etb_qr_count.csv
+
+
+    //etb_textbook_status_grade.csv
+    etbDf.select($"identifier",$"status",explode_outer(split('gradeLevel,",")).as("Class"))
+      .groupBy("Class","status").pivot(col("status"))
+      .agg(count("identifier")).drop("status").na.fill(0)
+      .orderBy("Class").show
+
+    //etb_textbook_status_subject.csv
+    etbDf.select($"identifier",$"status",explode_outer(split('subject,",")).as("Subject"))
+      .groupBy("Subject","status").pivot(col("status"))
+      .agg(count("identifier")).drop("status").na.fill(0)
+      .orderBy("Subject").show
+
+    //        +-------+-----+----+
+    //        |subject|Draft|Live|
+    //        +-------+-----+----+
+    //        |    Bio|    0|   1|
+    //        |  Maths|    0|   1|
+    //        |  Maths|    1|   0|
+    //        +-------+-----+----+
+
+    //etb_textbook_status.csv
+    etbDf.groupBy("status").agg(count(col("identifier")).as("Count")).show
+    //        +------+-----+
+    //        |status|count|
+    //        +------+-----+
+    //        | Draft|    1|
+    //        |  Live|    2|
+    //        +------+-----+
+
   }
 
   def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
