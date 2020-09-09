@@ -14,7 +14,6 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfi
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
-import org.sunbird.analytics.job.report.AssessmentMetricsJobV2.cassandraUrl
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
@@ -201,16 +200,16 @@ object CourseUtils {
     } else List[CourseBatchInfo]()
   }
 
-  def getActiveBatches(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
+  def getActiveBatches(fetchData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
                       (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
     val courseBatchDF = if (batchList.nonEmpty) {
-      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
         .filter(batch => batchList.contains(batch.getString(1)))
         .persist(StorageLevel.MEMORY_ONLY)
     }
     else {
-      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
         .persist(StorageLevel.MEMORY_ONLY)
     }
 
@@ -283,6 +282,7 @@ object CourseUtils {
   }
 
   def filterAssessmentDF(assesmentDF: DataFrame): DataFrame = {
+    println("assesmentDF" + assesmentDF.count())
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
     val df = Window.partitionBy("userid", "batchid", "courseid", "content_id").orderBy(desc(columnName))

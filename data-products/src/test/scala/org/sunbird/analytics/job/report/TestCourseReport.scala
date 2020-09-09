@@ -42,6 +42,8 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
 
     userDF = spark.read.json("src/test/resources/course-metrics-updater-v3/user_data.json").cache()
 
+    assessmentProfileDF = spark.read.format("com.databricks.spark.csv").option("header", "true").load("src/test/resources/course-metrics-updater-v3/assessment.csv").cache()
+
     userActivityAgg = List(
       UserAgg("Course", "do_1130314965721088001129", "c7ef3848-bbdb-4219-8344-817d5b8103fa", "cb:01303150537737011211", Map("completedCount" -> 1), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
       UserAgg("Course", "do_13456760076615812", "f3dd58a4-a56f-4c1d-95cf-3231927a28e9", "cb:0130334873750159361", Map("completedCount" -> 1), "{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
@@ -54,7 +56,7 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
 
   "CourseReportJob" should "Generate report with required columns" in {
     implicit val fc = mock[FrameworkContext]
-    val conf = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+
 
     val convertMethod = udf((value: mutable.WrappedArray[String]) => {
       if (null != value && value.nonEmpty)
@@ -64,38 +66,39 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
 
     val alteredUserCourseDf = userCoursesDF.withColumn("certificates", convertMethod(split(userCoursesDF.col("certificates"), ",").cast("array<string>")))
 
-    (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+    (fc.loadData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
 
-    (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
+    (fc.loadData _)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType(), Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
       .anyNumberOfTimes()
       .returning(assessmentProfileDF)
 
     val schema = Encoders.product[UserData].schema
 
-    (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("user_id", "activity_id", "agg", "context_id")))
+    (fc.loadData _)
+      .expects(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType(), Some(Seq("user_id", "activity_id", "agg", "context_id")))
       .anyNumberOfTimes()
       .returning(userActivityAgg)
 
-    (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("identifier", "hierarchy")))
+    (fc.loadData _)
+      .expects(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), "org.apache.spark.sql.cassandra", new StructType(), Some(Seq("identifier", "hierarchy")))
       .anyNumberOfTimes()
       .returning(contentHierarchyDF)
 
-    (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid", "state", "district")))
+    (fc.loadData _)
+      .expects(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", schema, Some(Seq("firstname", "lastname", "userid", "state", "district")))
       .anyNumberOfTimes()
       .returning(userDF)
 
-    (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon")))
+    (fc.loadData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType(), Some(Seq("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon")))
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
+    val conf = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV3","modelParams":{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_1130314965721088001129","do_1130314965721088001129"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v3/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     CourseReport.execute(Some(JSONUtils.deserialize[Map[String, AnyRef]](conf)))
 
 

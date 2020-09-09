@@ -4,13 +4,13 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils}
+import org.ekstep.analytics.framework.util.DatasetUtil.extensions
+import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, ReportConfigs, ReportOnDemandModelTemplate}
 import org.sunbird.analytics.job.report.CourseMetricsJobV2.saveReportToBlobStore
-import org.sunbird.analytics.util.CourseUtils.filterAssessmentDF
 import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -22,71 +22,67 @@ case class ContentBatch(courseId: String, batchId: String, startDate: String, en
 
 case class Reports(requestId: String, reportPath: String, batchIds: List[ContentBatch])
 
-
 object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, ReportLocations, ReportLocations] with IJob with BaseReportsJob {
-  val columnsOrder = List("Batch Id", "Batch Name", "Collection Id", "Collection Name", "DIKSHA UUID", "User Name", "State", "District", "Enrolment Date", "Completion Date", "Certificate Status", "Course Progress", "Total Score")
 
-  val reportFieldMapping = Map("courseid" -> "Collection Id", "courseName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "DIKSHA UUID", "username" -> "User Name",
-    "state" -> "State", "district" -> "District", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "course_completion" -> "Course Progress", "total_sum_score" -> "Total Score", "certificate_status" -> "Certificate Status"
-  )
 
   override def filterReports(reportConfigs: Dataset[ReportConfigs], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Dataset[Reports] = {
     import spark.implicits._
-    reportConfigs.show(false)
+    val activeBatches = CourseUtils.getActiveBatches(fc.loadData, cassandraUrl, List(), sunbirdCoursesKeyspace)
     val filteredReports = reportConfigs.as[ReportConfigs].collect.map(f => {
       val contentFilters = config.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
       val reportPath = "course-progress-reports/"
-      val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
-      Reports(f.requestId, reportPath, filteredContents.select(col("*")).map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))).collect().toList)
+      val filteredBatches = if (contentFilters.nonEmpty) {
+        val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
+        activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
+          .select(activeBatches.col("*")).map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))) collect
+      } else {
+        println(activeBatches)
+        activeBatches.show(false)
+        activeBatches.map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))).collect
+      }
+      Reports(f.requestId, reportPath, filteredBatches.toList)
+
     })
     spark.createDataset(filteredReports)
+
   }
 
   override def generateReports(filteredReports: Dataset[Reports], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Dataset[ReportLocations] = {
     import spark.implicits._
-    val schema = Encoders.product[UserData].schema
-
-    val userDF = fetchData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"),
-      redisUrl,
-      Some(schema),
-      Some(Seq("firstname", "lastname", "userid", "state", "district"))).withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
-
-    val userEnrolmentDF = fetchData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),
-      cassandraUrl, Some(new StructType()),
-      Some(Seq("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon")))
-      .withColumn("certificate_status", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
-      .persist(StorageLevel.MEMORY_ONLY)
-
-    val assessmentDF = CourseUtils.filterAssessmentDF(
-      fetchData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),
-        cassandraUrl,
-        Some(new StructType()),
-        Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
-    )
+    val assessmentDF = getAssessmentData(spark, loadData = fc.loadData)
+    val userEnrolmentDF = getUserEnrollment(spark, loadData = fc.loadData)
+    val userDF = getUserData(spark, loadData = fc.loadData)
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
-    val reportPath= "course-report-path/"
-    val userCourseInfoDF = getUserCourseInfo(fetchData).join(userDF, Seq("userid"), "inner")
-    filteredReports.flatMap(f => {
+    val reportPath = "course-report-path/"
+    val userCourseInfoDF = getUserCourseInfo(fc.loadData).join(userDF, Seq("userid"), "inner").persist(StorageLevel.MEMORY_ONLY)
+    val res = filteredReports.collect().flatMap(f => {
       val reportLocation: List[ReportLocations] = f.batchIds.map(row => {
         val coursesBatchInfo: CourseBatchInfo = CourseUtils.getCourseInfo(spark, row.courseId)
         val batchName: String = coursesBatchInfo.batches.find(x => row.batchId == x.batchId).map(x => x.name).getOrElse("")
         val batch = CourseBatchMap(row.batchId, row.startDate, row.endDate, coursesBatchInfo.channel, "", coursesBatchInfo.name, batchName);
-        val result = CommonUtil.time({
-          val reportDF = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF)
-          reportDF.unpersist(true)
-          val totalRecords = reportDF.count()
-          ReportLocations(f.requestId, saveReportToBlobStore(batch, reportDF, storageConfig, totalRecords, reportPath))
-        })
-        result._2
+        val reportDF = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF)
+        reportDF.unpersist(true)
+        val totalRecords = reportDF.count()
+        val path:List[String] = reportDF.saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
+        println("pathaa" + path)
+        ReportLocations(f.requestId, path)
       })
       reportLocation
     })
+    spark.createDataset(res)
   }
 
 
   def getCourseReport(batch: CourseBatchMap, userCourseDF: DataFrame, userEnrollmentDF: DataFrame, assessmentProfileDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+
+    val columnsOrder = List("Batch Id", "Batch Name", "Collection Id", "Collection Name", "DIKSHA UUID", "User Name", "State", "District", "Enrolment Date", "Completion Date", "Certificate Status", "Course Progress", "Total Score")
+
+    val reportFieldMapping = Map("courseid" -> "Collection Id", "courseName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "DIKSHA UUID", "user_name" -> "User Name",
+      "state" -> "State", "district" -> "District", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "course_completion" -> "Course Progress", "total_sum_score" -> "Total Score", "certificate_status" -> "Certificate Status"
+    )
+
     val userEnrolmentDF = userEnrollmentDF.where(col("batchid") === batch.batchid)
       .withColumn("batchName", lit(batch.batchName))
       .withColumn("courseName", lit(batch.courseName))
@@ -101,14 +97,14 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
         userEnrolmentDF.col("userid") === userCourseDF.col("userid"), "inner")
       .select(
         userEnrolmentDF.col("*"),
-        col(UserCache.firstname), col(UserCache.lastname),
         col(UserCache.district), col(UserCache.state),
         col("completionPercentage").as("course_completion"),
-        col("l1identifier"), col("l1completionPercentage")
+        col("l1identifier"), col("l1completionPercentage"),
+        col("user_name")
       ).persist(StorageLevel.MEMORY_ONLY)
 
     val assessmentAggDf = Window.partitionBy("userid", "batchid", "courseid")
-    val assessDF = filterAssessmentDF(assessmentProfileDF)
+    val assessDF = assessmentProfileDF
       .withColumn("agg_score", sum("total_score") over assessmentAggDf)
       .withColumn("agg_max_score", sum("total_max_score") over assessmentAggDf)
       .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
@@ -116,15 +112,14 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
     val assessmentDF = reportDF.join(assessDF, Seq("courseid", "batchid", "userid"), "left_outer")
     val contentIds: List[String] = assessmentDF.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
     val denormedDF = denormAssessment(assessmentDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY)
-      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
-      .select("courseid", "batchid", "userid", "username", "district", "state", "course_completion", "l1identifier", "l1completionPercentage", "content_id", "name", "grand_total", "total_sum_score", "batchName", "courseName", "certificate_status", "enrolleddate", "completedon")
+      .select("courseid", "batchid", "userid", "user_name", "district", "state", "course_completion", "l1identifier", "l1completionPercentage", "content_id", "name", "grand_total", "total_sum_score", "batchName", "courseName", "certificate_status", "enrolleddate", "completedon")
+
     val groupedDF = denormedDF.groupBy("courseid", "batchid", "userid")
+
     val reportData = transposeDF(groupedDF).join(denormedDF, Seq("courseid", "batchid", "userid"), "inner")
       .dropDuplicates("userid", "courseid", "batchid")
       .drop("content_name", "null", "grand_total", "l1identifier", "l1completionPercentage", "name", "content_id")
-    val customizedDF = customizeDF(reportData, reportFieldMapping, columnsOrder)
-    println("customizedDF" + customizedDF.show(false))
-    reportData
+    customizeDF(reportData, reportFieldMapping, columnsOrder)
   }
 
   def transposeDF(reportDF: RelationalGroupedDataset): DataFrame = {
@@ -136,28 +131,26 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       .join(leafNodes, Seq("courseid", "batchid", "userid"), "inner")
   }
 
-  def getUserCourseInfo(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getUserCourseInfo(fetchData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
 
     import sqlContext.implicits._
 
-    val userAgg = fetchData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("user_id", "activity_id", "agg", "context_id")))
+    val userAgg = fetchData(spark, Map("table" -> "user_activity_agg", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType(), Some(Seq("user_id", "activity_id", "agg", "context_id")))
       .map(row => {
         UserAggData(row.getString(0), row.getString(1), row.get(2).asInstanceOf[Map[String, Int]]("completedCount"), row.getString(3))
       }).toDF()
-    val hierarchyData = fetchData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), cassandraUrl, Some(new StructType()), Some(Seq("identifier", "hierarchy")))
+    val hierarchyData = fetchData(spark, Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore), cassandraUrl, new StructType(), Some(Seq("identifier", "hierarchy")))
 
     val hierarchyDataDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
       parseCourseHierarchy(List(hierarchy), 0, CourseData(row.getString(0), "0", List()))
     }).toDF()
 
-    println("hierarchyDataDf" + hierarchyDataDf.show(20, false))
 
     val hierarchyDf = hierarchyDataDf.select($"courseid", $"leafNodesCount", $"level1Data", explode_outer($"level1Data").as("exploded_level1Data"))
       .select("courseid", "leafNodesCount", "exploded_level1Data.*")
 
-    println("hierarchyDf" + hierarchyDf.show(20, false))
 
     val dataDf = hierarchyDf.join(userAgg, hierarchyDf.col("courseid") === userAgg.col("activity_id"), "left")
       .withColumn("completionPercentage", (userAgg.col("completedCount") / hierarchyDf.col("leafNodesCount") * 100).cast("int"))
@@ -214,7 +207,38 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       .select("*")
   }
 
-  override def saveReports(generatedreports: Dataset[ReportLocations], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext) = ???
+  def getAssessmentData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame) = {
+    loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),
+      cassandraUrl,
+      new StructType(),
+      Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
+      .withColumnRenamed("user_id", "userid")
+      .withColumnRenamed("batch_id", "batchid")
+      .withColumnRenamed("course_id", "courseid")
+  }
+
+  def getUserEnrollment(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame) = {
+    loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),
+      cassandraUrl, new StructType(),
+      Some(Seq("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon")))
+      .withColumn("certificate_status", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
+      .persist(StorageLevel.MEMORY_ONLY)
+  }
+
+  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame) = {
+    val schema = Encoders.product[UserData].schema
+    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), redisUrl, schema,
+      Some(Seq("firstname", "lastname", "userid", "state", "district"))).persist(StorageLevel.MEMORY_ONLY)
+      .withColumn("user_name", concat_ws(" ", col("firstname"), col("lastname")))
+  }
+
+
+  override def saveReports(generatedreports: Dataset[ReportLocations], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext) = {
+    println("Report is got saved")
+    println("generatedreports" + generatedreports.show(false))
+    generatedreports
+  }
+
 
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = ???
 }
