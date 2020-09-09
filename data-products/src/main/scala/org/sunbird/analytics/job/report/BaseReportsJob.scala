@@ -1,13 +1,10 @@
 package org.sunbird.analytics.job.report
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, concat, concat_ws, first, lit}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.ekstep.analytics.framework.Level.INFO
-import org.ekstep.analytics.framework.util.{CommonUtil, JobLogger}
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext, StorageConfig}
-import org.sunbird.analytics.job.report.CourseMetricsJobV2.finalColumnMapping
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.ekstep.analytics.framework.util.CommonUtil
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
@@ -35,7 +32,7 @@ trait BaseReportsJob {
     import org.apache.spark.sql.functions.col
     val selectedCols = columnNames.getOrElse(Seq("*"))
     if (dataSchema.nonEmpty) {
-     spark.read.schema(dataSchema).format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
+      spark.read.schema(dataSchema).format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)
     }
     else {
       spark.read.format(url).options(settings).load().select(selectedCols.map(c => col(c)): _*)

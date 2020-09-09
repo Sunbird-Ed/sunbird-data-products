@@ -10,9 +10,14 @@ import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, ReportConfigs, ReportOnDemandModelTemplate}
-import org.sunbird.analytics.job.report.CourseMetricsJobV2.saveReportToBlobStore
+import org.joda.time.format.DateTimeFormat
+import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
+
+case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
+case class Level1Data(l1identifier: String, l1leafNodesCount: String)
+case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
 
 case class ReportLocations(requestId: String, locations: List[String])
 
@@ -23,7 +28,6 @@ case class ContentBatch(courseId: String, batchId: String, startDate: String, en
 case class Reports(requestId: String, reportPath: String, batchIds: List[ContentBatch])
 
 object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, ReportLocations, ReportLocations] with IJob with BaseReportsJob {
-
 
   override def filterReports(reportConfigs: Dataset[ReportConfigs], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Dataset[Reports] = {
     import spark.implicits._
@@ -52,6 +56,7 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
     val assessmentDF = getAssessmentData(spark, loadData = fc.loadData)
     val userEnrolmentDF = getUserEnrollment(spark, loadData = fc.loadData)
     val userDF = getUserData(spark, loadData = fc.loadData)
+    val currentDate = DateTimeFormat.forPattern("yyyy-MM-dd").print(DateTime.now(DateTimeZone.UTC).minusDays(1))
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
@@ -61,12 +66,11 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       val reportLocation: List[ReportLocations] = f.batchIds.map(row => {
         val coursesBatchInfo: CourseBatchInfo = CourseUtils.getCourseInfo(spark, row.courseId)
         val batchName: String = coursesBatchInfo.batches.find(x => row.batchId == x.batchId).map(x => x.name).getOrElse("")
-        val batch = CourseBatchMap(row.batchId, row.startDate, row.endDate, coursesBatchInfo.channel, "", coursesBatchInfo.name, batchName);
+        val batch: CourseBatchMap = CourseBatchMap(row.batchId, row.startDate, row.endDate, coursesBatchInfo.channel, "", coursesBatchInfo.name, batchName);
         val reportDF = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF)
         reportDF.unpersist(true)
         val totalRecords = reportDF.count()
-        val path:List[String] = reportDF.saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batch.batchid, Option(Map("header" -> "true")), None)
-        println("pathaa" + path)
+        val path: List[String] = reportDF.saveToBlobStore(storageConfig, "csv", reportPath + s"report-${batch.batchid}-progress-${currentDate}", Option(Map("header" -> "true")), None)
         ReportLocations(f.requestId, path)
       })
       reportLocation
@@ -83,24 +87,22 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       "state" -> "State", "district" -> "District", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "course_completion" -> "Course Progress", "total_sum_score" -> "Total Score", "certificate_status" -> "Certificate Status"
     )
 
-    val userEnrolmentDF = userEnrollmentDF.where(col("batchid") === batch.batchid)
+    val enrolledUsersToBatch = userEnrollmentDF.where(col("batchid") === batch.batchid)
       .withColumn("batchName", lit(batch.batchName))
       .withColumn("courseName", lit(batch.courseName))
       .withColumn("enddate", lit(batch.endDate))
       .withColumn("startdate", lit(batch.startDate))
-      .select(col("batchid"), col("userid"), col("enrolleddate"), col("completedon"), col("courseid"), col("certificate_status"),
+      .select(col("batchid"), col("userid"),
+        col("enrolleddate"), col("completedon"),
+        col("courseid"), col("certificate_status"),
         col("courseName"), col("batchName")
       )
-    val reportDF = userEnrolmentDF
+    val reportDF = enrolledUsersToBatch
       .join(userCourseDF, userCourseDF.col("contextid") === s"cb:${batch.batchid}" &&
-        userEnrolmentDF.col("courseid") === userCourseDF.col("courseid") &&
-        userEnrolmentDF.col("userid") === userCourseDF.col("userid"), "inner")
-      .select(
-        userEnrolmentDF.col("*"),
-        col(UserCache.district), col(UserCache.state),
-        col("completionPercentage").as("course_completion"),
-        col("l1identifier"), col("l1completionPercentage"),
-        col("user_name")
+        enrolledUsersToBatch.col("courseid") === userCourseDF.col("courseid") &&
+        enrolledUsersToBatch.col("userid") === userCourseDF.col("userid"), "inner")
+      .select(enrolledUsersToBatch.col("*"), col(UserCache.district), col(UserCache.state), col("completionPercentage").as("course_completion"),
+        col("l1identifier"), col("l1completionPercentage"), col("user_name")
       ).persist(StorageLevel.MEMORY_ONLY)
 
     val assessmentAggDf = Window.partitionBy("userid", "batchid", "courseid")
