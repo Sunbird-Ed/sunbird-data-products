@@ -59,7 +59,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
       .set("spark.sql.caseSensitive", AppConf.getConfig(key = "spark.sql.caseSensitive"))
     val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
     val time = CommonUtil.time({
-      prepareReport(spark, fc.loadData, config, batchList)
+      prepareReport(spark, fetchData, config, batchList)
     });
     metrics.put("totalExecutionTime", time._1);
     JobLogger.end("AssessmentReport Generation Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "metrics" -> metrics)))
@@ -67,24 +67,24 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
     fc.closeContext()
   }
 
-  def prepareReport(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
+  def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, config: JobConfig, batchList: List[String])(implicit fc: FrameworkContext): Unit = {
 
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext = new SQLContext(spark.sparkContext)
 
     val userData = CommonUtil.time({
-      CourseUtils.recordTime(CourseUtils.getUserData(spark, fc.loadData, Seq("firstname", "lastname", "userid", "state", "district", "userchannel", "orgname", "maskedemail", "maskedphone", "block", "externalid", "schoolname", "schooludisecode")), "Time taken to get generate the userData- ")
+      CourseUtils.recordTime(CourseUtils.getUserData(spark, fetchData), "Time taken to get generate the userData- ")
     })
 
     val modelParams = config.modelParams.get
-    val filteredBatches = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fc.loadData, cassandraUrl, batchList, sunbirdCoursesKeyspace), config)
+    val filteredBatches = CourseUtils.getFilteredBatches(spark, CourseUtils.getActiveBatches(fetchData, cassandraUrl, batchList, sunbirdCoursesKeyspace), config)
     val activeBatchesCount = new AtomicInteger(filteredBatches.length)
 
     metrics.put("userDFLoadTime", userData._1)
     metrics.put("activeBatchesCount", activeBatchesCount.get())
     val batchFilters = JSONUtils.serialize(modelParams("batchFilters"))
 
-    val assessmentProfileDF = getAssessmentProfileDF(fc.loadData).persist(StorageLevel.MEMORY_ONLY)
+    val assessmentProfileDF = getAssessmentProfileDF(fetchData).persist(StorageLevel.MEMORY_ONLY)
 
     for (index <- filteredBatches.indices) {
       val row = filteredBatches(index)
@@ -99,7 +99,7 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
             val totalRecords = denormalizedDF.count()
             if (totalRecords > 0) CourseUtils.recordTime(saveReport(denormalizedDF, batch.batchid, modelParams.getOrElse("reportPath", AppConf.getConfig("assessment.metrics.cloud.objectKey")).asInstanceOf[String]), s"Time take to save the $totalRecords for batch ${batch.batchid} all the reports into azure -")
             denormalizedDF.unpersist(true)
-          } else {
+          }else{
             JobLogger.log("empty content id", None, INFO)
           }
           reportDF.unpersist(true)
@@ -114,10 +114,10 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
   }
 
 
-  def getAssessmentProfileDF(loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-    val userEnrolmentDF = loadData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType(), Some(Seq("batchid", "userid", "courseid", "active", "completionpercentage", "enrolleddate", "completedon")))
+  def getAssessmentProfileDF(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+    val userEnrolmentDF = fetchData(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("batchid", "userid", "courseid", "active", "completionpercentage", "enrolleddate", "completedon")))
       .filter(lower(col("active")).equalTo("true")).persist(StorageLevel.MEMORY_ONLY)
-    val assessmentProfileDF = loadData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, new StructType(), Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
+    val assessmentProfileDF = fetchData(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace), cassandraUrl, Some(new StructType()), Some(Seq("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")))
     val assessmentDF = filterAssessmentDF(assessmentProfileDF)
     val assessmentAggDf = Window.partitionBy("user_id", "batch_id", "course_id")
     val aggregatedAssessmentDF = assessmentDF
@@ -182,7 +182,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         .withColumn(UserCache.schooludisecode, when(reportDF.col("course_channel") === reportDF.col(UserCache.userchannel), reportDF.col(UserCache.schooludisecode)).otherwise(""))
     } else reportDF
   }
-
   /**
    * De-norming the assessment report - Adding content name column to the content id
    *
@@ -198,7 +197,6 @@ object AssessmentMetricsJobV2 extends optional.Application with IJob with BaseRe
         report.col(UserCache.orgname), report.col(UserCache.externalid), report.col(UserCache.schoolname),
         report.col("username"), col(UserCache.state), col(UserCache.schooludisecode))
   }
-
   /**
    * This method is used to upload the report the azure cloud service
    */

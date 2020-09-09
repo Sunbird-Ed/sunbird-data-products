@@ -102,27 +102,27 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType(), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
       .returning(userCoursesDF)
       .anyNumberOfTimes()
 
     val schema = Encoders.product[UserData].schema
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema, Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType(), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
       .anyNumberOfTimes()
       .returning(assessmentProfileDF)
 
-    AssessmentMetricsJobV2.prepareReport(spark, mockFc.loadData, config, List())
+    AssessmentMetricsJobV2.prepareReport(spark, reporterMock.fetchData, config, List())
   }
 
   it should "generate report per batch" in {
@@ -135,27 +135,27 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJob","modelParams":{"batchFilters":["NCF"],"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     val config = JSONUtils.deserialize[JobConfig](strConfig)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra",new StructType(), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra",Some(new StructType()),Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
       .returning(userCoursesDF)
       .anyNumberOfTimes()
 
     val schema = Encoders.product[UserData].schema
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema, Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType(), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
       .anyNumberOfTimes()
       .returning(assessmentProfileDF)
 
-    AssessmentMetricsJobV2.prepareReport(spark, mockFc.loadData, config, List("1006"))
+    AssessmentMetricsJobV2.prepareReport(spark, reporterMock.fetchData, config, List("1006"))
   }
 
   it should "return an empty list if no assessment names found for given content" in {
@@ -174,29 +174,29 @@ class TestAssessmentMetricsJobV2 extends BaseReportSpec with MockFactory {
     (mockStorageService.upload _).expects(*, *, *, *, *, *, *).returns("").anyNumberOfTimes();
     (mockStorageService.closeContext _).expects().returns().anyNumberOfTimes()
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
       .returning(courseBatchDF)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra",new StructType(), Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()),Some(Seq("batchid","userid","courseid","active","completionpercentage","enrolleddate","completedon")))
       .returning(userCoursesDF)
       .anyNumberOfTimes()
 
     val schema = Encoders.product[UserData].schema
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", schema, Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user","infer.schema" -> "true", "key.column"-> "userid"),"org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid","state","district","userchannel","orgname","maskedemail","maskedphone","block","externalid","schoolname","schooludisecode")))
       .anyNumberOfTimes()
       .returning(userInfoDF)
 
-    (mockFc.loadData _)
-      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra",new StructType(), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "assessment_aggregator", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", Some(new StructType()), Some(Seq("course_id","batch_id","user_id","content_id","total_max_score","total_score","grand_total")))
       .anyNumberOfTimes()
       .returning(assessmentProfileDF)
 
-    AssessmentMetricsJobV2.prepareReport(spark, mockFc.loadData, jobConf, List())
+    AssessmentMetricsJobV2.prepareReport(spark, reporterMock.fetchData, jobConf, List())
     val contents = CourseUtils.filterContents("""{"request": {"filters": {"channel": "0898765434567891"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}}""".stripMargin)
-    val assessmentDF = AssessmentMetricsJobV2.getAssessmentProfileDF(mockFc.loadData)
+    val assessmentDF = AssessmentMetricsJobV2.getAssessmentProfileDF(reporterMock.fetchData)
     val batch = CourseBatch("1006","","2018-12-01","in.ekstep")
     val reportDf = AssessmentMetricsJobV2.getReportDF(batch, userInfoDF, assessmentDF, false)
     val contentIds: List[String] = reportDf.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]

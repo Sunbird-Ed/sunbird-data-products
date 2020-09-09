@@ -203,10 +203,10 @@ object CourseUtils {
     } else List[CourseBatchInfo]()
   }
 
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
+  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
                       (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
-    val courseBatchDF = loadCourseBatch(loadData, url, batchList, sunbirdCoursesKeyspace)
+    val courseBatchDF = loadCourseBatch1(loadData, url, batchList, sunbirdCoursesKeyspace)
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
     val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
     JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
@@ -216,6 +216,23 @@ object CourseUtils {
     JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
     courseBatchDF.unpersist(true)
     activeBatchList
+  }
+
+  def loadCourseBatch1(fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
+                     (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    val courseBatchDF = if (batchList.nonEmpty) {
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+        .filter(batch => batchList.contains(batch.getString(1)))
+        .persist(StorageLevel.MEMORY_ONLY)
+    }
+    else {
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, Some(new StructType()), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+        .persist(StorageLevel.MEMORY_ONLY)
+    }
+    courseBatchDF
+
   }
 
   def loadCourseBatch(fetchData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
@@ -235,11 +252,11 @@ object CourseUtils {
 
   }
 
-//  def getUserData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame): DataFrame = {
-//    val schema = Encoders.product[UserData].schema
-//    fetchData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid", "state", "district", "userchannel", "orgname", "maskedemail", "maskedphone", "block", "externalid", "schoolname", "schooludisecode")))
-//      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
-//  }
+  def getUserData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame): DataFrame = {
+    val schema = Encoders.product[UserData].schema
+    fetchData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", Some(schema), Some(Seq("firstname", "lastname", "userid", "state", "district", "userchannel", "orgname", "maskedemail", "maskedphone", "block", "externalid", "schoolname", "schooludisecode")))
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
+  }
 
   def getFilteredBatches(spark: SparkSession, activeBatches: DataFrame, config: JobConfig): Array[Row] = {
     implicit val sparkSession: SparkSession = spark
@@ -295,7 +312,7 @@ object CourseUtils {
   def filterAssessmentDF(assesmentDF: DataFrame): DataFrame = {
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
-    val df = Window.partitionBy("userid", "batchid", "courseid", "content_id").orderBy(desc(columnName))
+    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
     assesmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum").persist(StorageLevel.MEMORY_ONLY)
   }
 
