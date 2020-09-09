@@ -192,7 +192,7 @@ object CourseUtils {
     } else CourseBatchInfo("", "", "", "", List())
   }
 
-  def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
+  def filterContents(query: String): List[CourseBatchInfo] = {
     val apiUrl = Constants.COMPOSITE_SEARCH_URL
     val response = RestUtil.post[CourseResponse](apiUrl, query)
     if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
@@ -203,16 +203,7 @@ object CourseUtils {
   def getActiveBatches(fetchData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
                       (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext: SQLContext = spark.sqlContext
-    val courseBatchDF = if (batchList.nonEmpty) {
-      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
-        .filter(batch => batchList.contains(batch.getString(1)))
-        .persist(StorageLevel.MEMORY_ONLY)
-    }
-    else {
-      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
-        .persist(StorageLevel.MEMORY_ONLY)
-    }
-
+    val courseBatchDF = loadCourseBatch(fetchData, url, batchList, sunbirdCoursesKeyspace)
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
     val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
     JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
@@ -222,6 +213,23 @@ object CourseUtils {
     JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
     courseBatchDF.unpersist(true)
     activeBatchList
+  }
+
+  def loadCourseBatch(fetchData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame, url: String, batchList: List[String], sunbirdCoursesKeyspace: String)
+                     (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    val courseBatchDF = if (batchList.nonEmpty) {
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+        .filter(batch => batchList.contains(batch.getString(1)))
+        .persist(StorageLevel.MEMORY_ONLY)
+    }
+    else {
+      fetchData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), url, new StructType(), Some(Seq("courseid", "batchid", "enddate", "startdate")))
+        .persist(StorageLevel.MEMORY_ONLY)
+    }
+    courseBatchDF
+
   }
 
   def getUserData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, Option[StructType], Option[Seq[String]]) => DataFrame): DataFrame = {
@@ -237,7 +245,7 @@ object CourseUtils {
     val modelParams = config.modelParams.get
     val contentFilters = modelParams.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
     val filteredBatches = if (contentFilters.nonEmpty) {
-      val filteredContents = CourseUtils.filterContents(spark, JSONUtils.serialize(contentFilters)).toDF()
+      val filteredContents = CourseUtils.filterContents(JSONUtils.serialize(contentFilters)).toDF()
       activeBatches.join(filteredContents, activeBatches.col("courseid") === filteredContents.col("identifier"), "inner")
         .select(activeBatches.col("*")).collect
     } else activeBatches.collect
