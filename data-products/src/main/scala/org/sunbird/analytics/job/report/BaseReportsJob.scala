@@ -9,6 +9,12 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable
 
+case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
+
+case class Level1Data(l1identifier: String, l1leafNodesCount: String)
+
+case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
+
 trait BaseReportsJob {
 
   val sunbirdKeyspace: String = AppConf.getConfig("course.metrics.cassandra.sunbirdKeyspace")

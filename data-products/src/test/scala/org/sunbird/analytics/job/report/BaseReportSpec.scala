@@ -6,6 +6,10 @@ import org.sunbird.analytics.util.EsIndex
 import org.joda.time.DateTimeUtils
 import org.scalatest.BeforeAndAfterAll
 
+case class UserAgg(activity_type:String,activity_id:String, user_id:String,context_id:String, agg: Map[String,Int],agg_last_updated:String)
+case class ContentHierarchy(identifier: String, hierarchy: String)
+
+
 class BaseReportSpec extends BaseSpec with BeforeAndAfterAll {
 
   override def beforeAll() {

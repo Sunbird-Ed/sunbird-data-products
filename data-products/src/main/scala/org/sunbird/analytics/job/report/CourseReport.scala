@@ -18,11 +18,7 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.mutable.ListBuffer
 
-case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
 
-case class Level1Data(l1identifier: String, l1leafNodesCount: String)
-
-case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
 
 case class CourseBatchMap(batchid: String, startDate: String, endDate: String, courseChannel: String, courseName: String, batchName: String)
 
@@ -71,7 +67,7 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
     import spark.implicits._
     val assessmentDF = getAssessmentData(spark, loadData = fc.loadData)
     val userEnrolmentDF = getUserEnrollment(spark, loadData = fc.loadData)
-    val userDF = getUserData(spark, loadData = fc.loadData)
+    val userDF = CourseUtils.getUserData(spark, loadData = fc.loadData, Seq("firstname", "lastname", "userid", "state", "district", "userchannel"))
     val currentDate = DateTimeFormat.forPattern("yyyy-MM-dd").print(DateTime.now(DateTimeZone.UTC).minusDays(1))
     val userCourseInfoDF = getUserCourseInfo(fc.loadData).join(userDF, Seq("userid"), "inner").persist(StorageLevel.MEMORY_ONLY)
     val reportPaths = filteredReports.collect().map(f => {
@@ -215,21 +211,10 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       .persist(StorageLevel.MEMORY_ONLY)
   }
 
-  def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame) = {
-    val schema = Encoders.product[UserData].schema
-    loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), redisUrl, schema,
-      Some(Seq("firstname", "lastname", "userid", "state", "district", "userchannel"))).persist(StorageLevel.MEMORY_ONLY)
-      .withColumn("user_name", concat_ws(" ", col("firstname"), col("lastname")))
-  }
-
   def filterReportByConsent(requestedChannel: String, courseChannel: String, reportDF: DataFrame): DataFrame = {
-    println("requestedChannel" + requestedChannel)
-    println("courseChannel" + courseChannel)
     if (requestedChannel == courseChannel) {
-      println("found")
       reportDF
     } else {
-      println("not found")
       reportDF.where(col("userchannel") === requestedChannel)
     }
   }

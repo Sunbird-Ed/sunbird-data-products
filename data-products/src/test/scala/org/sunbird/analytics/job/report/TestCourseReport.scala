@@ -12,10 +12,6 @@ import org.sunbird.analytics.util.{EmbeddedPostgresSql, UserData}
 
 import scala.collection.mutable
 
-case class UserAgg(activity_type: String, activity_id: String, user_id: String, context_id: String, agg: Map[String, Int], agg_last_updated: String)
-
-case class ContentHierarchy(identifier: String, hierarchy: String)
-
 class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJob {
   implicit var spark: SparkSession = _
   var courseBatchDF: DataFrame = _
