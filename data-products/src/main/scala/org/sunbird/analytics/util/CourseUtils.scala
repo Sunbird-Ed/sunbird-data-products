@@ -1,5 +1,6 @@
 package org.sunbird.analytics.util
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{col, concat_ws, desc, lit, row_number, to_date}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -14,6 +15,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfi
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.job.report.{CourseData, Level1Data}
 import org.sunbird.cloud.storage.conf.AppConf
 
 //Getting live courses from compositesearch
@@ -29,7 +31,7 @@ case class CourseResult(count: Int, content: List[CourseBatchInfo])
 
 case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
 
-case class BatchInfo(batchId: String, startDate: String, endDate: String, name:String)
+case class BatchInfo(batchId: String, startDate: String, endDate: String, name: String)
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), maskedemail: Option[String] = Option(""), maskedphone: Option[String] = Option(""),
@@ -296,4 +298,34 @@ object CourseUtils {
     val df = Window.partitionBy("userid", "batchid", "courseid", "content_id").orderBy(desc(columnName))
     assesmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum").persist(StorageLevel.MEMORY_ONLY)
   }
+
+  def parseCourseHierarchy(data: List[Map[String, AnyRef]], levelCount: Int, prevData: CourseData, depthLevel: Int): CourseData = {
+    if (levelCount < depthLevel) {
+      val list = data.map(childNodes => {
+        val mimeType = childNodes.getOrElse("mimeType", "").asInstanceOf[String]
+        val visibility = childNodes.getOrElse("visibility", "").asInstanceOf[String]
+        val contentType = childNodes.getOrElse("contentType", "").asInstanceOf[String]
+        if ((StringUtils.equalsIgnoreCase(mimeType, "application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility, "Default") && StringUtils.equalsIgnoreCase(contentType, "Course"))) {
+          val identifier = childNodes.getOrElse("identifier", "").asInstanceOf[String]
+          val leafNodesCount = childNodes.getOrElse("leafNodesCount", 0).asInstanceOf[Int]
+          val courseData = if (levelCount == 0) {
+            CourseData(prevData.courseid, leafNodesCount.toString, List())
+          } else {
+            val prevL1List = prevData.level1Data
+            CourseData(prevData.courseid, prevData.leafNodesCount, (prevL1List ::: List(Level1Data(identifier, leafNodesCount.toString))))
+          }
+          val children = childNodes.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
+          if (null != children && children.nonEmpty) {
+            parseCourseHierarchy(children, levelCount + 1, courseData, 2)
+          } else courseData
+        } else prevData
+      })
+      val courseId = list.head.courseid
+      val leafNodeCount = list.head.leafNodesCount
+      val level1Data = list.map(x => x.level1Data).flatten.toList
+      CourseData(courseId, leafNodeCount, level1Data)
+    } else prevData
+  }
+
+
 }

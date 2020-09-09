@@ -26,7 +26,6 @@ case class Level1Data(l1identifier: String, l1leafNodesCount: String)
 
 case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
 
-
 case class CourseBatchMap(batchid: String, startDate: String, endDate: String, courseChannel: String, courseName: String, batchName: String)
 
 case class ContentBatch(courseId: String, batchId: String, startDate: String, endDate: String)
@@ -53,18 +52,17 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
     import spark.implicits._
     val courseBatches = CourseUtils.loadCourseBatch(fc.loadData, cassandraUrl, List(), sunbirdCoursesKeyspace)
     val filteredReports = reportConfigs.as[OnDemandJobRequest].collect.map(f => {
-      val request_data = JSONUtils.deserialize[Map[String, AnyRef]](f.request_data)
-      val contentFilters = request_data.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
-      val batchFilters = request_data.getOrElse("batchFilters", List()).asInstanceOf[List[String]]
+      val requestObject = JSONUtils.deserialize[Map[String, AnyRef]](f.request_data)
+      val contentFilters = requestObject.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
+      val batchFilters = requestObject.getOrElse("batchFilters", List()).asInstanceOf[List[String]]
       val filteredBatches = if (contentFilters.nonEmpty) {
         val filteredContents = CourseUtils.filterContents(JSONUtils.serialize(contentFilters)).toDF()
         courseBatches.join(filteredContents, courseBatches.col("courseid") === filteredContents.col("identifier"), "inner")
           .select(courseBatches.col("*")).map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))).collect
       } else {
-        courseBatches.show(false)
         courseBatches.map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))).collect
       }
-      Reports(f.request_id, request_data.getOrElse("reportPath", "").asInstanceOf[String], filteredBatches.toList, filteredBatches.length, batchFilters)
+      Reports(f.request_id, requestObject.getOrElse("reportPath", "").asInstanceOf[String], filteredBatches.toList, filteredBatches.length, batchFilters)
     })
     spark.createDataset(filteredReports)
 
@@ -76,21 +74,17 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
     val userEnrolmentDF = getUserEnrollment(spark, loadData = fc.loadData)
     val userDF = getUserData(spark, loadData = fc.loadData)
     val currentDate = DateTimeFormat.forPattern("yyyy-MM-dd").print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-    val container = AppConf.getConfig("cloud.container.reports")
-    val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
-    val storageConfig = getStorageConfig(container, objectKey)
     val userCourseInfoDF = getUserCourseInfo(fc.loadData).join(userDF, Seq("userid"), "inner").persist(StorageLevel.MEMORY_ONLY)
     val reportPaths = filteredReports.collect().map(f => {
-      val files = f.batchIds.flatMap(row => {
+      val blobPathList = f.batchIds.flatMap(row => {
         var filesPaths = ListBuffer[String]()
         metrics.put(f.requestId + " : TotalBatches : ", f.count)
         val coursesBatchInfo: CourseBatchInfo = CourseUtils.getCourseInfo(spark, row.courseId)
-        val batchName: String = coursesBatchInfo.batches.find(x => row.batchId == x.batchId).map(x => x.name).getOrElse("")
-        val batch: CourseBatchMap = CourseBatchMap(row.batchId, row.startDate, row.endDate, coursesBatchInfo.channel, coursesBatchInfo.name, batchName);
+        val batch: CourseBatchMap = CourseBatchMap(row.batchId, row.startDate, row.endDate, coursesBatchInfo.channel, coursesBatchInfo.name, coursesBatchInfo.batches.find(x => row.batchId == x.batchId).map(x => x.name).getOrElse(""));
         val result = CommonUtil.time({
           if (null != coursesBatchInfo.framework && coursesBatchInfo.framework.nonEmpty && f.batchFilter.contains(coursesBatchInfo.framework)) {
             val reportDF = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF)
-            filesPaths = filesPaths ++ reportDF.saveToBlobStore(storageConfig, "csv", f.reportPath + s"report-${batch.batchid}-progress-${currentDate}", Option(Map("header" -> "true")), None)
+            filesPaths = filesPaths ++ reportDF.saveToBlobStore(getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("course.metrics.cloud.objectKey")), "csv", f.reportPath + s"report-${batch.batchid}-progress-${currentDate}", Option(Map("header" -> "true")), None)
             reportDF.unpersist(true)
             filesPaths
           } else {
@@ -98,24 +92,20 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
             JobLogger.log(s"Constrains are not matching, skipping the requestId: ${f.requestId}, batchId: ${batch.batchid} and Remaining batches", None, INFO)
             filesPaths
           }
-
         })
         result._2
       })
-      OnDemandJobRequest(f.requestId, "", files, "COMPLETED")
+      OnDemandJobRequest(f.requestId, "", blobPathList, "COMPLETED")
     })
     spark.createDataset(reportPaths)
   }
 
 
   def getCourseReport(batch: CourseBatchMap, userCourseDF: DataFrame, userEnrollmentDF: DataFrame, assessmentProfileDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-
     val columnsOrder = List("Batch Id", "Batch Name", "Collection Id", "Collection Name", "DIKSHA UUID", "User Name", "State", "District", "Enrolment Date", "Completion Date", "Certificate Status", "Course Progress", "Total Score")
-
     val reportFieldMapping = Map("courseid" -> "Collection Id", "courseName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "DIKSHA UUID", "user_name" -> "User Name",
       "state" -> "State", "district" -> "District", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "course_completion" -> "Course Progress", "total_sum_score" -> "Total Score", "certificate_status" -> "Certificate Status"
     )
-
     val enrolledUsersToBatch = userEnrollmentDF.where(col("batchid") === batch.batchid)
       .withColumn("batchName", lit(batch.batchName))
       .withColumn("courseName", lit(batch.courseName))
@@ -175,7 +165,7 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
 
     val hierarchyDataDf = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
-      parseCourseHierarchy(List(hierarchy), 0, CourseData(row.getString(0), "0", List()))
+      CourseUtils.parseCourseHierarchy(List(hierarchy), 0, CourseData(row.getString(0), "0", List()), depthLevel = 2)
     }).toDF()
 
 
@@ -201,34 +191,6 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
         col("l1identifier"),
         col("l1completionPercentage"))
     resDf
-  }
-
-  def parseCourseHierarchy(data: List[Map[String, AnyRef]], levelCount: Int, prevData: CourseData): CourseData = {
-    if (levelCount < 2) {
-      val list = data.map(childNodes => {
-        val mimeType = childNodes.getOrElse("mimeType", "").asInstanceOf[String]
-        val visibility = childNodes.getOrElse("visibility", "").asInstanceOf[String]
-        val contentType = childNodes.getOrElse("contentType", "").asInstanceOf[String]
-        if ((StringUtils.equalsIgnoreCase(mimeType, "application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility, "Default") && StringUtils.equalsIgnoreCase(contentType, "Course"))) {
-          val identifier = childNodes.getOrElse("identifier", "").asInstanceOf[String]
-          val leafNodesCount = childNodes.getOrElse("leafNodesCount", 0).asInstanceOf[Int]
-          val courseData = if (levelCount == 0) {
-            CourseData(prevData.courseid, leafNodesCount.toString, List())
-          } else {
-            val prevL1List = prevData.level1Data
-            CourseData(prevData.courseid, prevData.leafNodesCount, (prevL1List ::: List(Level1Data(identifier, leafNodesCount.toString))))
-          }
-          val children = childNodes.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
-          if (null != children && children.nonEmpty) {
-            parseCourseHierarchy(children, levelCount + 1, courseData)
-          } else courseData
-        } else prevData
-      })
-      val courseId = list.head.courseid
-      val leafNodeCount = list.head.leafNodesCount
-      val level1Data = list.map(x => x.level1Data).flatten.toList
-      CourseData(courseId, leafNodeCount, level1Data)
-    } else prevData
   }
 
   def denormAssessment(report: DataFrame, contentIds: List[String])(implicit spark: SparkSession): DataFrame = {
