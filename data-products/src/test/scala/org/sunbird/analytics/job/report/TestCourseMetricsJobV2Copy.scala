@@ -2,26 +2,28 @@ package org.sunbird.analytics.job.report
 
 import java.io.File
 import java.time.{ZoneOffset, ZonedDateTime}
+import java.util.Date
 
 import cats.syntax.either._
 import ing.wbaa.druid._
 import ing.wbaa.druid.client.DruidClient
 import io.circe._
 import io.circe.parser._
+import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
 import org.apache.spark.sql.functions._
+
 import scala.collection.JavaConverters._
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.{CourseUtils, UserData}
+import org.sunbird.analytics.util.{CourseUtils, EmbeddedPostgresSql, UserData}
 
 import scala.collection.mutable
 import scala.concurrent.Future
 
-//case class UserAgg(activity_type:String,activity_id:String, user_id:String,context_id:String, agg: Map[String,Int],agg_last_updated:String)
-//case class ContentHierarchy(identifier: String, hierarchy: String)
+
 
 class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with BaseReportsJob  {
   implicit var spark: SparkSession = _
@@ -62,7 +64,11 @@ class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with Ba
 
     implicit val sqlContext: SQLContext = spark.sqlContext
     import sqlContext.implicits._
+      EmbeddedPostgresSql.start()
+      EmbeddedPostgresSql.createTables()
 
+      //EmbeddedPostgresSql.execute(s"""INSERT INTO job_request(tag, request_id, job_id, status, request_data, requested_by,requested_channel, dt_job_submitted) values('11234', '1234', 'CourseMetricsJobV2Copy', 'SUBMITTED', '{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/"}','analytics', 'portal','${new Date()}')""")
+      EmbeddedPostgresSql.execute(s"""INSERT INTO job_request(tag, request_id, job_id, status, request_data, requested_by,requested_channel, dt_job_submitted) values('11234', '1234', 'CourseMetricsJobV2Copy', 'SUBMITTED', '{"batchFilters":["TPD","NCFCOPY"],"reportPath":"course-progress-v2/"}','analytics', 'portal','${new Date()}')""")
     userAggDF = List(UserAgg("Course","do_1130314965721088001129","c7ef3848-bbdb-4219-8344-817d5b8103fa","cb:0130561083009187841",Map("completedCount"->1),"{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
       UserAgg("Course","do_13456760076615812","f3dd58a4-a56f-4c1d-95cf-3231927a28e9","cb:0130561083009187841",Map("completedCount"->1),"{'completedCount': '2020-07-21 08:30:48.855000+0000'}"),
       UserAgg("Course","do_1125105431453532161282","be28a4-a56f-4c1d-95cf-3231927a28e9","cb:0130561083009187841",Map("completedCount"->5),"{'completedCount': '2020-07-21 08:30:48.855000+0000'}")).toDF()
@@ -70,13 +76,10 @@ class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with Ba
     contentHierarchyDF = List(ContentHierarchy("do_1130314965721088001129","""{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "collection","contentType": "Course","visibility": "Default","identifier": "do_1125105431453532161282","leafNodesCount": 3}, {"contentType": "Course","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_1130314965721088001129","visibility": "Default","leafNodesCount": 9}"""),
       ContentHierarchy("do_13456760076615812","""{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282"}, {"contentType": "CourseUnit","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_13456760076615812","visibility": "Default","leafNodesCount": 4}""")).toDF()
   }
-  "TestSHoudl" should "test functinoaliyt" in {
+  "Tes  tV2Copy" should "test functionality" in {
       implicit val fc=mock[FrameworkContext]
-    val conf ="""{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
-
-    //(mockDruidClient.doQueryAsStream(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Source(results)).anyNumberOfTimes();
-    //fc.loadData(_,_,_,_).expects(*).returns(mockDruidClient).anyNumberOfTimes();
-      courseBatchDF.show(false)
+    val conf ="""{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+      
       (fc.loadData _)
         .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
         .returning(courseBatchDF)
@@ -128,11 +131,9 @@ class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with Ba
       val outputDir = "course-progress-reports"
       val storageConfig = StorageConfig("local", "", outputLocation)
 
-      val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2","modelParams":{"batchFilters":["TPD"],"applyPrivacyPolicy":false,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+      val strConfig= """{"jobId": "CourseMetricsJobV2Copy","search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV2Copy","modelParams":{"batchFilters":["TPD"],"applyPrivacyPolicy":false,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"},{"fieldName":"channel","aliasName":"channel"}],"filters":[{"type":"equals","dimension":"contentType","value":"Course"}],"descending":"false"},"fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
       val config = JSONUtils.deserialize[JobConfig](strConfig)
 
-      //mocking for DruidDataFetcher
-      import scala.concurrent.ExecutionContext.Implicits.global
       val json: String =
           """
             |{
@@ -141,12 +142,10 @@ class TestCourseMetricsJobV2Copy extends BaseReportSpec with MockFactory with Ba
             |}
           """.stripMargin
 
+      CourseMetricsJobV2Copy.execute(Some(JSONUtils.deserialize[Map[String,AnyRef]](strConfig)))
 
+      //EmbeddedPostgresSql.close()
 
-//      implicit val sc = spark
-
-      //CourseMetricsJobV2Copy.loadData(spark, Map("table" -> "user", "keyspace" -> "sunbird"),"org.apache.spark.sql.cassandra", new StructType())
-    CourseMetricsJobV2Copy.execute(Some(JSONUtils.deserialize[Map[String,AnyRef]](conf)))
   }
 
   /*"TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
