@@ -189,7 +189,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
     //etb_textbook_status_grade.csv
     val etbGradeStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('gradeLevel,",")).as("Class"))
-      .groupBy("Class","status","slug").pivot(col("status"))
+      .groupBy("Class","slug").pivot(col("status"))
       .agg(count("identifier")).drop("status").na.fill(0).withColumn("reportName",lit("etb_textbook_status_grade"))
       .orderBy("Class")
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_grade.csv")
@@ -197,7 +197,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
     //etb_textbook_status_subject.csv
     val etbSubjectStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('subject,",")).as("Subject"))
-      .groupBy("Subject","status","slug").pivot(col("status"))
+      .groupBy("Subject","slug").pivot(col("status"))
       .agg(count("identifier")).drop("status").na.fill(0).withColumn("reportName",lit("etb_textbook_status_subject"))
       .orderBy("Subject")
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_subject.csv")
