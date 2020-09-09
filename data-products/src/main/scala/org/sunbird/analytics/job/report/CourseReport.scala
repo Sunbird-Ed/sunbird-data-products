@@ -1,8 +1,5 @@
 package org.sunbird.analytics.job.report
 
-import java.util.concurrent.atomic.AtomicInteger
-
-import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.Window
@@ -12,11 +9,12 @@ import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, JobContext, OnDemandJobRequest, ReportOnDemandModelTemplate}
+import org.ekstep.analytics.framework._
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, UserCache, UserData}
 import org.sunbird.cloud.storage.conf.AppConf
+
 
 import scala.collection.mutable.ListBuffer
 
@@ -30,17 +28,17 @@ case class CourseBatchMap(batchid: String, startDate: String, endDate: String, c
 
 case class ContentBatch(courseId: String, batchId: String, startDate: String, endDate: String)
 
-case class Reports(requestId: String, reportPath: String, batchIds: List[ContentBatch], count: Long, batchFilter: List[String])
+case class Reports(requestId: String, reportPath: String, batchIds: List[ContentBatch], count: Long, batchFilter: List[String], requestedChannel:String)
 
 object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, OnDemandJobRequest] with IJob with BaseReportsJob {
 
-  implicit val className: String = "org.ekstep.analytics.job.CourseMetricsJobV3"
+  implicit val className: String = "org.ekstep.analytics.job.CourseReportJob"
 
   override def name(): String = "CourseReportJob"
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
-    JobLogger.init("CourseMetricsJob")
-    JobLogger.start("CourseMetrics Job Started executing", Option(Map("config" -> config, "model" -> name)))
+    JobLogger.init("CourseReportJOb")
+    JobLogger.start("CourseReport Job Started executing", Option(Map("config" -> config, "model" -> name)))
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
@@ -55,6 +53,7 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       val requestObject = JSONUtils.deserialize[Map[String, AnyRef]](f.request_data)
       val contentFilters = requestObject.getOrElse("contentFilters", Map()).asInstanceOf[Map[String, AnyRef]]
       val batchFilters = requestObject.getOrElse("batchFilters", List()).asInstanceOf[List[String]]
+      val requestedChannel = requestObject.getOrElse("channel", "").asInstanceOf[String]
       val filteredBatches = if (contentFilters.nonEmpty) {
         val filteredContents = CourseUtils.filterContents(JSONUtils.serialize(contentFilters)).toDF()
         courseBatches.join(filteredContents, courseBatches.col("courseid") === filteredContents.col("identifier"), "inner")
@@ -62,7 +61,7 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       } else {
         courseBatches.map(f => ContentBatch(f.getString(0), f.getString(1), f.getString(2), f.getString(3))).collect
       }
-      Reports(f.request_id, requestObject.getOrElse("reportPath", "").asInstanceOf[String], filteredBatches.toList, filteredBatches.length, batchFilters)
+      Reports(f.request_id, requestObject.getOrElse("reportPath", "").asInstanceOf[String], filteredBatches.toList, filteredBatches.length, batchFilters, requestedChannel)
     })
     spark.createDataset(filteredReports)
 
@@ -83,12 +82,11 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
         val batch: CourseBatchMap = CourseBatchMap(row.batchId, row.startDate, row.endDate, coursesBatchInfo.channel, coursesBatchInfo.name, coursesBatchInfo.batches.find(x => row.batchId == x.batchId).map(x => x.name).getOrElse(""));
         val result = CommonUtil.time({
           if (null != coursesBatchInfo.framework && coursesBatchInfo.framework.nonEmpty && f.batchFilter.contains(coursesBatchInfo.framework)) {
-            val reportDF = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF)
+            val reportDF = getCourseReport(batch = batch, userCourseInfoDF, userEnrolmentDF, assessmentDF, requestedChannel = f.requestedChannel)
             filesPaths = filesPaths ++ reportDF.saveToBlobStore(getStorageConfig(AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("course.metrics.cloud.objectKey")), "csv", f.reportPath + s"report-${batch.batchid}-progress-${currentDate}", Option(Map("header" -> "true")), None)
             reportDF.unpersist(true)
             filesPaths
           } else {
-            println("Invalid constrains")
             JobLogger.log(s"Constrains are not matching, skipping the requestId: ${f.requestId}, batchId: ${batch.batchid} and Remaining batches", None, INFO)
             filesPaths
           }
@@ -101,7 +99,7 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
   }
 
 
-  def getCourseReport(batch: CourseBatchMap, userCourseDF: DataFrame, userEnrollmentDF: DataFrame, assessmentProfileDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def getCourseReport(batch: CourseBatchMap, userCourseDF: DataFrame, userEnrollmentDF: DataFrame, assessmentProfileDF: DataFrame, requestedChannel: String)(implicit spark: SparkSession): DataFrame = {
     val columnsOrder = List("Batch Id", "Batch Name", "Collection Id", "Collection Name", "DIKSHA UUID", "User Name", "State", "District", "Enrolment Date", "Completion Date", "Certificate Status", "Course Progress", "Total Score")
     val reportFieldMapping = Map("courseid" -> "Collection Id", "courseName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "DIKSHA UUID", "user_name" -> "User Name",
       "state" -> "State", "district" -> "District", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "course_completion" -> "Course Progress", "total_sum_score" -> "Total Score", "certificate_status" -> "Certificate Status"
@@ -121,7 +119,8 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
         enrolledUsersToBatch.col("courseid") === userCourseDF.col("courseid") &&
         enrolledUsersToBatch.col("userid") === userCourseDF.col("userid"), "inner")
       .select(enrolledUsersToBatch.col("*"), col(UserCache.district), col(UserCache.state), col("completionPercentage").as("course_completion"),
-        col("l1identifier"), col("l1completionPercentage"), col("user_name")
+        col("l1identifier"), col("l1completionPercentage"), col("user_name"),
+          col("userchannel")
       ).persist(StorageLevel.MEMORY_ONLY)
 
     val assessmentAggDf = Window.partitionBy("userid", "batchid", "courseid")
@@ -133,14 +132,14 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
     val assessmentDF = reportDF.join(assessDF, Seq("courseid", "batchid", "userid"), "left_outer")
     val contentIds: List[String] = assessmentDF.select(col("content_id")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
     val denormedDF = denormAssessment(assessmentDF, contentIds.distinct).persist(StorageLevel.MEMORY_ONLY)
-      .select("courseid", "batchid", "userid", "user_name", "district", "state", "course_completion", "l1identifier", "l1completionPercentage", "content_id", "name", "grand_total", "total_sum_score", "batchName", "courseName", "certificate_status", "enrolleddate", "completedon")
+      .select("courseid", "batchid", "userid", "user_name", "district", "state", "course_completion", "l1identifier", "l1completionPercentage", "content_id", "name", "grand_total", "total_sum_score", "batchName", "courseName", "certificate_status", "enrolleddate", "completedon", "userchannel")
 
     val groupedDF = denormedDF.groupBy("courseid", "batchid", "userid")
 
     val reportData = transposeDF(groupedDF).join(denormedDF, Seq("courseid", "batchid", "userid"), "inner")
       .dropDuplicates("userid", "courseid", "batchid")
       .drop("content_name", "null", "grand_total", "l1identifier", "l1completionPercentage", "name", "content_id")
-    customizeDF(reportData, reportFieldMapping, columnsOrder)
+    customizeDF(filterReportByConsent(requestedChannel, batch.courseChannel, reportData), reportFieldMapping, columnsOrder)
   }
 
   def transposeDF(reportDF: RelationalGroupedDataset): DataFrame = {
@@ -167,7 +166,6 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
       CourseUtils.parseCourseHierarchy(List(hierarchy), 0, CourseData(row.getString(0), "0", List()), depthLevel = 2)
     }).toDF()
-
 
     val hierarchyDf = hierarchyDataDf.select($"courseid", $"leafNodesCount", $"level1Data", explode_outer($"level1Data").as("exploded_level1Data"))
       .select("courseid", "leafNodesCount", "exploded_level1Data.*")
@@ -220,13 +218,23 @@ object CourseReport extends scala.App with ReportOnDemandModelTemplate[Reports, 
   def getUserData(spark: SparkSession, loadData: (SparkSession, Map[String, String], String, StructType, Option[Seq[String]]) => DataFrame) = {
     val schema = Encoders.product[UserData].schema
     loadData(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), redisUrl, schema,
-      Some(Seq("firstname", "lastname", "userid", "state", "district"))).persist(StorageLevel.MEMORY_ONLY)
+      Some(Seq("firstname", "lastname", "userid", "state", "district", "userchannel"))).persist(StorageLevel.MEMORY_ONLY)
       .withColumn("user_name", concat_ws(" ", col("firstname"), col("lastname")))
   }
 
+  def filterReportByConsent(requestedChannel: String, courseChannel: String, reportDF: DataFrame): DataFrame = {
+    println("requestedChannel" + requestedChannel)
+    println("courseChannel" + courseChannel)
+    if (requestedChannel == courseChannel) {
+      println("found")
+      reportDF
+    } else {
+      println("not found")
+      reportDF.where(col("userchannel") === requestedChannel)
+    }
+  }
 
   override def saveReports(generatedreports: Dataset[OnDemandJobRequest], config: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext) = {
-    println("generatedreports" + generatedreports.show(false))
     generatedreports
   }
 

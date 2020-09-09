@@ -292,7 +292,6 @@ object CourseUtils {
   }
 
   def filterAssessmentDF(assesmentDF: DataFrame): DataFrame = {
-    println("assesmentDF" + assesmentDF.count())
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
     val df = Window.partitionBy("userid", "batchid", "courseid", "content_id").orderBy(desc(columnName))

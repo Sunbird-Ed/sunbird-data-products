@@ -8,7 +8,6 @@ import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.job.report.CourseReport.execute
 import org.sunbird.analytics.util.{EmbeddedPostgresSql, UserData}
 
 import scala.collection.mutable
@@ -60,7 +59,7 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
     EmbeddedPostgresSql.createTables()
 
     //EmbeddedPostgresSql.execute(s"""INSERT INTO job_request(tag, request_id, job_id, status, request_data, requested_by,requested_channel, dt_job_submitted) values('11234', '1234', 'CourseMetricsJobV2Copy', 'SUBMITTED', '{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_11305960936384921612216","do_1130934466492252161819"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/"}','analytics', 'portal','${new Date()}')""")
-    EmbeddedPostgresSql.execute(s"""INSERT INTO job_request(tag, request_id, job_id, status, request_data, requested_by,requested_channel, dt_job_submitted) values('11234', '1234', 'CourseReport', 'SUBMITTED', '{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_1130314965721088001129","do_1130314965721088001129"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/"}','analytics', 'portal','${new Date()}')""")
+    EmbeddedPostgresSql.execute(s"""INSERT INTO job_request(tag, request_id, job_id, status, request_data, requested_by,requested_channel, dt_job_submitted) values('11234', '1234', 'CourseReport', 'SUBMITTED', '{"batchFilters":["TPD","NCFCOPY"], "channel":"b00bc992ef25f1a9a8d63291e20efc8d", "contentFilters":{"request":{"filters":{"identifier":["do_1130314965721088001129","do_1130314965721088001129"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v2/"}','analytics', 'portal','${new Date()}')""")
 
   }
 
@@ -99,7 +98,7 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
       .returning(contentHierarchyDF)
 
     (fc.loadData _)
-      .expects(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", schema, Some(Seq("firstname", "lastname", "userid", "state", "district")))
+      .expects(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", schema, Some(Seq("firstname", "lastname", "userid", "state", "district","userchannel")))
       .anyNumberOfTimes()
       .returning(userDF)
 
@@ -108,7 +107,7 @@ class TestCourseReport extends BaseReportSpec with MockFactory with BaseReportsJ
       .anyNumberOfTimes()
       .returning(alteredUserCourseDf)
 
-    val conf = """{"jobId":"CourseReport","search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV3","modelParams":{"batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_1130314965721088001129","do_1130314965721088001129"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v3/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
+    val conf = """{"jobId":"CourseReport","search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CourseMetricsJobV3","modelParams":{"channel":"b00bc992ef25f1a9a8d63291e20efc8d","batchFilters":["TPD","NCFCOPY"],"contentFilters":{"request":{"filters":{"identifier":["do_1130314965721088001129","do_1130314965721088001129"],"prevState":"Draft"},"sort_by":{"createdOn":"desc"},"limit":10000,"fields":["framework","identifier","name","channel","prevState"]}},"reportPath":"course-progress-v3/","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost":"'$sunbirdPlatformCassandraHost'","sparkElasticsearchConnectionHost":"'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost":"'$sparkRedisConnectionHost'","sparkUserDbRedisIndex":"12"},"output":[{"to":"console","params":{"printEvent":false}}],"parallelization":8,"appName":"Course Dashboard Metrics","deviceMapping":false}"""
     CourseReport.execute(Some(JSONUtils.deserialize[Map[String, AnyRef]](conf)))
 
 
