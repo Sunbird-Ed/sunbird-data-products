@@ -142,13 +142,15 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     //dce_qr_content_status_grade.csv
     val dceGradeDf = dceDf.select($"slug",$"contentLinkedQR",$"withoutContentQR",explode_outer(split('gradeLevel,",")).as("Class"))
       .groupBy("Class","slug").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content")).withColumn("reportName",lit("dce_qr_content_status_grade"))
-      .orderBy("Class")
+      .na.fill("Unknown", Seq("Class"))
+      .orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
     var reportMap = updateReportPath(aggConf(2), aggConf(1), "dce_qr_content_status_grade.csv")
     CourseUtils.postDataToBlob(dceGradeDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
 
     //dce_qr_content_status_subject.csv
     val dceSubjectDf = dceDf.select($"slug",$"contentLinkedQR",$"withoutContentQR",explode_outer(split('subject,",")).as("Subject"))
       .groupBy("Subject","slug").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content")).withColumn("reportName",lit("dce_qr_content_status_subject"))
+      .na.fill("Unknown", Seq("Subject"))
       .orderBy("Subject")
     reportMap = updateReportPath(aggConf(2), aggConf(1), "dce_qr_content_status_subject.csv")
     CourseUtils.postDataToBlob(dceSubjectDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
@@ -163,13 +165,15 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     //etb_qr_content_status_grade.csv
     val etbGradeDf = etbDf.select($"slug",$"totalQRLinked",$"totalQRNotLinked",explode_outer(split('gradeLevel,",")).as("Class"))
       .groupBy("Class","slug").agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content")).withColumn("reportName",lit("etb_qr_content_status_grade"))
-      .orderBy("Class")
+      .na.fill("Unknown", Seq("Class"))
+      .orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_qr_content_status_grade.csv")
     CourseUtils.postDataToBlob(etbGradeDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
 
     //etb_qr_content_status_subject.csv
     val etbContentStatus = etbDf.select($"slug",$"totalQRLinked",$"totalQRNotLinked",explode_outer(split('subject,",")).as("Subject"))
       .groupBy("Subject","slug").agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content")).withColumn("reportName",lit("etb_qr_content_status_subject"))
+      .na.fill("Unknown", Seq("Subject"))
       .orderBy("Subject")
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_qr_content_status_subject.csv")
     CourseUtils.postDataToBlob(etbContentStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
@@ -191,7 +195,8 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     val etbGradeStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('gradeLevel,",")).as("Class"))
       .groupBy("Class","slug").pivot(col("status"))
       .agg(count("identifier")).drop("status").na.fill(0).withColumn("reportName",lit("etb_textbook_status_grade"))
-      .orderBy("Class")
+      .na.fill("Unknown", Seq("Class"))
+      .orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_grade.csv")
     CourseUtils.postDataToBlob(etbGradeStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
 
@@ -199,6 +204,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     val etbSubjectStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('subject,",")).as("Subject"))
       .groupBy("Subject","slug").pivot(col("status"))
       .agg(count("identifier")).drop("status").na.fill(0).withColumn("reportName",lit("etb_textbook_status_subject"))
+      .na.fill("Unknown", Seq("Subject"))
       .orderBy("Subject")
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_subject.csv")
     CourseUtils.postDataToBlob(etbSubjectStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
