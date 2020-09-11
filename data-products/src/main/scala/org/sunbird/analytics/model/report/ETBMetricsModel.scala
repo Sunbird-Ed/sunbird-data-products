@@ -193,25 +193,25 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
     //etb_textbook_status_grade.csv
     val etbGradeStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('gradeLevel,",")).as("Class"))
-      .groupBy("Class","slug").pivot(col("status"))
-      .agg(count("identifier")).drop("status").na.fill(0).withColumn("reportName",lit("etb_textbook_status_grade"))
-      .na.fill("Unknown", Seq("Class"))
-      .orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
+      .groupBy("Class","slug").pivot(col("status"), Seq("Live","Review","Draft"))
+      .agg(count("identifier")).drop("status").na.fill("Unknown", Seq("Class")).withColumn("reportName",lit("etb_textbook_status_grade"))
+      .na.fill(0).orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_grade.csv")
     CourseUtils.postDataToBlob(etbGradeStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
 
     //etb_textbook_status_subject.csv
     val etbSubjectStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('subject,",")).as("Subject"))
-      .groupBy("Subject","slug").pivot(col("status"))
-      .agg(count("identifier")).drop("status").na.fill(0).withColumn("reportName",lit("etb_textbook_status_subject"))
-      .na.fill("Unknown", Seq("Subject"))
+      .groupBy("Subject","slug").pivot(col("status"), Seq("Live","Review","Draft"))
+      .agg(count("identifier")).drop("status").na.fill("Unknown", Seq("Subject")).withColumn("reportName",lit("etb_textbook_status_subject"))
+      .na.fill(0)
       .orderBy("Subject")
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_subject.csv")
     CourseUtils.postDataToBlob(etbSubjectStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
 
     //etb_textbook_status.csv
-    val etbTextbookStatus = etbDf.groupBy("status","slug").agg(count(col("identifier"))
-      .as("Count")).withColumn("reportName",lit("etb_textbook_status"))
+    val etbTextbookStatus = etbSubjectStatus.select($"slug",expr("stack(3, 'Live', Live, 'Review', Review, 'Draft', Draft) as(Status,Total)"))
+      .where("Total is not null").groupBy("Status","slug")
+      .agg(sum("Total").alias("Count")).withColumn("reportName",lit("etb_textbook_status"))
     reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status.csv")
     CourseUtils.postDataToBlob(etbTextbookStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
 
