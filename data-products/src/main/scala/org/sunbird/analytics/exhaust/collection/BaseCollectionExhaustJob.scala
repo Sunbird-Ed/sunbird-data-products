@@ -26,10 +26,12 @@ import org.joda.time.DateTimeZone
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.RestUtil
+import org.apache.spark.sql.cassandra._
+import com.datastax.spark.connector.cql.CassandraConnectorConf
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), maskedemail: Option[String] = Option(""), maskedphone: Option[String] = Option(""),
-                    block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""))
+                    block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""))
 
 case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]])
 case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: String)
@@ -42,13 +44,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   implicit val className: String = getClassName;
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid");
-  private val userDBSettings = Map("table" -> "user", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"));
-  private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"));
-  private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"));
-  private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"));
+  private val userDBSettings = Map("table" -> "user", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
+  private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
+  private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
+  private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   private val redisFormat = "org.apache.spark.sql.redis";
-  private val cassandraFormat = "org.apache.spark.sql.cassandra";
-  private val maskedFields = Array("email", "phonenumber");
+  val cassandraFormat = "org.apache.spark.sql.cassandra";
+  private val maskedFields = Array("maskedemail", "maskedphone");
 
   val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
 
@@ -61,7 +63,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
+    init()
     logTime(execute(), "Job execution complete");
+  }
+  
+  def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
+    spark.setCassandraConf("UserCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.user.cluster.host")))
+    spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
+    spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
   }
 
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
@@ -163,12 +172,16 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val container = modelParams.getOrElse("storageContainer", "reports").asInstanceOf[String]
     for (batch <- filterCollectionBatches(collectionBatches)) yield {
-      val userEnrolmentDF = getUserEnrolmentDF(false).join(userCachedDF, Seq("userid"), "inner");
-      val filteredDF = filterUsers(batch, userEnrolmentDF);
-      val reportDF = processBatch(filteredDF, batch);
-      val storageConfig = getStorageConfig(container, AppConf.getConfig("collection.exhaust.store.prefix"))
-      val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
-      CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "");
+      val userEnrolmentDF = getUserEnrolmentDF(batch.collectionId, batch.batchId, false).join(userCachedDF, Seq("userid"), "inner").withColumn("collectionName", lit(batch.collectionName)).withColumn("batchName", lit(batch.batchName));
+      val filteredDF = filterUsers(batch, userEnrolmentDF).persist();
+      try {
+        val reportDF = processBatch(filteredDF, batch);
+        val storageConfig = getStorageConfig(container, AppConf.getConfig("collection.exhaust.store.prefix"))
+        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
+        CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "");
+      } catch {
+        case ex: Exception => CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage);
+      }
     }
   }
   
@@ -186,7 +199,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "username", "state", "district")
+    Seq("userid", "username", "state", "district", "userchannel")
   }
   /** END - Overridable Methods */
   
@@ -211,8 +224,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId").select(col("value")).select("value").first().getString(0)
   }
   
-  def getUserEnrolmentDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
-    val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).select("batchid", "userid", "courseid", "active", "certificates", "enrolleddate", "completedon")
+  def getUserEnrolmentDF(collectionId: String, batchId: String, persist: Boolean)(implicit spark: SparkSession): DataFrame = {
+    val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).where(col("courseid") === collectionId && col("batchid") === batchId).select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
     if (persist) df.persist() else df
   }
   
@@ -278,6 +291,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val res = CommonUtil.time(block);
     JobLogger.log(message, Some(Map("timeTaken" -> res._1)), INFO)
     res._2
+  }
+  
+  def organizeDF(reportDF: DataFrame, finalColumnMapping: Map[String, String], finalColumnOrder: List[String]): DataFrame = {
+    val fields = reportDF.schema.fieldNames
+    val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
+    val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
+    val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
+    reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
   }
   /** END - Utility Methods */
 
