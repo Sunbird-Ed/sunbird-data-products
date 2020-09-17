@@ -1,15 +1,15 @@
 package org.sunbird.analytics.exhaust.collection
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.conf.AppConf
-import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.util.JSONUtils
-import org.apache.spark.sql.functions._
-import org.apache.commons.lang3.StringUtils
-import org.apache.spark.sql.expressions.Window
 
 case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
 case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
@@ -43,16 +43,13 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
 
   def getProgressDF(userEnrolmentDF: DataFrame, collectionAggDF: DataFrame, assessmentAggDF: DataFrame): DataFrame = {
 
-    val assessmentAggSpec = Window.partitionBy("userid", "batchid", "courseid")
-    val scoreDF = assessmentAggDF
-      .withColumn("agg_score", sum("total_score") over assessmentAggSpec)
-      .withColumn("agg_max_score", sum("total_max_score") over assessmentAggSpec)
-      .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
-
-    val progressDF = collectionAggDF.join(scoreDF, Seq("courseid", "batchid", "userid"), "left_outer")
-      .select("courseid", "batchid", "userid", "completionPercentage", "total_sum_score", "l1identifier", "l1completionPercentage", "content_id", "grand_total")
-
-    transposeDF(progressDF).join(userEnrolmentDF, Seq("courseid", "batchid", "userid"), "inner")
+    val collectionAggPivotDF = collectionAggDF.groupBy("courseid", "batchid", "userid", "completionPercentage").pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")));
+    val assessmentAggPivotDF = assessmentAggDF.groupBy("courseid", "batchid", "userid", "total_sum_score")
+      .pivot(concat(col("content_id"), lit(" - Score"))).agg(concat(ceil((split(first("grand_total"), "\\/")
+        .getItem(0) * 100) / (split(first("grand_total"), "\\/")
+          .getItem(1))), lit("%")))
+    val progressDF = collectionAggPivotDF.join(assessmentAggPivotDF, Seq("courseid", "batchid", "userid"), "left_outer")
+    userEnrolmentDF.join(progressDF, Seq("courseid", "batchid", "userid"), "inner")
   }
 
   def transposeDF(progressDF: DataFrame): DataFrame = {
@@ -70,10 +67,14 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   }
 
   def getAssessmentDF(batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
+    val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
       .withColumnRenamed("user_id", "userid")
       .withColumnRenamed("batch_id", "batchid")
       .withColumnRenamed("course_id", "courseid")
+    val assessmentAggSpec = Window.partitionBy("userid", "batchid", "courseid")
+    assessAggdf.withColumn("agg_score", sum("total_score") over assessmentAggSpec)
+      .withColumn("agg_max_score", sum("total_max_score") over assessmentAggSpec)
+      .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%")))
   }
 
   def getCollectionAgg(batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
@@ -98,8 +99,9 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
 
     val resDf = dataDf.join(userAgg, dataDf.col("l1identifier") === userAgg.col("activity_id") &&
       userAgg.col("context_id") === dataDf.col("contextid") && userAgg.col("user_id") === dataDf.col("userid"), "left")
+      .withColumn("batchid", lit(batch.batchId))
       .withColumn("l1completionPercentage", when(userAgg.col("completedCount") >= dataDf.col("l1leafNodesCount"), 100).otherwise(userAgg.col("completedCount") / dataDf.col("l1leafNodesCount") * 100).cast("int"))
-      .select(col("userid"), col("courseid"), col("contextid"), col("completionPercentage"), col("l1identifier"), col("l1completionPercentage"))
+      .select("userid", "courseid", "batchid", "completionPercentage", "l1identifier", "l1completionPercentage")
 
     resDf
   }

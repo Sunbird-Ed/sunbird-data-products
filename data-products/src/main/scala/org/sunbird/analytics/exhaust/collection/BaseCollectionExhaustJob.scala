@@ -44,7 +44,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   implicit val className: String = getClassName;
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid");
-  private val userDBSettings = Map("table" -> "user", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
   private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
@@ -149,14 +148,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     if (batchId.isDefined || batchFilter.isDefined) {
       val batches = if(batchId.isDefined) collectionBatches.filter(col("batchid") === batchId.get) else collectionBatches.filter(col("batchid").isin(batchFilter.get:_*))
       val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
-      val collectionDF = getCollections(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds))));
+      val collectionDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds))));
       val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
       val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
         .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
         .select(col("batchid").as("batchId"),col("courseid").as("collectionId"),col("name").as("batchName"),col("custodianOrgId"),col("requestedOrgId"),col("channel").as("collectionOrgId"),col("collectionName"),col("userConsent"));
       finalDF.as[CollectionBatch](encoder).collect().toList
     } else if(searchFilter.isDefined) {
-      val collectionDF = getCollections(searchFilter.get)
+      val collectionDF = searchContent(searchFilter.get)
       val joinedDF = collectionBatches.join(collectionDF, collectionBatches("courseid") === collectionDF("identifier"), "inner");
       val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
         .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
@@ -229,7 +228,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     if (persist) df.persist() else df
   }
   
-  def getCollections(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+  def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
     val response = RestUtil.post[CollectionDetails](apiURL, request).result.content
@@ -247,11 +246,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     if (persist) df.persist() else df
   }
 
-  def getUserDF(cols: Seq[String], persist: Boolean)(implicit spark: SparkSession): DataFrame = {
-    val df = loadData(userDBSettings, cassandraFormat, new StructType()).filter(col("userid").isNotNull).select(cols.head, cols.tail: _*);
-    if (persist) df.persist() else df
-  }
-
   def filterUsers(collectionBatch: CollectionBatch, reportDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     if (collectionBatch.requestedOrgId.equals(collectionBatch.collectionOrgId)) {
@@ -266,9 +260,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     df.where(col("object_id") === collectionBatch.collectionId && col("subject_id") === collectionBatch.requestedOrgId).dropDuplicates("userid", "object_id", "subject_id").select("userid", "object_id", "subject_id", "consented", "consented_date");
   }
 
-  def applyConsentRules(collectionBatch: CollectionBatch, reportDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def applyConsentRules(collectionBatch: CollectionBatch, reportDF: DataFrame, privateColumns: List[String])(implicit spark: SparkSession): DataFrame = {
 
-    if (collectionBatch.requestedOrgId.equals(collectionBatch.custodianOrgId)) {
+    val consentDF = if (collectionBatch.requestedOrgId.equals(collectionBatch.custodianOrgId)) {
       reportDF.withColumn("consentFlag", lit("false"));
     } else {
       val consentDF = getUserConsentDF(collectionBatch);
@@ -277,6 +271,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       resultDF.withColumn("consentFlag", when(col("rootOrgId") === collectionBatch.requestedOrgId, "true").when(col("consentFlag").isNotNull, col("consentFlag")).otherwise("false"))
     }
 
+    privateColumns.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentFlag") === "true", col(column)).otherwise("")))
   }
 
   def decryptMaskedInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
