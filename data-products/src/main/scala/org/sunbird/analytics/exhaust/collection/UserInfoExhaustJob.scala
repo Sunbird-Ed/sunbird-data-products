@@ -28,7 +28,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     
-    collectionBatch.userConsent.toLowerCase() match {
+    collectionBatch.userConsent.getOrElse("No").toLowerCase() match {
       case "yes" =>
         val unmaskedDF = decryptUserInfo(applyConsentRules(collectionBatch, userEnrolmentDF, privateFields))
         val reportDF = unmaskedDF.withColumn("persona", when(col("externalid").isNotNull && length(col("externalid")) > 0, "Teacher").otherwise("")).select(filterColumns.head, filterColumns.tail: _*);
