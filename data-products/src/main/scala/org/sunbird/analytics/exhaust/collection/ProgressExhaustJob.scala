@@ -56,15 +56,6 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
   }
 
-  def transposeDF(progressDF: DataFrame): DataFrame = {
-    val groupedDF = progressDF.groupBy("courseid", "batchid", "userid", "completionPercentage", "total_sum_score")
-    val assessment = groupedDF.pivot(concat(col("content_id"), lit(" - Score"))).agg(concat(ceil((split(first("grand_total"), "\\/")
-      .getItem(0) * 100) / (split(first("grand_total"), "\\/")
-        .getItem(1))), lit("%")))
-    val leafNodes = groupedDF.pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
-    assessment.join(leafNodes, Seq("courseid", "batchid", "userid"), "inner")
-  }
-
   def updateCertificateStatus(userEnrolmentDF: DataFrame): DataFrame = {
     userEnrolmentDF.withColumn("certificatestatus", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued")
       .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
