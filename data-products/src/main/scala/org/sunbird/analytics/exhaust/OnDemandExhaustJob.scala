@@ -15,6 +15,12 @@ import org.apache.spark.sql.functions._
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.EncryptionMethod
+import org.apache.spark.sql.SaveMode
+import java.sql.Connection
+import java.sql.DriverManager
+import java.sql.PreparedStatement
+import java.sql.Timestamp
+import org.ekstep.analytics.framework.util.HadoopFileUtil
 
 case class JobRequest(tag: String, request_id: String, job_id: String, var status: String, request_data: String, requested_by: String, requested_channel: String,
                       dt_job_submitted: Long, var download_urls: Option[List[String]], var dt_file_created: Option[Long], var dt_job_completed: Option[Long], 
@@ -32,28 +38,52 @@ trait OnDemandExhaustJob {
   val maxIterations = 3;
 
   def getRequests(jobId: String)(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
+
     val encoder = Encoders.product[JobRequest]
-    import org.apache.spark.sql.functions.col
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
-      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus:_*))
-      
-    reportConfigsDf.withColumn("status", lit("PROCESSING")).write.jdbc(url, requestsTable, connProperties);
-    reportConfigsDf.as[JobRequest](encoder).collect()
+      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus:_*));
+    
+    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
+    updateRequests(requests)
+    requests;
+  }
+  
+  private def updateRequests(requests: Array[JobRequest]) = {
+    if(requests != null && requests.length > 0) {
+      val dbc:Connection = DriverManager.getConnection(url, connProperties.getProperty("user"), connProperties.getProperty("password"));
+      dbc.setAutoCommit(true);
+      val updateQry = s"UPDATE job_request SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
+      val pstmt:PreparedStatement = dbc.prepareStatement(updateQry);
+      for(request <- requests) {
+        pstmt.setInt(1, request.iteration.getOrElse(0));
+        pstmt.setString(2, request.status);
+        val downloadURLs = request.download_urls.getOrElse(List()).toArray.asInstanceOf[Array[Object]];
+        pstmt.setArray(3, dbc.createArrayOf("text", downloadURLs))
+        pstmt.setTimestamp(4, if(request.dt_file_created.isDefined) new Timestamp(request.dt_file_created.get) else null);
+        pstmt.setTimestamp(5, if(request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
+        pstmt.setLong(6, request.execution_time.getOrElse(0));
+        pstmt.setString(7, request.err_message.getOrElse(""));
+        pstmt.setString(8, request.tag);
+        pstmt.setString(9, request.request_id);
+        pstmt.addBatch();
+      }
+      val updateCounts = pstmt.executeBatch();
+    }
+    
   }
 
   def saveRequests(storageConfig: StorageConfig, requests: Array[JobRequest])(implicit spark: SparkSession, fc: FrameworkContext) = {
     val zippedRequests = for (request <- requests) yield {
-      val downloadURLs = for (url <- request.download_urls.get) yield {
+      val downloadURLs = for (url <- request.download_urls.getOrElse(List())) yield {
         zipAndEncrypt(url, storageConfig, request.encryption_key);
       };
       request.download_urls = Option(downloadURLs);
       request;
     }
-    val df = spark.createDataFrame(zippedRequests);
-    df.write.jdbc(url, requestsTable, connProperties)
+    updateRequests(zippedRequests)
   }
 
-  private def zipAndEncrypt(url: String, storageConfig: StorageConfig, encryptionKey: Option[String])(implicit fc: FrameworkContext): String = {
+  private def zipAndEncrypt(url: String, storageConfig: StorageConfig, encryptionKey: Option[String])(implicit spark: SparkSession, fc: FrameworkContext): String = {
 
     val path = Paths.get(url);
     val storageService = fc.getStorageService(storageConfig.store, storageConfig.accountKey.getOrElse(""), storageConfig.secretKey.getOrElse(""));
@@ -67,7 +97,11 @@ trait OnDemandExhaustJob {
         storageConfig.fileName
     }
     val objKey = url.replace(filePrefix, "");
-    storageService.download(storageConfig.container, objKey, localPath, Some(false));
+    if(storageConfig.store.equals("local")) {
+      fc.getHadoopFileUtil().copy(objKey, localPath, spark.sparkContext.hadoopConfiguration)
+    } else {
+      storageService.download(storageConfig.container, objKey, localPath, Some(false));  
+    }
 
     val zipPath = localPath.replace("csv", "zip")
     val zipObjectKey = objKey.replace("csv", "zip")
@@ -81,6 +115,10 @@ trait OnDemandExhaustJob {
     }).getOrElse({
       new ZipFile(zipPath).addFile(new File(localPath));
     })
-    storageService.upload(storageConfig.container, zipPath, zipObjectKey, None, Some(0), Some(3), None);
+    if(storageConfig.store.equals("local")) {
+      fc.getHadoopFileUtil().copy(zipPath, zipObjectKey, spark.sparkContext.hadoopConfiguration)
+    } else {
+      storageService.upload(storageConfig.container, zipPath, zipObjectKey, None, Some(0), Some(3), None);
+    }
   }
 }
