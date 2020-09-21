@@ -2,12 +2,11 @@ package org.sunbird.analytics.exhaust.collection
 
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.conf.AppConf
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.functions._
-import org.ekstep.analytics.framework.util.JSONUtils
 
 object ResponseExhaustJob extends optional.Application with BaseCollectionExhaustJob {
   
@@ -50,19 +49,9 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumn("questionduration", round(col("questiondata.duration")))
       .withColumn("questionscore", col("questiondata.score"))
       .withColumn("questionmaxscore", col("questiondata.max_score"))
-      .withColumn("questionresponse", JSONParseUDF.toJSON(col("questiondata.resvalues")))
-      .withColumn("questionoption", JSONParseUDF.toJSON(col("questiondata.params")))
+      .withColumn("questionresponse", UDFUtils.toJSON(col("questiondata.resvalues")))
+      .withColumn("questionoption", UDFUtils.toJSON(col("questiondata.params")))
       .drop("question", "questiondata")
   }
   
-}
-
-object JSONParseUDF extends Serializable {
-  def toJSONFun(array: AnyRef): String = {
-    val str = JSONUtils.serialize(array);
-    val sanitizedStr = str.replace("\\n", "").replace("\\", "").replace("\"", "'");
-    sanitizedStr;
-  }
-
-  val toJSON = udf[String, AnyRef](toJSONFun)
 }
