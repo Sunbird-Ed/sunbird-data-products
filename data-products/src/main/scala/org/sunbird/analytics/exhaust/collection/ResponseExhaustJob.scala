@@ -7,6 +7,7 @@ import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.conf.AppConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.functions._
+import org.ekstep.analytics.framework.util.JSONUtils
 
 object ResponseExhaustJob extends optional.Application with BaseCollectionExhaustJob {
   
@@ -18,7 +19,10 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
   
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   
-  private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "User Name", "State", "District", "Persona", "Org Name", "External ID", "School Id", "School Name", "Block Name", "Declared Board", "Declared Org", "Email ID", "Mobile Number", "Consent Provided");
+  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid", "username",  "content_id", "contentname", "attempt_id", "last_attempted_on", "questionid", 
+      "questiontype", "questiontitle", "questiondescription", "questionduration", "questionscore", "questionmaxscore", "questionoption", "questionresponse");
+  private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "User Name", "QuestionSet Id", "QuestionSet Title", "Attempt Id", "Attempted On", 
+      "Question Id", "Question Type", "Question Title", "Question Description", "Question Duration", "Question Score", "Question Max Score", "Question Options", "Question Response");
   val columnMapping = Map("courseid" -> "Collection Id", "collectionName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User UUID", "username" -> "User Name", 
       "content_id" -> "QuestionSet Id", "contentname" -> "QuestionSet Title", "attempt_id" -> "Attempt Id", "last_attempted_on" -> "Attempted On", "questionid" -> "Question Id", 
       "questiontype" -> "Question Type", "questiontitle" -> "Question Title", "questiondescription" -> "Question Description", "questionduration" -> "Question Duration", 
@@ -29,7 +33,7 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
     val assessmentDF = getAssessmentDF(collectionBatch);
     val contentIds = assessmentDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
     val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds)))).withColumnRenamed("collectionName", "contentname").select("identifier", "contentname");
-    val reportDF = assessmentDF.join(contentDF, assessmentDF("content_id") === contentDF("identifier")).join(userEnrolmentDF, Seq("courseid", "batchid", "userid"), "left_outer").drop("identifier")
+    val reportDF = assessmentDF.join(contentDF, assessmentDF("content_id") === contentDF("identifier"), "left_outer").join(userEnrolmentDF, Seq("courseid", "batchid", "userid"), "left_outer").drop("identifier").select(filterColumns.head, filterColumns.tail: _*);
     organizeDF(reportDF, columnMapping, columnsOrder);
   }
   
@@ -43,12 +47,22 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumn("questiontype", col("questiondata.type"))
       .withColumn("questiontitle", col("questiondata.title"))
       .withColumn("questiondescription", col("questiondata.description"))
-      .withColumn("questionduration", col("questiondata.duration"))
+      .withColumn("questionduration", round(col("questiondata.duration")))
       .withColumn("questionscore", col("questiondata.score"))
       .withColumn("questionmaxscore", col("questiondata.max_score"))
-      .withColumn("questionresponse", col("questiondata.resvalues"))
-      .withColumn("questionoption", col("questiondata.params"))
+      .withColumn("questionresponse", JSONParseUDF.toJSON(col("questiondata.resvalues")))
+      .withColumn("questionoption", JSONParseUDF.toJSON(col("questiondata.params")))
       .drop("question", "questiondata")
   }
   
+}
+
+object JSONParseUDF extends Serializable {
+  def toJSONFun(array: AnyRef): String = {
+    val str = JSONUtils.serialize(array);
+    val sanitizedStr = str.replace("\\n", "").replace("\\", "").replace("\"", "'");
+    sanitizedStr;
+  }
+
+  val toJSON = udf[String, AnyRef](toJSONFun)
 }

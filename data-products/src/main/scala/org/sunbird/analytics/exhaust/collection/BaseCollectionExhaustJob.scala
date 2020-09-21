@@ -1,6 +1,5 @@
 package org.sunbird.analytics.exhaust.collection
 
-import scala.collection.mutable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.DataFrame
@@ -30,28 +29,29 @@ import org.apache.spark.sql.cassandra._
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
-                    firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), maskedemail: Option[String] = Option(""), maskedphone: Option[String] = Option(""),
+                    firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""), phone: Option[String] = Option(""), rootorgid: String,
                     block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""))
 
 case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]])
-case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: String)
+case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"))
 case class CollectionBatchResponse(batchId: String, file: String, status: String, statusMsg: String)
 case class CollectionDetails(result: Result)
 case class Result(content: List[CollectionInfo])
-case class CollectionInfo(channel: String, identifier: String, name: String)
+case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String])
 
-trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob {
+trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
   implicit val className: String = getClassName;
+
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid");
   private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
+  private val systemDBSettings = Map("table" -> "system_settings", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
+  
   private val redisFormat = "org.apache.spark.sql.redis";
   val cassandraFormat = "org.apache.spark.sql.cassandra";
-  private val maskedFields = Array("maskedemail", "maskedphone");
-
-  val metrics: mutable.Map[String, BigInt] = mutable.Map[String, BigInt]()
+  private val encryptedFields = Array("email", "phone");
 
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -63,10 +63,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     implicit val spark: SparkSession = openSparkSession(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     init()
-    logTime(execute(), "Job execution complete");
+    val res = CommonUtil.time(execute());
+    spark.close()
+    JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1)));
   }
   
   def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
+    DecryptUtil.initialise();
     spark.setCassandraConf("UserCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.user.cluster.host")))
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
@@ -77,7 +80,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
 
     val custodianOrgId = getCustodianOrgId();
-    val userCachedDF = getUserCacheDF(getUserCacheColumns(), true);
+    val userCachedDF = logTime(getUserCacheDF(getUserCacheColumns(), true), "Time taken to fetch the user DF from redis");
     mode.toLowerCase() match {
       case "standalone" =>
         executeStandAlone(custodianOrgId, userCachedDF)
@@ -93,6 +96,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val searchFilter = modelParams.get("batchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
     val result = processBatches(userCachedDF, collectionBatches);
+    result.foreach(f => println(f));
     // TODO: Log result
   }
 
@@ -175,11 +179,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       val filteredDF = filterUsers(batch, userEnrolmentDF).persist();
       try {
         val reportDF = processBatch(filteredDF, batch);
+        reportDF.show(false);
         val storageConfig = getStorageConfig(container, AppConf.getConfig("collection.exhaust.store.prefix"))
         val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "");
       } catch {
-        case ex: Exception => CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage);
+        case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage);
       }
     }
   }
@@ -198,16 +203,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "username", "state", "district", "userchannel")
+    Seq("userid", "username", "state", "district", "userchannel", "rootorgid")
   }
   /** END - Overridable Methods */
   
   /** START - Utility Methods */
-  def toDecryptFun(str: String): Option[String] = {
-    Some(DecryptUtil.decryptData(str))
-  }
-
-  val toDecrypt = udf[Option[String], String](toDecryptFun)
   
   def getFilePath(batchId: String)(implicit config: JobConfig): String = {
     getReportPath() + batchId + "_" + getReportKey() + "_" + getDate()
@@ -219,16 +219,17 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getCustodianOrgId()(implicit spark: SparkSession): String = {
-    loadData(Map("table" -> "system_settings", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace")), cassandraFormat, new StructType())
+    loadData(systemDBSettings, cassandraFormat, new StructType())
       .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId").select(col("value")).select("value").first().getString(0)
   }
   
   def getUserEnrolmentDF(collectionId: String, batchId: String, persist: Boolean)(implicit spark: SparkSession): DataFrame = {
-    val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).where(col("courseid") === collectionId && col("batchid") === batchId).select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
+    val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).where(col("courseid") === collectionId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull).select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
     if (persist) df.persist() else df
   }
   
   def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+    
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
     val response = RestUtil.post[CollectionDetails](apiURL, request).result.content
@@ -257,28 +258,31 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def getUserConsentDF(collectionBatch: CollectionBatch)(implicit spark: SparkSession): DataFrame = {
     val df = loadData(userConsentDBSettings, cassandraFormat, new StructType());
-    df.where(col("object_id") === collectionBatch.collectionId && col("subject_id") === collectionBatch.requestedOrgId).dropDuplicates("userid", "object_id", "subject_id").select("userid", "object_id", "subject_id", "consented", "consented_date");
+    df.where(col("object_id") === collectionBatch.collectionId && col("consumer_id") === collectionBatch.requestedOrgId)
+    .dropDuplicates("user_id", "object_id", "consumer_id")
+    .withColumn("consentflag", when(lower(col("status")) === "active", "true").otherwise("false"))
+    .select(col("user_id").as("userid"), col("consentflag"));
   }
 
   def applyConsentRules(collectionBatch: CollectionBatch, reportDF: DataFrame, privateColumns: List[String])(implicit spark: SparkSession): DataFrame = {
 
     val consentDF = if (collectionBatch.requestedOrgId.equals(collectionBatch.custodianOrgId)) {
-      reportDF.withColumn("consentFlag", lit("false"));
+      reportDF.withColumn("consentflag", lit("false"));
     } else {
       val consentDF = getUserConsentDF(collectionBatch);
-      val resultDF = reportDF.join(consentDF, Seq("userid"), "left_outer").withColumnRenamed("consented", "consentFlag").drop("object_id", "subject_id")
+      val resultDF = reportDF.join(consentDF, Seq("userid"), "left_outer")
       // Global consent - will be updated in 3.4 to read from user_consent table
-      resultDF.withColumn("consentFlag", when(col("rootOrgId") === collectionBatch.requestedOrgId, "true").when(col("consentFlag").isNotNull, col("consentFlag")).otherwise("false"))
+      resultDF.withColumn("consentflag", when(col("rootorgid") === collectionBatch.requestedOrgId, "true").when(col("consentflag").isNotNull, col("consentflag")).otherwise("false"))
     }
 
-    privateColumns.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentFlag") === "true", col(column)).otherwise("")))
+    privateColumns.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentflag") === "true", col(column)).otherwise("")))
   }
 
-  def decryptMaskedInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     val schema = userDF.schema
-    val unmaskFields = schema.fields.filter(field => maskedFields.contains(field.name));
-    val resultDF = unmaskFields.foldLeft(userDF)((df, field) => df.withColumn(field.name, when(col("consentFlag") === "true", toDecrypt(col(field.name))).otherwise(col(field.name))))
+    val decryptFields = schema.fields.filter(field => encryptedFields.contains(field.name));
+    val resultDF = decryptFields.foldLeft(userDF)((df, field) => {df.withColumn(field.name, when(col("consentflag") === "true", DecryptUDF.toDecrypt(col(field.name))).otherwise(""))})
     resultDF
   }
   
@@ -293,7 +297,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
     val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
-    reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
+    reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
   /** END - Utility Methods */
 
