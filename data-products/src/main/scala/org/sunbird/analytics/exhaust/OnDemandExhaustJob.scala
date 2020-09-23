@@ -90,6 +90,7 @@ trait OnDemandExhaustJob {
     val tempDir = AppConf.getConfig("spark_output_temp_dir") + request.request_id + "/"
     val localPath = tempDir + path.getFileName;
     fc.getHadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, tempDir);
+    println("storageConfig.store.toLowerCase()" + storageConfig.store.toLowerCase())
     val filePrefix = storageConfig.store.toLowerCase() match {
       case "s3" =>
         CommonUtil.getS3File(storageConfig.container, "");

@@ -78,8 +78,7 @@ trait BaseReportsJob {
     val container = modelParams.getOrElse("storageContainer", "reports").asInstanceOf[String]
     val storageKey = modelParams.getOrElse("storageKeyConfig", "reports_storage_key").asInstanceOf[String];
     val storageSecret = modelParams.getOrElse("storageSecretConfig", "reports_storage_secret").asInstanceOf[String];
-    val store = modelParams.getOrElse("store", "local").asInstanceOf[String];
-    StorageConfig(store, container, key, Option(storageKey), Option(storageSecret));
+    StorageConfig(AppConf.getConfig("cloud_storage_type"), container, key, Option(storageKey), Option(storageSecret));
   }
 
 }
