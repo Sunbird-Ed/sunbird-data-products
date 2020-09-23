@@ -237,10 +237,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-
+    println("====searchFilter====" + searchFilter)
     // TODO: Handle limit and do a recursive search call
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
+    println("===requestObj====" + request)
     val response = RestUtil.post[CollectionDetails](apiURL, request).result.content
     spark.createDataFrame(response).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent")
   }

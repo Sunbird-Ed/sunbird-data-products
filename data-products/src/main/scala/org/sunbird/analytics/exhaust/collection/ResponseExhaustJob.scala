@@ -30,7 +30,9 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     
     val assessmentDF = getAssessmentDF(collectionBatch);
+    println("assessmentDFassessmentDF" + assessmentDF.show(false))
     val contentIds = assessmentDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
+    println("contentIds====" + contentIds)
     val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds)))).withColumnRenamed("collectionName", "contentname").select("identifier", "contentname");
     val reportDF = assessmentDF.join(contentDF, assessmentDF("content_id") === contentDF("identifier"), "left_outer").join(userEnrolmentDF, Seq("courseid", "batchid", "userid"), "left_outer").drop("identifier").select(filterColumns.head, filterColumns.tail: _*);
     organizeDF(reportDF, columnMapping, columnsOrder);
