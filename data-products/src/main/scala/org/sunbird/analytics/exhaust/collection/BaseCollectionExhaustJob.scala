@@ -62,9 +62,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     implicit val spark: SparkSession = openSparkSession(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     init()
-    val res = CommonUtil.time(execute());
-    spark.close()
-    JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1)));
+    try {
+      val res = CommonUtil.time(execute());
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1)));
+    } finally {
+      frameworkContext.closeContext();
+      spark.close()
+    }
+    
   }
 
   def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
@@ -102,8 +107,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
 
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
-    val container = modelParams.getOrElse("storageContainer", "reports").asInstanceOf[String]
-    val storageConfig = getStorageConfig(container, "");
+    val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
     val result = for (request <- requests) yield {
       if (validateRequest(request)) {
@@ -174,8 +178,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def processBatches(userCachedDF: DataFrame, collectionBatches: List[CollectionBatch])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
 
-    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
-    val container = modelParams.getOrElse("storageContainer", "reports").asInstanceOf[String]
     for (batch <- filterCollectionBatches(collectionBatches)) yield {
       val userEnrolmentDF = getUserEnrolmentDF(batch.collectionId, batch.batchId, false).join(userCachedDF, Seq("userid"), "inner")
         .withColumn("collectionName", lit(batch.collectionName))
@@ -184,7 +186,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       try {
         val res = CommonUtil.time(processBatch(filteredDF, batch));
         val reportDF = res._2;
-        val storageConfig = getStorageConfig(container, AppConf.getConfig("collection.exhaust.store.prefix"))
+        val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
         val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1);
       } catch {
@@ -218,7 +220,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getDate(): String = {
-    val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("ddMMyyyy").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
+    val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
   }
 
