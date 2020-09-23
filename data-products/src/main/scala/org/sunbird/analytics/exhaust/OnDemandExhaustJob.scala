@@ -75,7 +75,7 @@ trait OnDemandExhaustJob {
   def saveRequests(storageConfig: StorageConfig, requests: Array[JobRequest])(implicit spark: SparkSession, fc: FrameworkContext) = {
     val zippedRequests = for (request <- requests) yield {
       val downloadURLs = for (url <- request.download_urls.getOrElse(List())) yield {
-        zipAndEncrypt(url, storageConfig, request.encryption_key);
+        zipAndEncrypt(url, storageConfig, request);
       };
       request.download_urls = Option(downloadURLs);
       request;
@@ -83,11 +83,13 @@ trait OnDemandExhaustJob {
     updateRequests(zippedRequests)
   }
 
-  private def zipAndEncrypt(url: String, storageConfig: StorageConfig, encryptionKey: Option[String])(implicit spark: SparkSession, fc: FrameworkContext): String = {
+  private def zipAndEncrypt(url: String, storageConfig: StorageConfig, request: JobRequest)(implicit spark: SparkSession, fc: FrameworkContext): String = {
 
     val path = Paths.get(url);
     val storageService = fc.getStorageService(storageConfig.store, storageConfig.accountKey.getOrElse(""), storageConfig.secretKey.getOrElse(""));
-    val localPath = AppConf.getConfig("spark_output_temp_dir") + path.getFileName;
+    val tempDir = AppConf.getConfig("spark_output_temp_dir") + request.request_id + "/"
+    val localPath = tempDir + path.getFileName;
+    fc.getHadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, tempDir);
     val filePrefix = storageConfig.store.toLowerCase() match {
       case "s3" =>
         CommonUtil.getS3File(storageConfig.container, "");
@@ -100,13 +102,13 @@ trait OnDemandExhaustJob {
     if(storageConfig.store.equals("local")) {
       fc.getHadoopFileUtil().copy(objKey, localPath, spark.sparkContext.hadoopConfiguration)
     } else {
-      storageService.download(storageConfig.container, objKey, localPath, Some(false));  
+      storageService.download(storageConfig.container, objKey, tempDir, Some(false));  
     }
 
     val zipPath = localPath.replace("csv", "zip")
     val zipObjectKey = objKey.replace("csv", "zip")
 
-    encryptionKey.map(key => {
+    request.encryption_key.map(key => {
       val zipParameters = new ZipParameters();
       zipParameters.setEncryptFiles(true);
       zipParameters.setEncryptionMethod(EncryptionMethod.ZIP_STANDARD); // AES encryption is not supported by default with various OS.
@@ -115,10 +117,12 @@ trait OnDemandExhaustJob {
     }).getOrElse({
       new ZipFile(zipPath).addFile(new File(localPath));
     })
-    if(storageConfig.store.equals("local")) {
+    val resultFile = if(storageConfig.store.equals("local")) {
       fc.getHadoopFileUtil().copy(zipPath, zipObjectKey, spark.sparkContext.hadoopConfiguration)
     } else {
-      storageService.upload(storageConfig.container, zipPath, zipObjectKey, None, Some(0), Some(3), None);
+      storageService.upload(storageConfig.container, zipPath, zipObjectKey, Some(false), Some(0), Some(3), None);
     }
+    fc.getHadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, tempDir);
+    resultFile;
   }
 }
