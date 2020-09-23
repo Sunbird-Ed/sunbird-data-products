@@ -17,7 +17,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
   private val encryptedFields = Array("email", "phone");
 
   override def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "username", "state", "district", "orgname", "externalid", "schooludisecode", "schoolname", "block", "userchannel", "board", "rootorgid", "email", "phone", "maskedemail", "maskedphone", "userinfo")
+    Seq("userid", "username", "state", "district", "orgname", "externalid", "schooludisecode", "schoolname", "block", "userchannel", "board", "rootorgid", "email", "phone", "userinfo")
   }
 
   override def validateRequest(request: JobRequest): Boolean = {
@@ -30,8 +30,8 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
 
   private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid", "username", "state", "district", "persona", "orgname", "externalid", "schooludisecode", "schoolname", "block", "board", "userchannel", "email", "phone", "consentflag", "consentprovideddate");
 
-  private val consentFields = Map("email" -> "maskedemail", "phone" -> "maskedphone")
-  private val orgDerivedFields = List("externalid", "schooludisecode", "schoolname", "block")
+  private val consentFields = List("email", "phone")
+  private val orgDerivedFields = List("externalid", "username")
   private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "User Name", "State", "District", "Persona", "Org Name", "External ID", "School Id", "School Name", "Block Name", "Declared Board", "Declared Org", "Email ID", "Mobile Number", "Consent Provided", "Consent Provided Date");
   val columnMapping = Map("courseid" -> "Collection Id", "collectionName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User UUID", "username" -> "User Name", "state" -> "State", "district" -> "District",
     "persona" -> "Persona", "orgname" -> "Org Name", "externalid" -> "External ID", "schooludisecode" -> "School Id", "schoolname" -> "School Name", "block" -> "Block Name", "board" -> "Declared Board", "userchannel" -> "Declared Org", "email" -> "Email ID", "phone" -> "Mobile Number", "consentflag" -> "Consent Provided", "consentprovideddate" -> "Consent Provided Date")
@@ -64,7 +64,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
       resultDF.withColumn("orgconsentflag", when(col("rootorgid") === collectionBatch.requestedOrgId, "true").otherwise("false"))
     }
 
-    val consentAppliedDF = consentFields.foldLeft(consentDF)((df, column) => df.withColumn(column._1, when(col("consentflag") === "true", col(column._1)).otherwise(col(column._2))));
+    val consentAppliedDF = consentFields.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentflag") === "true", col(column)).otherwise(col(column))));
     orgDerivedFields.foldLeft(consentAppliedDF)((df, field) => df.withColumn(field, when(col("consentflag") === "true", col(field)).when(col("orgconsentflag") === "true", col(field)).otherwise("")));
   }
 
