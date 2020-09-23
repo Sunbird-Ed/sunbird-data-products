@@ -27,11 +27,11 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   private val contentHierarchyDBSettings = Map("table" -> "content_hierarchy", "keyspace" -> AppConf.getConfig("sunbird.content.hierarchy.keyspace"), "cluster" -> "ContentCluster");
   
-  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid", "username",  "state", "district", "enrolleddate", "completedon", "certificatestatus");
-  private val columnsOrder = List("Batch Id", "Batch Name", "Collection Id", "Collection Name", "User UUID", "User Name", "State", "District", "Enrolment Date", "Completion Date",
+  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid",  "state", "district", "schooludisecode", "schoolname", "block", "enrolleddate", "completedon", "certificatestatus");
+  private val columnsOrder = List("Batch Id", "Batch Name", "Collection Id", "Collection Name", "User UUID", "State", "District", "School Id", "School Name", "Block Name", "Enrolment Date", "Completion Date",
     "Certificate Status", "Progress", "Total Score")
   private val columnMapping = Map("courseid" -> "Collection Id", "collectionName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User UUID",
-    "username" -> "User Name", "state" -> "State", "district" -> "District", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "completionPercentage" -> "Progress",
+    "state" -> "State", "district" -> "District", "schooludisecode" -> "School Id", "schoolname" -> "School Name", "block" -> "Block Name", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "completionPercentage" -> "Progress",
     "total_sum_score" -> "Total Score", "certificatestatus" -> "Certificate Status")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {

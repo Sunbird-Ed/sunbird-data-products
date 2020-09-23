@@ -69,7 +69,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       frameworkContext.closeContext();
       spark.close()
     }
-    
+
   }
 
   def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
@@ -209,7 +209,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "username", "state", "district", "userchannel", "rootorgid")
+    Seq("userid", "state", "district", "schooludisecode", "schoolname", "block", "userchannel", "rootorgid")
   }
   /** END - Overridable Methods */
 
