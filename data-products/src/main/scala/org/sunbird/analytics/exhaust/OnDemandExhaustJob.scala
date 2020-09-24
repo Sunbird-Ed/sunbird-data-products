@@ -11,6 +11,7 @@ import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.apache.spark.sql.functions._
+import org.apache.commons.lang.StringUtils
 
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
@@ -52,7 +53,7 @@ trait OnDemandExhaustJob {
     if(requests != null && requests.length > 0) {
       val dbc:Connection = DriverManager.getConnection(url, connProperties.getProperty("user"), connProperties.getProperty("password"));
       dbc.setAutoCommit(true);
-      val updateQry = s"UPDATE job_request SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
+      val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
       val pstmt:PreparedStatement = dbc.prepareStatement(updateQry);
       for(request <- requests) {
         pstmt.setInt(1, request.iteration.getOrElse(0));
@@ -62,7 +63,7 @@ trait OnDemandExhaustJob {
         pstmt.setTimestamp(4, if(request.dt_file_created.isDefined) new Timestamp(request.dt_file_created.get) else null);
         pstmt.setTimestamp(5, if(request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
         pstmt.setLong(6, request.execution_time.getOrElse(0));
-        pstmt.setString(7, request.err_message.getOrElse(""));
+        pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
         pstmt.setString(8, request.tag);
         pstmt.setString(9, request.request_id);
         pstmt.addBatch();

@@ -105,7 +105,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
-
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
@@ -233,11 +232,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .where(col("courseid") === collectionId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
       .select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
+
     if (persist) df.persist() else df
   }
 
   def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-
     // TODO: Handle limit and do a recursive search call
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
@@ -257,7 +256,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def filterUsers(collectionBatch: CollectionBatch, reportDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-
     if (collectionBatch.requestedOrgId.equals(collectionBatch.collectionOrgId)) {
       reportDF
     } else {
