@@ -38,6 +38,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
 
     val collectionAggDF = getCollectionAgg(collectionBatch).withColumn("batchid", lit(collectionBatch.batchId));
     println("collectionAggDF" + collectionAggDF.show(false))
+    println("userEnrolmentDF" + userEnrolmentDF.show(false))
     val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF)
     println("enrolledUsersToBatch" + enrolledUsersToBatch.show(false))
     println("filterColumns.head" + filterColumns.head)
