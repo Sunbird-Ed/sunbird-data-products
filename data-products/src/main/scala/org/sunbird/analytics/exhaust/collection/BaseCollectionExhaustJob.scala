@@ -292,7 +292,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
     val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
-    reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
+    reportDF.withColumn("batchid", concat(lit("BatchId_"), col("batchid"))).toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
   /** END - Utility Methods */
 
@@ -327,7 +327,7 @@ object UDFUtils extends Serializable {
       val str = JSONUtils.deserialize[AnyRef](board);
       str.asInstanceOf[List[String]].head
     } catch {
-      case ex: JsonParseException =>
+      case ex: Exception =>
         board
     }
   }
