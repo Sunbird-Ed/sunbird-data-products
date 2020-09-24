@@ -233,6 +233,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .where(col("courseid") === collectionId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
       .select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
+
     if (persist) df.persist() else df
   }
 
