@@ -26,6 +26,8 @@ import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.RestUtil
 import org.apache.spark.sql.cassandra._
 import com.datastax.spark.connector.cql.CassandraConnectorConf
+import com.fasterxml.jackson.core.JsonParseException
+import scala.collection.immutable.List
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""), phone: Option[String] = Option(""), maskedemail: Option[String] = Option(""),
@@ -312,4 +314,16 @@ object UDFUtils extends Serializable {
   }
 
   val toJSON = udf[String, AnyRef](toJSONFun)
+  
+  def extractFromArrayStringFun(board: String): String = {
+    try {
+      val str = JSONUtils.deserialize[AnyRef](board);
+      str.asInstanceOf[List[String]].head
+    } catch {
+      case ex: JsonParseException =>
+        board
+    }
+  }
+
+  val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
 }

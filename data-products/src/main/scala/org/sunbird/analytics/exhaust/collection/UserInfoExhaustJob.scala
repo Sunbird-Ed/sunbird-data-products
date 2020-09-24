@@ -18,7 +18,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
   private val encryptedFields = Array("email", "phone");
 
   override def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "username", "state", "district", "externalid", "rootorgid", "email", "phone", "userinfo")
+    Seq("userid", "username", "state", "district", "externalid", "rootorgid", "orgname", "email", "phone", "userinfo")
   }
 
   override def validateRequest(request: JobRequest): Boolean = {
@@ -29,16 +29,16 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
     }
   }
 
-  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid", "username", "state", "district", "externalid", "email", "phone",
+  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid", "username", "state", "district", "orgname", "externalid", "email", "phone",
     "consentflag", "consentprovideddate");
 
   private val consentFields = List("email", "phone")
   private val orgDerivedFields = List("externalid", "username")
-  private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "User Name", "State", "District", "External ID",
+  private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "User Name", "State", "District", "Org Name", "External ID",
     "Email ID", "Mobile Number", "Consent Provided", "Consent Provided Date");
   val columnMapping = Map("courseid" -> "Collection Id", "collectionName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User UUID",
-    "username" -> "User Name", "state" -> "State", "district" -> "District", "externalid" -> "External ID", "schooludisecode" -> "School Id", "schoolname" -> "School Name",
-    "block" -> "Block Name", "email" -> "Email ID", "phone" -> "Mobile Number", "consentflag" -> "Consent Provided", "consentprovideddate" -> "Consent Provided Date")
+    "username" -> "User Name", "state" -> "State", "district" -> "District", "orgname" -> "Org Name", "externalid" -> "External ID", "email" -> "Email ID",
+    "phone" -> "Mobile Number", "consentflag" -> "Consent Provided", "consentprovideddate" -> "Consent Provided Date")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
