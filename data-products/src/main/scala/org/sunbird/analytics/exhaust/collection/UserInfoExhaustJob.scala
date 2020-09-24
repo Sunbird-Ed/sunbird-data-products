@@ -54,7 +54,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
         organizeDF(reportDF, columnMapping, columnsOrder)
 
       case _ =>
-        throw new Exception(StringUtils.abbreviate("Invalid request. User info exhaust is not applicable for collections which don't request for user consent to share data", 300))
+        throw new Exception("Invalid request. User info exhaust is not applicable for collections which don't request for user consent to share data")
     }
   }
 
