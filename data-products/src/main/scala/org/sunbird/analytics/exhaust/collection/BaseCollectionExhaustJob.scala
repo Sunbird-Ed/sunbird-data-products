@@ -209,7 +209,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "state", "district", "schooludisecode", "schoolname", "block", "userchannel", "rootorgid")
+    Seq("userid", "state", "district", "userchannel", "rootorgid")
   }
   /** END - Overridable Methods */
 
