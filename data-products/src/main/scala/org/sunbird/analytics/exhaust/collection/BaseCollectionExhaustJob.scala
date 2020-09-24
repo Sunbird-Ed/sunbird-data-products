@@ -258,7 +258,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def filterUsers(collectionBatch: CollectionBatch, reportDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-
+    println("collectionBatch.requestedOrgId" + collectionBatch.requestedOrgId)
+    println("collectionBatch.collectionOrgId" + collectionBatch.collectionOrgId)
+    println("reportsdfff" + reportDF.show(false))
     if (collectionBatch.requestedOrgId.equals(collectionBatch.collectionOrgId)) {
       reportDF
     } else {
