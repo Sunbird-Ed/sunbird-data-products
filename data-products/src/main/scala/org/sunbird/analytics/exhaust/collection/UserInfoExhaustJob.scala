@@ -1,5 +1,6 @@
 package org.sunbird.analytics.exhaust.collection
 
+import org.apache.commons.lang.StringUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
@@ -51,8 +52,9 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
         val unmaskedDF = decryptUserInfo(applyConsentRules(collectionBatch, userEnrolments))
         val reportDF = unmaskedDF.withColumn("persona", when(col("externalid").isNotNull && length(col("externalid")) > 0, "Teacher").otherwise("")).select(filterColumns.head, filterColumns.tail: _*);
         organizeDF(reportDF, columnMapping, columnsOrder)
+
       case _ =>
-        throw new Exception(s"Invalid request. User consent is ${collectionBatch.userConsent}")
+        throw new Exception(StringUtils.abbreviate("Invalid request. User info exhaust is not applicable for collections which don't request for user consent to share data", 300))
     }
   }
 
