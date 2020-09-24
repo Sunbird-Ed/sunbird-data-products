@@ -28,7 +28,6 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
       "questionscore" -> "Question Score", "questionmaxscore" -> "Question Max Score", "questionoption" -> "Question Options", "questionresponse" -> "Question Response")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    
     val assessmentDF = getAssessmentDF(collectionBatch);
     val contentIds = assessmentDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
     val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds)))).withColumnRenamed("collectionName", "contentname").select("identifier", "contentname");

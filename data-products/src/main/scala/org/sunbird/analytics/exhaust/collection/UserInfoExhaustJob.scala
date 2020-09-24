@@ -1,5 +1,6 @@
 package org.sunbird.analytics.exhaust.collection
 
+import org.apache.commons.lang.StringUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
@@ -51,8 +52,9 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
         val unmaskedDF = decryptUserInfo(applyConsentRules(collectionBatch, userEnrolments))
         val reportDF = unmaskedDF.withColumn("persona", when(col("externalid").isNotNull && length(col("externalid")) > 0, "Teacher").otherwise("")).select(filterColumns.head, filterColumns.tail: _*);
         organizeDF(reportDF, columnMapping, columnsOrder)
+
       case _ =>
-        throw new Exception("Invalid request. User info exhaust is not applicable for collections which don't request for user consent to share data.")
+        throw new Exception("Invalid request. User info exhaust is not applicable for collections which don't request for user consent to share data")
     }
   }
 
@@ -66,7 +68,6 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
       // Org level consent - will be updated in 3.4 to read from user_consent table
       resultDF.withColumn("orgconsentflag", when(col("rootorgid") === collectionBatch.requestedOrgId, "true").otherwise("false"))
     }
-
     val consentAppliedDF = consentFields.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentflag") === "true", col(column)).otherwise("")));
     orgDerivedFields.foldLeft(consentAppliedDF)((df, field) => df.withColumn(field, when(col("consentflag") === "true", col(field)).when(col("orgconsentflag") === "true", col(field)).otherwise("")));
   }
