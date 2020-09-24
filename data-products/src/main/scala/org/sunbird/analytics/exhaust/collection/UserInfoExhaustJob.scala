@@ -52,7 +52,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
         val reportDF = unmaskedDF.withColumn("persona", when(col("externalid").isNotNull && length(col("externalid")) > 0, "Teacher").otherwise("")).select(filterColumns.head, filterColumns.tail: _*);
         organizeDF(reportDF, columnMapping, columnsOrder)
       case _ =>
-        throw new Exception("Invalid request. User info exhaust is not applicable collections")
+        throw new Exception("Invalid request.User consent is not requested to share the data")
     }
   }
 
