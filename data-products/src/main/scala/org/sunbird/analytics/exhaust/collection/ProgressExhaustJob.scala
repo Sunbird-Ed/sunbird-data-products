@@ -64,7 +64,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   def updateCertificateStatus(userEnrolmentDF: DataFrame): DataFrame = {
     userEnrolmentDF.withColumn("certificatestatus", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued")
       .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
-      .withColumn("board", UDFUtils.parseBoard(col("board")))
+      .withColumn("board", UDFUtils.extractFromArrayString(col("board")))
   }
   def getAssessmentDF(batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")

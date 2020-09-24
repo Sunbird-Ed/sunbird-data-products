@@ -315,7 +315,7 @@ object UDFUtils extends Serializable {
 
   val toJSON = udf[String, AnyRef](toJSONFun)
   
-  def parseBoardFun(board: String): String = {
+  def extractFromArrayStringFun(board: String): String = {
     try {
       val str = JSONUtils.deserialize[AnyRef](board);
       str.asInstanceOf[List[String]].head
@@ -325,5 +325,5 @@ object UDFUtils extends Serializable {
     }
   }
 
-  val parseBoard = udf[String, String](parseBoardFun)
+  val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
 }
