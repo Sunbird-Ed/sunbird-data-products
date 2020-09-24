@@ -37,9 +37,13 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
     val collectionAggDF = getCollectionAgg(collectionBatch).withColumn("batchid", lit(collectionBatch.batchId));
+    println("collectionAggDF" + collectionAggDF.show(false))
     val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*);
+    println("enrolledUsersToBatch" + enrolledUsersToBatch.show(false))
     val assessmentAggDF = getAssessmentDF(collectionBatch);
+    println("assessmentAggDF" + assessmentAggDF.show(false))
     val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
+    println("progressDF" + progressDF.show(false))
     organizeDF(progressDF, columnMapping, columnsOrder);
   }
 
