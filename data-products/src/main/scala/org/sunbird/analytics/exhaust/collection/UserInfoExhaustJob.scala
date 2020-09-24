@@ -63,9 +63,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
       // Org level consent - will be updated in 3.4 to read from user_consent table
       resultDF.withColumn("orgconsentflag", when(col("rootorgid") === collectionBatch.requestedOrgId, "true").otherwise("false"))
     }
-    println("consentDF" + consentDF.show(false))
     val consentAppliedDF = consentFields.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentflag") === "true", col(column)).otherwise("")));
-    println("consentAppliedDF"+ consentAppliedDF.show(false))
     orgDerivedFields.foldLeft(consentAppliedDF)((df, field) => df.withColumn(field, when(col("consentflag") === "true", col(field)).when(col("orgconsentflag") === "true", col(field)).otherwise("")));
   }
 
