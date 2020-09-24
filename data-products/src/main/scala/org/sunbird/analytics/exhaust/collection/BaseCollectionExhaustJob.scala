@@ -86,7 +86,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
 
     val custodianOrgId = getCustodianOrgId();
-    val userCachedDF = logTime(getUserCacheDF(getUserCacheColumns(), true), "Time taken to fetch the user DF from redis");
+    val res = CommonUtil.time({
+      val userDF = getUserCacheDF(getUserCacheColumns(), true)
+      (userDF.count(), userDF)
+    })
+    JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
+    val userCachedDF = res._2._2;
     mode.toLowerCase() match {
       case "standalone" =>
         executeStandAlone(custodianOrgId, userCachedDF)
@@ -189,6 +194,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         val reportDF = res._2;
         val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
         val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
+        unpersistDFs();
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1);
       } catch {
         case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage, 0);
@@ -200,6 +206,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   /** START - Overridable Methods */
   def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
+  def unpersistDFs(){};
   def jobId(): String;
   def jobName(): String;
   def getClassName(): String;
