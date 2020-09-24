@@ -94,7 +94,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def executeStandAlone(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
-    println("Standalone====")
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchId = modelParams.get("batchId").asInstanceOf[Option[String]];
     val batchFilter = modelParams.get("batchFilter").asInstanceOf[Option[List[String]]];
@@ -106,7 +105,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
-    println("executeOnDemand====")
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());

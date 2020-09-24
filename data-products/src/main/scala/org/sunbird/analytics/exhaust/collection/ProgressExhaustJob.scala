@@ -40,20 +40,10 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     "total_sum_score" -> "Total Score", "certificatestatus" -> "Certificate Status")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-
     val collectionAggDF = getCollectionAgg(collectionBatch).withColumn("batchid", lit(collectionBatch.batchId));
-    println("collectionAggDF" + collectionAggDF.show(false))
-    println("userEnrolmentDF" + userEnrolmentDF.show(false))
-    val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF)
-    println("enrolledUsersToBatch" + enrolledUsersToBatch.show(false))
-    println("filterColumns.head" + filterColumns.head)
-    println("filterColumns.tail" + filterColumns.tail)
-    val testenrol =  enrolledUsersToBatch.select(filterColumns.head, filterColumns.tail: _*);
-    println("testenrol" + testenrol.show(false))
+    val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     val assessmentAggDF = getAssessmentDF(collectionBatch);
-    println("assessmentAggDF" + assessmentAggDF.show(false))
     val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
-    println("progressDF" + progressDF.show(false))
     organizeDF(progressDF, columnMapping, columnsOrder);
   }
 
