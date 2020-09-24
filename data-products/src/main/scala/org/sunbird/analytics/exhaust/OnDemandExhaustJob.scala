@@ -52,7 +52,7 @@ trait OnDemandExhaustJob {
     if(requests != null && requests.length > 0) {
       val dbc:Connection = DriverManager.getConnection(url, connProperties.getProperty("user"), connProperties.getProperty("password"));
       dbc.setAutoCommit(true);
-      val updateQry = s"UPDATE sunbirddev_job_request SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
+      val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
       val pstmt:PreparedStatement = dbc.prepareStatement(updateQry);
       for(request <- requests) {
         pstmt.setInt(1, request.iteration.getOrElse(0));
@@ -90,7 +90,6 @@ trait OnDemandExhaustJob {
     val tempDir = AppConf.getConfig("spark_output_temp_dir") + request.request_id + "/"
     val localPath = tempDir + path.getFileName;
     fc.getHadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, tempDir);
-    println("storageConfig.store.toLowerCase()" + storageConfig.store.toLowerCase())
     val filePrefix = storageConfig.store.toLowerCase() match {
       case "s3" =>
         CommonUtil.getS3File(storageConfig.container, "");
