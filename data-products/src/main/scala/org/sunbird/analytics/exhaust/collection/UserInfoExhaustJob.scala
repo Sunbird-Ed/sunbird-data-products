@@ -67,7 +67,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
       resultDF.withColumn("orgconsentflag", when(col("rootorgid") === collectionBatch.requestedOrgId, "true").otherwise("false"))
     }
 
-    val consentAppliedDF = consentFields.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentflag") === "true", col(column)).otherwise(col(column))));
+    val consentAppliedDF = consentFields.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentflag") === "true", col(column)).otherwise("")));
     orgDerivedFields.foldLeft(consentAppliedDF)((df, field) => df.withColumn(field, when(col("consentflag") === "true", col(field)).when(col("orgconsentflag") === "true", col(field)).otherwise("")));
   }
 
