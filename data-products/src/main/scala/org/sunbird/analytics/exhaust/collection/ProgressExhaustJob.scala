@@ -68,7 +68,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     userEnrolmentDF.join(progressDF, Seq("courseid", "batchid", "userid"), "inner")
       .withColumn("completedon", when(col("completedon").isNotNull, date_format(col("completedon"), "dd/MM/yyyy")).when(col("completionPercentage") === 100, date_format(current_date(), "dd/MM/yyyy")).otherwise(""))
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
-      .drop("issued_certificates", "certificates")
+      .drop("issued_certificates", "certificates", "rootorgid", "active", "null")
   }
 
   def updateCertificateStatus(userEnrolmentDF: DataFrame): DataFrame = {
