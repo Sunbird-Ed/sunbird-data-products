@@ -17,6 +17,7 @@ class TestVDNMetricsJob extends SparkSpec with Matchers with MockFactory {
   val spark = getSparkSession()
 
   it should "execute generate VDN metrics report" in {
+    implicit val sc = spark.sparkContext
     implicit val mockFc = mock[FrameworkContext]
 
     //mocking for DruidDataFetcher
