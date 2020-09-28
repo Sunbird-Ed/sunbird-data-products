@@ -39,7 +39,7 @@ case class CollectionBatch(batchId: String, collectionId: String, batchName: Str
 case class CollectionBatchResponse(batchId: String, file: String, status: String, statusMsg: String, execTime: Long)
 case class CollectionDetails(result: Result)
 case class Result(content: List[CollectionInfo])
-case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String])
+case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String], contentType: String)
 
 trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
