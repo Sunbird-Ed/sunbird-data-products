@@ -59,7 +59,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
         .getItem(0) * 100) / (split(first("grand_total"), "\\/")
           .getItem(1))), lit("%")))
     val progressDF = collectionAggPivotDF.join(assessmentAggPivotDF, Seq("courseid", "batchid", "userid"), "left_outer")
-    userEnrolmentDF.join(progressDF, Seq("courseid", "batchid", "userid"), "inner")
+    userEnrolmentDF.join(progressDF, Seq("courseid", "batchid", "userid"), "left_outer")
       .withColumn("completedon", when(col("completedon").isNotNull, date_format(col("completedon"), "dd/MM/yyyy")).when(col("completionPercentage") === 100, date_format(current_date(), "dd/MM/yyyy")).otherwise(""))
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
   }
