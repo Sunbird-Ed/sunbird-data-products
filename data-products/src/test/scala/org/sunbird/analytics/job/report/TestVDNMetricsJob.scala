@@ -19,7 +19,7 @@ class TestVDNMetricsJob extends SparkSpec with Matchers with MockFactory {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val spark = getSparkSession()
+    spark = getSparkSession()
   }
 
   it should "execute generate VDN metrics report" in {
