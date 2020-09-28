@@ -67,7 +67,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   }
 
   def getAssessmentDF(batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
+    val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId && batch.contentType.equals(AppConf.getConfig("assessment.metrics.supported.contenttype"))).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
       .withColumnRenamed("user_id", "userid")
       .withColumnRenamed("batch_id", "batchid")
       .withColumnRenamed("course_id", "courseid")

@@ -33,7 +33,7 @@ case class UserData(userid: String, state: Option[String] = Option(""), district
                     schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""), userinfo: Option[String])
 
 case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]])
-case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"))
+case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"), contentType: String)
 case class CollectionBatchResponse(batchId: String, file: String, status: String, statusMsg: String, execTime: Long)
 case class CollectionDetails(result: Result)
 case class Result(content: List[CollectionInfo])
@@ -158,11 +158,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     if (batchId.isDefined || batchFilter.isDefined) {
       val batches = if (batchId.isDefined) collectionBatches.filter(col("batchid") === batchId.get) else collectionBatches.filter(col("batchid").isin(batchFilter.get: _*))
       val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
-      val collectionDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds), "fields" -> Array("channel", "identifier", "name", "userConsent"))));
+      val collectionDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds), "fields" -> Array("channel", "identifier", "name", "userConsent" , "contentType"))));
       val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
       val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
         .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
-        .select(col("batchid").as("batchId"), col("courseid").as("collectionId"), col("name").as("batchName"), col("custodianOrgId"), col("requestedOrgId"), col("channel").as("collectionOrgId"), col("collectionName"), col("userConsent"));
+        .select(col("batchid").as("batchId"), col("courseid").as("collectionId"), col("name").as("batchName"), col("custodianOrgId"), col("requestedOrgId"), col("channel").as("collectionOrgId"), col("collectionName"), col("userConsent"), col("contentType"));
       finalDF.as[CollectionBatch](encoder).collect().toList
     } else if (searchFilter.isDefined) {
       val collectionDF = searchContent(searchFilter.get)
@@ -242,7 +242,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
     val response = RestUtil.post[CollectionDetails](apiURL, request).result.content
-    spark.createDataFrame(response).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent")
+    spark.createDataFrame(response).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "contentType")
   }
 
   def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
