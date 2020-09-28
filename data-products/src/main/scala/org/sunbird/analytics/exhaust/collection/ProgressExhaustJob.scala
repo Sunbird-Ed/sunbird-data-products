@@ -43,7 +43,10 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     val collectionAggDF = getCollectionAgg(collectionBatch).withColumn("batchid", lit(collectionBatch.batchId));
     val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     val assessmentAggDF = getAssessmentDF(collectionBatch);
-    val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
+    val contentIds = assessmentAggDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
+    val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds, "contentType" -> AppConf.getConfig("assessment.metrics.supported.contenttype"))))).select("identifier");
+    val reportDF = assessmentAggDF.join(contentDF, assessmentAggDF("content_id") === contentDF("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
+    val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, reportDF);
     organizeDF(progressDF, columnMapping, columnsOrder);
   }
 
@@ -55,7 +58,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       .pivot(concat(col("content_id"), lit(" - Score"))).agg(concat(ceil((split(first("grand_total"), "\\/")
         .getItem(0) * 100) / (split(first("grand_total"), "\\/")
           .getItem(1))), lit("%")))
-    val progressDF = collectionAggPivotDF.join(assessmentAggPivotDF, Seq("courseid", "batchid", "userid"), "right_outer") //Doing right join since to generate report only for the "SelfAssess" content types
+    val progressDF = collectionAggPivotDF.join(assessmentAggPivotDF, Seq("courseid", "batchid", "userid"), "left_outer")
     userEnrolmentDF.join(progressDF, Seq("courseid", "batchid", "userid"), "inner")
       .withColumn("completedon", when(col("completedon").isNotNull, date_format(col("completedon"), "dd/MM/yyyy")).when(col("completionPercentage") === 100, date_format(current_date(), "dd/MM/yyyy")).otherwise(""))
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
@@ -67,7 +70,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumn("board", UDFUtils.extractFromArrayString(col("board")))
   }
   def getAssessmentDF(batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId && batch.contentType.equals(AppConf.getConfig("assessment.metrics.supported.contenttype"))).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
+    val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
       .withColumnRenamed("user_id", "userid")
       .withColumnRenamed("batch_id", "batchid")
       .withColumnRenamed("course_id", "courseid")
