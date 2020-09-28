@@ -1,13 +1,11 @@
 package org.sunbird.analytics.exhaust.collection
 
 import org.apache.commons.lang3.StringUtils
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.JobConfig
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JSONUtils
 
@@ -22,7 +20,8 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   override def jobId() = "progress-exhaust";
   override def getReportPath() = "progress-exhaust/";
   override def getReportKey() = "progress";
-  
+  private val persistedDF:scala.collection.mutable.ListBuffer[DataFrame] = scala.collection.mutable.ListBuffer[DataFrame]();
+
   override def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "state", "district", "orgname", "schooludisecode", "schoolname", "block", "board", "rootorgid")
   }
@@ -43,6 +42,8 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     val collectionAggDF = getCollectionAgg(collectionBatch).withColumn("batchid", lit(collectionBatch.batchId));
     val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     val assessmentAggDF = getAssessmentDF(collectionBatch);
+    persistedDF.append(assessmentAggDF);
+
     val contentIds = assessmentAggDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
     val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds, "contentType" -> AppConf.getConfig("assessment.metrics.supported.contenttype"))))).select("identifier");
     val reportDF = assessmentAggDF.join(contentDF, assessmentAggDF("content_id") === contentDF("identifier"), "inner")
@@ -62,6 +63,10 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     userEnrolmentDF.join(progressDF, Seq("courseid", "batchid", "userid"), "left_outer")
       .withColumn("completedon", when(col("completedon").isNotNull, date_format(col("completedon"), "dd/MM/yyyy")).when(col("completionPercentage") === 100, date_format(current_date(), "dd/MM/yyyy")).otherwise(""))
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
+  }
+
+  override def unpersistDFs() {
+    persistedDF.foreach(f => f.unpersist(true))
   }
 
   def updateCertificateStatus(userEnrolmentDF: DataFrame): DataFrame = {
