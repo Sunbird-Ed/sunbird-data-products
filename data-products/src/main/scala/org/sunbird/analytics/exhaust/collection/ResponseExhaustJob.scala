@@ -15,6 +15,7 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
   override def jobId() = "response-exhaust";
   override def getReportPath() = "response-exhaust/";
   override def getReportKey() = "response";
+  private val persistedDF:scala.collection.mutable.ListBuffer[DataFrame] = scala.collection.mutable.ListBuffer[DataFrame]();  
   
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   
@@ -28,12 +29,16 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
       "questionscore" -> "Question Score", "questionmaxscore" -> "Question Max Score", "questionoption" -> "Question Options", "questionresponse" -> "Question Response")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    
-    val assessmentDF = getAssessmentDF(collectionBatch);
+    val assessmentDF = getAssessmentDF(collectionBatch).persist();
+    persistedDF.append(assessmentDF);
     val contentIds = assessmentDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
     val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds)))).withColumnRenamed("collectionName", "contentname").select("identifier", "contentname");
     val reportDF = assessmentDF.join(contentDF, assessmentDF("content_id") === contentDF("identifier"), "left_outer").join(userEnrolmentDF, Seq("courseid", "batchid", "userid"), "left_outer").drop("identifier").select(filterColumns.head, filterColumns.tail: _*);
     organizeDF(reportDF, columnMapping, columnsOrder);
+  }
+  
+  override def unpersistDFs() {
+    persistedDF.foreach(f => f.unpersist(true))
   }
   
   def getAssessmentDF(batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {

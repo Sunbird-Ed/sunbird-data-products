@@ -26,6 +26,8 @@ import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.RestUtil
 import org.apache.spark.sql.cassandra._
 import com.datastax.spark.connector.cql.CassandraConnectorConf
+import com.fasterxml.jackson.core.JsonParseException
+import scala.collection.immutable.List
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""), phone: Option[String] = Option(""), maskedemail: Option[String] = Option(""),
@@ -84,7 +86,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
 
     val custodianOrgId = getCustodianOrgId();
-    val userCachedDF = logTime(getUserCacheDF(getUserCacheColumns(), true), "Time taken to fetch the user DF from redis");
+    val res = CommonUtil.time({
+      val userDF = getUserCacheDF(getUserCacheColumns(), true)
+      (userDF.count(), userDF)
+    })
+    JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
+    val userCachedDF = res._2._2;
     mode.toLowerCase() match {
       case "standalone" =>
         executeStandAlone(custodianOrgId, userCachedDF)
@@ -105,7 +112,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
-
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
@@ -188,6 +194,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         val reportDF = res._2;
         val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
         val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
+        unpersistDFs();
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1);
       } catch {
         case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage, 0);
@@ -199,6 +206,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   /** START - Overridable Methods */
   def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
+  def unpersistDFs(){};
   def jobId(): String;
   def jobName(): String;
   def getClassName(): String;
@@ -233,11 +241,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .where(col("courseid") === collectionId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
       .select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
+
     if (persist) df.persist() else df
   }
 
   def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-
     // TODO: Handle limit and do a recursive search call
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
@@ -257,7 +265,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def filterUsers(collectionBatch: CollectionBatch, reportDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-
     if (collectionBatch.requestedOrgId.equals(collectionBatch.collectionOrgId)) {
       reportDF
     } else {
@@ -285,7 +292,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
     val dynamicColumns = fields.toList.filter(e => !finalColumnMapping.keySet.contains(e))
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
-    reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
+    reportDF.withColumn("batchid", concat(lit("BatchId_"), col("batchid"))).toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
   /** END - Utility Methods */
 
@@ -314,4 +321,16 @@ object UDFUtils extends Serializable {
   }
 
   val toJSON = udf[String, AnyRef](toJSONFun)
+  
+  def extractFromArrayStringFun(board: String): String = {
+    try {
+      val str = JSONUtils.deserialize[AnyRef](board);
+      str.asInstanceOf[List[String]].head
+    } catch {
+      case ex: Exception =>
+        board
+    }
+  }
+
+  val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
 }
