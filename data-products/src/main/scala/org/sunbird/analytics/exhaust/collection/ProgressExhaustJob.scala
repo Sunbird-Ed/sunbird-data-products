@@ -45,7 +45,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     val assessmentAggDF = getAssessmentDF(collectionBatch);
     val contentIds = assessmentAggDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
     val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds, "contentType" -> AppConf.getConfig("assessment.metrics.supported.contenttype"))))).select("identifier");
-    val reportDF = assessmentAggDF.join(contentDF, assessmentAggDF("content_id") === contentDF("identifier"), "right_outer") // Doing right join since to generate report only for the "SelfAssess" content types
+    val reportDF = assessmentAggDF.join(contentDF, assessmentAggDF("content_id") === contentDF("identifier"), "inner")
     val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, reportDF);
     organizeDF(progressDF, columnMapping, columnsOrder);
   }
