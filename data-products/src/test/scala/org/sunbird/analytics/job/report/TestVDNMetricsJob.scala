@@ -6,11 +6,13 @@ import ing.wbaa.druid.client.DruidClient
 import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResponseTimeseriesImpl, DruidResult, QueryType}
 import io.circe.Json
 import io.circe.parser.parse
-import org.apache.spark.sql.SparkSession
-import org.ekstep.analytics.framework.FrameworkContext
+import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
+import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
+import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
-import org.sunbird.analytics.util.SparkSpec
+import org.sunbird.analytics.job.report.VDNMetricsJob.sunbirdHierarchyStore
+import org.sunbird.analytics.util.{EmbeddedCassandra, SparkSpec}
 
 import scala.concurrent.Future
 
@@ -20,6 +22,7 @@ class TestVDNMetricsJob extends SparkSpec with Matchers with MockFactory {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = getSparkSession()
+    EmbeddedCassandra.loadData("src/test/resources/reports/reports_textbook_data.cql")
   }
 
   it should "execute generate VDN metrics report" in {
@@ -53,6 +56,23 @@ class TestVDNMetricsJob extends SparkSpec with Matchers with MockFactory {
     val config = """{"search": {"type": "none"},"druidConfig": {"queryType": "groupBy","dataSource": "content-model-snapshot","intervals": "1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00","aggregations": [{"name": "count","type": "count"}],"dimensions": [{"fieldName": "channel","aliasName": "channel"}, {"fieldName": "identifier","aliasName": "identifier","type": "Extraction","outputType": "STRING","extractionFn": [{"type": "javascript","fn": "function(str){return str == null ? null: str.split(\".\")[0]}"}]}, {"fieldName": "name","aliasName": "name"}, {"fieldName": "createdFor","aliasName": "createdFor"}, {"fieldName": "createdOn","aliasName": "createdOn"}, {"fieldName": "lastUpdatedOn","aliasName": "lastUpdatedOn"}, {"fieldName": "board","aliasName": "board"}, {"fieldName": "medium","aliasName": "medium"}, {"fieldName": "gradeLevel","aliasName": "gradeLevel"}, {"fieldName": "subject","aliasName": "subject"}, {"fieldName": "status","aliasName": "status"}],"filters": [{"type": "equals","dimension": "contentType","value": "TextBook"}, {"type": "equals","dimension": "channel","value": "01306475770753843226"}, {"type": "in","dimension": "status","values": ["Live", "Draft", "Review"]}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}},"model": "org.ekstep.analytics.job.report.VDNMetricsJob","modelParams": {"reportConfig": {"id": "vdn_report","metrics": [],"labels": {"date": "Date","name": "Textbook Name","medium": "Medium","gradeLevel": "Grade","subject": "Subject","board": "Board","grade": "Grade","chapters": "Chapter Name","totalChapters": "Total number of chapters (first level sections of ToC)","status": "Textbook Status"},"output":[],"outputs": [{"type": "csv","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]},{"type": "json","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}]},"store": "local","format": "csv","key": "druid-reports/","filePath": "druid-reports/","container": "test-container","folderPrefix": ["slug", "reportName"]},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "VDN Metrics Job","deviceMapping": false}""".stripMargin
     VDNMetricsJob.generateVDNReport(spark, config)
 
+  }
+
+  it should "generate hierarchy report" in {
+    implicit val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    val config = """{"search": {"type": "none"},"druidConfig": {"queryType": "groupBy","dataSource": "content-model-snapshot","intervals": "1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00","aggregations": [{"name": "count","type": "count"}],"dimensions": [{"fieldName": "channel","aliasName": "channel"}, {"fieldName": "identifier","aliasName": "identifier","type": "Extraction","outputType": "STRING","extractionFn": [{"type": "javascript","fn": "function(str){return str == null ? null: str.split(\".\")[0]}"}]}, {"fieldName": "name","aliasName": "name"}, {"fieldName": "createdFor","aliasName": "createdFor"}, {"fieldName": "createdOn","aliasName": "createdOn"}, {"fieldName": "lastUpdatedOn","aliasName": "lastUpdatedOn"}, {"fieldName": "board","aliasName": "board"}, {"fieldName": "medium","aliasName": "medium"}, {"fieldName": "gradeLevel","aliasName": "gradeLevel"}, {"fieldName": "subject","aliasName": "subject"}, {"fieldName": "status","aliasName": "status"}],"filters": [{"type": "equals","dimension": "contentType","value": "TextBook"}, {"type": "equals","dimension": "channel","value": "01306475770753843226"}, {"type": "in","dimension": "status","values": ["Live", "Draft", "Review"]}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}},"model": "org.ekstep.analytics.job.report.VDNMetricsJob","modelParams": {"reportConfig": {"id": "vdn_report","metrics": [],"labels": {"date": "Date","name": "Textbook Name","medium": "Medium","gradeLevel": "Grade","subject": "Subject","board": "Board","grade": "Grade","chapters": "Chapter Name","totalChapters": "Total number of chapters (first level sections of ToC)","status": "Textbook Status"},"output":[],"outputs": [{"type": "csv","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]},{"type": "json","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}]},"store": "local","format": "csv","key": "druid-reports/","filePath": "druid-reports/","container": "test-container","folderPrefix": ["slug", "reportName"]},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "VDN Metrics Job","deviceMapping": false}""".stripMargin
+    val encoders = Encoders.product[ContentHierarchy]
+    val data = spark.read.format("org.apache.spark.sql.cassandra").options(Map("table" -> "content_hierarchy", "keyspace" -> sunbirdHierarchyStore)).load()
+      .as[ContentHierarchy](encoders).first()
+    val hierarchy = JSONUtils.deserialize[TextbookHierarchy](data.hierarchy)
+    val report = VDNMetricsJob.generateReport(List(hierarchy),List(), List(),hierarchy,List(),List("","0"))
+    VDNMetricsJob.saveReportToBlob(report._1.toDF(),config,StorageConfig("local","test","Textbook",Option(""),Option("")),"")
+
+    report._1.length should be (1)
+    report._2.length should be (2)
+    report._2.map(f => f.contentType should not be("TextbookUnit"))
   }
 
 }
