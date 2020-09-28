@@ -6,6 +6,7 @@ import ing.wbaa.druid.client.DruidClient
 import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResponseTimeseriesImpl, DruidResult, QueryType}
 import io.circe.Json
 import io.circe.parser.parse
+import org.apache.spark.sql.SparkSession
 import org.ekstep.analytics.framework.FrameworkContext
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
@@ -14,7 +15,12 @@ import org.sunbird.analytics.util.SparkSpec
 import scala.concurrent.Future
 
 class TestVDNMetricsJob extends SparkSpec with Matchers with MockFactory {
-  val spark = getSparkSession()
+  var spark: SparkSession = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    val spark = getSparkSession()
+  }
 
   it should "execute generate VDN metrics report" in {
     implicit val sc = spark.sparkContext

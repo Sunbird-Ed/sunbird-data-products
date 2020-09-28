@@ -95,6 +95,7 @@ object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob 
 
     val textbookReport = report.join(contentTb, Seq("identifier"),"inner")
       .drop("identifier","channel","id","chapters","l1identifier")
+      .distinct()
       .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name)
     saveReportToBlob(textbookReport, config, storageConfig, "TextbookLevel")
 
