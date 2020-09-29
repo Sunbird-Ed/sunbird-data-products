@@ -16,11 +16,8 @@ import org.sunbird.analytics.util.EmbeddedPostgresql
 import scala.concurrent.Future
 
 class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
-  var spark: SparkSession = _
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
-    spark = getSparkSession()
     EmbeddedPostgresql.start()
     EmbeddedPostgresql.createProgramTable()
     EmbeddedPostgresql.createNominationTable()
@@ -32,7 +29,7 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
   }
 
   it should "execute and generate Funnel Report" in {
-    implicit val sc = spark.sparkContext
+    implicit val sparkCon = sc
     implicit val mockFc = mock[FrameworkContext]
 
     //mocking for DruidDataFetcher
