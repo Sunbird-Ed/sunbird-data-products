@@ -76,9 +76,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       filterAssessmentsFromHierarchy(List(hierarchy), List(AppConf.getConfig("assessment.metrics.supported.contenttype")), AssessmentData(row.getString(0), List()))
     }).toDF()
         .select(col("courseid"), explode_outer(col("assessmentIds")).as("contentid"))
-    println("contentDataDF")
-    contentDataDF.show(false)
-
+    
     val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
       .withColumnRenamed("user_id", "userid")
       .withColumnRenamed("batch_id", "batchid")
