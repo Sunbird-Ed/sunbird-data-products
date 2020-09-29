@@ -36,8 +36,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "State", "District", "Org Name", "School Id", "School Name", "Block Name", "Declared Board", "Enrolment Date", "Completion Date",
     "Certificate Status", "Progress", "Total Score")
   private val columnMapping = Map("courseid" -> "Collection Id", "collectionName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User UUID",
-    "state" -> "State", "district" -> "District", "orgname" -> "Org Name", "schooludisecode" -> "School Id", "schoolname" -> "School Name", "block" -> "Block Name",
-    "board" -> "Declared Board", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "completionPercentage" -> "Progress",
+    "state" -> "State", "district" -> "District", "orgname" -> "Org Name", "schooludisecode" -> "School Id", "schoolname" -> "School Name", "block" -> "Block Name", "board" -> "Declared Board", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date", "completionPercentage" -> "Progress",
     "total_sum_score" -> "Total Score", "certificatestatus" -> "Certificate Status")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
@@ -76,6 +75,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       // TODO: assessmentTypes - make it configurable.
       filterAssessmentsFromHierarchy(List(hierarchy), List(AppConf.getConfig("assessment.metrics.supported.contenttype")), AssessmentData(row.getString(0), List()))
     }).toDF()
+        .select(col("courseid"), explode_outer(col("assessmentIds")).as("contentid"))
     println("contentDataDF")
     contentDataDF.show(false)
 
@@ -84,7 +84,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumnRenamed("batch_id", "batchid")
       .withColumnRenamed("course_id", "courseid")
 
-    val dataDF = contentDataDF.join(assessAggdf, contentDataDF.col("courseid") === assessAggdf.col("courseid") && contentDataDF.col("assessmentIds") === assessAggdf.col("content_id"), "inner").select(assessAggdf.col("*"))
+    val dataDF = contentDataDF.join(assessAggdf, contentDataDF.col("courseid") === assessAggdf.col("courseid") && contentDataDF.col("contentid") === assessAggdf.col("content_id"), "inner").select(assessAggdf.col("*"))
 
     val assessmentAggSpec = Window.partitionBy("userid", "batchid", "courseid")
     dataDF.withColumn("agg_score", sum("total_score") over assessmentAggSpec)
