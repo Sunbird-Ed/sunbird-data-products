@@ -129,7 +129,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
         // TODO: need to change to primaryCategory after 3.3.0
         val contentType = childNode.getOrElse("contentType", "").asInstanceOf[String]
         val updatedIds = (if (assessmentTypes.contains(contentType)) {
-          List(childNode.get("identifier").asInstanceOf[String])
+          List(childNode.get("identifier").get.asInstanceOf[String])
         } else List()) ::: prevData.assessmentIds
         val updatedAssessmentData = AssessmentData(prevData.courseid, updatedIds)
         val children = childNode.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
