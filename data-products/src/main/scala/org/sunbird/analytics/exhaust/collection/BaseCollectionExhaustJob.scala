@@ -1,32 +1,22 @@
 package org.sunbird.analytics.exhaust.collection
 
+import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
+import org.apache.spark.sql.cassandra._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.IJob
-import org.ekstep.analytics.framework.JobConfig
+import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.JSONUtils
-import org.ekstep.analytics.framework.util.JobLogger
-import org.sunbird.analytics.exhaust.BaseReportsJob
-import org.sunbird.analytics.exhaust.OnDemandExhaustJob
-import org.sunbird.analytics.util.DecryptUtil
-import org.sunbird.analytics.exhaust.JobRequest
-import org.ekstep.analytics.framework.util.CommonUtil
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.joda.time.format.DateTimeFormatter
-import org.joda.time.format.DateTimeFormat
-import org.joda.time.DateTimeZone
-import org.ekstep.analytics.framework.Level.{ ERROR, INFO }
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.util.Constants
-import org.ekstep.analytics.framework.util.RestUtil
-import org.apache.spark.sql.cassandra._
-import com.datastax.spark.connector.cql.CassandraConnectorConf
-import com.fasterxml.jackson.core.JsonParseException
+import org.joda.time.DateTimeZone
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
+import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
+import org.sunbird.analytics.util.DecryptUtil
+
 import scala.collection.immutable.List
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
