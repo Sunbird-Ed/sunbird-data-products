@@ -129,6 +129,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       request.status = "SUCCESS";
       request.download_urls = Option(response.map(f => f.file));
       request.execution_time = Option(result._1);
+      request.dt_job_completed = Option(System.currentTimeMillis)
       request
     }
   }
