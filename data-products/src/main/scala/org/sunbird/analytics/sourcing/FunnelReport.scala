@@ -217,7 +217,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       .withColumn("reportName",lit(reportName))
 
     reportConfig.output.map(format => {
-      renamedDf.saveToBlobStore(storageConfig, format.`type`, "",
+      renamedDf.saveToBlobStore(storageConfig, format.`type`, "sourcing",
         Option(Map("header" -> "true")), Option(List("slug","reportName")))
     })
 
