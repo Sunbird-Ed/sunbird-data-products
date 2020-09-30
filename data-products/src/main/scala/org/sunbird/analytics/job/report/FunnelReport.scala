@@ -44,6 +44,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
   val programTable = "program"
   val nominationTable = "nomination"
 
+  // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
     JobLogger.init("FunnelReport")
     JobLogger.log("Started execution - FunnelReport Job",None, Level.INFO)
@@ -63,6 +64,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     generateFunnelReport(spark,configMap)
   }
 
+  // $COVERAGE-ON$ Enabling scoverage for all other functions
   def generateFunnelReport(spark: SparkSession, config: Map[String,AnyRef])(implicit sc: SparkContext, fc: FrameworkContext) = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._

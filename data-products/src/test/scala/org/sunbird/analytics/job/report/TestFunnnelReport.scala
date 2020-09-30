@@ -8,6 +8,7 @@ import io.circe.Json
 import io.circe.parser.parse
 import org.apache.spark.sql.SparkSession
 import org.ekstep.analytics.framework.FrameworkContext
+import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
 import org.sunbird.analytics.util.SparkSpec
@@ -16,8 +17,10 @@ import org.sunbird.analytics.util.EmbeddedPostgresql
 import scala.concurrent.Future
 
 class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
+  var spark: SparkSession = _
 
   override def beforeAll(): Unit = {
+    spark = getSparkSession()
     EmbeddedPostgresql.start()
     EmbeddedPostgresql.createProgramTable()
     EmbeddedPostgresql.createNominationTable()
@@ -29,6 +32,7 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
   }
 
   it should "execute and generate Funnel Report" in {
+    implicit val sc = spark.sparkContext
     implicit val mockFc = mock[FrameworkContext]
 
     //mocking for DruidDataFetcher
@@ -51,7 +55,8 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
     (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     val config = """{"search": {"type": "none"},"model": "org.ekstep.analytics.job.report.FunnelReport","druidConfig": {"queryType": "timeseries","dataSource": "telemetry-events-syncts","intervals": "startdate/enddate","aggregations": [{"name": "visitors","type": "count","fieldName": "actor_id"}],"filters": [{"type": "equals","dimension": "context_cdata_id","value": "program_id"}, {"type": "equals","dimension": "context_cdata_type","value": "Program"}, {"type": "equals","dimension": "context_pdata_id","value": "'$producerEnv'.portal"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}},"modelParams": {"reportConfig": {"id": "funnel_report","metrics": [],"labels": {"reportDate": "Report Generation Date","name": "Project Name"},"output": [],"outputs": [{"type": "csv","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}, {"type": "json","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}]},"store": "local","format": "csv","key": "druid-reports/","filePath": "druid-reports/","container": "test-container","folderPrefix": ["slug", "reportName"]},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Funnel Metrics Report","deviceMapping": false}""".stripMargin
-    FunnelReport.main(config)
+    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
+    FunnelReport.generateFunnelReport(spark, configMap)
   }
 
 }
