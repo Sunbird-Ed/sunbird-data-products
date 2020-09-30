@@ -29,7 +29,6 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
   }
 
   it should "execute and generate Funnel Report" in {
-    implicit val sparkCon = sc
     implicit val mockFc = mock[FrameworkContext]
 
     //mocking for DruidDataFetcher
