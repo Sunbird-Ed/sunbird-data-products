@@ -80,11 +80,11 @@ object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob 
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
-    val report = textbookReports.fullOuterJoin(tenantInfo).map(f=> FinalReport(f._2._1.getOrElse(textbookResult).identifier,f._2._1.getOrElse(textbookResult).l1identifier,
+    val report = textbookReports.fullOuterJoin(tenantInfo).map(f => FinalReport(f._2._1.getOrElse(textbookResult).identifier,f._2._1.getOrElse(textbookResult).l1identifier,
       f._2._1.getOrElse(textbookResult).board,f._2._1.getOrElse(textbookResult).medium,f._2._1.getOrElse(textbookResult).grade,
       f._2._1.getOrElse(textbookResult).subject,f._2._1.getOrElse(textbookResult).name,f._2._1.getOrElse(textbookResult).chapters,
       f._2._1.getOrElse(textbookResult).channel,f._2._1.getOrElse(textbookResult).totalChapters,
-      f._2._2.getOrElse(TenantInfo("","Unknown")).slug)).toDF()
+      f._2._2.getOrElse(TenantInfo("","Unknown")).slug)).filter(f=>f.identifier.nonEmpty).toDF()
     val contentdf = contentReportData.toDF()
     val contentChapter = contentdf.groupBy("identifier","l1identifier")
       .pivot(concat(lit("Number of "), col("contentType"))).agg(count("l1identifier"))
@@ -93,13 +93,13 @@ object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob 
 
     val storageConfig = getStorageConfig("reports", "")
 
-    val textbookReport = report.join(contentTb, Seq("identifier"),"inner")
+    val textbookReport = report.join(contentTb, Seq("identifier"),"left")
       .drop("identifier","channel","id","chapters","l1identifier")
       .distinct()
       .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name)
     saveReportToBlob(textbookReport, config, storageConfig, "TextbookLevel")
 
-    val chapterReport = report.join(contentChapter, Seq("identifier","l1identifier"),"inner")
+    val chapterReport = report.join(contentChapter, Seq("identifier","l1identifier"),"left")
       .drop("identifier","l1identifier","channel","id","totalChapters")
       .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name,'chapters)
     JobLogger.log(s"VDNMetricsJob: extracted chapter and textbook reports", None, INFO)
@@ -116,7 +116,7 @@ object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob 
 
     data.map(units=> {
       val children = units.children
-      if(units.depth==1) {
+      if(units.depth==1 && (units.contentType.getOrElse("").equalsIgnoreCase("TextBookUnit") || units.contentType.getOrElse("").equalsIgnoreCase("TextBook"))) {
         textbook = units :: newData
         l1identifier = units.identifier
         val grade = TextBookUtils.getString(textbookInfo.gradeLevel)
@@ -125,7 +125,7 @@ object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob 
         textbookReport = report :: textbookReport
       }
 
-      if(units.depth!=0 && units.contentType.getOrElse("").nonEmpty) {
+      if(units.depth!=0 && units.contentType.getOrElse("").nonEmpty && !units.contentType.getOrElse("").equalsIgnoreCase("TextBookUnit")) {
         contentData = ContentReportResult(textbookInfo.identifier,l1identifier, units.contentType.get) :: contentData
       }
 
