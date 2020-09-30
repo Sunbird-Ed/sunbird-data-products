@@ -20,6 +20,7 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
   var spark: SparkSession = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     spark = getSparkSession()
     EmbeddedPostgresql.start()
     EmbeddedPostgresql.createProgramTable()

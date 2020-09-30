@@ -98,13 +98,14 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
           f._2._2.Pending,f._2._2.Approved,datav2._1.toString,datav2._2.toString,datav2._3.toString,
           datav2._4.toString,f._2._1.rootorg_id)
       }).map(f=>(f.slug,f))
+    val funnelResult = FunnelResult("","","","","","","","","","","","","")
 
-    val df = report.join(tenantInfo).map(f=>
-      FunnelResult(f._2._1.program_id,f._2._1.reportDate,f._2._1.projectName,
-        f._2._1.noOfUsers,f._2._1.initiatedNominations,f._2._1.rejectedNominations,
-        f._2._1.pendingNominations,f._2._1.acceptedNominations,f._2._1.noOfContributors,
-        f._2._1.noOfContributions,f._2._1.pendingContributions,f._2._1.approvedContributions,
-        f._2._2.slug)).toDF()
+    val df = report.fullOuterJoin(tenantInfo).map(f=>
+      FunnelResult(f._2._1.getOrElse(funnelResult).program_id,f._2._1.getOrElse(funnelResult).reportDate,f._2._1.getOrElse(funnelResult).projectName,
+        f._2._1.getOrElse(funnelResult).noOfUsers,f._2._1.getOrElse(funnelResult).initiatedNominations,f._2._1.getOrElse(funnelResult).rejectedNominations,
+        f._2._1.getOrElse(funnelResult).pendingNominations,f._2._1.getOrElse(funnelResult).acceptedNominations,f._2._1.getOrElse(funnelResult).noOfContributors,
+        f._2._1.getOrElse(funnelResult).noOfContributions,f._2._1.getOrElse(funnelResult).pendingContributions,f._2._1.getOrElse(funnelResult).approvedContributions,
+        f._2._2.getOrElse(TenantInfo("","Unknown")).slug)).filter(f=>f.program_id.nonEmpty).toDF()
 
     val visitorData = druidData.map(f => {
       val query = getDruidQuery(druidQuery,f.program_id,s"${f.startdate.split(" ")(0)}T00:00:00+00:00/${f.enddate.split(" ")(0)}T00:00:00+00:00")
@@ -112,7 +113,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       val noOfVisitors = if(data.nonEmpty) data.head.visitors.toString else "0"
       ProgramVisitors(f.program_id,f.startdate,f.enddate,noOfVisitors)
     }).toDF().na.fill(0)
-    visitorData.show
 
     val funnelReport = df
       .join(visitorData,Seq("program_id"),"left")
