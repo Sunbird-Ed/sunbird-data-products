@@ -1,4 +1,4 @@
-package org.sunbird.analytics.job.report
+package org.sunbird.analytics.sourcing
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -10,6 +10,7 @@ import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, Re
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, Level, StorageConfig}
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
+import org.sunbird.analytics.job.report.BaseReportsJob
 import org.sunbird.analytics.model.report.{TenantInfo, TenantResponse}
 import org.sunbird.analytics.util.TextBookUtils
 import org.sunbird.cloud.storage.conf.AppConf
@@ -23,9 +24,9 @@ case class TextbookHierarchy(channel: String, board: String, identifier: String,
 case class FinalReport(identifier: String,l1identifier: String,board: String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String, totalChapters: String, slug:String)
 case class TextbookResponse(l1identifier:String,board: String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String)
 
-object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob {
+object SourcingMetrics extends optional.Application with IJob with BaseReportsJob {
 
-  implicit val className = "org.sunbird.analytics.job.VDNMetricsJob"
+  implicit val className = "org.sunbird.analytics.job.SourcingMetrics"
   val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
 
   // add for output blob values
@@ -42,11 +43,11 @@ object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob 
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
     val spark = SparkSession.builder.config(sparkConf).getOrCreate()
 
-    generateVDNReport(spark, config)
+    generateSourcingMetrics(spark, config)
   }
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def generateVDNReport(spark: SparkSession, config: String)(implicit sc: SparkContext,fc: FrameworkContext): Unit = {
+  def generateSourcingMetrics(spark: SparkSession, config: String)(implicit sc: SparkContext,fc: FrameworkContext): Unit = {
     val conf = JSONUtils.deserialize[Map[String,AnyRef]](config)
     val textbooks = TextBookUtils.getTextBooks(conf, RestUtil)
     JobLogger.log(s"Fetched textbooks from druid ${textbooks.length}",None, Level.INFO)
@@ -102,7 +103,7 @@ object VDNMetricsJob extends optional.Application with IJob with BaseReportsJob 
     val chapterReport = report.join(contentChapter, Seq("identifier","l1identifier"),"left")
       .drop("identifier","l1identifier","channel","id","totalChapters")
       .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name,'chapters)
-    JobLogger.log(s"VDNMetricsJob: extracted chapter and textbook reports", None, INFO)
+    JobLogger.log(s"SourcingMetrics: extracted chapter and textbook reports", None, INFO)
     saveReportToBlob(chapterReport, config, storageConfig, "ChapterLevel")
 
   }
