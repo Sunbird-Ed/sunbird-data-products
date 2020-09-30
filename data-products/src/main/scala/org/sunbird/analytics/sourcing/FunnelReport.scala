@@ -1,4 +1,4 @@
-package org.sunbird.analytics.job.report
+package org.sunbird.analytics.sourcing
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -14,12 +14,13 @@ import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
+import org.sunbird.analytics.job.report.BaseReportsJob
 import org.sunbird.analytics.model.report.{TenantInfo, TenantResponse}
 
 case class ProgramData(program_id: String, name: String, rootorg_id: String, channel: String,
                        status: String, startdate: String, enddate: String)
 case class NominationData(program_id: String, Initiated : String, Pending: String,
-                            Rejected: String, Approved: String)
+                          Rejected: String, Approved: String)
 case class ContributionResult(result: ContributionResultData, responseCode: String)
 case class ContributionResultData(content: List[Contributions], count: Int)
 case class Contributions(acceptedContents: List[String],rejectedContents: List[String])

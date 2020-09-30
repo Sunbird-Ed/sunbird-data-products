@@ -1,9 +1,9 @@
-package org.sunbird.analytics.job.report
+package org.sunbird.analytics.sourcing
 
 import java.time.{ZoneOffset, ZonedDateTime}
 import cats.syntax.either._
 import ing.wbaa.druid.client.DruidClient
-import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResponseTimeseriesImpl, DruidResult, QueryType}
+import ing.wbaa.druid._
 import io.circe.Json
 import io.circe.parser.parse
 import org.apache.spark.sql.SparkSession
@@ -11,8 +11,7 @@ import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
-import org.sunbird.analytics.util.SparkSpec
-import org.sunbird.analytics.util.EmbeddedPostgresql
+import org.sunbird.analytics.util.{EmbeddedPostgresql, SparkSpec}
 
 import scala.concurrent.Future
 
