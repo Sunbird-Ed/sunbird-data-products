@@ -96,8 +96,8 @@ class ReportMerger:
         file_path = self.base_path.joinpath(report_path)
         col_order = []
         report_container = self.report_config.get('postContainer') if self.report_config.get('postContainer') else 'report-verification'
-        delta_file_access = self.report_config.get('deltaFileAccess') if self.report_config.get('deltaFileAccess') else True
-        report_file_access = self.report_config.get('reportFileAccess') if self.report_config.get('reportFileAccess') else True
+        delta_file_access = self.report_config.get('deltaFileAccess') if 'deltaFileAccess' in self.report_config else True
+        report_file_access = self.report_config.get('reportFileAccess') if 'reportFileAccess' in self.report_config else True
 
         try:
             os.makedirs(self.base_path.joinpath(delta_path).parent, exist_ok=True)
