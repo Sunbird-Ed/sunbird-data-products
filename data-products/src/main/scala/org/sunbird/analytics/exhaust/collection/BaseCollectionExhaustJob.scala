@@ -113,10 +113,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         if (validateRequest(request)) {
           updateRequests(Array(request)) // Set the request status to PROCESSING for each request
           val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
-          JobLogger.log(s"The Request is processed, RequestId: ${request.request_id}, TimeTaken: ${res._1}, Remaining requests: ${totalRequests.getAndDecrement()}")
+          JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           res._2
         } else {
-          JobLogger.log(s"Invalid Request, RequestId: ${request.request_id}, Remaining requests: ${totalRequests.getAndDecrement()}")
+          JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           markRequestAsFailed(request, "Invalid request")
         }
       }
@@ -124,7 +124,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       case ex: Exception => ex.printStackTrace()
         null
     } finally {
-      saveRequests(storageConfig, result);
+      logTime(saveRequests(storageConfig, result), "Total time taken to save the report(download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
     }
     Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
   }
