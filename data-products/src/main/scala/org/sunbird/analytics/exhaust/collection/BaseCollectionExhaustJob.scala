@@ -1,5 +1,7 @@
 package org.sunbird.analytics.exhaust.collection
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
@@ -30,6 +32,7 @@ case class CollectionBatchResponse(batchId: String, file: String, status: String
 case class CollectionDetails(result: Result)
 case class Result(content: List[CollectionInfo])
 case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String])
+case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
 
 trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
@@ -56,7 +59,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     init()
     try {
       val res = CommonUtil.time(execute());
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1)));
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRequests" -> res._2.totalRequests, "successRequests" -> res._2.successRequests, "failedRequests" -> res._2.failedRequests)));
     } finally {
       frameworkContext.closeContext();
       spark.close()
@@ -71,7 +74,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
   }
 
-  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
+  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
 
@@ -90,29 +93,40 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     }
   }
 
-  def executeStandAlone(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
+  def executeStandAlone(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchId = modelParams.get("batchId").asInstanceOf[Option[String]];
     val batchFilter = modelParams.get("batchFilter").asInstanceOf[Option[List[String]]];
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
-    val result = processBatches(userCachedDF, collectionBatches);
-    result.foreach(f => println(f));
-    // TODO: Log result. How many batches succeeded/failed. Avg time taken for execution per batch
+    val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches);
+    result.foreach(f =>  JobLogger.log(s"Batch Status: ${f.status}, batchId: ${f.batchId}, time: ${f.execTime}, message: ${f.statusMsg}, location: ${f.file} ", None, INFO));
+    Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toLowerCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toLowerCase() == "SUCCESS")))
   }
 
-  def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
-    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
+  def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
-    val result = for (request <- requests) yield {
-      if (validateRequest(request)) {
-        processRequest(request, custodianOrgId, userCachedDF)
-      } else {
-        markRequestAsFailed(request, "Invalid request")
+    val totalRequests = new AtomicInteger(requests.length)
+    val result: Array[JobRequest] = try {
+      for (request <- requests) yield {
+        if (validateRequest(request)) {
+          updateRequests(Array(request)) // Set the request status to PROCESSING for each request
+          val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
+          JobLogger.log(s"The Request is processed, RequestId: ${request.request_id}, TimeTaken: ${res._1}, Remaining requests: ${totalRequests.getAndDecrement()}")
+          res._2
+        } else {
+          JobLogger.log(s"Invalid Request, RequestId: ${request.request_id}, Remaining requests: ${totalRequests.getAndDecrement()}")
+          markRequestAsFailed(request, "Invalid request")
+        }
       }
+    } catch {
+      case ex: Exception => ex.printStackTrace()
+        null
+    } finally {
+      saveRequests(storageConfig, result);
     }
-    saveRequests(storageConfig, result);
+    Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
   }
 
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {

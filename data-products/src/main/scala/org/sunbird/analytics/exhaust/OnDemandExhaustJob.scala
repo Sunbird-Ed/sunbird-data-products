@@ -45,11 +45,10 @@ trait OnDemandExhaustJob {
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus:_*));
     
     val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
-    updateRequests(requests)
     requests;
   }
   
-  private def updateRequests(requests: Array[JobRequest]) = {
+  def updateRequests(requests: Array[JobRequest]) = {
     if(requests != null && requests.length > 0) {
       val dbc:Connection = DriverManager.getConnection(url, connProperties.getProperty("user"), connProperties.getProperty("password"));
       dbc.setAutoCommit(true);
