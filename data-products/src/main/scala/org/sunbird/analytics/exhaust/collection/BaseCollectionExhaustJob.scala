@@ -100,7 +100,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
     val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches);
-    result.foreach(f =>  JobLogger.log(s"Batch Status: ${f.status}, batchId: ${f.batchId}, time: ${f.execTime}, message: ${f.statusMsg}, location: ${f.file} ", None, INFO));
+    result.foreach(f => JobLogger.log("Batch Status", Some(Map("status" -> f.status, "batchId" -> f.batchId, "executionTime" -> f.execTime, "message" -> f.statusMsg, "location" -> f.file)), INFO));
     Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toLowerCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toLowerCase() == "SUCCESS")))
   }
 
