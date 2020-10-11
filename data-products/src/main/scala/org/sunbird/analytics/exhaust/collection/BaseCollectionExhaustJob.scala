@@ -151,11 +151,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def getCollectionBatches(batchId: Option[String], batchFilter: Option[List[String]], searchFilter: Option[Map[String, AnyRef]], custodianOrgId: String, requestedOrgId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatch] = {
 
     val encoder = Encoders.product[CollectionBatch];
-    val collectionBatches = getCollectionBatchDF(false);
+    val collectionBatches = getCollectionBatchDF(false); // course_batch
     if (batchId.isDefined || batchFilter.isDefined) {
       val batches = if (batchId.isDefined) collectionBatches.filter(col("batchid") === batchId.get) else collectionBatches.filter(col("batchid").isin(batchFilter.get: _*))
       val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
-      val collectionDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds), "fields" -> Array("channel", "identifier", "name", "userConsent"))));
+      val collectionDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "userConsent"))));
       val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
       val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
         .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
