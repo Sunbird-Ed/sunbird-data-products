@@ -110,6 +110,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
     val totalRequests = new AtomicInteger(requests.length)
+    JobLogger.log("Total Requests to process", Some(Map("jobId" -> jobId(), "totalRequests" -> requests.length)), INFO)
     val result = for (request <- requests) yield {
       if (validateRequest(request)) {
         val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
