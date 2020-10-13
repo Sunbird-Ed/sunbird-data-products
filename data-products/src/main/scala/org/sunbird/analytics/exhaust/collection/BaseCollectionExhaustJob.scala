@@ -110,8 +110,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log("Total requests to process", Some(Map("totalRequests" -> totalRequests.get())))
     var result: Array[JobRequest] = null
-    result = for (request <- requests) yield {
-      try {
+    try {
+      result = for (request <- requests) yield {
         if (validateRequest(request)) {
           updateRequests(Array(request)) // Set the request status to PROCESSING for each request
           val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
@@ -121,7 +121,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
             println("requests1" + request)
             println("RequestCountt" + count)
             throw new Exception("Custom job failed")
-            res._2
           } else {
             println("requests2" + request)
             res._2
@@ -130,17 +129,16 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           markRequestAsFailed(request, "Invalid request")
         }
-      } catch {
-        case t: Throwable => {
-          println("Exceptionsss")
-          t.printStackTrace()
-          markRequestAsFailed(request, t.getMessage)
-        }
       }
-      finally {
-        println("resultresult" + JSONUtils.serialize(result))
-        logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
+    } catch {
+      case t: Throwable => {
+        println("Exceptionsss")
+        t.printStackTrace()
       }
+    }
+    finally {
+      println("resultresult" + JSONUtils.serialize(result))
+      logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
     }
     Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
   }
