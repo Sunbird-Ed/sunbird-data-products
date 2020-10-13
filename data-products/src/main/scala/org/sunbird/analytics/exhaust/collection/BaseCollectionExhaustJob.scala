@@ -118,10 +118,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           val count = totalRequests.getAndDecrement()
           JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> count)), INFO)
           if (count == 2) {
-            println("Countisss" + count)
+            println("requests1" + request)
+            println("RequestCountt" + count)
             throw new Exception("Custom job failed")
           } else {
             res._2
+            println("requests2" + request)
           }
         } else {
           JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
@@ -129,10 +131,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         }
       } catch {
         case t: Throwable => {
+          println("Exceptionsss")
           t.printStackTrace()
           markRequestAsFailed(request, t.getMessage)
         }
-
       }
       finally {
         println("resultresult" + JSONUtils.serialize(result))
