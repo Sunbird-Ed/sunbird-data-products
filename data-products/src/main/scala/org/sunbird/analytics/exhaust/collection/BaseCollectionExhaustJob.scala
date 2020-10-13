@@ -117,7 +117,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
           val count = totalRequests.getAndDecrement()
           JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> count)), INFO)
-          if (count >= 2) throw new Exception("Custom job failed")
+          if (count == 2) throw new Exception("Custom job failed")
           res._2
         } else {
           JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
@@ -128,6 +128,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           markRequestAsFailed(request, t.getMessage)
       }
       finally {
+        println("resultresult" + JSONUtils.serialize(result))
         logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
       }
     }
