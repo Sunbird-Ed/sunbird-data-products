@@ -121,9 +121,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
             println("requests1" + request)
             println("RequestCountt" + count)
             throw new Exception("Custom job failed")
-          } else {
             res._2
+          } else {
             println("requests2" + request)
+            res._2
           }
         } else {
           JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
