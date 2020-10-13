@@ -122,9 +122,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         }
       }
     } catch {
-      case ex: Exception => ex.printStackTrace()
-        null
+      case ex: Exception => {
+        println("Exception occurred..")
+        ex.printStackTrace()
+      }
     } finally {
+      println("results are" + JSONUtils.serialize(result))
       logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
     }
     Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
