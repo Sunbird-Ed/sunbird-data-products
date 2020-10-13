@@ -108,28 +108,32 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
     val totalRequests = new AtomicInteger(requests.length)
-    val result: Array[JobRequest] = for (request <- requests) yield {
+    var result: Array[JobRequest] = null
+    try {
+      result = for (request <- requests) yield {
         try {
-        if (validateRequest(request)) {
-          updateRequests(Array(request)) // Set the request status to PROCESSING for each request
-          val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
-          JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-          res._2
-        } else {
-          JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-          markRequestAsFailed(request, "Invalid request")
+          if (validateRequest(request)) {
+            updateRequests(Array(request)) // Set the request status to PROCESSING for each request
+            val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
+            JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            res._2
+          } else {
+            JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            markRequestAsFailed(request, "Invalid request")
+          }
+        }
+        catch {
+          case ex: Exception => {
+            println("Exception occurred..")
+            ex.printStackTrace()
+            markRequestAsFailed(request, "Invalid request")
+          }
         }
       }
-      catch {
-        case ex: Exception => {
-          println("Exception occurred..")
-          ex.printStackTrace()
-          markRequestAsFailed(request, "Invalid request")
-        }
-      } finally {
-        println("results are" + JSONUtils.serialize(result))
-        logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
-      }
+    }
+    finally {
+      println("results are" + JSONUtils.serialize(result))
+      logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
     }
     Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
   }
