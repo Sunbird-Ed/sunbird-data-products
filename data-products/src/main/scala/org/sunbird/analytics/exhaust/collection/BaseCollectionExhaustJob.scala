@@ -115,7 +115,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           if (validateRequest(request)) {
             updateRequests(Array(request)) // Set the request status to PROCESSING for each request
             val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
-            JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            val count = totalRequests.getAndDecrement()
+            JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> count)), INFO)
+            if(count == 2) {
+              println("counttt" + count)
+              throw new Exception("TestException")
+            }
             res._2
           } else {
             JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
