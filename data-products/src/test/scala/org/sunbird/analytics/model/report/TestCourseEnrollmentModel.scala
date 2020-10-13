@@ -7,6 +7,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, _}
 import org.ekstep.analytics.model.ReportConfig
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
+import org.sunbird.analytics.util.SparkSpec
 import org.sunbird.analytics.util._
 import org.sunbird.cloud.storage.BaseStorageService
 

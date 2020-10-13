@@ -11,7 +11,7 @@ import org.ekstep.analytics.framework.util.JobLogger
 import org.sunbird.cloud.storage.conf.AppConf
 import sun.misc.BASE64Decoder
 
-object DecryptUtil {
+object DecryptUtil extends Serializable {
     
     var sunbird_encryption = ""
     
