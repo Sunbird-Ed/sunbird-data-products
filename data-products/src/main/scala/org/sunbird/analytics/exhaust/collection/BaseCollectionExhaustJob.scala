@@ -124,8 +124,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           markRequestAsFailed(request, "Invalid request")
         }
       } catch {
-        case ex: Exception => ex.printStackTrace()
-          markRequestAsFailed(request, ex.getMessage)
+        case t: Throwable => t.printStackTrace()
+          markRequestAsFailed(request, t.getMessage)
       }
       finally {
         logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
