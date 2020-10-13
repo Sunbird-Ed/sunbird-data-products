@@ -108,19 +108,15 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
     val totalRequests = new AtomicInteger(requests.length)
+    JobLogger.log(s"Total requests are: ${totalRequests.getAndDecrement()}", None, INFO)
     var result: Array[JobRequest] = null
     try {
       result = for (request <- requests) yield {
         try {
           if (validateRequest(request)) {
-            updateRequests(Array(request)) // Set the request status to PROCESSING for each request
+            updateRequests(Array(request)) // Set the request status to PROCESSING when it picked up for processing
             val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
-            val count = totalRequests.getAndDecrement()
-            JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> count)), INFO)
-            if(count == 2) {
-              println("counttt" + count)
-              throw new Exception("TestException")
-            }
+            JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res._2
           } else {
             JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
@@ -129,15 +125,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         }
         catch {
           case ex: Exception => {
-            println("Exception occurred..")
+            JobLogger.log(s"The Request is failed to process due to ${ex.getMessage}", Some(Map("requestId" -> request.request_id,  "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             ex.printStackTrace()
-            markRequestAsFailed(request, "Invalid request")
+            markRequestAsFailed(request, ex.getMessage)
           }
         }
       }
     }
     finally {
-      println("results are" + JSONUtils.serialize(result))
       logTime(saveRequests(storageConfig, result), s"Total time taken to save the ${result.length} requests (download, zipping, encryption, upload, postgres save) - "); // Updating the postgress table
     }
     Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
