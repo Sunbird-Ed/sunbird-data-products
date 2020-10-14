@@ -75,11 +75,15 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     })
     import spark.implicits._
 
-    val textbookReports = textbookReportData.toDF()
-    val tenantInfo = getTenantInfo(RestUtil).toDF()
+    val textbookReports = sc.parallelize(textbookReportData).map(f=>(f.channel,f))
+    val tenantInfo = getTenantInfo(RestUtil).map(f=>(f.id,f))
+    val textbookResult = TextbookReportResult("","","","","","","","","","")
 
-    val report = textbookReports.join(tenantInfo,textbookReports.col("channel")===tenantInfo.col("id"),"left")
-      .na.fill("Unknown", Seq("slug"))
+    val report = textbookReports.fullOuterJoin(tenantInfo).map(f => FinalReport(f._2._1.getOrElse(textbookResult).identifier,f._2._1.getOrElse(textbookResult).l1identifier,
+      f._2._1.getOrElse(textbookResult).board,f._2._1.getOrElse(textbookResult).medium,f._2._1.getOrElse(textbookResult).grade,
+      f._2._1.getOrElse(textbookResult).subject,f._2._1.getOrElse(textbookResult).name,f._2._1.getOrElse(textbookResult).chapters,
+      f._2._1.getOrElse(textbookResult).channel,f._2._1.getOrElse(textbookResult).totalChapters,
+      f._2._2.getOrElse(TenantInfo("","Unknown")).slug)).filter(f=>f.identifier.nonEmpty).toDF()
     val contentdf = contentReportData.toDF()
     val contentChapter = contentdf.groupBy("identifier","l1identifier")
       .pivot(concat(lit("Number of "), col("contentType"))).agg(count("l1identifier"))
