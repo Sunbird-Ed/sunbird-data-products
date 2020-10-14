@@ -156,6 +156,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     val labelsLookup = reportConfig.labels ++ Map("date" -> "Date")
     val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*)
       .withColumn("reportName",lit(reportName))
+    JobLogger.log(s"$jobName: Saving $reportName to blob - ${renamedDf.count()}", None, INFO)
 
     reportConfig.output.map(format => {
       renamedDf.saveToBlobStore(storageConfig, format.`type`, reportPath,
