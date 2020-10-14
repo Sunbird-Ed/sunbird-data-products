@@ -27,16 +27,16 @@ case class TextbookResponse(l1identifier:String,board: String, medium: String, g
 object SourcingMetrics extends optional.Application with IJob with BaseReportsJob {
 
   implicit val className = "org.sunbird.analytics.job.SourcingMetrics"
+  val jobName: String = "Sourcing Metrics Job"
+  val reportPath: String = "sourcing"
+  val reportKey: String = "reports"
   val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
 
-  // add for output blob values
   // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
-    JobLogger.log("Started execution - Textbook Report Job",None, Level.INFO)
-
+    JobLogger.log(s"Started execution - $jobName",None, Level.INFO)
     implicit val sparkContext: SparkContext = getReportingSparkContext(JSONUtils.deserialize[JobConfig](config))
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
-
     val readConsistencyLevel: String = AppConf.getConfig("course.metrics.cassandra.input.consistency")
     val sparkConf = sparkContext.getConf
       .set("es.write.operation", "upsert")
@@ -73,26 +73,20 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
       }
       (textbookReportData,contentReportData)
     })
+    import spark.implicits._
 
-    val textbookReports = sc.parallelize(textbookReportData).map(f=>(f.channel,f))
-    val tenantInfo = getTenantInfo(RestUtil).map(f=>(f.id,f))
-    val textbookResult = TextbookReportResult("","","","","","","","","","")
+    val textbookReports = textbookReportData.toDF()
+    val tenantInfo = getTenantInfo(RestUtil).toDF()
 
-    implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
-
-    val report = textbookReports.fullOuterJoin(tenantInfo).map(f => FinalReport(f._2._1.getOrElse(textbookResult).identifier,f._2._1.getOrElse(textbookResult).l1identifier,
-      f._2._1.getOrElse(textbookResult).board,f._2._1.getOrElse(textbookResult).medium,f._2._1.getOrElse(textbookResult).grade,
-      f._2._1.getOrElse(textbookResult).subject,f._2._1.getOrElse(textbookResult).name,f._2._1.getOrElse(textbookResult).chapters,
-      f._2._1.getOrElse(textbookResult).channel,f._2._1.getOrElse(textbookResult).totalChapters,
-      f._2._2.getOrElse(TenantInfo("","Unknown")).slug)).filter(f=>f.identifier.nonEmpty).toDF()
+    val report = textbookReports.join(tenantInfo,textbookReports.col("channel")===tenantInfo.col("id"),"left")
+      .na.fill("Unknown", Seq("slug"))
     val contentdf = contentReportData.toDF()
     val contentChapter = contentdf.groupBy("identifier","l1identifier")
       .pivot(concat(lit("Number of "), col("contentType"))).agg(count("l1identifier"))
     val contentTb = contentdf.groupBy("identifier")
       .pivot(concat(lit("Number of "), col("contentType"))).agg(count("identifier"))
 
-    val storageConfig = getStorageConfig("reports", "")
+    val storageConfig = getStorageConfig(reportKey, "")
 
     val textbookReport = report.join(contentTb, Seq("identifier"),"left")
       .drop("identifier","channel","id","chapters","l1identifier")
@@ -103,7 +97,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     val chapterReport = report.join(contentChapter, Seq("identifier","l1identifier"),"left")
       .drop("identifier","l1identifier","channel","id","totalChapters")
       .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name,'chapters)
-    JobLogger.log(s"SourcingMetrics: extracted chapter and textbook reports", None, INFO)
+    JobLogger.log(s"$jobName: extracted chapter and textbook reports", None, INFO)
     saveReportToBlob(chapterReport, config, storageConfig, "ChapterLevel")
 
   }
@@ -125,11 +119,9 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
         totalChapters = (totalChapters.toInt+1).toString
         textbookReport = report :: textbookReport
       }
-
       if(units.depth!=0 && units.contentType.getOrElse("").nonEmpty && !units.contentType.getOrElse("").equalsIgnoreCase("TextBookUnit")) {
         contentData = ContentReportResult(textbookInfo.identifier,l1identifier, units.contentType.get) :: contentData
       }
-
       if(children.isDefined) {
         val textbookReportData = generateReport(children.get, textbookReport, textbook,textbookInfo, contentData,List(l1identifier,totalChapters))
         textbookReport = textbookReportData._1
@@ -137,13 +129,11 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
         totalChapters = textbookReportData._3
       }
     })
-
     (textbookReport,contentData,totalChapters)
   }
 
   def getTenantInfo(restUtil: HTTPClient)(implicit sc: SparkContext): RDD[TenantInfo] = {
     val url = Constants.ORG_SEARCH_URL
-
     val tenantRequest = s"""{
                            |    "params": { },
                            |    "request":{
@@ -168,7 +158,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
       .withColumn("reportName",lit(reportName))
 
     reportConfig.output.map(format => {
-      renamedDf.saveToBlobStore(storageConfig, format.`type`, "sourcing",
+      renamedDf.saveToBlobStore(storageConfig, format.`type`, reportPath,
         Option(Map("header" -> "true")), Option(List("slug","reportName")))
     })
 
