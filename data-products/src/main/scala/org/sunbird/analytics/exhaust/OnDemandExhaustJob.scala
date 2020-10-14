@@ -43,8 +43,11 @@ trait OnDemandExhaustJob {
     val encoder = Encoders.product[JobRequest]
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus:_*));
-    
-    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
+    val distinctRequestsDf = reportConfigsDf.select("*").dropDuplicates("request_data.batchId")
+    val duplicateRequestsDf = reportConfigsDf.except(distinctRequestsDf)
+    val duplicateReq = duplicateRequestsDf.withColumn("status", lit("ABORTED")).withColumn("err_message", lit("Duplicate batch request")).as[JobRequest](encoder).collect()
+    updateRequests(duplicateReq)
+    val requests = distinctRequestsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
     requests;
   }
   
