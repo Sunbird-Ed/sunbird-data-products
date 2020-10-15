@@ -10,7 +10,7 @@ import org.sunbird.analytics.exhaust.JobRequest
 
 object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaustJob with Serializable {
 
-  override def getClassName = "org.sunbird.analytics.exhaust.collection.ProgressExhaustJob"
+  override def getClassName = "org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob"
   override def jobName() = "UserInfoExhaustJob";
   override def jobId() = "userinfo-exhaust";
   override def getReportPath() = "userinfo-exhaust/";

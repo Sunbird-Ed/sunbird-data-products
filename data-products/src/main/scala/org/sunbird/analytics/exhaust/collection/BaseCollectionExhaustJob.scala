@@ -122,7 +122,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         } else {
           JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "requestStatus" -> "FAILED", "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           val failedRequest = markRequestAsFailed(request, "Invalid Request")
-          saveRequests(storageConfig, Array(failedRequest))
+          updateRequests(Array(failedRequest))
           failedRequest
         }
       }
@@ -131,7 +131,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           JobLogger.log(s"The Request is failed to process due to ${ex.getMessage}", Some(Map("requestId" -> request.request_id, "requestStatus" -> "FAILED",  "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           ex.printStackTrace()
           val failedRequest = markRequestAsFailed(request, ex.getMessage)
-          updateRequests(Array(failedRequest)) // Set the request status to PROCESSING when it picked up for processing
+          updateRequests(Array(failedRequest))
           failedRequest
         }
       }
