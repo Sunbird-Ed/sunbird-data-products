@@ -116,6 +116,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
           JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "requestStatus" -> res._2.status, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           saveRequests(storageConfig, Array(res._2))
+          if(totalRequests.get() == 2) throw new NullPointerException("Custom null")
           res._2
         } else {
           JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "requestStatus" -> "FAILED", "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
