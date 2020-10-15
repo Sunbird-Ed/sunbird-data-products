@@ -45,7 +45,7 @@ trait OnDemandExhaustJob {
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus:_*));
     val distinctRequestsDf = reportConfigsDf.dropDuplicates("tag")
     val duplicateRequestsDf = reportConfigsDf.exceptAll(distinctRequestsDf)
-    val duplicateReq = duplicateRequestsDf.withColumn("status", lit("ABORTED")).withColumn("err_message", lit("Duplicate batch request")).as[JobRequest](encoder).collect()
+    val duplicateReq = duplicateRequestsDf.withColumn("status", lit("ABORTED")).withColumn("err_message", lit("Duplicate request tag")).as[JobRequest](encoder).collect()
     updateRequests(duplicateReq)
     val requests = distinctRequestsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
     requests;

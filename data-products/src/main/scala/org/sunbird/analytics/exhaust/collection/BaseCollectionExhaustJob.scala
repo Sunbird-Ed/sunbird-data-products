@@ -108,17 +108,17 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
     val totalRequests = new AtomicInteger(requests.length)
-    JobLogger.log(s"Total requests are: ${totalRequests.getAndDecrement()}", None, INFO)
+    JobLogger.log(s"Total distinct requests are: ${totalRequests.getAndDecrement()}", None, INFO)
     val result: Array[JobRequest] = for (request <- requests) yield {
       try {
         if (validateRequest(request)) {
           updateRequests(Array(request)) // Set the request status to PROCESSING when it picked up for processing
           val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
-          JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+          JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "requestStatus" -> res._2.status, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           saveRequests(storageConfig, Array(res._2))
           res._2
         } else {
-          JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+          JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "requestStatus" -> "FAILED", "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           val failedRequest = markRequestAsFailed(request, "Invalid Request")
           saveRequests(storageConfig, Array(failedRequest))
           failedRequest
@@ -126,7 +126,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       }
       catch {
         case ex: Exception => {
-          JobLogger.log(s"The Request is failed to process due to ${ex.getMessage}", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+          JobLogger.log(s"The Request is failed to process due to ${ex.getMessage}", Some(Map("requestId" -> request.request_id, "requestStatus" -> "FAILED",  "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           ex.printStackTrace()
           val failedRequest = markRequestAsFailed(request, ex.getMessage)
           saveRequests(storageConfig, Array(failedRequest))
