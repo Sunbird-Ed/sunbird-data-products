@@ -32,7 +32,7 @@ case class CollectionBatchResponse(batchId: String, file: String, status: String
 case class CollectionDetails(result: Result)
 case class Result(content: List[CollectionInfo])
 case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String])
-case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
+case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int], abortedRequests: Option[Int])
 
 trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
@@ -105,8 +105,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
-    val storageConfig = getStorageConfig(config, "");
-    val requests = getRequests(jobId());
+    val storageConfig = getStorageConfig(config, "")
+    val filteredRequests = filterRequests(getRequests(jobId()))
+    val requests: Array[JobRequest] = filteredRequests.getOrElse("unique", new Array[JobRequest](0))
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log(s"Total distinct requests are: ${totalRequests.getAndDecrement()}", None, INFO)
     val result: Array[JobRequest] = for (request <- requests) yield {
@@ -114,10 +115,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         if (validateRequest(request)) {
           updateRequests(Array(request)) // Set the request status to PROCESSING when it picked up for processing
           val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
-          val rem = totalRequests.getAndDecrement()
-          JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "requestStatus" -> res._2.status, "remainingRequest" -> rem)), INFO)
+          JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "requestStatus" -> res._2.status, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
           saveRequests(storageConfig, Array(res._2))
-          if(rem == 2) throw new NullPointerException("Custom null")
           res._2
         } else {
           JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "requestStatus" -> "FAILED", "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
@@ -136,7 +135,17 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         }
       }
     }
-    Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
+    Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")), Some(filteredRequests.getOrElse("duplicate", new Array[JobRequest](0)).length))
+  }
+
+  def filterRequests(jobRequests: DataFrame): Map[String, Array[JobRequest]] = {
+    val encoder = Encoders.product[JobRequest]
+    val uniqueRequestsDf = jobRequests.dropDuplicates("tag")
+    val duplicateRequestsDf = jobRequests.exceptAll(uniqueRequestsDf)
+    val duplicateReq = duplicateRequestsDf.withColumn("status", lit("ABORTED")).withColumn("err_message", lit("Duplicate request tag")).as[JobRequest](encoder).collect()
+    updateRequests(duplicateReq)
+    val uniqueReq = uniqueRequestsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
+    Map("unique" -> uniqueReq, "duplicate" -> duplicateReq)
   }
 
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {

@@ -4,23 +4,20 @@ import java.io.File
 import java.nio.file.Paths
 import java.util.Properties
 
-import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.SparkSession
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.StorageConfig
+import org.apache.spark.sql.{DataFrame, Encoders, SaveMode, SparkSession}
+import org.ekstep.analytics.framework.{DataSet, FrameworkContext, StorageConfig}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.apache.spark.sql.functions._
 import org.apache.commons.lang.StringUtils
-
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.EncryptionMethod
-import org.apache.spark.sql.SaveMode
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
 import java.sql.Timestamp
+
 import org.ekstep.analytics.framework.util.HadoopFileUtil
 
 case class JobRequest(tag: String, request_id: String, job_id: String, var status: String, request_data: String, requested_by: String, requested_channel: String,
@@ -38,17 +35,9 @@ trait OnDemandExhaustJob {
   val jobStatus = List("SUBMITTED","FAILED") 
   val maxIterations = 3;
 
-  def getRequests(jobId: String)(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
-
-    val encoder = Encoders.product[JobRequest]
-    val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
-      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus:_*));
-    val distinctRequestsDf = reportConfigsDf.dropDuplicates("tag")
-    val duplicateRequestsDf = reportConfigsDf.exceptAll(distinctRequestsDf)
-    val duplicateReq = duplicateRequestsDf.withColumn("status", lit("ABORTED")).withColumn("err_message", lit("Duplicate request tag")).as[JobRequest](encoder).collect()
-    updateRequests(duplicateReq)
-    val requests = distinctRequestsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
-    requests;
+  def getRequests(jobId: String)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+    spark.read.jdbc(url, requestsTable, connProperties)
+      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*)).toDF()
   }
   
   def updateRequests(requests: Array[JobRequest]) = {
