@@ -11,7 +11,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, Level,
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
 import org.sunbird.analytics.job.report.BaseReportsJob
-import org.sunbird.analytics.model.report.{TenantInfo, TenantResponse}
+import org.sunbird.analytics.model.report.{TenantInfo, TenantResponse, TextbookData}
 import org.sunbird.analytics.util.TextBookUtils
 import org.sunbird.cloud.storage.conf.AppConf
 
@@ -28,8 +28,6 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
 
   implicit val className = "org.sunbird.analytics.job.SourcingMetrics"
   val jobName: String = "Sourcing Metrics Job"
-  val reportPath: String = "sourcing"
-  val reportKey: String = "reports"
   val sunbirdHierarchyStore: String = AppConf.getConfig("course.metrics.cassandra.sunbirdHierarchyStore")
 
   // $COVERAGE-OFF$ Disabling scoverage for main method
@@ -51,7 +49,42 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     val conf = JSONUtils.deserialize[Map[String,AnyRef]](config)
     val textbooks = TextBookUtils.getTextBooks(conf, RestUtil)
     JobLogger.log(s"Fetched textbooks from druid ${textbooks.length}",None, Level.INFO)
+    import spark.implicits._
 
+    val textbookReportData = getTextbookInfo(textbooks, spark, config)
+    val textbookReports = textbookReportData._1.toDF()
+    val tenantInfo = getTenantInfo(RestUtil).toDF()
+    val report = textbookReports.join(tenantInfo,
+      textbookReports.col("channel") === tenantInfo.col("id"),"left")
+    generateSourcingReport(spark, textbookReportData._2.toDF(), report, config)
+  }
+
+  def generateSourcingReport(spark: SparkSession, contentdf: DataFrame, report: DataFrame, config: String): Unit = {
+    import spark.implicits._
+    val contentChapter = contentdf.groupBy("identifier","l1identifier")
+      .pivot(concat(lit("Number of "), col("contentType"))).agg(count("l1identifier"))
+    val contentTb = contentdf.groupBy("identifier")
+      .pivot(concat(lit("Number of "), col("contentType"))).agg(count("identifier"))
+    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
+    val reportConfig = configMap("modelParams").asInstanceOf[Map[String, AnyRef]]("reportConfig").asInstanceOf[Map[String, AnyRef]]
+    val reportPath = reportConfig.getOrElse("reportPath","sourcing").asInstanceOf[String]
+    val reportKey = reportConfig.getOrElse("reportKey","reports").asInstanceOf[String]
+    val storageConfig = getStorageConfig(reportKey, "")
+
+    val textbookReport = report.join(contentTb, Seq("identifier"),"left")
+      .drop("identifier","channel","id","chapters","l1identifier")
+      .distinct()
+      .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name)
+    saveReportToBlob(textbookReport, JSONUtils.serialize(reportConfig), storageConfig, "TextbookLevel", reportPath)
+
+    val chapterReport = report.join(contentChapter, Seq("identifier","l1identifier"),"left")
+      .drop("identifier","l1identifier","channel","id","totalChapters")
+      .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name,'chapters)
+    JobLogger.log(s"$jobName: extracted chapter and textbook reports", None, INFO)
+    saveReportToBlob(chapterReport, JSONUtils.serialize(reportConfig), storageConfig, "ChapterLevel", reportPath)
+  }
+
+  def getTextbookInfo(textbooks: List[TextbookData], spark: SparkSession, config: String)(implicit sc: SparkContext,fc: FrameworkContext): (List[TextbookReportResult],List[ContentReportResult]) = {
     val encoders = Encoders.product[ContentHierarchy]
     var textbookReportData = List[TextbookReportResult]()
     var contentReportData = List[ContentReportResult]()
@@ -73,37 +106,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
       }
       (textbookReportData,contentReportData)
     })
-    import spark.implicits._
-
-    val textbookReports = sc.parallelize(textbookReportData).map(f=>(f.channel,f))
-    val tenantInfo = getTenantInfo(RestUtil).map(f=>(f.id,f))
-    val textbookResult = TextbookReportResult("","","","","","","","","","")
-
-    val report = textbookReports.fullOuterJoin(tenantInfo).map(f => FinalReport(f._2._1.getOrElse(textbookResult).identifier,f._2._1.getOrElse(textbookResult).l1identifier,
-      f._2._1.getOrElse(textbookResult).board,f._2._1.getOrElse(textbookResult).medium,f._2._1.getOrElse(textbookResult).grade,
-      f._2._1.getOrElse(textbookResult).subject,f._2._1.getOrElse(textbookResult).name,f._2._1.getOrElse(textbookResult).chapters,
-      f._2._1.getOrElse(textbookResult).channel,f._2._1.getOrElse(textbookResult).totalChapters,
-      f._2._2.getOrElse(TenantInfo("","Unknown")).slug)).filter(f=>f.identifier.nonEmpty).toDF()
-    val contentdf = contentReportData.toDF()
-    val contentChapter = contentdf.groupBy("identifier","l1identifier")
-      .pivot(concat(lit("Number of "), col("contentType"))).agg(count("l1identifier"))
-    val contentTb = contentdf.groupBy("identifier")
-      .pivot(concat(lit("Number of "), col("contentType"))).agg(count("identifier"))
-
-    val storageConfig = getStorageConfig(reportKey, "")
-
-    val textbookReport = report.join(contentTb, Seq("identifier"),"left")
-      .drop("identifier","channel","id","chapters","l1identifier")
-      .distinct()
-      .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name)
-    saveReportToBlob(textbookReport, config, storageConfig, "TextbookLevel")
-
-    val chapterReport = report.join(contentChapter, Seq("identifier","l1identifier"),"left")
-      .drop("identifier","l1identifier","channel","id","totalChapters")
-      .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name,'chapters)
-    JobLogger.log(s"$jobName: extracted chapter and textbook reports", None, INFO)
-    saveReportToBlob(chapterReport, config, storageConfig, "ChapterLevel")
-
+    (textbookReportData,contentReportData)
   }
 
   def generateReport(data: List[TextbookHierarchy], prevData: List[TextbookResponse], newData: List[TextbookHierarchy],textbookInfo: TextbookHierarchy, contentInfo: List[ContentReportResult], chapterInfo: List[String]): (List[TextbookResponse],List[ContentReportResult],String) = {
@@ -150,10 +153,8 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     sc.parallelize(restUtil.post[TenantResponse](url, tenantRequest).result.response.content)
   }
 
-  def saveReportToBlob(data: DataFrame, config: String, storageConfig: StorageConfig, reportName: String): Unit = {
-    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
-    val reportconfigMap = configMap("modelParams").asInstanceOf[Map[String, AnyRef]]("reportConfig")
-    val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(reportconfigMap))
+  def saveReportToBlob(data: DataFrame, reportConf: String, storageConfig: StorageConfig, reportName: String, reportPath: String): Unit = {
+    val reportConfig = JSONUtils.deserialize[ReportConfig](reportConf)
 
     val fieldsList = data.columns
     val filteredDf = data.select(fieldsList.head, fieldsList.tail: _*)

@@ -72,7 +72,9 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
     val hierarchy = JSONUtils.deserialize[TextbookHierarchy](data.hierarchy)
     val report = SourcingMetrics.generateReport(List(hierarchy),List(), List(),hierarchy,List(),List("","0"))
     val df = report._1.toDF().withColumn("slug",lit("test-slug")).withColumn("reportName",lit("TextbookReport"))
-    SourcingMetrics.saveReportToBlob(df,config,StorageConfig("local","test","Textbook",Option(""),Option("")),"TextbookReport")
+    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
+    val reportConfig = configMap("modelParams").asInstanceOf[Map[String, AnyRef]]("reportConfig").asInstanceOf[Map[String, AnyRef]]
+    SourcingMetrics.saveReportToBlob(df,JSONUtils.serialize(reportConfig),StorageConfig("local","test","Textbook",Option(""),Option("")),"TextbookReport", "sourcing")
 
     report._1.length should be (1)
     report._2.length should be (2)
