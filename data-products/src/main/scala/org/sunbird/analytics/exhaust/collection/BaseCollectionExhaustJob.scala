@@ -101,7 +101,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
     val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches);
     result.foreach(f => JobLogger.log("Batch Status", Some(Map("status" -> f.status, "batchId" -> f.batchId, "executionTime" -> f.execTime, "message" -> f.statusMsg, "location" -> f.file)), INFO));
-    Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase() == "SUCCESS")))
+    Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase() == "SUCCESS")), Some(0))
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
