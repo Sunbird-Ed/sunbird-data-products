@@ -6,7 +6,7 @@ import org.apache.spark.sql.functions.{col, concat, count, lit, split}
 import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.util.{CommonUtil, HTTPClient, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, Level, StorageConfig}
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
@@ -33,43 +33,50 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
   // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     JobLogger.log(s"Started execution - $jobName",None, Level.INFO)
-    implicit val sparkContext: SparkContext = getReportingSparkContext(JSONUtils.deserialize[JobConfig](config))
+    implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
+    val sparkContext: SparkContext = getReportingSparkContext(jobConfig)
+    val modelParams = jobConfig.modelParams.get
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
-    val readConsistencyLevel: String = AppConf.getConfig("course.metrics.cassandra.input.consistency")
+    val readConsistencyLevel: String = modelParams.getOrElse("readConsistencyLevel", AppConf.getConfig("course.metrics.cassandra.input.consistency")).asInstanceOf[String]
     val sparkConf = sparkContext.getConf
-      .set("es.write.operation", "upsert")
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
-    val spark = SparkSession.builder.config(sparkConf).getOrCreate()
+    implicit val spark = SparkSession.builder.config(sparkConf).getOrCreate()
 
-    generateSourcingMetrics(spark, config)
+    try {
+      val res = CommonUtil.time(execute());
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1)))
+    } finally {
+      frameworkContext.closeContext();
+      spark.close()
+    }
   }
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def generateSourcingMetrics(spark: SparkSession, config: String)(implicit sc: SparkContext,fc: FrameworkContext): Unit = {
-    val conf = JSONUtils.deserialize[Map[String,AnyRef]](config)
-    val textbooks = TextBookUtils.getTextBooks(conf, RestUtil)
-    JobLogger.log(s"Fetched textbooks from druid ${textbooks.length}",None, Level.INFO)
+  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
+    implicit val sc = spark.sparkContext
     import spark.implicits._
+    val textbooks = TextBookUtils.getTextBooks(config.modelParams.get)
+    JobLogger.log(s"Fetched textbooks from druid ${textbooks.length}",None, Level.INFO)
 
-    val textbookReportData = getTextbookInfo(textbooks, spark, config)
+    val textbookReportData = getTextbookInfo(textbooks)
     val textbookReports = textbookReportData._1.toDF()
     val tenantInfo = getTenantInfo(RestUtil).toDF()
     val report = textbookReports.join(tenantInfo,
-      textbookReports.col("channel") === tenantInfo.col("id"),"left")
-    generateSourcingReport(spark, textbookReportData._2.toDF(), report, config)
+      textbookReports.col("channel") === tenantInfo.col("id"),"left").na.fill("Unknown", Seq("slug"))
+    process(textbookReportData._2.toDF(), report)
   }
 
-  def generateSourcingReport(spark: SparkSession, contentdf: DataFrame, report: DataFrame, config: String): Unit = {
+  def process(contentdf: DataFrame, report: DataFrame)(implicit spark: SparkSession, config: JobConfig): Unit = {
     import spark.implicits._
     val contentChapter = contentdf.groupBy("identifier","l1identifier")
       .pivot(concat(lit("Number of "), col("contentType"))).agg(count("l1identifier"))
     val contentTb = contentdf.groupBy("identifier")
       .pivot(concat(lit("Number of "), col("contentType"))).agg(count("identifier"))
-    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
-    val reportConfig = configMap("modelParams").asInstanceOf[Map[String, AnyRef]]("reportConfig").asInstanceOf[Map[String, AnyRef]]
+    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get))
+    val reportConfig = configMap("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportPath = reportConfig.getOrElse("reportPath","sourcing").asInstanceOf[String]
-    val reportKey = reportConfig.getOrElse("reportKey","reports").asInstanceOf[String]
-    val storageConfig = getStorageConfig(reportKey, "")
+    val container = reportConfig.getOrElse("container","reports").asInstanceOf[String]
+    val storageConfig = getStorageConfig(container, "")
 
     val textbookReport = report.join(contentTb, Seq("identifier"),"left")
       .drop("identifier","channel","id","chapters","l1identifier")
@@ -84,7 +91,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     saveReportToBlob(chapterReport, JSONUtils.serialize(reportConfig), storageConfig, "ChapterLevel", reportPath)
   }
 
-  def getTextbookInfo(textbooks: List[TextbookData], spark: SparkSession, config: String)(implicit sc: SparkContext,fc: FrameworkContext): (List[TextbookReportResult],List[ContentReportResult]) = {
+  def getTextbookInfo(textbooks: List[TextbookData])(implicit spark: SparkSession,fc: FrameworkContext): (List[TextbookReportResult],List[ContentReportResult]) = {
     val encoders = Encoders.product[ContentHierarchy]
     var textbookReportData = List[TextbookReportResult]()
     var contentReportData = List[ContentReportResult]()

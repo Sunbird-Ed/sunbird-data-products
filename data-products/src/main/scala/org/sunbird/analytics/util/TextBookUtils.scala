@@ -35,7 +35,7 @@ object TBConstants {
 
 object TextBookUtils {
 
-  def getTextBooks(config: Map[String, AnyRef], restUtil: HTTPClient)(implicit sc:SparkContext,fc: FrameworkContext): List[TextbookData] = {
+  def getTextBooks(config: Map[String, AnyRef])(implicit sc:SparkContext,fc: FrameworkContext): List[TextbookData] = {
     val request = JSONUtils.serialize(config.get("druidConfig").get)
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
     val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
