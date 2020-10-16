@@ -10,7 +10,7 @@ import org.ekstep.analytics.framework.util.{CommonUtil, HTTPClient, JSONUtils, J
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, Level, StorageConfig}
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
-import org.sunbird.analytics.job.report.BaseReportsJob
+import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.model.report.{TenantInfo, TenantResponse, TextbookData}
 import org.sunbird.analytics.util.TextBookUtils
 import org.sunbird.cloud.storage.conf.AppConf
@@ -34,13 +34,8 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     JobLogger.log(s"Started execution - $jobName",None, Level.INFO)
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
-    val sparkContext: SparkContext = getReportingSparkContext(jobConfig)
-    val modelParams = jobConfig.modelParams.get
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
-    val readConsistencyLevel: String = modelParams.getOrElse("readConsistencyLevel", AppConf.getConfig("course.metrics.cassandra.input.consistency")).asInstanceOf[String]
-    val sparkConf = sparkContext.getConf
-      .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
-    implicit val spark = SparkSession.builder.config(sparkConf).getOrCreate()
+    implicit val spark = openSparkSession(jobConfig)
 
     try {
       val res = CommonUtil.time(execute());
@@ -76,7 +71,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     val reportConfig = configMap("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportPath = reportConfig.getOrElse("reportPath","sourcing").asInstanceOf[String]
     val container = reportConfig.getOrElse("container","reports").asInstanceOf[String]
-    val storageConfig = getStorageConfig(container, "")
+    val storageConfig = getStorageConfig(config, "")
 
     val textbookReport = report.join(contentTb, Seq("identifier"),"left")
       .drop("identifier","channel","id","chapters","l1identifier")
