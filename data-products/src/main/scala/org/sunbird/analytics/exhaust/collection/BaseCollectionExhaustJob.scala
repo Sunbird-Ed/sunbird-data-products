@@ -72,16 +72,19 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
+    println("jobConfig: " + config)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
 
     val custodianOrgId = getCustodianOrgId();
+    println("custodianOrgId: " + custodianOrgId)
     val res = CommonUtil.time({
       val userDF = getUserCacheDF(getUserCacheColumns(), true)
       (userDF.count(), userDF)
     })
     JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
     val userCachedDF = res._2._2;
+    userCachedDF.show(false)
     mode.toLowerCase() match {
       case "standalone" =>
         executeStandAlone(custodianOrgId, userCachedDF)
