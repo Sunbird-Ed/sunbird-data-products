@@ -39,15 +39,15 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
 
     try {
       val res = CommonUtil.time(execute());
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1)))
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "chapterReportCount" -> res._2.getOrElse("chapterReportCount",0), "textbookReportCount" -> res._2.getOrElse("textbookReportCount",0))))
     } finally {
-      frameworkContext.closeContext();
+      frameworkContext.closeContext()
       spark.close()
     }
   }
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
+  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Map[String, Long] = {
     implicit val sc = spark.sparkContext
     import spark.implicits._
     val textbooks = TextBookUtils.getTextBooks(config.modelParams.get)
@@ -56,12 +56,13 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     val textbookReportData = getTextbookInfo(textbooks)
     val textbookReports = textbookReportData._1.toDF()
     val tenantInfo = getTenantInfo(RestUtil).toDF()
+    JobLogger.log(s"$jobName: Generated report metrics - textbook: ${textbookReportData._1.length}, contents: ${textbookReportData._2.length}", None, INFO)
     val report = textbookReports.join(tenantInfo,
       textbookReports.col("channel") === tenantInfo.col("id"),"left").na.fill("Unknown", Seq("slug"))
     process(textbookReportData._2.toDF(), report)
   }
 
-  def process(contentdf: DataFrame, report: DataFrame)(implicit spark: SparkSession, config: JobConfig): Unit = {
+  def process(contentdf: DataFrame, report: DataFrame)(implicit spark: SparkSession, config: JobConfig): Map[String, Long] = {
     import spark.implicits._
     val contentChapter = contentdf.groupBy("identifier","l1identifier")
       .pivot(concat(lit("Number of "), col("contentType"))).agg(count("l1identifier"))
@@ -70,7 +71,6 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get))
     val reportConfig = configMap("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportPath = reportConfig.getOrElse("reportPath","sourcing").asInstanceOf[String]
-    val container = reportConfig.getOrElse("container","reports").asInstanceOf[String]
     val storageConfig = getStorageConfig(config, "")
 
     val textbookReport = report.join(contentTb, Seq("identifier"),"left")
@@ -84,6 +84,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
       .orderBy('medium,split(split('grade,",")(0)," ")(1).cast("int"),'subject,'name,'chapters)
     JobLogger.log(s"$jobName: extracted chapter and textbook reports", None, INFO)
     saveReportToBlob(chapterReport, JSONUtils.serialize(reportConfig), storageConfig, "ChapterLevel", reportPath)
+    Map("textbookReportCount"->textbookReport.count(),"chapterReportCount"->chapterReport.count())
   }
 
   def getTextbookInfo(textbooks: List[TextbookData])(implicit spark: SparkSession,fc: FrameworkContext): (List[TextbookReportResult],List[ContentReportResult]) = {
@@ -157,19 +158,17 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
 
   def saveReportToBlob(data: DataFrame, reportConf: String, storageConfig: StorageConfig, reportName: String, reportPath: String): Unit = {
     val reportConfig = JSONUtils.deserialize[ReportConfig](reportConf)
-
     val fieldsList = data.columns
     val filteredDf = data.select(fieldsList.head, fieldsList.tail: _*)
     val labelsLookup = reportConfig.labels ++ Map("date" -> "Date")
     val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*)
       .withColumn("reportName",lit(reportName))
-    JobLogger.log(s"$jobName: Saving $reportName to blob - ${renamedDf.count()}", None, INFO)
+    JobLogger.log(s"$jobName: Saving $reportName to blob", None, INFO)
 
     reportConfig.output.map(format => {
       renamedDf.saveToBlobStore(storageConfig, format.`type`, reportPath,
         Option(Map("header" -> "true")), Option(List("slug","reportName")))
     })
-
   }
 
 }
