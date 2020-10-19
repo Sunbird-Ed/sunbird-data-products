@@ -145,13 +145,14 @@ trait OnDemandExhaustJob {
 
   def saveRequest(storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): Boolean = {
 
-    val downloadURLs = for (url <- request.download_urls.getOrElse(List())) yield {
+    val downloadURLs = CommonUtil.time(for (url <- request.download_urls.getOrElse(List())) yield {
       if (zipEnabled())
         zipAndEncrypt(url, storageConfig, request);
       else
         url
-    };
-    request.download_urls = Option(downloadURLs);
+    });
+    request.execution_time = Some(downloadURLs._1 + request.execution_time.getOrElse(0).asInstanceOf[Long])  
+    request.download_urls = Option(downloadURLs._2);
     updateRequest(request)
   }
 
