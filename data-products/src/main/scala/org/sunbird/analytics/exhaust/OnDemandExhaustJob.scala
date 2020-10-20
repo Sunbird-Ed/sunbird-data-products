@@ -151,7 +151,7 @@ trait OnDemandExhaustJob {
       else
         url
     });
-    request.execution_time = Some(downloadURLs._1 + request.execution_time.getOrElse(0).asInstanceOf[Long])  
+    request.execution_time = Some((downloadURLs._1 + request.execution_time.getOrElse(0).asInstanceOf[Long]).asInstanceOf[Long])  
     request.download_urls = Option(downloadURLs._2);
     updateRequest(request)
   }

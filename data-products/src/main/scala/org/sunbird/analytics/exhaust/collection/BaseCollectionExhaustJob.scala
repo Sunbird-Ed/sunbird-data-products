@@ -228,6 +228,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "state", "district", "userchannel", "rootorgid")
   }
+  
+  def getEnrolmentColumns() : Seq[String] = {
+    Seq("batchid", "userid", "courseid")
+  }
   /** END - Overridable Methods */
 
   /** START - Utility Methods */
@@ -247,9 +251,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getUserEnrolmentDF(collectionId: String, batchId: String, persist: Boolean)(implicit spark: SparkSession): DataFrame = {
+    val cols = getEnrolmentColumns();
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .where(col("courseid") === collectionId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
-      .select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
+      .select(cols.head, cols.tail: _*);
 
     if (persist) df.persist() else df
   }
@@ -342,4 +347,17 @@ object UDFUtils extends Serializable {
   }
 
   val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
+  
+  def completionPercentageFunction(statusMap: Map[String, Int], leafNodesCount: Int): Int = {
+    try {
+      val completedContent = statusMap.filter(p => p._2 == 2).size;
+      if(completedContent >= leafNodesCount) 100 else Math.round(((completedContent.toFloat/leafNodesCount) * 100))
+    } catch {
+      case ex: Exception =>
+        ex.printStackTrace();
+        0
+    }
+  }
+
+  val completionPercentage = udf[Int, Map[String, Int], Int](completionPercentageFunction)
 }
