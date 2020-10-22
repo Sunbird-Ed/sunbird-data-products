@@ -140,7 +140,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
     val res = CommonUtil.time({
-      val filteredContents: List[CourseBatchInfo] = CourseUtils.filterContents(spark, JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> collectionBatch.courseId, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name")))))
+      val filteredContents: List[CourseBatchInfo] = CourseUtils.filterContents(spark, JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> collectionBatch.courseId, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
       val channel = filteredContents.map(res => res.channel).headOption.getOrElse("")
       val organisationName = filteredContents.map(res => if (res.organisation.nonEmpty) res.organisation.head else "").headOption.getOrElse("")
       val collectionName = filteredContents.map(res => res.name).headOption.getOrElse("")
