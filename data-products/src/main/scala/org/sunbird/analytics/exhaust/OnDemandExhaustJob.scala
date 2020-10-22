@@ -2,26 +2,18 @@ package org.sunbird.analytics.exhaust
 
 import java.io.File
 import java.nio.file.Paths
+import java.sql.{Connection, DriverManager, PreparedStatement, Timestamp}
 import java.util.Properties
-
-import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.SparkSession
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.StorageConfig
-import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.CommonUtil
-import org.apache.spark.sql.functions._
-import org.apache.commons.lang.StringUtils
 
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.EncryptionMethod
-import org.apache.spark.sql.SaveMode
-import java.sql.Connection
-import java.sql.DriverManager
-import java.sql.PreparedStatement
-import java.sql.Timestamp
-import org.ekstep.analytics.framework.util.HadoopFileUtil
+import org.apache.commons.lang.StringUtils
+import org.apache.spark.sql.{Encoders, SparkSession}
+import org.apache.spark.sql.functions._
+import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
+import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.util.CommonUtil
 
 case class JobRequest(tag: String, request_id: String, job_id: String, var status: String, request_data: String, requested_by: String, requested_channel: String,
                       dt_job_submitted: Long, var download_urls: Option[List[String]], var dt_file_created: Option[Long], var dt_job_completed: Option[Long], 
@@ -39,11 +31,11 @@ trait OnDemandExhaustJob {
   val maxIterations = 3;
 
   def getRequests(jobId: String)(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
-
+    println("jobId: " + jobId)
     val encoder = Encoders.product[JobRequest]
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus:_*));
-    
+    reportConfigsDf.show(false)
     val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
     updateRequests(requests)
     requests;

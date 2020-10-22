@@ -67,6 +67,14 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
       .withColumn("board", UDFUtils.extractFromArrayString(col("board")))
   }
+
+  def filterAssessmentDF(assessmentDF: DataFrame): DataFrame = {
+    val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
+    val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
+    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
+    assessmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
+  }
+
   def getAssessmentDF(batch: CollectionBatch, hierarchyData: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
     import spark.implicits._
@@ -75,9 +83,10 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       // TODO: assessmentTypes - make it configurable.
       filterAssessmentsFromHierarchy(List(hierarchy), List(AppConf.getConfig("assessment.metrics.supported.contenttype")), AssessmentData(row.getString(0), List()))
     }).toDF()
-        .select(col("courseid"), explode_outer(col("assessmentIds")).as("contentid"))
+      .select(col("courseid"), explode_outer(col("assessmentIds")).as("contentid"))
 
-    val assessAggdf = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
+    val assessAggdf = filterAssessmentDF(loadData(assessmentAggDBSettings, cassandraFormat, new StructType()))
+      .where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
       .withColumnRenamed("user_id", "userid")
       .withColumnRenamed("batch_id", "batchid")
       .withColumnRenamed("course_id", "courseid")
