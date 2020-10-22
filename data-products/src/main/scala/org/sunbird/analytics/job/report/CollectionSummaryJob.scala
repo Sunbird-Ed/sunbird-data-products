@@ -183,7 +183,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
     val columnWithOrder = (columnsOrder ::: dynamicColumns).distinct
     reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
-    .saveToBlobStore(storageConfig, "csv", s"$reportPath report-$batchId-${getDate()}", Option(Map("header" -> "true")), None)
+    .saveToBlobStore(storageConfig, "csv", s"${reportPath}report-$batchId-${getDate()}", Option(Map("header" -> "true")), None)
   }
 
   def getDate(): String = {
