@@ -14,7 +14,7 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
-import org.joda.time.format.DateTimeFormat
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, DecryptUtil, UserData}
 
@@ -94,7 +94,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     fetchData(spark, userEnrolmentDBSettings, cassandraUrl, new StructType())
       .where(col("courseid") === courseId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
-        , col("completionpercentage"), col("enrolleddate"), col("completedon"), col("status"), col("certificates"))
+        , col("completionpercentage"), col("enrolleddate"), col("completedon"), col("status"), col("certificates"), col("issued_certificates"))
   }
 
   def getOrganisationDetails(spark: SparkSession, channel: String, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -147,10 +147,11 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       println("courseChannel" + channel)
       println("organisationName" + organisationName)
       val userEnrolment = getUserEnrollment(spark, collectionBatch.courseId, collectionBatch.batchId, fetchData).join(userCacheDF, Seq("userid"), "inner")
-        .withColumn("isCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
+        .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
+        .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       val completedUsers = userEnrolment.where(col("status") === 2)
       val avgElapsedTime = getAvgElapsedTime(completedUsers)
-      val totalCertificatesIssues: Long = userEnrolment.where(col("isCertificatedIssued") === "Y").count()
+      val totalCertificatesIssues: Long = userEnrolment.where(col("isPDFCertificatedIssued") === "Y" || col("isSVGCertificatedIssued") === "Y").count()
       val userInfo = Seq(
         (organisationName, collectionName, collectionBatch.batchId, collectionBatch.startDate, collectionBatch.endDate,
           userEnrolment.select("userid").distinct().count(), completedUsers.select("userid").distinct().count(),
@@ -185,8 +186,13 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val colNames = for (e <- fields) yield columnMapping.getOrElse(e, e)
     val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
     val columnWithOrder = (columnsOrder ::: dynamicColumns).distinct
-    val fin = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
-    fin.saveToBlobStore(storageConfig, "csv", reportPath + "report-" + batchId, Option(Map("header" -> "true")), None)
+    reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
+    .saveToBlobStore(storageConfig, "csv", s"$reportPath report-$batchId-${getDate()}", Option(Map("header" -> "true")), None)
+  }
+
+  def getDate(): String = {
+    val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
+    dateFormat.print(System.currentTimeMillis());
   }
 
   /**
