@@ -111,11 +111,9 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       (userDF.count(), userDF)
     })
     JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
-    val userCachedDF = res._2._2;
-
+    val userCachedDF = res._2._2
     val encoder = Encoders.product[CollectionBatch];
     val processBatches = filterBatches(spark, fetchData, config, batchList).as[CollectionBatch](encoder).collect().toList
-    println("processBatches" + processBatches)
     val processBatchesCount = new AtomicInteger(processBatches.length)
     JobLogger.log("Total Batches to process", Some("totalBatches" -> processBatchesCount.getAndDecrement()), INFO)
     val result: List[CollectionBatchResponses] = for (collectionBatch <- processBatches) yield {
