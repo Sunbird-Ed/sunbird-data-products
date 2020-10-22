@@ -144,8 +144,6 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       val channel = filteredContents.map(res => res.channel).headOption.getOrElse("")
       val organisationName = filteredContents.map(res => if (res.organisation.nonEmpty) res.organisation.head else "").headOption.getOrElse("")
       val collectionName = filteredContents.map(res => res.name).headOption.getOrElse("")
-      println("courseChannel" + channel)
-      println("organisationName" + organisationName)
       val userEnrolment = getUserEnrollment(spark, collectionBatch.courseId, collectionBatch.batchId, fetchData).join(userCacheDF, Seq("userid"), "inner")
         .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
         .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
@@ -153,7 +151,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       val avgElapsedTime = getAvgElapsedTime(completedUsers)
       val totalCertificatesIssues: Long = userEnrolment.where(col("isPDFCertificatedIssued") === "Y" || col("isSVGCertificatedIssued") === "Y").count()
       val userInfo = Seq(
-        (organisationName, collectionName, collectionBatch.batchId, collectionBatch.startDate, collectionBatch.endDate,
+        (organisationName, collectionName, collectionBatch.courseId, collectionBatch.startDate, collectionBatch.endDate,
           userEnrolment.select("userid").distinct().count(), completedUsers.select("userid").distinct().count(),
           completedUsers.where(completedUsers.col("userchannel") === channel).count(), userEnrolment.where(userEnrolment.col("userchannel") === channel).select("userid").distinct().count(),
           avgElapsedTime, totalCertificatesIssues, if (totalCertificatesIssues > 0) "Y" else "N"
