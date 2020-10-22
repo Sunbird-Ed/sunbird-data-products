@@ -122,12 +122,12 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val result: List[CollectionBatchResponses] = for (collectionBatch <- processBatches) yield {
       try {
         val response = processBatch(userCachedDF, collectionBatch, fetchData)
-        JobLogger.log("Batch is processed", Some(Map("batchId" -> response.batchId, "execTime" -> response.execTime, "remainingBatch" -> processBatchesCount.getAndDecrement())), INFO)
+        JobLogger.log("Batch is processed", Some(Map("batchId" -> response.batchId, "courseId" -> collectionBatch.courseId,  "execTime" -> response.execTime, "remainingBatch" -> processBatchesCount.getAndDecrement())), INFO)
         response
       } catch {
         case ex: Exception => {
           ex.printStackTrace()
-          JobLogger.log("Batch is failed", Some(Map("batchId" -> collectionBatch.batchId, "remainingBatch" -> processBatchesCount.getAndDecrement(), "errMessage" -> ex.getMessage)), INFO)
+          JobLogger.log("Batch is failed", Some(Map("batchId" -> collectionBatch.batchId, "courseId" -> collectionBatch.courseId, "remainingBatch" -> processBatchesCount.getAndDecrement(), "errMessage" -> ex.getMessage)), INFO)
           CollectionBatchResponses(batchId = collectionBatch.batchId, 0L, "FAILED")
         }
       }
@@ -144,10 +144,12 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       val filteredContents: List[CourseBatchInfo] = CourseUtils.filterContents(spark, JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> collectionBatch.courseId, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name")))))
       val channel = filteredContents.map(res => res.channel).headOption.getOrElse("")
       val collectionName = filteredContents.map(res => res.name).headOption.getOrElse("")
-      val organisationDF = getOrganisationDetails(spark, channel, fetchData).select("orgname", "channel").collect() // Filter by channel and returns channel, orgname, id fields
+      println("channelchannel" + channel)
+      val organisationDF = getOrganisationDetails(spark, channel, fetchData).select("orgname", "channel") // Filter by channel and returns channel, orgname, id fields
+      println("organisationDF" + organisationDF.show(false))
       val userEnrolment = getUserEnrollment(spark, collectionBatch.courseId, collectionBatch.batchId, fetchData).join(userCacheDF, Seq("userid"), "inner")
         .withColumn("isCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
-      val publisherName = organisationDF.headOption.getOrElse(Row()).getString(0)
+      val publisherName = organisationDF.collect().headOption.getOrElse(Row()).getString(0)
       val completedUsers = userEnrolment.where(col("status") === 2)
       val avgElapsedTime = getAvgElapsedTime(completedUsers)
       val totalCertificatesIssues: Long = userEnrolment.where(col("isCertificatedIssued") === "Y").count()
