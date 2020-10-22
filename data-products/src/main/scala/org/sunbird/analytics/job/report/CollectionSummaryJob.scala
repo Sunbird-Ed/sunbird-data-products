@@ -21,7 +21,6 @@ import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, DecryptUtil, Us
 import scala.collection.immutable.List
 
 
-
 case class CollectionBatch(batchId: String, courseId: String, startDate: String, endDate: String)
 
 case class CourseMetrics(processedBatches: Option[Int], failedBatches: Option[Int], successBatches: Option[Int])
@@ -122,7 +121,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val result: List[CollectionBatchResponses] = for (collectionBatch <- processBatches) yield {
       try {
         val response = processBatch(userCachedDF, collectionBatch, fetchData)
-        JobLogger.log("Batch is processed", Some(Map("batchId" -> response.batchId, "courseId" -> collectionBatch.courseId,  "execTime" -> response.execTime, "remainingBatch" -> processBatchesCount.getAndDecrement())), INFO)
+        JobLogger.log("Batch is processed", Some(Map("batchId" -> response.batchId, "courseId" -> collectionBatch.courseId, "execTime" -> response.execTime, "remainingBatch" -> processBatchesCount.getAndDecrement())), INFO)
         response
       } catch {
         case ex: Exception => {
@@ -143,18 +142,17 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val res = CommonUtil.time({
       val filteredContents: List[CourseBatchInfo] = CourseUtils.filterContents(spark, JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> collectionBatch.courseId, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name")))))
       val channel = filteredContents.map(res => res.channel).headOption.getOrElse("")
+      val organisationName = filteredContents.map(res => if (res.organisation.nonEmpty) res.organisation.head else "").headOption.getOrElse("")
       val collectionName = filteredContents.map(res => res.name).headOption.getOrElse("")
-      println("channelchannel" + channel)
-      val organisationDF = getOrganisationDetails(spark, channel, fetchData).select("orgname", "channel") // Filter by channel and returns channel, orgname, id fields
-      println("organisationDF" + organisationDF.show(false))
+      println("courseChannel" + channel)
+      println("organisationName" + organisationName)
       val userEnrolment = getUserEnrollment(spark, collectionBatch.courseId, collectionBatch.batchId, fetchData).join(userCacheDF, Seq("userid"), "inner")
         .withColumn("isCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
-      val publisherName = organisationDF.collect().headOption.getOrElse(Row()).getString(0)
       val completedUsers = userEnrolment.where(col("status") === 2)
       val avgElapsedTime = getAvgElapsedTime(completedUsers)
       val totalCertificatesIssues: Long = userEnrolment.where(col("isCertificatedIssued") === "Y").count()
       val userInfo = Seq(
-        (publisherName, collectionName, collectionBatch.batchId, collectionBatch.startDate, collectionBatch.endDate,
+        (organisationName, collectionName, collectionBatch.batchId, collectionBatch.startDate, collectionBatch.endDate,
           userEnrolment.select("userid").distinct().count(), completedUsers.select("userid").distinct().count(),
           completedUsers.where(completedUsers.col("userchannel") === channel).count(), userEnrolment.where(userEnrolment.col("userchannel") === channel).select("userid").distinct().count(),
           avgElapsedTime, totalCertificatesIssues, if (totalCertificatesIssues > 0) "Y" else "N"
