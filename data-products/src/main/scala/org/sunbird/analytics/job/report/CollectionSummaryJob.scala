@@ -41,10 +41,10 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     "Is certified course", "Total Certificate issues", "Average elapsed time to complete the course");
 
   private val columnMapping = Map("publishedBy" -> "Published by", "collectionId" -> "Collection id", "collectionName" -> "Collection name", "batchStartDate" -> "Batch start date",
-    "batchEndDate" -> "Batch end date", "enrolmentCount" -> "Total Enrolments", "completionCount" -> "Total Completion",
-    "enrolCountBySameOrg" -> "Total Enrolment from same org", "completionCountBySameOrg" -> "Total Completion from same org",
+    "batchEndDate" -> "Batch end date", "enrolmentCount" -> "Total enrolments", "completionCount" -> "Total completion",
+    "enrolCountBySameOrg" -> "Total enrolment from same org", "completionCountBySameOrg" -> "Total completion from same org",
     "isCertified" -> "Is certified course",
-    "certificateIssuesCount" -> "Total Certificate issues",
+    "certificateIssuesCount" -> "Total certificate issues",
     "avgElapsedTime" -> "Average elapsed time to complete the course")
 
 
