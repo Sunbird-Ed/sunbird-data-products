@@ -21,7 +21,6 @@ import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, DecryptUtil, Us
 import scala.collection.immutable.List
 
 
-case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
 
 case class CollectionBatch(batchId: String, courseId: String, startDate: String, endDate: String)
 
