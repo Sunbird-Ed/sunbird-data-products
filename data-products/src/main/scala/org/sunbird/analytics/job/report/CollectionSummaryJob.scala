@@ -114,8 +114,9 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     })
     JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
     val userCachedDF = res._2._2
-    val processBatches: DataFrame = filterBatches(spark, fetchData, config, batchList).join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "inner")
-      .join(userCachedDF, Seq("userid"), "inner").drop("completionpercentage", "active")
+    val processBatches: DataFrame = filterBatches(spark, fetchData, config, batchList)
+      .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
+      .join(userCachedDF, Seq("userid"), "left_outer").drop("completionpercentage", "active")
 
     val courseIds = processBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
 
@@ -127,7 +128,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .select(processBatches.col("*"), courseInfo.col("identifier"), courseInfo.col("channel"), courseInfo.col("name"), courseInfo.col("organisation"))
       .withColumn("batchid", concat(lit("batch -"), col("batchid")))
       .withColumn("collectionName", col("name"))
-      .withColumn("publishedBy", col("organisation"))
+      .withColumn("publishedBy", concat_ws(",", col("organisation")))
       .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       .withColumn("isCertified", when((col("isPDFCertificatedIssued") === "Y" || col("isSVGCertificatedIssued") === "Y"), "Y").otherwise("N"))
