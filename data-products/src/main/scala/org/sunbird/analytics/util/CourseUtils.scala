@@ -14,6 +14,11 @@ import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, 
 import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
 import org.sunbird.cloud.storage.conf.AppConf
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+
+import scala.collection.immutable.List
+import scala.concurrent.Future
 
 //Getting live courses from compositesearch
 case class CourseDetails(result: Result)
@@ -214,5 +219,28 @@ object CourseUtils {
     JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
     courseBatchDF.unpersist(true)
     activeBatchList
+  }
+
+
+  def getCourseInfo(courseIds: List[String], maxSize: Int): List[CourseBatchInfo] = {
+    val subCourseIds = courseIds.grouped(maxSize).toList
+    import scala.concurrent.ExecutionContext.Implicits.global
+    import scala.concurrent._
+    import scala.concurrent.duration._
+    val responses = Future.traverse(subCourseIds)(ids => {
+      JobLogger.log(s"Batch Size Invoke ${ids.size}", None, INFO)
+      fetchContents(JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
+    })
+    Await.result(responses, 180.seconds).flatten
+  }
+
+  def fetchContents(query: String): Future[List[CourseBatchInfo]] = {
+    Future {
+      val apiUrl = Constants.COMPOSITE_SEARCH_URL
+      val response = RestUtil.post[CourseResponse](apiUrl, query)
+      if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+        response.result.content
+      } else List[CourseBatchInfo]()
+    }
   }
 }

@@ -1,7 +1,5 @@
 package org.sunbird.analytics.job.report
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
@@ -16,9 +14,8 @@ import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
-import org.sunbird.analytics.util.{CourseBatchInfo, CourseUtils, DecryptUtil, UserData}
+import org.sunbird.analytics.util.{CourseUtils, DecryptUtil, UserData}
 
-import scala.Seq
 import scala.collection.immutable.List
 
 
@@ -110,11 +107,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .join(userCachedDF, Seq("userid"), "left_outer").drop("completionpercentage", "active")
 
     val courseIds = processBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-    // Fetching course info
-    val courseInfo = CourseUtils.filterContents(spark,
-      JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> courseIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
-      .toDF("framework", "identifier", "name", "channel", "batches", "organisation")
-
+    val courseInfo = CourseUtils.getCourseInfo(courseIds, 500).toDF("framework", "identifier", "name", "channel", "batches", "organisation")
+    JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
     val filteredBatches = processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "left_outer")
       .select(processBatches.col("*"), courseInfo.col("identifier"), courseInfo.col("channel"), courseInfo.col("name"), courseInfo.col("organisation"))
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
