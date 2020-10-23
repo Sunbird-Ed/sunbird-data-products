@@ -196,7 +196,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       courseBatchData.filter(batch => batchList.contains(batch.getString(1))) // In this case report all batches which have a start date after the specific date irrespective of whether the batch is live or expired
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
-      courseBatchData.filter(col("startdate").isNotNull && to_date(col("startdate"), "yyyy-MM-dd").geq(lit(enrolledFrom))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
+      courseBatchData.filter(col("startdate").isNotNull && to_date(col("startdate"), "yyyy-MM-dd").geq(lit(startDate))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
     } else if (generateForAllBatches) {
       JobLogger.log(s"Generating reports for all the batches irrespective of whether the batch is live or expired", None, INFO)
       courseBatchData // Irrespective of whether the batch is live or expired
