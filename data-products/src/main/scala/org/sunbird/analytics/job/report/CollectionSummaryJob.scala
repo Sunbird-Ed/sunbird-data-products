@@ -32,7 +32,6 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   val cassandraUrl = "org.apache.spark.sql.cassandra"
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val organisationDBSettings = Map("table" -> "organisation", "keyspace" -> "sunbird", "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJob"
@@ -106,18 +105,13 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val res = CommonUtil.time({
-      val userDF = getUserData(spark, fetchData = fetchData).select("userid", "userchannel").persist(StorageLevel.MEMORY_ONLY)
-      (userDF.count(), userDF)
-    })
-    JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
-    val userCachedDF = res._2._2
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "userchannel").persist(StorageLevel.MEMORY_ONLY)
     val processBatches: DataFrame = filterBatches(spark, fetchData, config, batchList)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "left_outer").drop("completionpercentage", "active")
 
     val courseIds = processBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-
+    // Fetching course info
     val courseInfo = CourseUtils.filterContents(spark,
       JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> courseIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
       .toDF("framework", "identifier", "name", "channel", "batches", "organisation")
@@ -137,7 +131,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("completedDate", to_timestamp(col("completedon"), fmt = "yyyy-MM-dd HH:mm:ss"))
       .withColumn("diffInMinutes", round(col("completedDate").cast(LongType) - col("enrolDate").cast(LongType)) / 60) // Converting to mins
       .drop("isPDFCertificatedIssued", "isSVGCertificatedIssued").persist(StorageLevel.MEMORY_ONLY)
-    // Saving report to blob storage
+    // Compute the values for all
     computeValues(filteredBatches)
   }
 
