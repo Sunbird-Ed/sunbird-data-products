@@ -38,10 +38,10 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJob"
   val jobName = "CollectionSummaryJob"
 
-  private val columnsOrder = List("Published by", "Collection id", "Collection name", "Batch start date", "Batch end date", "Total Enrolments", "Total Completion", "Total Enrolment from same org", "Total Completion from same org",
+  private val columnsOrder = List("Published by", "Batch id", "Collection id", "Collection name", "Batch start date", "Batch end date", "Total Enrolments", "Total Completion", "Total Enrolment from same org", "Total Completion from same org",
     "Is certified course", "Total Certificate issues", "Average elapsed time to complete the course");
 
-  private val columnMapping = Map("batchid" -> "BatchId",
+  private val columnMapping = Map("batchid" -> "Batch id",
     "publishedBy" -> "Published by",
     "courseid" -> "Collection id", "collectionName" -> "Collection name",
     "startdate" -> "Batch start date",
@@ -65,8 +65,6 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     } else List()
     try {
       val res = CommonUtil.time(prepareReport(spark, fetchData, batchIds))
-      JobLogger.log(s"Total Records are" + res._2.count(), None, INFO)
-      println("report" + res._2.show(false))
       saveToBlob(res._2) // Saving report to blob stroage
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
     } finally {
@@ -128,7 +126,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .select(processBatches.col("*"), courseInfo.col("identifier"), courseInfo.col("channel"), courseInfo.col("name"), courseInfo.col("organisation"))
       .withColumn("batchid", concat(lit("batch -"), col("batchid")))
       .withColumn("collectionName", col("name"))
-      .withColumn("publishedBy", concat_ws(",", col("organisation")))
+      .withColumn("publishedBy", concat_ws(", ", col("organisation")))
       .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       .withColumn("isCertified", when((col("isPDFCertificatedIssued") === "Y" || col("isSVGCertificatedIssued") === "Y"), "Y").otherwise("N"))
@@ -177,13 +175,10 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     val reportPath = "collection-summary-reports/"
     val fields = reportData.schema.fieldNames
-    println("fields" + fields)
-
     val colNames = for (e <- fields) yield columnMapping.getOrElse(e, e)
     val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
     val columnWithOrder = (columnsOrder ::: dynamicColumns).distinct
     val mod = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
-    println("reporrttt" + mod.show(false))
     mod.saveToBlobStore(storageConfig, "csv", s"${reportPath}summary-report-${getDate()}", Option(Map("header" -> "true")), None)
   }
 
@@ -218,6 +213,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       val comparisonDate = DateTimeFormat.forPattern("yyyy-MM-dd").print(DateTime.now(DateTimeZone.UTC).minusDays(1))
       courseBatchData.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate))).toDF()
     }
+    JobLogger.log(s"Computing summary agg report for ${filteredBatches.count()}", None, INFO)
     filteredBatches.persist(StorageLevel.MEMORY_ONLY)
   }
 }
