@@ -96,7 +96,6 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, userEnrolmentDBSettings, cassandraUrl, new StructType())
-      .where(lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
       .select(col("batchid"), col("userid"), col("courseid"), col("active")
         , col("completionpercentage"), col("enrolleddate"), col("completedon"), col("status"), col("certificates"), col("issued_certificates")).persist(StorageLevel.MEMORY_ONLY)
   }
