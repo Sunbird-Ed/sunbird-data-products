@@ -118,7 +118,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
 
     val filteredBatches = processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "left_outer")
       .select(processBatches.col("*"), courseInfo.col("identifier"), courseInfo.col("channel"), courseInfo.col("name"), courseInfo.col("organisation"))
-      .withColumn("batchid", concat(lit("batch -"), col("batchid")))
+      .withColumn("batchid", concat(lit("batch-"), col("batchid")))
       .withColumn("collectionName", col("name"))
       .withColumn("publishedBy", concat_ws(", ", col("organisation")))
       .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
