@@ -186,7 +186,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
 
   def filterBatches(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig, batchList: List[String]): DataFrame = {
     val modelParams = config.modelParams.get
-    val enrolledFrom = modelParams.getOrElse("batchEnrolDate", "").asInstanceOf[String]
+    val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
     val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", true).asInstanceOf[Boolean]
 
     val courseBatchData = fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
@@ -194,8 +194,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val filteredBatches = if (batchList.nonEmpty) {
       JobLogger.log("Generating reports only for mentioned batch Id's", None, INFO)
       courseBatchData.filter(batch => batchList.contains(batch.getString(1))) // In this case report all batches which have a start date after the specific date irrespective of whether the batch is live or expired
-    } else if (enrolledFrom.nonEmpty) {
-      JobLogger.log(s"Generating reports only for the batches which are started from $enrolledFrom date ", None, INFO)
+    } else if (startDate.nonEmpty) {
+      JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
       courseBatchData.filter(col("startdate").isNotNull && to_date(col("startdate"), "yyyy-MM-dd").geq(lit(enrolledFrom))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
     } else if (generateForAllBatches) {
       JobLogger.log(s"Generating reports for all the batches irrespective of whether the batch is live or expired", None, INFO)
