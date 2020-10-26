@@ -1,16 +1,13 @@
 package org.sunbird.analytics.exhaust.collection
 
-import org.apache.commons.lang.StringUtils
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.JobConfig
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.sunbird.analytics.exhaust.JobRequest
 
 object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaustJob with Serializable {
 
-  override def getClassName = "org.sunbird.analytics.exhaust.collection.ProgressExhaustJob"
+  override def getClassName = "org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob"
   override def jobName() = "UserInfoExhaustJob";
   override def jobId() = "userinfo-exhaust";
   override def getReportPath() = "userinfo-exhaust/";
@@ -41,7 +38,6 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
     "phone" -> "Mobile Number", "consentflag" -> "Consent Provided", "consentprovideddate" -> "Consent Provided Date")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-
     collectionBatch.userConsent.getOrElse("No").toLowerCase() match {
       case "yes" =>
         val userEnrolments = userEnrolmentDF
@@ -59,10 +55,12 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
   }
 
   def applyConsentRules(collectionBatch: CollectionBatch, userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-
+    // $COVERAGE-OFF$ Disabling scoverage for if condition to-do in release-3.4
     val consentDF = if (collectionBatch.requestedOrgId.equals(collectionBatch.custodianOrgId)) {
       userDF.withColumn("consentflag", lit("false"));
-    } else {
+    }
+    // $COVERAGE-ON$ Enabling scoverage for else condition
+    else {
       val consentDF = getUserConsentDF(collectionBatch);
       val resultDF = userDF.join(consentDF, Seq("userid"), "left_outer")
       // Org level consent - will be updated in 3.4 to read from user_consent table

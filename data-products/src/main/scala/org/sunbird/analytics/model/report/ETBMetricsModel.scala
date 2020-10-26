@@ -157,7 +157,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
   def generateReports(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): (RDD[FinalOutput]) = {
     val metrics = CommonUtil.time({
-      val textBookInfo = TextBookUtils.getTextBooks(config, RestUtil)
+      val textBookInfo = TextBookUtils.getTextBooks(config)
       val tenantInfo = getTenantInfo(config, RestUtil)
       TextBookUtils.getTextbookHierarchy(config, textBookInfo, tenantInfo, RestUtil)
     })

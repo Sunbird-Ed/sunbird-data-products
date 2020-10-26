@@ -20,6 +20,8 @@ import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaus
 import org.sunbird.analytics.util.DecryptUtil
 
 import scala.collection.immutable.List
+import java.util.concurrent.CompletableFuture
+import org.ekstep.analytics.framework.StorageConfig
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""), phone: Option[String] = Option(""), maskedemail: Option[String] = Option(""),
@@ -37,8 +39,6 @@ case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], succ
 
 trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
-  implicit val className: String = getClassName;
-
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid");
   private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
@@ -49,6 +49,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   val cassandraFormat = "org.apache.spark.sql.cassandra";
 
   /** START - Job Execution Methods */
+  // $COVERAGE-OFF$ Disabling scoverage for main and init method
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
     JobLogger.init(jobName)
@@ -64,6 +65,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     } finally {
       frameworkContext.closeContext();
       spark.close()
+      cleanUp()
     }
 
   }
@@ -74,21 +76,19 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
   }
+  // $COVERAGE-ON$ Enabling scoverage for all other functions
 
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
 
     val custodianOrgId = getCustodianOrgId();
-    println("custodianOrgId: " + custodianOrgId)
     val res = CommonUtil.time({
       val userDF = getUserCacheDF(getUserCacheColumns(), true)
       (userDF.count(), userDF)
     })
     JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
     val userCachedDF = res._2._2;
-    println("user cache df")
-    userCachedDF.show(false)
     mode.toLowerCase() match {
       case "standalone" =>
         executeStandAlone(custodianOrgId, userCachedDF)
@@ -103,35 +103,39 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val batchFilter = modelParams.get("batchFilter").asInstanceOf[Option[List[String]]];
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
-    val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches);
+    val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
+    val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches, storageConfig);
     result.foreach(f => JobLogger.log("Batch Status", Some(Map("status" -> f.status, "batchId" -> f.batchId, "executionTime" -> f.execTime, "message" -> f.statusMsg, "location" -> f.file)), INFO));
     Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase() == "SUCCESS")))
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics =  {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
-    val storageConfig = getStorageConfig(config, "");
     val requests = getRequests(jobId());
+    val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId(), "totalRequests" -> requests.length)), INFO)
     val result = for (request <- requests) yield {
-      if (validateRequest(request)) {
-        val res = CommonUtil.time(processRequest(request, custodianOrgId, userCachedDF))
-        JobLogger.log("The Request is processed", Some(Map("requestId" -> request.request_id, "timeTaken" -> res._1, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-        res._2
+      val updRequest = if (validateRequest(request)) {
+        val res = processRequest(request, custodianOrgId, userCachedDF, storageConfig)
+        JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+        res
       } else {
         JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
         markRequestAsFailed(request, "Invalid request")
       }
+      saveRequestAsync(storageConfig, updRequest)(spark.sparkContext.hadoopConfiguration, fc)
     }
-    saveRequests(storageConfig, result);
-    Metrics(totalRequests = Some(requests.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase == "SUCCESS")))
+    CompletableFuture.allOf(result: _*) // Wait for all the async tasks to complete
+    val completedResult = result.map(f => f.join()); // Get the completed job requests
+    Metrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")))
   }
 
-  def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
+  def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
+    markRequestAsProcessing(request)
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
     val collectionBatches = getCollectionBatches(collectionConfig.batchId, None, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
-    val result = CommonUtil.time(processBatches(userCachedDF, collectionBatches));
+    val result = CommonUtil.time(processBatches(userCachedDF, collectionBatches, storageConfig));
     val response = result._2;
     val failedBatches = response.filter(p => p.status.equals("FAILED"));
     if (response.size == 0) {
@@ -152,7 +156,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     if (collectionConfig.batchId.isEmpty && collectionConfig.searchFilter.isEmpty) false else true
     // TODO: Check if the requestedBy user role has permission to request for the job
   }
-
+  
   def markRequestAsFailed(request: JobRequest, failedMsg: String): JobRequest = {
     request.status = "FAILED";
     request.dt_job_completed = Option(System.currentTimeMillis());
@@ -160,9 +164,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     request.err_message = Option(failedMsg);
     request
   }
+  
+  def markRequestAsProcessing(request: JobRequest) = {
+    request.status = "PROCESSING";
+    updateStatus(request);
+  }
 
   def getCollectionBatches(batchId: Option[String], batchFilter: Option[List[String]], searchFilter: Option[Map[String, AnyRef]], custodianOrgId: String, requestedOrgId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatch] = {
-
     val encoder = Encoders.product[CollectionBatch];
     val collectionBatches = getCollectionBatchDF(false);
     if (batchId.isDefined || batchFilter.isDefined) {
@@ -186,8 +194,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     }
   }
 
-  def processBatches(userCachedDF: DataFrame, collectionBatches: List[CollectionBatch])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
-
+  def processBatches(userCachedDF: DataFrame, collectionBatches: List[CollectionBatch], storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
     for (batch <- filterCollectionBatches(collectionBatches)) yield {
       val userEnrolmentDF = getUserEnrolmentDF(batch.collectionId, batch.batchId, false).join(userCachedDF, Seq("userid"), "inner")
         .withColumn("collectionName", lit(batch.collectionName))
@@ -196,7 +203,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       try {
         val res = CommonUtil.time(processBatch(filteredDF, batch));
         val reportDF = res._2;
-        val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
         val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
         unpersistDFs();
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1);
@@ -213,7 +219,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def unpersistDFs(){};
   def jobId(): String;
   def jobName(): String;
-  def getClassName(): String;
   def getReportPath(): String;
   def getReportKey(): String;
   def filterCollectionBatches(collectionBatches: List[CollectionBatch]): List[CollectionBatch] = {
@@ -222,6 +227,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "state", "district", "userchannel", "rootorgid")
+  }
+  
+  def getEnrolmentColumns() : Seq[String] = {
+    Seq("batchid", "userid", "courseid")
   }
   /** END - Overridable Methods */
 
@@ -242,10 +251,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getUserEnrolmentDF(collectionId: String, batchId: String, persist: Boolean)(implicit spark: SparkSession): DataFrame = {
+    val cols = getEnrolmentColumns();
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .where(col("courseid") === collectionId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
-      .select("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon")
-
+      .select(cols.head, cols.tail: _*);
     if (persist) df.persist() else df
   }
 
@@ -265,8 +274,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def getUserCacheDF(cols: Seq[String], persist: Boolean)(implicit spark: SparkSession): DataFrame = {
     val schema = Encoders.product[UserData].schema
     val df = loadData(userCacheDBSettings, redisFormat, schema).withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).select(cols.head, cols.tail: _*);
-    println("df")
-    df.show(false)
     if (persist) df.persist() else df
   }
 
@@ -287,11 +294,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       .select(col("user_id").as("userid"), col("consentflag"), col("last_updated_on").as("consentprovideddate"));
   }
 
+  // $COVERAGE-OFF$ Disabling scoverage since logTime function is not in use
   def logTime[R](block: => R, message: String): R = {
     val res = CommonUtil.time(block);
     JobLogger.log(message, Some(Map("timeTaken" -> res._1)), INFO)
     res._2
   }
+  // $COVERAGE-ON$ Enabling scoverage for other functions
 
   def organizeDF(reportDF: DataFrame, finalColumnMapping: Map[String, String], finalColumnOrder: List[String]): DataFrame = {
     val fields = reportDF.schema.fieldNames
@@ -339,4 +348,17 @@ object UDFUtils extends Serializable {
   }
 
   val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
+  
+  def completionPercentageFunction(statusMap: Map[String, Int], leafNodesCount: Int): Int = {
+    try {
+      val completedContent = statusMap.filter(p => p._2 == 2).size;
+      if(completedContent >= leafNodesCount) 100 else Math.round(((completedContent.toFloat/leafNodesCount) * 100))
+    } catch {
+      case ex: Exception =>
+        ex.printStackTrace();
+        0
+    }
+  }
+
+  val completionPercentage = udf[Int, Map[String, Int], Int](completionPercentageFunction)
 }
