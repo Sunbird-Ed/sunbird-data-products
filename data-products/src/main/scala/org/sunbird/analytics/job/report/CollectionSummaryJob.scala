@@ -35,17 +35,18 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   val jobName = "CollectionSummaryJob"
 
   private val columnsOrder = List("Published by", "Batch id", "Collection id", "Collection name", "Batch start date", "Batch end date", "Total Enrolments", "Total Completion", "Total Enrolment from same org", "Total Completion from same org",
-    "Is certified course", "Total Certificate issues", "Average elapsed time to complete the course");
+    "Is certified course", "Total Certificate issued", "Average elapsed time to complete the course");
 
   private val columnMapping = Map("batchid" -> "Batch id",
     "publishedBy" -> "Published by",
     "courseid" -> "Collection id", "collectionName" -> "Collection name",
     "startdate" -> "Batch start date",
-    "enddate" -> "Batch end date", "totalEnrolledUsers" -> "Total enrolments", "completedUserCount" -> "Total completion",
-    "sameOrgEnrolledCount" -> "Total enrolment from same org", "sameOrgCompletedCount" -> "Total completion from same org",
+    "enddate" -> "Batch end date", "enrolledUsersCount" -> "Total enrolments", "completionUserCount" -> "Total completion",
+    "sameOrgEnrolledUserCount" -> "Total enrolment from same org", "sameOrgCompletedUserCount" -> "Total completion from same org",
     "isCertified" -> "Is certified course",
-    "totalCertificationIssuedCount" -> "Total certificate issues",
-    "avgElapsedTime" -> "Average elapsed time to complete the course")
+    "avgElapsedTime" -> "Average elapsed time to complete the course",
+    "certificatedIssuedCount" -> "Total Certificate issued"
+  )
 
 
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -114,9 +115,9 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
       .withColumn("collectionName", col("name"))
       .withColumn("publishedBy", concat_ws(", ", col("organisation")))
-      .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
-      .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
-      .withColumn("isCertified", when((col("isPDFCertificatedIssued") === "Y" || col("isSVGCertificatedIssued") === "Y"), "Y").otherwise("N"))
+      .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, true).otherwise(false))
+      .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, true).otherwise(false))
+      .withColumn("isCertified", when((col("isPDFCertificatedIssued") === true || col("isSVGCertificatedIssued") === true), "Y").otherwise("N"))
       .withColumn("isCompleted", when((col("status") === 2), true).otherwise(false))
       .withColumn("isSameOrgUserEnrolled", when((col("userchannel") === col("channel")), true).otherwise(false))
       .withColumn("isSameOrgUserCompleted", when((col("userchannel") === col("channel") && col("status") === 2), true).otherwise(false))
@@ -129,30 +130,27 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   }
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
-    val computedDF =
-    // Total user completed the course irrespective or org
-      transformedDF.groupBy("courseid", "batchid", "isCompleted").count().withColumnRenamed("count", "total_user_completion")
-        .withColumn("completedUserCount", when(col("isCompleted") === true, col("total_user_completion")).otherwise(0))
-        .drop("isCompleted", "total_user_completion")
-        // Enrolment count by orgs
-        .join(transformedDF.groupBy("courseid", "batchid", "isSameOrgUserEnrolled").count().withColumnRenamed("count", "same_org_enrolled_count")
-          .withColumn("sameOrgEnrolledCount", when(col("isSameOrgUserEnrolled") === true, col("same_org_enrolled_count")).otherwise(0)),
-          Seq("courseid", "batchid"), "inner").drop("isSameOrgUserEnrolled", "same_org_enrolled_count")
-        // Completion count by orgs
-        .join(transformedDF.groupBy("courseid", "batchid", "isSameOrgUserCompleted").count().withColumnRenamed("count", "same_org_completed_count")
-          .withColumn("sameOrgCompletedCount", when(col("isSameOrgUserCompleted") === true, col("same_org_completed_count")).otherwise(0)), Seq("courseid", "batchid"), "inner")
-        .drop("isSameOrgUserCompleted", "same_org_completed_count")
-        // Certification issue count
-        .join(transformedDF.groupBy("courseid", "batchid", "isCertified").count().withColumnRenamed("count", "certificate_issue_count")
-          .withColumn("totalCertificationIssuedCount", when(col("isCertified") === "Y", col("certificate_issue_count")).otherwise(0)), Seq("courseid", "batchid"), "inner")
-        .drop("isCertified", "certificate_issue_count")
-        // Total Enrolled Users
-        .join(transformedDF.groupBy("courseid", "batchid").count().withColumnRenamed("count", "totalEnrolledUsers"), Seq("courseid", "batchid"), "inner")
 
-    transformedDF.join(computedDF, Seq("courseid", "batchid"), "inner")
-      // To Compute the Avg Elapsed Time
-      .withColumn("avgElapsedTime", transformedDF.col("diffInMinutes") / computedDF.col("completedUserCount"))
-      .select("batchid", "courseid", "collectionName", "publishedBy", "startdate", "enddate", "totalEnrolledUsers", "completedUserCount", "sameOrgEnrolledCount", "sameOrgCompletedCount", "totalCertificationIssuedCount", "isCertified", "avgElapsedTime").dropDuplicates("courseid", "batchid")
+    val certificates = transformedDF.groupBy("batchid", "courseid", "isCertified").count().withColumnRenamed("count", "certificatedIssuedCount")
+      .filter(col("isCertified") === "Y")
+
+    val completedUserCount = transformedDF.groupBy("courseid", "batchid", "isCompleted").count().withColumnRenamed("count", "completionUserCount")
+      .filter(col("isCompleted") === true)
+
+    val totalEnrolledUsers = transformedDF.groupBy("courseid", "batchid").count().withColumnRenamed("count", "enrolledUsersCount")
+
+    val sameOrgEnrolledUserCount = transformedDF.groupBy("courseid", "batchid", "isSameOrgUserEnrolled").count().withColumnRenamed("count", "sameOrgEnrolledUserCount")
+      .filter(col("isSameOrgUserEnrolled") === true)
+    val sameOrgCompletedUserCount = transformedDF.groupBy("courseid", "batchid", "isSameOrgUserCompleted").count().withColumnRenamed("count", "sameOrgCompletedUserCount")
+      .filter(col("isSameOrgUserCompleted") === true)
+    val computedDF = transformedDF.join(totalEnrolledUsers, Seq("courseid", "batchid"), "left_outer").dropDuplicates("courseid", "batchid")
+      .join(certificates, Seq("courseid", "batchid", "isCertified"), "left_outer")
+      .join(completedUserCount, Seq("courseid", "batchid", "isCompleted"), "left_outer")
+      .join(sameOrgEnrolledUserCount, Seq("courseid", "batchid", "isSameOrgUserEnrolled"), "left_outer")
+      .join(sameOrgCompletedUserCount, Seq("courseid", "batchid", "isSameOrgUserCompleted"), "left_outer")
+      .withColumn("avgElapsedTime", transformedDF.col("diffInMinutes") / col("completionUserCount"))
+      .select("batchid", "courseid", "collectionName", "publishedBy", "startdate", "enddate", "enrolledUsersCount", "completionUserCount", "sameOrgEnrolledUserCount", "sameOrgCompletedUserCount", "certificatedIssuedCount", "isCertified", "avgElapsedTime")
+    computedDF
   }
 
   def saveToBlob(reportData: DataFrame): Unit = {
