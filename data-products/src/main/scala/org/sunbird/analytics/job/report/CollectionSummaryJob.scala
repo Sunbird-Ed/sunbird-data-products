@@ -135,18 +135,19 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
 
     val completedUserCount = transformedDF.groupBy("courseid", "batchid", "status").count().withColumnRenamed("count", "completionUserCount")
       .filter(col("status") === 2)
+
     val totalEnrolledUsers = transformedDF.groupBy("courseid", "batchid").count().withColumnRenamed("count", "enrolledUsersCount")
     val sameOrgEnrolledUserCount = transformedDF.groupBy("courseid", "batchid", "isSameOrgUserEnrolled").count().withColumnRenamed("count", "sameOrgEnrolledUserCount")
       .filter(col("isSameOrgUserEnrolled") === true)
     val sameOrgCompletedUserCount = transformedDF.groupBy("courseid", "batchid", "isSameOrgUserCompleted").count().withColumnRenamed("count", "sameOrgCompletedUserCount")
       .filter(col("isSameOrgUserCompleted") === true)
-    val computedDF = transformedDF.join(totalEnrolledUsers, Seq("courseid", "batchid"), "left_outer")
+    val computedDF = transformedDF.dropDuplicates("courseid", "batchid").join(totalEnrolledUsers, Seq("courseid", "batchid"), "left_outer")
       .join(completedUserCount, Seq("courseid", "batchid", "status"), "left_outer")
       .join(certificates, Seq("courseid", "batchid", "isCertified"), "left_outer")
       .join(sameOrgEnrolledUserCount, Seq("courseid", "batchid", "isSameOrgUserEnrolled"), "left_outer")
       .join(sameOrgCompletedUserCount, Seq("courseid", "batchid", "isSameOrgUserCompleted"), "left_outer")
       .withColumn("avgElapsedTime", transformedDF.col("diffInMinutes") / col("completionUserCount"))
-      .select("batchid", "courseid", "collectionName", "publishedBy", "startdate", "enddate", "enrolledUsersCount", "completionUserCount", "sameOrgEnrolledUserCount", "sameOrgCompletedUserCount", "certificatedIssuedCount", "isCertified", "avgElapsedTime").dropDuplicates("courseid", "batchid")
+      .select("batchid", "courseid", "collectionName", "publishedBy", "startdate", "enddate", "enrolledUsersCount", "completionUserCount", "sameOrgEnrolledUserCount", "sameOrgCompletedUserCount", "certificatedIssuedCount", "isCertified", "avgElapsedTime")
     computedDF
   }
 
