@@ -103,7 +103,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val courseIds = processBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
     val courseInfo = CourseUtils.getCourseInfo(courseIds, 500).toDF("framework", "identifier", "name", "channel", "batches", "organisation")
     JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
-    val filteredBatches = processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "left_outer")
+    val filteredBatches = processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "inner")
       .select(processBatches.col("*"), courseInfo.col("identifier"), courseInfo.col("channel"), courseInfo.col("name"), courseInfo.col("organisation"))
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
       .withColumn("collectionName", col("name"))

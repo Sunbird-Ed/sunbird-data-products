@@ -225,7 +225,7 @@ object CourseUtils {
     val subCourseIds = courseIds.grouped(maxSize).toList
     val responses = Future.traverse(subCourseIds)(ids => {
       JobLogger.log(s"Batch Size Invoke ${ids.size}", None, INFO)
-      fetchContents(JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
+      fetchContents(JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> Array("Live")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
     })
     Await.result(responses, 60.seconds).flatten
   }
