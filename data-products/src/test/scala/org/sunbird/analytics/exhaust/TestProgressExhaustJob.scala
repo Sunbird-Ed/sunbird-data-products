@@ -5,11 +5,13 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.exhaust.collection.ProgressExhaustJob
+import org.sunbird.analytics.exhaust.collection.{AssessmentData, ProgressExhaustJob}
 import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisCacheUtil}
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
+
+import scala.collection.JavaConverters._
 
 case class ProgressExhaustReport(`Collection Id`: String, `Collection Name`: String, `Batch Id`: String, `Batch Name`: String, `User UUID`: String, `State`: String, `District`: String, `Org Name`: String,
                                 `School Id`: String, `School Name`: String, `Block Name`: String, `Declared Board`: String, `Enrolment Date`: String, `Completion Date`: String, `Certificate Status`: String, `Progress`: String,
@@ -83,9 +85,37 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList()
-    batch1Results.size() should be (4)
+      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
+
+    batch1Results.size should be (4)
+    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1131350140968632321230")
+    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("Test_TextBook_name_5197942513")
+    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
+    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
+    batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
+    batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
+    batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
+    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List("27/10/2020")
+    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
+
+    while(pResponse.next()) {
+      pResponse.getString("status") should be ("SUCCESS")
+      pResponse.getString("err_message") should be ("")
+      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
+      pResponse.getString("download_urls") should be ("{reports/progress-exhaust/batch-001_progress_20201027.zip}")
+      pResponse.getString("dt_file_created") should be (null)
+      pResponse.getString("iteration") should be ("0")
+    }
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
+
+    //Test coverage for filterAssessmentsFromHierarchy method
+    val assessmentData = ProgressExhaustJob.filterAssessmentsFromHierarchy(List(), List(), AssessmentData("do_1131350140968632321230", List()))
+    assessmentData.courseid should be ("do_1131350140968632321230")
+    assert(assessmentData.assessmentIds.isEmpty)
+
   }
 }

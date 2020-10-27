@@ -12,6 +12,8 @@ import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisCacheUtil}
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
+import scala.collection.JavaConverters._
+
 
 case class ResponseExhaustReport(`Collection Id`: String, `Collection Name`: String, `Batch Id`: String, `Batch Name`: String, `User UUID`: String,
                                 `QuestionSet Id`: String, `QuestionSet Title`: String, `Attempt Id`: String, `Attempted On`: String, `Question Id` : String,
@@ -87,9 +89,35 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     implicit val responseExhaustEncoder = Encoders.product[ResponseExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$filePath.csv").as[ResponseExhaustReport].collectAsList()
+      .load(s"$outputLocation/$filePath.csv").as[ResponseExhaustReport].collectAsList().asScala
+    batch1Results.size should be (6)
 
-//    batch1Results.size() should be (2)
+    val user1Result = batch1Results.filter(f => f.`User UUID`.equals("user-001"))
+    user1Result.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1131350140968632321230")
+    user1Result.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
+    user1Result.map(f => f.`User UUID`).toList should contain atLeastOneElementOf List("user-001")
+    user1Result.map(f => f.`Attempt Id`).toList should contain atLeastOneElementOf List("attempat-001")
+    user1Result.map(f => f.`QuestionSet Id`).toList should contain atLeastOneElementOf List("do_1128870328040161281204", "do_112876961957437440179")
+    user1Result.map(f => f.`QuestionSet Title`).toList should contain atLeastOneElementOf List("SelfAssess for course", "Assessment score report using summary plugin")
+    user1Result.map(f => f.`Question Id`).toList should contain theSameElementsAs List("do_213019475454476288155", "do_213019970118279168165", "do_213019972814823424168", "do_2130256513760624641171")
+    user1Result.map(f => f.`Question Type`).toList should contain theSameElementsAs List("mcq", "mcq", "mtf", "mcq")
+    user1Result.map(f => f.`Question Title`).toList should contain atLeastOneElementOf List("testQuestiontextandformula", "test with formula")
+    user1Result.map(f => f.`Question Description`).toList should contain atLeastOneElementOf  List("testQuestiontextandformula")
+    user1Result.map(f => f.`Question Duration`).toList should contain theSameElementsAs List("1", "1", "2", "12")
+    user1Result.map(f => f.`Question Score`).toList should contain theSameElementsAs List("1.0", "1.0", "0.33", "10.0")
+    user1Result.map(f => f.`Question Max Score`).toList should contain theSameElementsAs List("1.0", "1.0", "1.0", "10.0")
+    user1Result.map(f => f.`Question Options`).head should be ("""[{'1':'{'text':'A=pi r^2'}'},{'2':'{'text':'no'}'},{'answer':'{'correct':['1']}'}]""")
+    user1Result.map(f => f.`Question Response`).head should be ("""[{'1':'{'text':'A=pi r^2'}'}]""")
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='response-exhaust'")
+
+    while(pResponse.next()) {
+      pResponse.getString("err_message") should be ("")
+      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
+      pResponse.getString("download_urls") should be ("{reports/response-exhaust/batch-001_response_20201027.zip}")
+      pResponse.getString("dt_file_created") should be (null)
+      pResponse.getString("iteration") should be ("0")
+    }
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
