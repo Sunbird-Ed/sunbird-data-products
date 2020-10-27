@@ -4,6 +4,7 @@ import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -77,12 +78,13 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
   }
+
   // $COVERAGE-ON$
 
   def getUserData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema
     fetchData(spark, userCacheDBSettings, "org.apache.spark.sql.redis", schema)
-      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).persist(StorageLevel.MEMORY_ONLY)
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
   }
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -95,7 +97,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "userchannel").persist(StorageLevel.MEMORY_ONLY)
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "userchannel")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config, batchList)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "left_outer").drop("completionpercentage", "active")
@@ -108,18 +110,19 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
       .withColumn("collectionName", col("name"))
       .withColumn("publishedBy", concat_ws(", ", col("organisation")))
-      .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, true).otherwise(false))
-      .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, true).otherwise(false))
-      .withColumn("isCertified", when((col("isPDFCertificatedIssued") === true || col("isSVGCertificatedIssued") === true), "Y").otherwise("N"))
+      .withColumn("isCertified", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y")
+        .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       .withColumn("isSameOrgUserEnrolled", when((col("userchannel") === col("channel")), true).otherwise(false))
       .withColumn("isSameOrgUserCompleted", when((col("userchannel") === col("channel") && col("status") === 2), true).otherwise(false))
-      .withColumn("enrolDate", to_timestamp(col("enrolleddate"), fmt = "yyyy-MM-dd HH:mm:ss"))
-      .withColumn("completedDate", to_timestamp(col("completedon"), fmt = "yyyy-MM-dd HH:mm:ss"))
-      .withColumn("diffInMinutes", round(col("completedDate").cast(LongType) - col("enrolDate").cast(LongType)) / 60) // Converting to mins
-      .drop("isPDFCertificatedIssued", "isSVGCertificatedIssued").persist(StorageLevel.MEMORY_ONLY)
-
-    computeValues(filteredBatches)
+      .withColumn("diffInMinutes", computeElapsedTime(to_timestamp(col("completedon"), fmt = "yyyy-MM-dd HH:mm:ss").cast(LongType), to_timestamp(col("enrolleddate"), fmt = "yyyy-MM-dd HH:mm:ss").cast(LongType))).persist(StorageLevel.MEMORY_ONLY) // Converting to mins
+    val res = computeValues(filteredBatches)
+    filteredBatches.unpersist()
+    res
   }
+
+  val computeElapsedTime: UserDefinedFunction = udf((completedDate: Long, enrolDate: Long) => {
+    (completedDate - enrolDate) / 60
+  })
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
 
