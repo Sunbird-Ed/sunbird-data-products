@@ -17,48 +17,58 @@
                 },
                 {
                   "type": "path",
-                  "name": "badgeAssertions_assertionId",
-                  "expr": "$.data.badgeAssertions[*].assertionId"
-                },
-                {
-                  "type": "path",
-                  "name": "badgeAssertions_badgeClassId",
-                  "expr": "$.data.badgeAssertions[*].badgeClassId"
-                },
-                {
-                  "type": "path",
-                  "name": "badgeAssertions_badgeClassImage",
-                  "expr": "$.data.badgeAssertions[*].badgeClassImage"
-                },
-                {
-                  "type": "path",
-                  "name": "badgeAssertions_badgeClassName",
-                  "expr": "$.data.badgeAssertions[*].badgeClassName"
-                },
-                {
-                  "type": "path",
-                  "name": "badgeAssertions_badgeId",
-                  "expr": "$.data.badgeAssertions[*].badgeId"
-                },
-                {
-                  "type": "path",
-                  "name": "badgeAssertions_createdTS",
-                  "expr": "$.data.badgeAssertions[*].createdTS"
-                },
-                {
-                  "type": "path",
-                  "name": "badgeAssertions_issuerId",
-                  "expr": "$.data.badgeAssertions[*].issuerId"
-                },
-                {
-                  "type": "path",
-                  "name": "badgeAssertions_status",
-                  "expr": "$.data.badgeAssertions[*].status"
-                },
-                {
-                  "type": "path",
                   "name": "board",
                   "expr": "$.data.board"
+                },
+                {
+                  "type": "path",
+                  "name": "lastStatusChangedOn",
+                  "expr": "$.data.lastStatusChangedOn"
+                },
+                {
+                  "type": "path",
+                  "name": "collectionId",
+                  "expr": "$.data.collectionId"
+                },
+                {
+                  "type": "path",
+                  "name": "organisationId",
+                  "expr": "$.data.organisationId"
+                },
+                {
+                  "type": "path",
+                  "name": "acceptedContents",
+                  "expr": "$.data.acceptedContents"
+                },
+                {
+                  "type": "path",
+                  "name": "rejectedContents",
+                  "expr": "$.data.rejectedContents"
+                },
+                {
+                  "type": "path",
+                  "name": "chapterCount",
+                  "expr": "$.data.chapterCount"
+                },
+                {
+                  "type": "path",
+                  "name": "sampleContentCount",
+                  "expr": "$.data.sampleContentCount"
+                },
+                {
+                  "type": "path",
+                  "name": "mvcContentCount",
+                  "expr": "$.data.mvcContentCount"
+                },
+                {
+                  "type": "path",
+                  "name": "sampleContent",
+                  "expr": "$.data.sampleContent"
+                },
+                {
+                  "type": "path",
+                  "name": "unitIdentifiers",
+                  "expr": "$.data.unitIdentifiers"
                 },
                 {
                   "type": "path",
@@ -420,39 +430,47 @@
                 },
                 {
                   "type": "string",
-                  "name": "badgeAssertions_assertionId"
-                },
-                {
-                  "type": "string",
-                  "name": "badgeAssertions_badgeClassId"
-                },
-                {
-                  "type": "string",
-                  "name": "badgeAssertions_badgeClassImage"
-                },
-                {
-                  "type": "string",
-                  "name": "badgeAssertions_badgeClassName"
-                },
-                {
-                  "type": "string",
-                  "name": "badgeAssertions_badgeId"
-                },
-                {
-                  "type": "string",
-                  "name": "badgeAssertions_createdTS"
-                },
-                {
-                  "type": "string",
-                  "name": "badgeAssertions_issuerId"
-                },
-                {
-                  "type": "string",
-                  "name": "badgeAssertions_status"
-                },
-                {
-                  "type": "string",
                   "name": "board"
+                },
+                {
+                  "type": "string",
+                  "name": "lastStatusChangedOn"
+                },
+                {
+                  "type": "string",
+                  "name": "collectionId"
+                },
+                {
+                  "type": "string",
+                  "name": "organisationId"
+                },
+                {
+                  "type": "string",
+                  "name": "acceptedContents"
+                },
+                {
+                  "type": "string",
+                  "name": "rejectedContents"
+                },
+                {
+                  "type": "number",
+                  "name": "chapterCount"
+                },
+                {
+                  "type": "number",
+                  "name": "sampleContentCount"
+                },
+                {
+                  "type": "string",
+                  "name": "mvcContentCount"
+                },
+                {
+                  "type": "boolean",
+                  "name": "sampleContent"
+                },
+                {
+                  "type": "string",
+                  "name": "unitIdentifiers"
                 },
                 {
                   "type": "string",
