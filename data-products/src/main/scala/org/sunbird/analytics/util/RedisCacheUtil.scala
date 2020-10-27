@@ -50,10 +50,4 @@ class RedisCacheUtil {
     jedis.select(dbIndex)
     jedis
   }
-  def close(): Unit = {
-    try jedisPool.close()
-    catch {
-      case e: Exception => throw e
-    }
-  }
 }
