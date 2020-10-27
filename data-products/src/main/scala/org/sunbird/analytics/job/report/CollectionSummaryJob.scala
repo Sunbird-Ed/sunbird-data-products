@@ -124,7 +124,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("completedDate", to_timestamp(col("completedon"), fmt = "yyyy-MM-dd HH:mm:ss"))
       .withColumn("diffInMinutes", round(col("completedDate").cast(LongType) - col("enrolDate").cast(LongType)) / 60) // Converting to mins
       .drop("isPDFCertificatedIssued", "isSVGCertificatedIssued").persist(StorageLevel.MEMORY_ONLY)
-    // Compute the values for all
+
     computeValues(filteredBatches)
   }
 
