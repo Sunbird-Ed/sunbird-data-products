@@ -118,7 +118,6 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("isPDFCertificatedIssued", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, true).otherwise(false))
       .withColumn("isSVGCertificatedIssued", when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, true).otherwise(false))
       .withColumn("isCertified", when((col("isPDFCertificatedIssued") === true || col("isSVGCertificatedIssued") === true), "Y").otherwise("N"))
-      .withColumn("isCompleted", when((col("status") === 2), true).otherwise(false))
       .withColumn("isSameOrgUserEnrolled", when((col("userchannel") === col("channel")), true).otherwise(false))
       .withColumn("isSameOrgUserCompleted", when((col("userchannel") === col("channel") && col("status") === 2), true).otherwise(false))
       .withColumn("enrolDate", to_timestamp(col("enrolleddate"), fmt = "yyyy-MM-dd HH:mm:ss"))
@@ -134,8 +133,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val certificates = transformedDF.groupBy("batchid", "courseid", "isCertified").count().withColumnRenamed("count", "certificatedIssuedCount")
       .filter(col("isCertified") === "Y")
 
-    val completedUserCount = transformedDF.groupBy("courseid", "batchid", "isCompleted").count().withColumnRenamed("count", "completionUserCount")
-      .filter(col("isCompleted") === true)
+    val completedUserCount = transformedDF.groupBy("courseid", "batchid", "status").count().withColumnRenamed("count", "completionUserCount")
+      .filter(col("status") === 2)
 
     val totalEnrolledUsers = transformedDF.groupBy("courseid", "batchid").count().withColumnRenamed("count", "enrolledUsersCount")
 
@@ -145,7 +144,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .filter(col("isSameOrgUserCompleted") === true)
     val computedDF = transformedDF.join(totalEnrolledUsers, Seq("courseid", "batchid"), "left_outer").dropDuplicates("courseid", "batchid")
       .join(certificates, Seq("courseid", "batchid", "isCertified"), "left_outer")
-      .join(completedUserCount, Seq("courseid", "batchid", "isCompleted"), "left_outer")
+      .join(completedUserCount, Seq("courseid", "batchid", "status"), "left_outer")
       .join(sameOrgEnrolledUserCount, Seq("courseid", "batchid", "isSameOrgUserEnrolled"), "left_outer")
       .join(sameOrgCompletedUserCount, Seq("courseid", "batchid", "isSameOrgUserCompleted"), "left_outer")
       .withColumn("avgElapsedTime", transformedDF.col("diffInMinutes") / col("completionUserCount"))
