@@ -48,7 +48,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     "certificatedIssuedCount" -> "Total Certificate issued"
   )
 
-
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
     JobLogger.init(jobName)
     JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
@@ -70,21 +70,14 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     }
   }
 
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
     DecryptUtil.initialise()
     spark.setCassandraConf("UserCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.user.cluster.host")))
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
   }
-
-  def loadData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {
-    if (schema.nonEmpty) {
-      spark.read.schema(schema).format(url).options(settings).load()
-    }
-    else {
-      spark.read.format(url).options(settings).load()
-    }
-  }
+  // $COVERAGE-ON$
 
   def getUserData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val schema = Encoders.product[UserData].schema

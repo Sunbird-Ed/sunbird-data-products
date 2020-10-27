@@ -6,6 +6,7 @@ import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
+import org.sunbird.analytics.job.report.CollectionSummaryJob.saveToBlob
 import org.sunbird.analytics.util.UserData
 
 import scala.collection.mutable
@@ -93,7 +94,8 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
     val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4","contentFilters": {"request": {"filters": {"framework": "TPD"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}},"reportPath": "course-reports/"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val storageConfig = StorageConfig("local", "", "/tmp/course-metrics")
-    CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData, List())
+    saveToBlob(CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData, List()))
+
   }
 
 }
