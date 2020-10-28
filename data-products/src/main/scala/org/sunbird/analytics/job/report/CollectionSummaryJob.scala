@@ -42,7 +42,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     "courseid" -> "Collection id", "collectionName" -> "Collection name",
     "startdate" -> "Batch start date",
     "enddate" -> "Batch end date", "enrolledUsersCount" -> "Total enrolments", "completionUserCount" -> "Total completion",
-    "isCertified" -> "Has certificate",
+    "hasCertified" -> "Has certificate",
     "certificatedIssuedCount" -> "Total Certificate issued"
   )
 
@@ -107,20 +107,20 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("publishedBy", concat_ws(", ", col("organisation")))
       .withColumn("isCertified", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y")
         .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
-    computeValues(filteredBatches)
+    computeValues(filteredBatches.drop("issued_certificates", "certificates", "userchannel", "identifier", "channel", "name", "organisation").persist(StorageLevel.MEMORY_ONLY))
   }
 
-
   def computeValues(transformedDF: DataFrame): DataFrame = {
-
     val computedDF = transformedDF.groupBy("batchid", "courseid").agg(
       count(when(col("status") === 2, 1)).as("completionUserCount"),
       count(when(col("isCertified") === "Y", 1)).as("certificatedIssuedCount"),
       count(col("userid")).as("enrolledUsersCount")
     )
-    transformedDF.dropDuplicates("courseid", "batchid").join(computedDF, Seq("courseid", "batchid"), "left_outer")
+    computedDF.join(transformedDF.drop("isCertified", "status").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
-      .select("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "enrolledUsersCount", "completionUserCount", "certificatedIssuedCount", "isCertified")
+      .withColumn("hasCertified", when(col("certificatedIssuedCount") > 0, "Y").otherwise("N"))
+      .select("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "enrolledUsersCount", "completionUserCount", "certificatedIssuedCount", "hasCertified")
+
   }
 
   def saveToBlob(reportData: DataFrame): Unit = {
