@@ -88,7 +88,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val schema = Encoders.product[UserData].schema
     fetchData(spark, userCacheDBSettings, "org.apache.spark.sql.redis", schema)
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
-      .withColumn("userstate", when(col("state").isNotNull, col("state")).otherwise("NA"))
+      .withColumn("userstate", when(col("state").isNotNull && col("state") =!= "", col("state")).otherwise("NA"))
   }
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
