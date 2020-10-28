@@ -4,6 +4,7 @@ import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -34,16 +35,22 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJob"
   val jobName = "CollectionSummaryJob"
 
-  private val columnsOrder = List("Published by", "Batch id", "Collection id", "Collection name", "Batch start date", "Batch end date", "Total Enrolments", "Total Completion",
-    "Has certificate", "Total Certificate issued");
+  private val columnsOrder = List(
+    "Published by", "Batch id", "Collection id",
+    "Collection name", "Batch start date", "Batch end date",
+    "State", "Total enrolments By State", "Total completion By State",
+    "Has certificate", "Total Certificate issued by State");
 
   private val columnMapping = Map("batchid" -> "Batch id",
     "publishedBy" -> "Published by",
     "courseid" -> "Collection id", "collectionName" -> "Collection name",
     "startdate" -> "Batch start date",
-    "enddate" -> "Batch end date", "enrolledUsersCount" -> "Total enrolments", "completionUserCount" -> "Total completion",
+    "enddate" -> "Batch end date",
     "hasCertified" -> "Has certificate",
-    "certificatedIssuedCount" -> "Total Certificate issued"
+    "enrolledUsersCountByState" -> "Total enrolments By State",
+    "completionUserCountByState" -> "Total completion By State",
+    "userstate" -> "State",
+    "certificateIssueCount" -> "Total Certificate issued by State"
   )
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
@@ -81,6 +88,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val schema = Encoders.product[UserData].schema
     fetchData(spark, userCacheDBSettings, "org.apache.spark.sql.redis", schema)
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
+      .withColumn("userstate", when(col("state").isNotNull, col("state")).otherwise("NA"))
   }
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -89,11 +97,12 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
         , col("completionpercentage"), col("enrolleddate"), col("completedon"), col("status"), col("certificates"), col("issued_certificates"))
   }
 
+
   def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String])(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "userchannel")
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "userchannel", "userstate")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config, batchList)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "left_outer").drop("completionpercentage", "active")
@@ -111,16 +120,16 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   }
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
-    val computedDF = transformedDF.groupBy("batchid", "courseid").agg(
-      count(when(col("status") === 2, 1)).as("completionUserCount"),
-      count(when(col("isCertified") === "Y", 1)).as("certificatedIssuedCount"),
-      count(col("userid")).as("enrolledUsersCount")
+    // Compute completionCount and enrolCount for state
+    val statePartitionDF = transformedDF.groupBy("batchid", "courseid", "userstate").agg(
+      count(when(col("status") === 2, 1)).as("completionUserCountByState"),
+      count(when(col("isCertified") === "Y", 1)).as("certificateIssueCount"),
+      count(col("userid")).as("enrolledUsersCountByState")
     )
-    computedDF.join(transformedDF.drop("isCertified", "status").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
+    statePartitionDF.join(transformedDF.drop("isCertified", "status", "userstate").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
-      .withColumn("hasCertified", when(col("certificatedIssuedCount") > 0, "Y").otherwise("N"))
-      .select("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "enrolledUsersCount", "completionUserCount", "certificatedIssuedCount", "hasCertified")
-
+      .withColumn("hasCertified", when(col("certificateIssueCount") > 0, "Y").otherwise("N"))
+      .select("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "userstate", "enrolledUsersCountByState", "completionUserCountByState", "certificateIssueCount")
   }
 
   def saveToBlob(reportData: DataFrame): Unit = {
@@ -134,10 +143,10 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
     val columnWithOrder = (columnsOrder ::: dynamicColumns).distinct
     reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
-      .saveToBlobStore(storageConfig, "csv", s"${reportPath}summary-report-${getDate()}", Option(Map("header" -> "true")), None)
+      .saveToBlobStore(storageConfig, "csv", s"${reportPath}summary-report-${getDate}", Option(Map("header" -> "true")), None)
   }
 
-  def getDate(): String = {
+  def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
   }
