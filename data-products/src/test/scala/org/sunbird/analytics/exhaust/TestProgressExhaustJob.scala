@@ -1,9 +1,12 @@
 package org.sunbird.analytics.exhaust
 
+import java.text.SimpleDateFormat
+import java.util.Calendar
+
 import org.apache.spark.sql.{Encoders, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.exhaust.collection.{AssessmentData, ProgressExhaustJob}
 import org.sunbird.analytics.job.report.BaseReportSpec
@@ -96,16 +99,17 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
     batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
     batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
-    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List("27/10/2020")
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(getDate("dd/MM/yyyy").format(Calendar.getInstance().getTime()))
     batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
 
     val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
 
     while(pResponse.next()) {
       pResponse.getString("status") should be ("SUCCESS")
       pResponse.getString("err_message") should be ("")
       pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
-      pResponse.getString("download_urls") should be ("{reports/progress-exhaust/batch-001_progress_20201027.zip}")
+      pResponse.getString("download_urls") should be (s"""{reports/progress-exhaust/batch-001_progress_${reportDate}.zip}""")
       pResponse.getString("dt_file_created") should be (null)
       pResponse.getString("iteration") should be ("0")
     }
@@ -117,5 +121,9 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     assessmentData.courseid should be ("do_1131350140968632321230")
     assert(assessmentData.assessmentIds.isEmpty)
 
+  }
+
+  def getDate(pattern: String): SimpleDateFormat = {
+    new SimpleDateFormat(pattern)
   }
 }

@@ -4,12 +4,15 @@ import org.apache.spark.sql.{Encoders, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
+import org.joda.time.DateTimeZone
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob
 import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisCacheUtil}
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
+
 import scala.collection.JavaConverters._
 
 
@@ -101,7 +104,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
       pResponse.getString("status") should be ("SUCCESS")
       pResponse.getString("err_message") should be ("")
       pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
-      pResponse.getString("download_urls") should be ("{reports/userinfo-exhaust/batch-001_userinfo_20201027.zip}")
+      pResponse.getString("download_urls") should be (s"{reports/userinfo-exhaust/batch-001_userinfo_${getDate()}.zip}")
       pResponse.getString("dt_file_created") should be (null)
       pResponse.getString("iteration") should be ("0")
     }
@@ -221,6 +224,11 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     implicit val config = jobConfig
 
     UserInfoExhaustJob.execute()
+  }
+
+  def getDate(): String = {
+    val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
+    dateFormat.print(System.currentTimeMillis());
   }
 
 }

@@ -12,6 +12,7 @@ import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisCacheUtil}
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
+
 import scala.collection.JavaConverters._
 
 
@@ -114,7 +115,7 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     while(pResponse.next()) {
       pResponse.getString("err_message") should be ("")
       pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
-      pResponse.getString("download_urls") should be ("{reports/response-exhaust/batch-001_response_20201027.zip}")
+      pResponse.getString("download_urls") should be (s"{reports/response-exhaust/batch-001_response_${getDate()}.zip}")
       pResponse.getString("dt_file_created") should be (null)
       pResponse.getString("iteration") should be ("0")
     }
