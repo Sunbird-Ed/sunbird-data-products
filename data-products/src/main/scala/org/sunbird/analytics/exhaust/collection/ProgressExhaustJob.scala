@@ -127,7 +127,6 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     }).collect().head
   }
 
-  // $COVERAGE-OFF$ Disabling scoverage since function is not in use
   def getCollectionAggWithModuleData(batch: CollectionBatch, hierarchyData: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
     import spark.implicits._
@@ -154,7 +153,6 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
 
     resDf.cache()
   }
-  // $COVERAGE-ON$ Enabling scoverage for filterAssessmentsFromHierarchy
 
   def filterAssessmentsFromHierarchy(data: List[Map[String, AnyRef]], assessmentTypes: List[String], prevData: AssessmentData): AssessmentData = {
     if (data.nonEmpty) {
@@ -175,7 +173,6 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       AssessmentData(courseId, assessmentIds)
     } else prevData
   }
-  // $COVERAGE-OFF$ Disabling scoverage since function is not in use
   def parseCourseHierarchy(data: List[Map[String, AnyRef]], levelCount: Int, prevData: CourseData, depthLevel: Int): CourseData = {
     if (levelCount < depthLevel) {
       val list = data.map(childNodes => {
@@ -204,6 +201,5 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       CourseData(courseId, leafNodeCount, level1Data)
     } else prevData
   }
-  // $COVERAGE-ON$ Enabling scoverage
 
 }

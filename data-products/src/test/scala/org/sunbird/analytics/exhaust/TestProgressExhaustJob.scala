@@ -3,12 +3,12 @@ package org.sunbird.analytics.exhaust
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
-import org.apache.spark.sql.{Encoders, SparkSession}
+import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.exhaust.collection.{AssessmentData, ProgressExhaustJob}
+import org.sunbird.analytics.exhaust.collection.{AssessmentData, CollectionBatch, CourseData, ProgressExhaustJob}
 import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisCacheUtil}
 import redis.clients.jedis.Jedis
@@ -19,6 +19,7 @@ import scala.collection.JavaConverters._
 case class ProgressExhaustReport(`Collection Id`: String, `Collection Name`: String, `Batch Id`: String, `Batch Name`: String, `User UUID`: String, `State`: String, `District`: String, `Org Name`: String,
                                 `School Id`: String, `School Name`: String, `Block Name`: String, `Declared Board`: String, `Enrolment Date`: String, `Completion Date`: String, `Certificate Status`: String, `Progress`: String,
                                 `Total Score`: String)
+case class ContentHierarchy(identifier: String, hierarchy: String)
 
 class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseReportsJob {
 
@@ -121,6 +122,44 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     assessmentData.courseid should be ("do_1131350140968632321230")
     assert(assessmentData.assessmentIds.isEmpty)
 
+  }
+
+
+  it should "provide hierarchy data on module level" in {
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    import sqlContext.implicits._
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    var collectionBatch = CollectionBatch("batch-001","do_1131350140968632321230","Basic Java","0130107621805015045","channel-01","channel-01","Test_TextBook_name_5197942513",Some("Yes"))
+    var hierarchyData = List(ContentHierarchy("do_1131350140968632321230","""{"identifier":"do_1131350140968632321230","mimeType":"application/vnd.ekstep.content-collection","visibility":"Default","contentType":"Course","children":[{"parent":"do_112876961957437440179","identifier":"do_1131350140968632321230","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","children":[],"status":"Draft"}]}""")).toDF()
+
+    val hierarchyModuleData = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
+    hierarchyModuleData.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
+    hierarchyModuleData.map(f => f.getString(1)) should contain allElementsOf List("do_1131350140968632321230")
+    hierarchyModuleData.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
+    hierarchyModuleData.map(f => f.getInt(3)) should contain allElementsOf List(100)
+    hierarchyModuleData.map(f => f.getString(4)) should contain allElementsOf List("do_1131350140968632321230")
+    hierarchyModuleData.map(f => f.getInt(5)) should contain allElementsOf List(100)
+
+    // No mimetype, visibility etc available in hierarchy
+    hierarchyData = List(ContentHierarchy("do_1131350140968632321230","""{"children":[{"parent":"do_112876961957437440179","identifier":"do_1131350140968632321230","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","status":"Draft"}]}""")).toDF()
+    val hierarchyModuleData1 = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
+
+    hierarchyModuleData1.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
+    hierarchyModuleData1.map(f => f.getString(1)) should contain allElementsOf List("do_1131350140968632321230")
+    hierarchyModuleData1.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
+    hierarchyModuleData1.map(f => f.getInt(3)) should contain allElementsOf List(100)
+    hierarchyModuleData1.map(f => f.getString(4)) should contain allElementsOf List(null)
+
+    //levelCount is less than depthLevel
+    val data =  List(Map("children" -> List(Map("lastStatusChangedOn" -> "2019-09-19T18:15:56.490+0000","parent" -> "do_112876961957437440179","children" -> List(),"name" -> "content_1","createdOn" -> "2019-09-19T18:15:56.489+0000"," lastUpdatedOn" -> "2019-09-19T18:15:56.490+0000", "identifier" -> "do_1131350140968632321230","description" -> "Test_TextBookUnit_desc_8305852636","versionKey" -> "1568916956489","mimeType" -> "application/vnd.ekstep.content-collection","code" -> "2cb4d698-dc19-4f0c-9990-96f49daff753"," contentType" -> "Course"," status" -> "Draft"," depth" -> "1"," visibility" -> "Default"," index" -> "1))"," identifier" -> "do_1131350140968632321230"," mimeType" -> "application/vnd.ekstep.content-collection"," contentType" -> "Course"," visibility" -> "Default"))))
+    val prevData = CourseData("do_1131350140968632321230","0",List())
+    val parseHierarchyData = ProgressExhaustJob.parseCourseHierarchy(data, 3, prevData, 2)
+    assert(parseHierarchyData.equals(prevData))
   }
 
   def getDate(pattern: String): SimpleDateFormat = {
