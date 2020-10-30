@@ -87,6 +87,12 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("userstate", when(col("state").isNotNull && col("state") =!= "", col("state")).otherwise("NA"))
   }
 
+  def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
+    fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
+      .select("courseid", "batchid", "enddate", "startdate", "cert_templates")
+      .withColumn("hasCertified", when(col("cert_templates").isNotNull, "Y").otherwise("N"))
+  }
+
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, userEnrolmentDBSettings, cassandraUrl, new StructType())
       .filter(lower(col("active")).equalTo("true"))
@@ -99,7 +105,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid",  "userstate")
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "userstate")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "left_outer")
@@ -128,7 +134,6 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     )
     statePartitionDF.join(transformedDF.drop("isCertified", "status", "userstate").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
-      .withColumn("hasCertified", when(col("certificateIssueCount") > 0, "Y").otherwise("N"))
   }
 
   def saveToBlob(reportData: DataFrame, reportPath: String): Unit = {
@@ -161,15 +166,13 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
     val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", true).asInstanceOf[Boolean]
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
-    val courseBatchData = fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
-      .select("courseid", "batchid", "enddate", "startdate")
+    val courseBatchData = getCourseBatch(spark, fetchData)
     val filteredBatches = if (searchFilter.nonEmpty) {
       JobLogger.log("Generating reports only search query", None, INFO)
       val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF("framework", "identifier", "name", "channel", "batches", "organisation")
         .withColumnRenamed("name", "collectionName")
         .withColumn("publishedBy", concat_ws(", ", col("organisation")))
       courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
-
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
       courseBatchData.filter(col("startdate").isNotNull && to_date(col("startdate"), "yyyy-MM-dd").geq(lit(startDate))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
