@@ -30,6 +30,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
+  private val filterColumns = Seq("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "userstate", "enrolledUsersCountByState", "completionUserCountByState", "certificateIssueCount")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJob"
   val jobName = "CollectionSummaryJob"
@@ -89,22 +90,21 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, userEnrolmentDBSettings, cassandraUrl, new StructType())
       .filter(lower(col("active")).equalTo("true"))
-      .select(col("batchid"), col("userid"), col("courseid"), col("enrolleddate"), col("completedon"), col("status"), col("certificates"), col("issued_certificates"))
+      .withColumn("isCertified", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y")
+        .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
+      .select(col("batchid"), col("userid"), col("courseid"), col("enrolleddate"), col("completedon"), col("status"), col("isCertified"))
   }
 
   def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "userchannel", "userstate")
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid",  "userstate")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "left_outer")
 
-    val filteredBatches = processBatches.select(col("*"))
-      .withColumn("isCertified", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Y")
-        .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
-    val processedBatches = computeValues(filteredBatches.drop("issued_certificates", "certificates", "userchannel"))
+    val processedBatches = computeValues(processBatches)
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val reportDF = if (searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
@@ -116,7 +116,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     } else {
       processedBatches
     }
-    reportDF.select("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "userstate", "enrolledUsersCountByState", "completionUserCountByState", "certificateIssueCount")
+    reportDF.select(filterColumns.head, filterColumns.tail: _*)
   }
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
