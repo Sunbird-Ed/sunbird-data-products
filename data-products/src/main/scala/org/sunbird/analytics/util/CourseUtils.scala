@@ -1,7 +1,7 @@
 package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, explode, lit, to_date}
+import org.apache.spark.sql.functions.{col, lit, to_date}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.storage.StorageLevel
@@ -9,11 +9,16 @@ import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
+import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
-import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
+import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.cloud.storage.conf.AppConf
+
+import scala.collection.immutable.List
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Future, _}
+import scala.concurrent.duration._
 
 //Getting live courses from compositesearch
 case class CourseDetails(result: Result)
@@ -22,7 +27,7 @@ case class CourseInfo(channel: String, identifier: String, name: String)
 
 case class CourseResponse(result: CourseResult, responseCode: String)
 case class CourseResult(count: Int, content: List[CourseBatchInfo])
-case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo])
+case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo], organisation: List[String])
 case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
@@ -163,7 +168,6 @@ object CourseUtils {
 
   def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
-    import sqlContext.implicits._
     val apiUrl = Constants.COMPOSITE_SEARCH_URL
     val request =
       s"""{
@@ -181,7 +185,7 @@ object CourseUtils {
     val response = RestUtil.post[CourseResponse](apiUrl, request)
     if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
       response.result.content.head
-    } else CourseBatchInfo("","","","",List())
+    } else CourseBatchInfo("","","","",List(), List())
   }
 
   def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
@@ -214,5 +218,30 @@ object CourseUtils {
     JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
     courseBatchDF.unpersist(true)
     activeBatchList
+  }
+
+
+  def getCourseInfo(courseIds: List[String], request: Option[Map[String, AnyRef]], maxSize: Int): List[CourseBatchInfo] = {
+    if (courseIds.nonEmpty) {
+      val subCourseIds = courseIds.grouped(maxSize).toList
+      val responses = Future.traverse(subCourseIds)(ids => {
+        JobLogger.log(s"Batch Size Invoke ${ids.size}", None, INFO)
+        fetchContents(JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> Array("Live")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
+      })
+      Await.result(responses, 60.seconds).flatten
+    } else {
+      val response = fetchContents(JSONUtils.serialize(request))
+      Await.result(response, 60.seconds)
+    }
+  }
+
+  def fetchContents(query: String): Future[List[CourseBatchInfo]] = {
+    Future {
+      val apiUrl = Constants.COMPOSITE_SEARCH_URL
+      val response = RestUtil.post[CourseResponse](apiUrl, query)
+      if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+        response.result.content
+      } else List[CourseBatchInfo]()
+    }
   }
 }
