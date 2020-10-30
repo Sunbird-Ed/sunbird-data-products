@@ -90,7 +90,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
       .select("courseid", "batchid", "enddate", "startdate", "cert_templates")
-      .withColumn("hasCertified", when(col("cert_templates").isNotNull, "Y").otherwise("N"))
+      .withColumn("hasCertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
   }
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
