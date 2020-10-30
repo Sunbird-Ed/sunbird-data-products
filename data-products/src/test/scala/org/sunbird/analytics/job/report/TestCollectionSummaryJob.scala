@@ -74,7 +74,7 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
-      .returning(courseBatchDF)
+      .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
@@ -95,6 +95,7 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val storageConfig = StorageConfig("local", "", "/tmp/course-metrics")
     val data = CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData)
+    println("dataa" + data.show(false))
     saveToBlob(data, "collection-summary-reports/")
 
   }
