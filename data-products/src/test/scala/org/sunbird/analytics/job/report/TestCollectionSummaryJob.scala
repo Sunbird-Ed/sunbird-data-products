@@ -94,7 +94,8 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
     val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4","contentFilters": {"request": {"filters": {"framework": "TPD"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}},"reportPath": "course-reports/"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val storageConfig = StorageConfig("local", "", "/tmp/course-metrics")
-    saveToBlob(CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData, List()))
+    val data = CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData)
+    saveToBlob(data, "collection-summary-reports/")
 
   }
 
