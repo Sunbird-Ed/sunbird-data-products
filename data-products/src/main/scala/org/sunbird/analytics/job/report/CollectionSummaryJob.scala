@@ -130,7 +130,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     // Compute completionCount and enrolCount for state
     val statePartitionDF = transformedDF.groupBy("batchid", "courseid", "userstate").agg(
       count(when(col("status") === 2, 1)).as("completionUserCountByState"),
-      // Adding this status check, Since some of inprogress users also got the certificates in the cassandra table.
+      // Adding this status check, Since some of in-progress(status = 1) users also got the certificates in the cassandra table.
       count(when(col("isCertified") === "Y" && col("status") === 2, 1)).as("certificateIssueCount"),
       count(col("userid")).as("enrolledUsersCountByState")
     )
