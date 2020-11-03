@@ -222,7 +222,6 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
     val store = config("store")
     val conf = config.get("etbFileConfig").get.asInstanceOf[Map[String, AnyRef]]
-
     val url = store match {
       case "local" =>
         conf("filePath").asInstanceOf[String]
