@@ -40,7 +40,6 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
         md5(concat(groupedDF.col("contentid"), groupedDF.col("courseid"),
           groupedDF.col("batchid"), groupedDF.col("userid"), lit(System.currentTimeMillis()))))
       .select(groupedDF.col("*"), col("attemptId"))
-    joinedDF.show(false)
 
     val outputData = joinedDF.rdd.map{f =>
       val assessmentTs: Long = System.currentTimeMillis()
@@ -77,9 +76,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
       val event = JSONUtils.serialize(f)
       AssessEvent(contentId, batchId, courseId, userId, event)
     }.toDF()
-    df.show( false)
     val groupedDF = df.groupBy("contentid","batchid","courseid","userid").agg(collect_list(col("assessEvent")).as("assessEventList"))
-    groupedDF.show(false)
     groupedDF
   }
 
