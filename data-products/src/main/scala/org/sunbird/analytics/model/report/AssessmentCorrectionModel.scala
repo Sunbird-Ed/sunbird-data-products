@@ -79,10 +79,4 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
     val groupedDF = df.groupBy("contentid","batchid","courseid","userid").agg(collect_list(col("assessEvent")).as("assessEventList"))
     groupedDF
   }
-
-  def isfieldEmpty(data: AssessEvent): Boolean = {
-  if (null != data.contentid && !data.contentid.isEmpty && null != data.userid && !data.userid.isEmpty &&
-    null != data.courseid && !data.courseid.isEmpty && null != data.batchid && !data.batchid.isEmpty) true
-  else false
-  }
 }
