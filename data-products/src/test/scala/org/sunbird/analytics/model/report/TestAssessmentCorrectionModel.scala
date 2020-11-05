@@ -43,9 +43,6 @@ class TestAssessmentCorrectionModel extends SparkSpec(null) with MockFactory {
     val data = loadFile[String]("src/test/resources/assessment-correction/test-data.log");
     val output = AssessmentCorrectionModel.execute(data, None)
 
-    println("output count: " + output.count())
-    output.foreach(f => println("output: " + f))
-
     output.count() should be (2)
 
     val assessEvent = output.collect()
@@ -53,6 +50,10 @@ class TestAssessmentCorrectionModel extends SparkSpec(null) with MockFactory {
     assessEvent.map {f => f.courseId }.toList should contain allElementsOf List("do_2130694768154214401105")
     assessEvent.map {f => f.userId }.toList should contain allElementsOf List("08631a74-4b94-4cf7-a818-831135248a4a")
     assessEvent.map {f => f.contentId }.toList should contain theSameElementsAs  List("do_2130252196790026241869", "do_2130252187329249281308")
+
+    val events = assessEvent.map {f=> f.events}.toList
+    events.size should be (2)
+    events.head.get(0) should be ("""{"eid":"ASSESS","ets":1595396274835,"ver":"3.1","mid":"ASSESS:3a2fefaf3b8db7ddbb2c41c3d28ddebb","actor":{"id":"08631a74-4b94-4cf7-a818-831135248a4a","type":"User"},"context":{"channel":"01269878797503692810","pdata":{"id":"preprod.diksha.portal","ver":"3.0.4","pid":"sunbird-portal.contentplayer","model":null},"env":"contentplayer","sid":"x9uYc2nb7NJOWlqPH5S0bY4YfgFZtF04","did":"ceec93de99b72cfd08e3f679418c2c3b","cdata":[{"id":"do_2130694768154214401105","type":"course"},{"id":"01306947998293196823","type":"batch"},{"id":"eb4bb0ae270af59b7e4f350b0e937486","type":"ContentSession"},{"id":"6044429e53cfbd6d528d85cc24d06894","type":"PlaySession"}],"rollup":{"l1":"01269878797503692810"}},"object":{"id":"do_2130252196790026241869","type":"Content","ver":"1","rollup":{"l1":"do_2130694768149053441103","l2":"do_2130694768154214401105","l3":"do_2130252196790026241869"},"subtype":null,"parent":null},"edata":{"duration":1,"item":{"id":"do_2130251387497431041150","maxscore":1,"exlength":0,"params":[{"1":"{\"text\":\"pink\\n\"}"},{"2":"{\"text\":\"red\\n\"}"},{"answer":"{\"correct\":[\"1\"]}"}],"uri":"","desc":"","title":"which color is good ?\n","mmc":[],"mc":[]},"pass":"No","score":0,"resvalues":[],"rating":0.0,"index":3,"data":null,"sort":null,"correlationid":null,"filters":null,"size":0},"tags":["01269878797503692810"],"flags":{"derived_location_retrieved":false,"device_data_retrieved":false,"user_data_retrieved":false,"dialcode_data_retrieved":false,"content_data_retrieved":false,"collection_data_retrieved":false},"@timestamp":"2020-07-22T05:38:00.120Z"}""")
   }
 
 }
