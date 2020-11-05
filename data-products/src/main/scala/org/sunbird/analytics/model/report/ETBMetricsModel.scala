@@ -10,11 +10,13 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{AlgoOutput, DataFetcher, Empty, FrameworkContext, IBatchModelTemplate, JobConfig, Level, Output}
-import org.ekstep.analytics.model.ReportConfig
+import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
 import org.ekstep.analytics.util.Constants
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.sunbird.analytics.util.{CourseUtils, TextBookUtils}
 import org.sunbird.cloud.storage.conf.AppConf
+import org.apache.spark.sql.functions._
+
 
 case class TenantInfo(id: String, slug: String)
 case class TenantResponse(result: TenantResult)
@@ -103,6 +105,8 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
         reportMap = updateReportPath(mergeConf, reportConfig, AppConf.getConfig("dcetextbook.filename"))
         CourseUtils.postDataToBlob(dceDf,f,config.updated("reportConfig",reportMap))
 
+        generateAggReports(etbDf, dceDf, f, List(config, reportConfig, mergeConf))
+
         val dialdceDF = dceDialcodeReport.toDF()
         val dialcodeDCE = dialdceDF.join(scansDF,dialdceDF.col("dialcode")===scansDF.col("dialcodes"),"left_outer")
           .drop("dialcodes","noOfScans","status","nodeType","noOfContent")
@@ -131,12 +135,93 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
     if(mergeMap.nonEmpty) reportConfig.updated("mergeConfig",mergeMap) else reportConfig
   }
 
+  def generateAggReports(etbDf: DataFrame, dceDf: DataFrame, outputConf: OutputConfig, aggConf: List[Map[String, AnyRef]])(implicit sc: SparkContext, fc: FrameworkContext): Unit = {
+    implicit val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    //dce_qr_content_status_grade.csv
+    val dceGradeDf = dceDf.select($"slug",$"contentLinkedQR",$"withoutContentQR",explode_outer(split('gradeLevel,",")).as("Class"))
+      .groupBy("Class","slug").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content")).withColumn("reportName",lit("dce_qr_content_status_grade"))
+      .na.fill("Unknown", Seq("Class"))
+      .orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
+    var reportMap = updateReportPath(aggConf(2), aggConf(1), "dce_qr_content_status_grade.csv")
+    CourseUtils.postDataToBlob(dceGradeDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //dce_qr_content_status_subject.csv
+    val dceSubjectDf = dceDf.select($"slug",$"contentLinkedQR",$"withoutContentQR",explode_outer(split('subject,",")).as("Subject"))
+      .groupBy("Subject","slug").agg(sum("contentLinkedQR").alias("QR Codes with content"),sum("withoutContentQR").alias("QR Codes without content")).withColumn("reportName",lit("dce_qr_content_status_subject"))
+      .na.fill("Unknown", Seq("Subject"))
+      .orderBy("Subject")
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "dce_qr_content_status_subject.csv")
+    CourseUtils.postDataToBlob(dceSubjectDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //dce_qr_content_status.csv
+    val dceStatusDf = dceDf.groupBy("slug").agg(sum("contentLinkedQR").alias("Count")).withColumn("Status",lit("QR Code With Content"))
+      .select("Status","Count","slug").union(dceDf.groupBy("slug").agg(sum("withoutContentQR").alias("Count")).withColumn("Status",lit("QR Code Without Content"))
+      .select("Status","Count","slug")).withColumn("reportName",lit("dce_qr_content_status"))
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "dce_qr_content_status.csv")
+    CourseUtils.postDataToBlob(dceStatusDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //etb_qr_content_status_grade.csv
+    val etbGradeDf = etbDf.select($"slug",$"totalQRLinked",$"totalQRNotLinked",explode_outer(split('gradeLevel,",")).as("Class"))
+      .groupBy("Class","slug").agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content")).withColumn("reportName",lit("etb_qr_content_status_grade"))
+      .na.fill("Unknown", Seq("Class"))
+      .orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_qr_content_status_grade.csv")
+    CourseUtils.postDataToBlob(etbGradeDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //etb_qr_content_status_subject.csv
+    val etbContentStatus = etbDf.select($"slug",$"totalQRLinked",$"totalQRNotLinked",explode_outer(split('subject,",")).as("Subject"))
+      .groupBy("Subject","slug").agg(sum("totalQRLinked").alias("QR Codes with content"),sum("totalQRNotLinked").alias("QR Codes without content")).withColumn("reportName",lit("etb_qr_content_status_subject"))
+      .na.fill("Unknown", Seq("Subject"))
+      .orderBy("Subject")
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_qr_content_status_subject.csv")
+    CourseUtils.postDataToBlob(etbContentStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //etb_qr_content_status.csv
+    val etbStatusDf = etbDf.groupBy("slug").agg(sum("totalQRLinked").alias("Count")).withColumn("Status",lit("QR Code With Content"))
+      .select("Status","Count","slug").union(etbDf.groupBy("slug").agg(sum("totalQRNotLinked").alias("Count")).withColumn("Status",lit("QR Code Without Content"))
+      .select("Status","Count","slug")).withColumn("reportName",lit("etb_qr_content_status"))
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_qr_content_status.csv")
+    CourseUtils.postDataToBlob(etbStatusDf,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //etb_qr_count.csv
+    val etbQRCount = etbDf.withColumn("Status",when(col("totalQRLinked")+col("totalQRNotLinked")>0,"With QR Code").otherwise("Without QR Code"))
+      .groupBy("Status","slug").agg(count("identifier").alias("Count")).withColumn("reportName",lit("etb_qr_count"))
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_qr_count.csv")
+    CourseUtils.postDataToBlob(etbQRCount,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //etb_textbook_status_grade.csv
+    val etbGradeStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('gradeLevel,",")).as("Class"))
+      .groupBy("Class","slug").pivot(col("status"), Seq("Live","Review","Draft"))
+      .agg(count("identifier")).drop("status").na.fill("Unknown", Seq("Class")).withColumn("reportName",lit("etb_textbook_status_grade"))
+      .na.fill(0).orderBy(split(split('Class,",")(0)," ")(1).cast("int"))
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_grade.csv")
+    CourseUtils.postDataToBlob(etbGradeStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //etb_textbook_status_subject.csv
+    val etbSubjectStatus = etbDf.select($"slug",$"identifier",$"status",explode_outer(split('subject,",")).as("Subject"))
+      .groupBy("Subject","slug").pivot(col("status"), Seq("Live","Review","Draft"))
+      .agg(count("identifier")).drop("status").na.fill("Unknown", Seq("Subject")).withColumn("reportName",lit("etb_textbook_status_subject"))
+      .na.fill(0)
+      .orderBy("Subject")
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status_subject.csv")
+    CourseUtils.postDataToBlob(etbSubjectStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+    //etb_textbook_status.csv
+    val etbTextbookStatus = etbSubjectStatus.select($"slug",expr("stack(3, 'Live', Live, 'Review', Review, 'Draft', Draft) as(Status,Total)"))
+      .where("Total is not null").groupBy("Status","slug")
+      .agg(sum("Total").alias("Count")).withColumn("reportName",lit("etb_textbook_status"))
+    reportMap = updateReportPath(aggConf(2), aggConf(1), "etb_textbook_status.csv")
+    CourseUtils.postDataToBlob(etbTextbookStatus,outputConf,aggConf.head.updated("reportConfig",reportMap))
+
+  }
+
   def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
     implicit val sqlContext = new SQLContext(sc)
 
     val store = config("store")
     val conf = config.get("etbFileConfig").get.asInstanceOf[Map[String, AnyRef]]
-
     val url = store match {
       case "local" =>
         conf("filePath").asInstanceOf[String]
