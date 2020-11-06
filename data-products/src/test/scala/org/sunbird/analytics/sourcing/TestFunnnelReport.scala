@@ -17,6 +17,8 @@ import scala.concurrent.Future
 
 class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
   var spark: SparkSession = _
+  val programTable = "program"
+  val nominationTable = "nomination"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -28,6 +30,8 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
 
   override def afterAll() {
     super.afterAll()
+    EmbeddedPostgresql.dropTable(programTable)
+    EmbeddedPostgresql.dropTable(nominationTable)
     EmbeddedPostgresql.close()
   }
 
@@ -56,6 +60,8 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
 
     val config = """{"search": {"type": "none"},"model": "org.ekstep.analytics.job.report.FunnelReport","druidConfig": {"queryType": "timeseries","dataSource": "telemetry-events-syncts","intervals": "startdate/enddate","aggregations": [{"name": "visitors","type": "count","fieldName": "actor_id"}],"filters": [{"type": "equals","dimension": "context_cdata_id","value": "program_id"}, {"type": "equals","dimension": "context_cdata_type","value": "Program"}, {"type": "equals","dimension": "context_pdata_id","value": "'$producerEnv'.portal"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}},"modelParams": {"reportConfig": {"id": "funnel_report","metrics": [],"labels": {"reportDate": "Report Generation Date","name": "Project Name"},"output": [],"outputs": [{"type": "csv","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}, {"type": "json","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}]},"store": "local","format": "csv","key": "druid-reports/","filePath": "druid-reports/","container": "test-container","folderPrefix": ["slug", "reportName"]},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Funnel Metrics Report","deviceMapping": false}""".stripMargin
     val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
+    EmbeddedPostgresql.execute("INSERT INTO program(program_id,status,startdate,enddate) VALUES('do_2341','Live','2020-01-10','2025-05-09')")
+    EmbeddedPostgresql.execute("INSERT INTO nomination(program_id,status) VALUES('do_2341','Initiated')")
     FunnelReport.generateFunnelReport(spark, configMap)
   }
 
