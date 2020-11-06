@@ -166,6 +166,30 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val totalContributors = contributionResponses.filter(p => null!=p.values).flatMap(f=>f.values).length
     val totalContributions=contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
 
+    val correctionsPendingRequest = s"""{
+                                       |    "request": {
+                                       |        "filters": {
+                                       |            "objectType": "content",
+                                       |            "status": "Draft",
+                                       |            "prevStatus": "Live",
+                                       |            "programId": "$programId",
+                                       |            "mimeType": {"!=": "application/vnd.ekstep.content-collection"},
+                                       |            "contentType": {"!=": "Asset"}
+                                       |        },
+                                       |        "not_exists": [
+                                       |            "sampleContent"
+                                       |        ],
+                                       |        "facets":["createdBy"],
+                                       |        "limit":0
+                                       |    }
+                                       |}
+                                       |""".stripMargin
+    val correctionsPendingResponse = RestUtil.post[TotalContributionResult](url,correctionsPendingRequest)
+    val correctionResponses =if(null != correctionsPendingResponse && correctionsPendingResponse.responseCode.equalsIgnoreCase("OK") && correctionsPendingResponse.result.count>0) {
+      correctionsPendingResponse.result.facets
+    } else List()
+    val correctionPending=correctionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
+
     val tbRequest = s"""{
                        |	"request": {
                        |       "filters": {
@@ -189,7 +213,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val contents = acceptedContents+rejectedContents
     val pendingContributions = if(totalContributions-contents > 0) totalContributions-contents else 0
 
-    (totalContributors,totalContributions,pendingContributions,acceptedContents)
+    (totalContributors,totalContributions+correctionPending,pendingContributions,acceptedContents)
 
   }
 
