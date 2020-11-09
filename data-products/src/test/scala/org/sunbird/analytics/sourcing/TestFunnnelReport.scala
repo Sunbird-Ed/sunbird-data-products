@@ -44,14 +44,14 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
     val json: String =
       """
         |{
-        |    "identifier": "do_2341",
+        |    "identifier": "2bf17140-8124-11e9-bafa-676cba786201",
         |    "visitors": 2.0
-        |  }
+        |}
       """.stripMargin
 
     //Inserting data into postgres
-    EmbeddedPostgresql.execute("INSERT INTO program(program_id,status,startdate,enddate,name) VALUES('do_23419','Live','2020-01-10','2025-05-09','Dock-Project')")
-    EmbeddedPostgresql.execute("INSERT INTO nomination(program_id,status) VALUES('do_23419','Initiated')")
+    EmbeddedPostgresql.execute("INSERT INTO program(program_id,status,startdate,enddate,name) VALUES('2bf17140-8124-11e9-bafa-676cba786201','Live','2020-01-10','2025-05-09','Dock-Project')")
+    EmbeddedPostgresql.execute("INSERT INTO nomination(program_id,status) VALUES('2bf17140-8124-11e9-bafa-676cba786201','Initiated')")
 
     val doc: Json = parse(json).getOrElse(Json.Null)
     val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc))
