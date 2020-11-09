@@ -67,4 +67,10 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
     FunnelReport.generateFunnelReport(spark, configMap)
   }
 
+  it should "return 0 if no resources found for correction pending" in {
+    val programId = "do_123"
+    val data = FunnelReport.getContributionData(programId)
+    data._2 should be (0)
+  }
+
 }
