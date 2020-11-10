@@ -15,7 +15,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util._
 import org.sunbird.cloud.storage.BaseStorageService
-
+import akka.actor.ActorSystem
 import scala.concurrent.Future
 
 class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
@@ -48,8 +48,9 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.actorSystem _).expects().returning(ActorSystem("TestQuery")).anyNumberOfTimes()
     (mockDruidClient.doQueryAsStream(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Source(List(druidResponse))).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+    (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
@@ -75,8 +76,9 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.actorSystem _).expects().returning(ActorSystem("TestQuery")).anyNumberOfTimes()
     (mockDruidClient.doQueryAsStream(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Source(List(druidResponse))).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+    (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
@@ -102,8 +104,9 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.actorSystem _).expects().returning(ActorSystem("TestQuery")).anyNumberOfTimes()
     (mockDruidClient.doQueryAsStream(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Source(List(druidResponse))).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+    (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
     //    val res = TextbookUtils.getContentDataList("0123653943740170242", mockRestUtil)
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
@@ -129,8 +132,9 @@ class TestTextbookProgressModel extends SparkSpec(null) with MockFactory{
 
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.actorSystem _).expects().returning(ActorSystem("TestQuery")).anyNumberOfTimes()
     (mockDruidClient.doQueryAsStream(_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Source(List(druidResponse))).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+    (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
     TextbookProgressModel.execute(sc.emptyRDD, jobConfig)
   }
 

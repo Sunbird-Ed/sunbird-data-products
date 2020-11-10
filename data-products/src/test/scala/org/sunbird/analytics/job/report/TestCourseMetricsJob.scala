@@ -143,7 +143,7 @@ class TestCourseMetricsJob extends BaseReportSpec with MockFactory {
 
     val mockDruidClient = mock[DruidClient]
     (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
-    (mockFc.getDruidClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+    (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     CourseMetricsJob.prepareReport(spark, storageConfig, reporterMock.loadData,config)
 
