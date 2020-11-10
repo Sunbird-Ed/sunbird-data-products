@@ -50,6 +50,10 @@ object EmbeddedPostgresql {
     stmt.executeQuery(sqlString)
   }
 
+  def dropTable(tableName: String): Boolean = {
+    stmt.execute(s"DROP TABLE $tableName")
+  }
+
   def close() {
     stmt.close()
     connection.close()
