@@ -142,11 +142,13 @@ trait OnDemandExhaustJob {
         try zipAndEncrypt(url, storageConfig, request)
         catch {
           case ex: Exception => ex.printStackTrace();
-            if(canZipExceptionBeIgnored())
+            if(canZipExceptionBeIgnored()) {
               url
-            else
+            } else {
               markRequestAsFailed(request, "Zip, encrypt and upload failed")
-            ""
+              ""
+            }
+
         }
       else
         url

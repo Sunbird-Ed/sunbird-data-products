@@ -151,7 +151,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def validateRequest(request: JobRequest): Boolean = {
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
-    if (collectionConfig.batchId.isEmpty && (collectionConfig.searchFilter.isEmpty || collectionConfig.batchFilter.isEmpty)) false else true
+    if (collectionConfig.batchId.isEmpty && (collectionConfig.searchFilter.isEmpty && collectionConfig.batchFilter.isEmpty)) false else true
     // TODO: Check if the requestedBy user role has permission to request for the job
   }
   
