@@ -141,7 +141,7 @@ trait OnDemandExhaustJob {
       if (zipEnabled())
         try zipAndEncrypt(url, storageConfig, request)
         catch {
-          case ex: Exception => ex.printStackTrace()
+          case ex: Exception => ex.printStackTrace(); markRequestAsFailed(request, "Zip, encrypt and upload failed")
             url
         }
       else
@@ -194,5 +194,13 @@ trait OnDemandExhaustJob {
     }
     fc.getHadoopFileUtil().delete(conf, tempDir);
     resultFile;
+  }
+
+  def markRequestAsFailed(request: JobRequest, failedMsg: String): JobRequest = {
+    request.status = "FAILED";
+    request.dt_job_completed = Option(System.currentTimeMillis());
+    request.iteration = Option(request.iteration.getOrElse(0) + 1);
+    request.err_message = Option(failedMsg);
+    request
   }
 }
