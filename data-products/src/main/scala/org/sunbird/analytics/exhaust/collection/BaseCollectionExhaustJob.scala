@@ -155,14 +155,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     // TODO: Check if the requestedBy user role has permission to request for the job
   }
   
-  def markRequestAsFailed(request: JobRequest, failedMsg: String): JobRequest = {
-    request.status = "FAILED";
-    request.dt_job_completed = Option(System.currentTimeMillis());
-    request.iteration = Option(request.iteration.getOrElse(0) + 1);
-    request.err_message = Option(failedMsg);
-    request
-  }
-  
   def markRequestAsProcessing(request: JobRequest) = {
     request.status = "PROCESSING";
     updateStatus(request);
