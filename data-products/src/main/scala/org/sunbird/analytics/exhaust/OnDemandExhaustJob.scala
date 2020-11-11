@@ -70,7 +70,7 @@ trait OnDemandExhaustJob {
     pstmt.setInt(1, request.iteration.getOrElse(0));
     pstmt.setString(2, request.status);
     pstmt.setTimestamp(3, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
-    pstmt.setLong(4, request.execution_time.getOrElse(0));
+    pstmt.setLong(4, request.execution_time.getOrElse(0L));
     pstmt.setString(5, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
     pstmt.setString(6, request.tag);
     pstmt.setString(7, request.request_id);
@@ -86,7 +86,7 @@ trait OnDemandExhaustJob {
     pstmt.setArray(3, dbc.createArrayOf("text", downloadURLs))
     pstmt.setTimestamp(4, if (request.dt_file_created.isDefined) new Timestamp(request.dt_file_created.get) else null);
     pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
-    pstmt.setLong(6, request.execution_time.getOrElse(0));
+    pstmt.setLong(6, request.execution_time.getOrElse(0L));
     pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
     pstmt.setString(8, request.tag);
     pstmt.setString(9, request.request_id);
@@ -104,7 +104,7 @@ trait OnDemandExhaustJob {
         pstmt.setArray(3, dbc.createArrayOf("text", downloadURLs))
         pstmt.setTimestamp(4, if (request.dt_file_created.isDefined) new Timestamp(request.dt_file_created.get) else null);
         pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
-        pstmt.setLong(6, request.execution_time.getOrElse(0));
+        pstmt.setLong(6, request.execution_time.getOrElse(0L));
         pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
         pstmt.setString(8, request.tag);
         pstmt.setString(9, request.request_id);
@@ -151,7 +151,7 @@ trait OnDemandExhaustJob {
       else
         url
     });
-    request.execution_time = Some((downloadURLs._1 + request.execution_time.getOrElse(0).asInstanceOf[Long]).asInstanceOf[Long])  
+    request.execution_time = Some((downloadURLs._1 + request.execution_time.getOrElse(0L).asInstanceOf[Long]).asInstanceOf[Long])
     request.download_urls = Option(downloadURLs._2);
     updateRequest(request)
   }
