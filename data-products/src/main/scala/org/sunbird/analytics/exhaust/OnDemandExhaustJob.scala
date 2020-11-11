@@ -70,7 +70,7 @@ trait OnDemandExhaustJob {
     pstmt.setInt(1, request.iteration.getOrElse(0));
     pstmt.setString(2, request.status);
     pstmt.setTimestamp(3, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
-    pstmt.setLong(4, request.execution_time.getOrElse(0));
+    pstmt.setLong(4, request.execution_time.getOrElse(0L));
     pstmt.setString(5, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
     pstmt.setString(6, request.tag);
     pstmt.setString(7, request.request_id);
@@ -86,7 +86,7 @@ trait OnDemandExhaustJob {
     pstmt.setArray(3, dbc.createArrayOf("text", downloadURLs))
     pstmt.setTimestamp(4, if (request.dt_file_created.isDefined) new Timestamp(request.dt_file_created.get) else null);
     pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
-    pstmt.setLong(6, request.execution_time.getOrElse(0));
+    pstmt.setLong(6, request.execution_time.getOrElse(0L));
     pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
     pstmt.setString(8, request.tag);
     pstmt.setString(9, request.request_id);
@@ -104,7 +104,7 @@ trait OnDemandExhaustJob {
         pstmt.setArray(3, dbc.createArrayOf("text", downloadURLs))
         pstmt.setTimestamp(4, if (request.dt_file_created.isDefined) new Timestamp(request.dt_file_created.get) else null);
         pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
-        pstmt.setLong(6, request.execution_time.getOrElse(0));
+        pstmt.setLong(6, request.execution_time.getOrElse(0L));
         pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
         pstmt.setString(8, request.tag);
         pstmt.setString(9, request.request_id);
@@ -116,19 +116,8 @@ trait OnDemandExhaustJob {
   }
 
   def saveRequests(storageConfig: StorageConfig, requests: Array[JobRequest])(implicit conf: Configuration, fc: FrameworkContext) = {
-    val zippedRequests = for (request <- requests) yield {
-      val downloadURLs = for (url <- request.download_urls.getOrElse(List())) yield {
-        if (zipEnabled())
-          zipAndEncrypt(url, storageConfig, request);
-        else
-          url
-      };
-      request.download_urls = Option(downloadURLs);
-      request;
-
-    }
+    val zippedRequests = for (request <- requests) yield processRequestEncryption(storageConfig, request)
     updateRequests(zippedRequests)
-
   }
 
   def saveRequestAsync(storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): CompletableFuture[JobRequest] = {
@@ -144,18 +133,34 @@ trait OnDemandExhaustJob {
   }
 
   def saveRequest(storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): Boolean = {
+    updateRequest(processRequestEncryption(storageConfig, request))
+  }
 
+  def processRequestEncryption(storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): JobRequest = {
     val downloadURLs = CommonUtil.time(for (url <- request.download_urls.getOrElse(List())) yield {
       if (zipEnabled())
-        zipAndEncrypt(url, storageConfig, request);
+        try zipAndEncrypt(url, storageConfig, request)
+        catch {
+          case ex: Exception => ex.printStackTrace();
+            if(canZipExceptionBeIgnored()) {
+              url
+            } else {
+              markRequestAsFailed(request, "Zip, encrypt and upload failed")
+              ""
+            }
+
+        }
       else
         url
     });
-    request.execution_time = Some((downloadURLs._1 + request.execution_time.getOrElse(0).asInstanceOf[Long]).asInstanceOf[Long])  
+    request.execution_time = Some((downloadURLs._1 + request.execution_time.getOrElse(0L).asInstanceOf[Long]).asInstanceOf[Long])
     request.download_urls = Option(downloadURLs._2);
-    updateRequest(request)
+    request
   }
 
+  def canZipExceptionBeIgnored(): Boolean = true
+
+  @throws(classOf[Exception])
   private def zipAndEncrypt(url: String, storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): String = {
 
     val path = Paths.get(url);
@@ -197,5 +202,13 @@ trait OnDemandExhaustJob {
     }
     fc.getHadoopFileUtil().delete(conf, tempDir);
     resultFile;
+  }
+
+  def markRequestAsFailed(request: JobRequest, failedMsg: String): JobRequest = {
+    request.status = "FAILED";
+    request.dt_job_completed = Option(System.currentTimeMillis());
+    request.iteration = Option(request.iteration.getOrElse(0) + 1);
+    request.err_message = Option(failedMsg);
+    request
   }
 }

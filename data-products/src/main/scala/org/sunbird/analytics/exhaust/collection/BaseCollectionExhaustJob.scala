@@ -28,7 +28,7 @@ case class UserData(userid: String, state: Option[String] = Option(""), district
                     maskedphone: Option[String] = Option(""), rootorgid: String, block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""),
                     schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""), userinfo: Option[String])
 
-case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]])
+case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]], batchFilter: Option[List[String]])
 case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"))
 case class CollectionBatchResponse(batchId: String, file: String, status: String, statusMsg: String, execTime: Long)
 case class CollectionDetails(result: Result)
@@ -151,16 +151,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def validateRequest(request: JobRequest): Boolean = {
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
-    if (collectionConfig.batchId.isEmpty && collectionConfig.searchFilter.isEmpty) false else true
+    if (collectionConfig.batchId.isEmpty && (collectionConfig.searchFilter.isEmpty && collectionConfig.batchFilter.isEmpty)) false else true
     // TODO: Check if the requestedBy user role has permission to request for the job
-  }
-  
-  def markRequestAsFailed(request: JobRequest, failedMsg: String): JobRequest = {
-    request.status = "FAILED";
-    request.dt_job_completed = Option(System.currentTimeMillis());
-    request.iteration = Option(request.iteration.getOrElse(0) + 1);
-    request.err_message = Option(failedMsg);
-    request
   }
   
   def markRequestAsProcessing(request: JobRequest) = {
