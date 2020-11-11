@@ -81,7 +81,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
   }
 
   /**
-   * UserInfo Exhaust should be an encrypted. So, don't ignore zip and encryption exceptions.
+   * UserInfo Exhaust should be an encrypted file. So, don't ignore zip and encryption exceptions.
    * @return
    */
   override def canZipExceptionBeIgnored(): Boolean = false
