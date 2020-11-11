@@ -141,8 +141,12 @@ trait OnDemandExhaustJob {
       if (zipEnabled())
         try zipAndEncrypt(url, storageConfig, request)
         catch {
-          case ex: Exception => ex.printStackTrace(); markRequestAsFailed(request, "Zip, encrypt and upload failed")
-            url
+          case ex: Exception => ex.printStackTrace();
+            if(canZipExceptionBeIgnored())
+              url
+            else
+              markRequestAsFailed(request, "Zip, encrypt and upload failed")
+            ""
         }
       else
         url
@@ -151,6 +155,8 @@ trait OnDemandExhaustJob {
     request.download_urls = Option(downloadURLs._2);
     request
   }
+
+  def canZipExceptionBeIgnored(): Boolean = true
 
   @throws(classOf[Exception])
   private def zipAndEncrypt(url: String, storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): String = {
