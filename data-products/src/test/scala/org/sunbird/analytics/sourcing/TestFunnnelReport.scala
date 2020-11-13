@@ -17,6 +17,8 @@ import scala.concurrent.Future
 
 class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
   var spark: SparkSession = _
+  val programTable = "program"
+  val nominationTable = "nomination"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -28,6 +30,8 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
 
   override def afterAll() {
     super.afterAll()
+    EmbeddedPostgresql.dropTable(programTable)
+    EmbeddedPostgresql.dropTable(nominationTable)
     EmbeddedPostgresql.close()
   }
 
@@ -40,10 +44,14 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
     val json: String =
       """
         |{
-        |    "identifier": "do_11298391390121984011",
+        |    "identifier": "2bf17140-8124-11e9-bafa-676cba786201",
         |    "visitors": 2.0
-        |  }
+        |}
       """.stripMargin
+
+    //Inserting data into postgres
+    EmbeddedPostgresql.execute("INSERT INTO program(program_id,status,startdate,enddate,name) VALUES('2bf17140-8124-11e9-bafa-676cba786201','Live','2020-01-10','2025-05-09','Dock-Project')")
+    EmbeddedPostgresql.execute("INSERT INTO nomination(program_id,status) VALUES('2bf17140-8124-11e9-bafa-676cba786201','Initiated')")
 
     val doc: Json = parse(json).getOrElse(Json.Null)
     val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc))
@@ -57,6 +65,12 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
     val config = """{"search": {"type": "none"},"model": "org.ekstep.analytics.job.report.FunnelReport","druidConfig": {"queryType": "timeseries","dataSource": "telemetry-events-syncts","intervals": "startdate/enddate","aggregations": [{"name": "visitors","type": "count","fieldName": "actor_id"}],"filters": [{"type": "equals","dimension": "context_cdata_id","value": "program_id"}, {"type": "equals","dimension": "context_cdata_type","value": "Program"}, {"type": "equals","dimension": "context_pdata_id","value": "'$producerEnv'.portal"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}},"modelParams": {"reportConfig": {"id": "funnel_report","metrics": [],"labels": {"reportDate": "Report Generation Date","name": "Project Name"},"output": [],"outputs": [{"type": "csv","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}, {"type": "json","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}]},"store": "local","format": "csv","key": "druid-reports/","filePath": "druid-reports/","container": "test-container","folderPrefix": ["slug", "reportName"]},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Funnel Metrics Report","deviceMapping": false}""".stripMargin
     val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
     FunnelReport.generateFunnelReport(spark, configMap)
+  }
+
+  it should "return 0 if no resources found for correction pending" in {
+    val programId = "do_123"
+    val data = FunnelReport.getContributionData(programId)
+    data._2 should be (0)
   }
 
 }
