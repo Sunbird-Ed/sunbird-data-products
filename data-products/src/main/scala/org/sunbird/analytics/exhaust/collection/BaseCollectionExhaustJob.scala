@@ -132,7 +132,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
     markRequestAsProcessing(request)
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
-    val collectionBatches = getCollectionBatches(collectionConfig.batchId, None, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
+    val collectionBatches = getCollectionBatches(collectionConfig.batchId, collectionConfig.batchFilter, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
     val result = CommonUtil.time(processBatches(userCachedDF, collectionBatches, storageConfig));
     val response = result._2;
     val failedBatches = response.filter(p => p.status.equals("FAILED"));
