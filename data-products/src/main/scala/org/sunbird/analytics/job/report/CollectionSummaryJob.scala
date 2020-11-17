@@ -149,10 +149,11 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val columnWithOrder = (modelParams.getOrElse("columns", columnsOrder).asInstanceOf[List[String]] ::: dynamicColumns).distinct
     val finalReportDF = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
     val keyword = modelParams.getOrElse("keywords", null).asInstanceOf[String] // If the keyword is not present then report name is generating without keyword.
-    // Generating two reports one is with date and another one is without date only -latest.
+    // Generating both csv and json extension two reports one is with date and another one is without date only -latest.
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
     finalReportDF.saveToBlobStore(storageConfig, "json", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "json", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
   }
 
   def getDate: String = {
@@ -164,7 +165,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     if (null == keyword) {
       s"${reportPath}${suffix}"
     } else {
-      s"${reportPath}${keyword}${suffix}"
+      s"${reportPath}${keyword}-${suffix}"
     }
   }
 
