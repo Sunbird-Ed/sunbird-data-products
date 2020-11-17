@@ -1,17 +1,19 @@
 package org.sunbird.analytics.model.report
 
-import com.redislabs.provider.redis._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, lower, _}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework._
+import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
+import org.ekstep.analytics.framework.util.JSONUtils
 import org.sunbird.analytics.exhaust.BaseReportsJob
+import org.sunbird.analytics.job.report.DruidOutput
 
 case class SelfAssessData(identifier: String, contentType: String)
-case class AssessEvent (contentid: String, batchid: String, courseid: String, userid: String, assessEvent: String)
+case class AssessEvent (contentid: String, attemptId: String, courseid: String, userid: String, assessEvent: String)
 case class AssessOutputEvent(assessmentTs: Long, batchId: String, courseId: String, userId: String, attemptId: String, contentId: String, events: java.util.List[String]) extends AlgoOutput with Output
 
 object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,AssessOutputEvent,AssessOutputEvent] with Serializable with BaseReportsJob {
@@ -19,9 +21,9 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
   implicit val className: String = "org.sunbird.analytics.model.report.AssessmentCorrectionModel"
   override def name: String = "AssessmentCorrectionModel"
 
-  val redisIndex = AppConf.getConfig("redis.db")
-  val redisHost = AppConf.getConfig("redis.host")
-  val redisPort = AppConf.getConfig("redis.port")
+  private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
+  val cassandraFormat = "org.apache.spark.sql.cassandra";
+
   val assessEvent = "ASSESS"
   val contentType = "SelfAssess"
 
@@ -32,18 +34,15 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
   override def algorithm(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
     implicit val sqlContext = new SQLContext(sc)
 
-    val groupedDF = getAssessEventData(events)
-    val redisData = loadRedisData()
+    val assessEventDF = getAssessEventData(events)
+    val druidData = loadDruidData(config)
 
-    val joinedDF = groupedDF.join(redisData, groupedDF.col("contentid") === redisData.col("identifier"), "inner")
-      .withColumn("attemptId",
-        md5(concat(groupedDF.col("contentid"), groupedDF.col("courseid"),
-          groupedDF.col("batchid"), groupedDF.col("userid"), lit(System.currentTimeMillis()))))
-      .select(groupedDF.col("*"), col("attemptId"))
+    val joinedDF = assessEventDF.join(druidData, assessEventDF.col("contentid") === druidData.col("identifier"), "inner")
+      .select(assessEventDF.col("*"))
 
     val outputData = joinedDF.rdd.map{f =>
       val assessmentTs: Long = System.currentTimeMillis()
-      AssessOutputEvent(assessmentTs, f.getString(1), f.getString(2), f.getString(3), f.getString(5), f.getString(0), f.getList(4) )
+      AssessOutputEvent(assessmentTs, f.getString(4), f.getString(1), f.getString(2), f.getString(3), f.getString(0), f.getList(5) )
     }
     outputData
   }
@@ -52,31 +51,38 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
     events
   }
 
-  def loadRedisData()(implicit sc: SparkContext, sqlContext: SQLContext) = {
+  def loadDruidData(config: Map[String, AnyRef])(implicit sc: SparkContext, sqlContext: SQLContext, fc: FrameworkContext): DataFrame = {
     import sqlContext.implicits._
-    val redisData = sc.fromRedisKV("*")
-    val selfAssessFiltered = redisData
-      .map(f => (f._1, JSONUtils.deserialize[Map[String, AnyRef]](f._2)))
-      .filter(f => contentType.equals(f._2.getOrElse("contentType", "")))
-      .map(f => SelfAssessData(f._1, f._2.getOrElse("contentType", "").asInstanceOf[String]))
-      .toDF()
-    selfAssessFiltered
+    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.get("modelParams").get.asInstanceOf[Map[String, AnyRef]].get("druidConfig").get))
+    val druidResponse = DruidDataFetcher.getDruidData(druidConfig)
+    val dataDF = druidResponse.map(f => JSONUtils.deserialize[DruidOutput](f)).toDF.select("identifier")
+    dataDF
   }
 
-  def getAssessEventData(events: RDD[V3Event])(implicit sqlContext: SQLContext): DataFrame = {
+  def getAssessEventData(events: RDD[V3Event])(implicit sqlContext: SQLContext, sc: SparkContext): DataFrame = {
     import sqlContext.implicits._
-    val df = events.map{f =>
-      val userId = if (f.actor.`type`.equals("User")) f.actor.id else ""
+
+    val assessEvent = events.map { f =>
+      val userId = if (f.actor.`type`.equals("User")) f.actor.id else "" // UserID
       val cData = f.context.cdata.getOrElse(List())
-      val batchList = cData.filter(f => f.`type`.equalsIgnoreCase("batch")).map(f => f.id)
-      val batchId = if (!batchList.isEmpty) batchList.head else ""
-      val courseList = cData.filter(f => f.`type`.equalsIgnoreCase("course")).map(f => f.id)
-      val courseId = if (!courseList.isEmpty) courseList.head else ""
-      val contentId = f.`object`.get.id
+      val attemptIdList = cData.filter(f => f.`type`.equalsIgnoreCase("AttemptId")).map(f => f.id)
+      val attemptId = if (!attemptIdList.isEmpty) attemptIdList.head else ""  // AttempId
+      val courseId = f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1 // CourseId
+      val contentId = f.`object`.get.id // ContentId
       val event = JSONUtils.serialize(f)
-      AssessEvent(contentId, batchId, courseId, userId, event)
-    }.toDF()
-    val groupedDF = df.groupBy("contentid","batchid","courseid","userid").agg(collect_list(col("assessEvent")).as("assessEventList"))
-    groupedDF
+      AssessEvent(contentId, attemptId, courseId, userId, event)
+    }.toDF
+    val userEnrollmentData = getUserEnrollData()
+    val df = assessEvent.join(userEnrollmentData, Seq("courseid", "userid"))
+      .groupBy("contentid", "courseid", "userid", "attemptId", "batchid")
+      .agg(collect_list(col("assessEvent")).as("assessEventList"))
+    df
+  }
+
+  def getUserEnrollData()(implicit sqlContext: SQLContext): DataFrame = {
+    implicit val spark = sqlContext.sparkSession
+    loadData(userEnrolmentDBSettings,cassandraFormat, new StructType())
+      .where(lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
+      .select("userid", "courseid", "batchid")
   }
 }
