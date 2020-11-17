@@ -64,7 +64,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     try {
       val res = CommonUtil.time(prepareReport(spark, fetchData))
       val modelParams = jobConfig.modelParams.get
-      saveToBlob(res._2, modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]) // Saving report to blob stroage
+      saveToBlob(res._2, modelParams) // Saving report to blob stroage
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
     } finally {
       frameworkContext.closeContext()
@@ -137,7 +137,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
   }
 
-  def saveToBlob(reportData: DataFrame, reportPath: String): Unit = {
+  def saveToBlob(reportData: DataFrame,  modelParams:Map[String, AnyRef]): Unit = {
+    val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
@@ -145,11 +146,12 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val fields = reportData.schema.fieldNames
     val colNames = for (e <- fields) yield columnMapping.getOrElse(e, e)
     val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
-    val columnWithOrder = (columnsOrder ::: dynamicColumns).distinct
+    val columnWithOrder = (modelParams.getOrElse("columns", columnsOrder).asInstanceOf[List[String]] ::: dynamicColumns).distinct
     val finalReportDF = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
+    val keyword = modelParams.getOrElse("keyword", null) // If the keyword is not present then report name is generating without keyword.
     // Generating two reports one is with date and another one is without date only -latest.
-    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}summary-report-${getDate}", Option(Map("header" -> "true")), None)
-    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}summary-report-latest", Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}${keyword}summary-report-${getDate}", Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}${keyword}summary-report-latest", Option(Map("header" -> "true")), None)
   }
 
   def getDate: String = {
