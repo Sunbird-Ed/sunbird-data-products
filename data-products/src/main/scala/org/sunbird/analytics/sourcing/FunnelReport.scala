@@ -88,17 +88,17 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val reportDate = DateTimeFormat.forPattern("dd-MM-yyyy").print(DateTime.now())
     val tenantInfo = getTenantInfo(RestUtil).toDF()
 
-    val data = programData.join(nominationRdd)
+    val data = programData.leftOuterJoin(nominationRdd).map(f=>(f._2._1,f._2._2.getOrElse(NominationData("","","","",""))))
     var druidData = List[ProgramVisitors]()
     val druidQuery = JSONUtils.serialize(config("druidConfig"))
     val report = data
-      .filter(f=> null != f._2._1.status && (f._2._1.status.equalsIgnoreCase("Live") || f._2._1.status.equalsIgnoreCase("Unlisted")) && null != f._2._1.enddate && DateTime.parse(f._2._1.enddate.split(" ")(0)).isAfter(DateTime.now().getMillis)).collect().toList
+      .filter(f=> null != f._1.status && (f._1.status.equalsIgnoreCase("Live") || f._1.status.equalsIgnoreCase("Unlisted"))).collect().toList
       .map(f => {
-        val contributionData = getContributionData(f._2._1.program_id)
-        druidData = ProgramVisitors(f._2._1.program_id,f._2._1.startdate,f._2._1.enddate, "0") :: druidData
-        FunnelResult(f._2._1.program_id,reportDate,f._2._1.name,"0",f._2._2.Initiated,f._2._2.Rejected,
-          f._2._2.Pending,f._2._2.Approved,contributionData._1.toString,contributionData._2.toString,contributionData._3.toString,
-          contributionData._4.toString,f._2._1.rootorg_id)
+        val contributionData = getContributionData(f._1.program_id)
+        druidData = ProgramVisitors(f._1.program_id,f._1.startdate,f._1.enddate, "0") :: druidData
+        FunnelResult(f._1.program_id,reportDate,f._1.name,"0",f._2.Initiated,f._2.Rejected,
+          f._2.Pending,f._2.Approved,contributionData._1.toString,contributionData._2.toString,contributionData._3.toString,
+          contributionData._4.toString,f._1.rootorg_id)
       }).toDF()
 
     val df = report.join(tenantInfo,report.col("channel") === tenantInfo.col("id"),"left")
@@ -106,9 +106,11 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       .persist(StorageLevel.MEMORY_ONLY)
 
     val visitorData = druidData.map(f => {
-      val query = getDruidQuery(druidQuery,f.program_id,s"${f.startdate.split(" ")(0)}T00:00:00+00:00/${f.enddate.split(" ")(0)}T00:00:00+00:00")
-      val response = DruidDataFetcher.getDruidData(query).collect()
-      val druidData = response.map(f => JSONUtils.deserialize[DruidTextbookData](f))
+      val druidData = if(null != f.enddate && null != f.startdate && DateTime.parse(f.enddate.split(" ")(0)).isAfter(DateTime.parse(f.startdate.split(" ")(0)).getMillis)) {
+        val query = getDruidQuery(druidQuery,f.program_id,s"${f.startdate.split(" ")(0)}T00:00:00+00:00/${f.enddate.split(" ")(0)}T00:00:00+00:00")
+        val response = DruidDataFetcher.getDruidData(query).collect()
+        response.map(f => JSONUtils.deserialize[DruidTextbookData](f))
+      } else Array[DruidTextbookData]()
       val noOfVisitors = if(druidData.nonEmpty) druidData.head.visitors.toString else "0"
       ProgramVisitors(f.program_id,f.startdate,f.enddate,noOfVisitors)
     }).toDF().na.fill(0).persist(StorageLevel.MEMORY_ONLY)

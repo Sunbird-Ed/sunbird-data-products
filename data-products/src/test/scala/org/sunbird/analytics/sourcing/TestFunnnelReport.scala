@@ -51,6 +51,7 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
 
     //Inserting data into postgres
     EmbeddedPostgresql.execute("INSERT INTO program(program_id,status,startdate,enddate,name) VALUES('2bf17140-8124-11e9-bafa-676cba786201','Live','2020-01-10','2025-05-09','Dock-Project')")
+    EmbeddedPostgresql.execute("INSERT INTO program(program_id,status,startdate,enddate,name) VALUES('f624il0r-8124-11e9-bafa-676cba755409','Live','2026-01-10','2025-05-09','Dock-Project')")
     EmbeddedPostgresql.execute("INSERT INTO nomination(program_id,status) VALUES('2bf17140-8124-11e9-bafa-676cba786201','Initiated')")
 
     val doc: Json = parse(json).getOrElse(Json.Null)
