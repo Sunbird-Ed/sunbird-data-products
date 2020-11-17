@@ -151,6 +151,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val keyword = modelParams.getOrElse("keyword", null) // If the keyword is not present then report name is generating without keyword.
     // Generating two reports one is with date and another one is without date only -latest.
     finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}${keyword}summary-report-${getDate}", Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "json", s"${reportPath}${keyword}summary-report-${getDate}", Option(Map("header" -> "true")), None)
     finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}${keyword}summary-report-latest", Option(Map("header" -> "true")), None)
   }
 
