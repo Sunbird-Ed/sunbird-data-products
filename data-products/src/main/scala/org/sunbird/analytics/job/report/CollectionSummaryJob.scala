@@ -148,16 +148,24 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
     val columnWithOrder = (modelParams.getOrElse("columns", columnsOrder).asInstanceOf[List[String]] ::: dynamicColumns).distinct
     val finalReportDF = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
-    val keyword = modelParams.getOrElse("keyword", null) // If the keyword is not present then report name is generating without keyword.
+    val keyword = modelParams.getOrElse("keywords", null).asInstanceOf[String] // If the keyword is not present then report name is generating without keyword.
     // Generating two reports one is with date and another one is without date only -latest.
-    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}${keyword}summary-report-${getDate}", Option(Map("header" -> "true")), None)
-    finalReportDF.saveToBlobStore(storageConfig, "json", s"${reportPath}${keyword}summary-report-${getDate}", Option(Map("header" -> "true")), None)
-    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}${keyword}summary-report-latest", Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "json", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
   }
 
   def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
+  }
+
+  def getReportName(keyword: String, reportPath: String, suffix: String): String = {
+    if (null == keyword) {
+      s"${reportPath}${suffix}"
+    } else {
+      s"${reportPath}${keyword}${suffix}"
+    }
   }
 
   /**
@@ -170,6 +178,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
     val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", true).asInstanceOf[Boolean]
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
+    println("searchFiltersearchFilter" + JSONUtils.serialize(searchFilter))
     val courseBatchData = getCourseBatch(spark, fetchData)
     val filteredBatches = if (searchFilter.nonEmpty) {
       JobLogger.log("Generating reports only search query", None, INFO)
