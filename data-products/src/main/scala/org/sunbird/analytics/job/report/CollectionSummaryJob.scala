@@ -83,7 +83,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val schema = Encoders.product[UserData].schema
     fetchData(spark, userCacheDBSettings, "org.apache.spark.sql.redis", schema)
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
-      //.filter(col("state").isNotNull).filter(col("state") =!= "")
+      .filter(col("state").isNotNull).filter(col("state") =!= "")
   }
 
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -179,7 +179,6 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
     val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", true).asInstanceOf[Boolean]
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
-    println("searchFiltersearchFilter" + JSONUtils.serialize(searchFilter))
     val courseBatchData = getCourseBatch(spark, fetchData)
     val filteredBatches = if (searchFilter.nonEmpty) {
       JobLogger.log("Generating reports only search query", None, INFO)
