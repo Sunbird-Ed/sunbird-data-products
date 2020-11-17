@@ -63,8 +63,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     init()
     try {
       val res = CommonUtil.time(prepareReport(spark, fetchData))
-      val modelParams = jobConfig.modelParams.get
-      saveToBlob(res._2, modelParams) // Saving report to blob stroage
+      saveToBlob(res._2, jobConfig) // Saving report to blob stroage
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
     } finally {
       frameworkContext.closeContext()
@@ -137,7 +136,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
   }
 
-  def saveToBlob(reportData: DataFrame,  modelParams:Map[String, AnyRef]): Unit = {
+  def saveToBlob(reportData: DataFrame, jobConfig: JobConfig): Unit = {
+    val modelParams = jobConfig.modelParams.get
     val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
