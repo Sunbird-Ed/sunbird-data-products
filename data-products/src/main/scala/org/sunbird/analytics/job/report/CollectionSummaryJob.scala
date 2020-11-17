@@ -83,7 +83,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val schema = Encoders.product[UserData].schema
     fetchData(spark, userCacheDBSettings, "org.apache.spark.sql.redis", schema)
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
-      .filter(col("state").isNotNull).filter(col("state") =!= "")
+      //.filter(col("state").isNotNull).filter(col("state") =!= "")
   }
 
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
