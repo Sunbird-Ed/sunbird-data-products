@@ -285,7 +285,7 @@ class ContentConsumption:
             self.config = json.loads(f.read())
         get_tenant_info(result_loc_=result_loc, org_search_=org_search, date_=execution_date)
         print("Success::Tenant info")
-        get_content_model(result_loc_=result_loc, druid_=druid, date_=execution_date, config_=self.config,
+        get_content_model(result_loc_=result_loc, druid_=druid_rollup, date_=execution_date, config_=self.config,
                           version_='v2')
         print("Success::content model snapshot")
         get_tb_content_mapping(result_loc_=result_loc, date_=execution_date, content_search_=content_search)
