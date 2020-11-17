@@ -65,8 +65,9 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
 
 //    val collectionAggPivotDF = collectionAggDF.groupBy("courseid", "batchid", "userid", "completionPercentage").pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
 //      .drop("null")
-    val assessmentAggPivotDF = assessmentAggDF.groupBy("courseid", "batchid", "userid", "total_sum_score")
-      .pivot(concat(col("content_id"), lit(" - Score"))).agg(concat(ceil((split(first("grand_total"), "\\/")
+    val assessmentAggPivotDF = assessmentAggDF.withColumn("content_score", concat(col("content_id"), lit(" - Score")))
+      .groupBy("courseid", "batchid", "userid", "total_sum_score")
+      .pivot("content_score").agg(concat(ceil((split(first("grand_total"), "\\/")
       .getItem(0) * 100) / (split(first("grand_total"), "\\/")
       .getItem(1))), lit("%")))
     //val progressDF = collectionAggPivotDF.join(assessmentAggPivotDF, Seq("courseid", "batchid", "userid"), "left_outer")
