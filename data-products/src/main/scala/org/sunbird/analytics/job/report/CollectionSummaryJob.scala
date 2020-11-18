@@ -165,7 +165,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
         ),
         List()),
       container = container,
-      postContainer = container
+      postContainer = Some(container)
     )
    CourseUtils.mergeReport(mergeScriptConfig)
   }
