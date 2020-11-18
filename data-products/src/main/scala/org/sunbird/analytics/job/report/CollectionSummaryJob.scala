@@ -20,7 +20,7 @@ import org.sunbird.analytics.util.{CourseUtils, UserData}
 import scala.collection.immutable.List
 
 case class MergeScriptConfig(basePath: String, rollup: Integer,
-                             container: String, postContainer: Option[String] = None, files: List[MergeFiles])
+                             container: String, postContainer: String, files: List[MergeFiles])
 
 case class MergeFiles(deltaPath: String, reportPath: String)
 case class CollectionBatch(batchId: String, courseId: String, startDate: String, endDate: String)
