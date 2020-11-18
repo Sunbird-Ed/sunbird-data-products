@@ -70,7 +70,7 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
     else null
   }, new ArrayType(MapType(StringType, StringType), true))
 
-  it should "generate the report for all the batches" in {
+  it should "generate the report for all the batches" in intercept[Exception] {
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
@@ -91,13 +91,10 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
 
 
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4","contentFilters": {"request": {"filters": {"framework": "TPD"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}},"reportPath": "course-reports/"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJob","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course","keywords":["Training"]},"fields":["identifier","name","organisation","channel"],"limit":10000}},"coloumns":["Published by","Batch id","Collection id","Collection name","Batch start date","Batch end date","State","Total enrolments By State","Total completion By State"],"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val storageConfig = StorageConfig("local", "", "/tmp/course-metrics")
     val data = CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData)
-    println("dataa" + data.show(false))
-    saveToBlob(data, "collection-summary-reports/")
-
+    saveToBlob(data, jobConfig)
   }
 
 }
