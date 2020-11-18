@@ -7,9 +7,8 @@ import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.Level.{ERROR, INFO}
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
@@ -153,23 +152,18 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     // Generating both csv and json extension two reports one is with date and another one is without date only -latest.
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
-    val mergeScriptConfig = MergeScriptConfig(
-      id = reportPath,
-      frequency = "DAY",
+    val mergeScriptConfig = MergeScriptConfig(id = reportPath, frequency = "DAY", rollup = 0,
       basePath = modelParams.getOrElse("baseScriptPath", "/mount/data/analytics/tmp/").asInstanceOf[String],
-      rollup = 0,
-      merge = MergeFiles(
-        List(
+      merge = MergeFiles(List(
           Map("deltaPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv"),
-          Map("deltaPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv")
-        ),
-        List()),
+          Map("deltaPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv")), List()
+      ),
       container = container,
       postContainer = Some(container)
     )
+    // Invoking a merge script to generate json format data.
    CourseUtils.mergeReport(mergeScriptConfig)
   }
-
   def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
