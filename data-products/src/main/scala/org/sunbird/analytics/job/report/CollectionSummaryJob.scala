@@ -13,16 +13,13 @@ import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
 
-case class MergeScriptConfig(basePath: String, rollup: Integer,
-                             container: String, postContainer: String, files: List[MergeFiles])
-
-case class MergeFiles(deltaPath: String, reportPath: String)
 case class CollectionBatch(batchId: String, courseId: String, startDate: String, endDate: String)
 
 case class CourseMetrics(processedBatches: Option[Int], failedBatches: Option[Int], successBatches: Option[Int])
@@ -156,27 +153,21 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     // Generating both csv and json extension two reports one is with date and another one is without date only -latest.
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
-
-    val mergeScriptConfig = MergeScriptConfig(modelParams.getOrElse("baseScriptPath", "/mount/data/analytics/tmp/").asInstanceOf[String], 0, AppConf.getConfig("cloud.container.reports"), AppConf.getConfig("cloud.container.reports"),
-      List(MergeFiles(deltaPath = getReportName(keyword, reportPath, "summary-report-latest"), reportPath = getReportName(keyword, reportPath, "summary-report-latest")),
-        MergeFiles(deltaPath = getReportName(keyword, reportPath, s"summary-report-${getDate}"), reportPath = getReportName(keyword, reportPath, s"summary-report-${getDate}"))))
-    mergeReport(mergeScriptConfig)
-  }
-
-  def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")): Unit = {
-    val mergeConfigStr = JSONUtils.serialize(mergeConfig)
-    val mergeReportCommand = Seq("bash", "-c",
-
-      s"source ${virtualEnvDir.get}/bin/activate; " +
-        s"dataproducts report_merger --report_config='$mergeConfigStr'")
-    JobLogger.log(s"Merge report script command:: $mergeReportCommand", None, INFO)
-    val mergeReportExitCode = ScriptDispatcher.dispatch(mergeReportCommand)
-    if (mergeReportExitCode == 0) {
-      JobLogger.log(s"Merge report script::Success", None, INFO)
-    } else {
-      JobLogger.log(s"Merge report script failed with exit code $mergeReportExitCode", None, ERROR)
-      throw new Exception(s"Merge report script failed with exit code $mergeReportExitCode")
-    }
+    val mergeScriptConfig = MergeScriptConfig(
+      id = reportPath,
+      frequency = "DAY",
+      basePath = modelParams.getOrElse("baseScriptPath", "/mount/data/analytics/tmp/").asInstanceOf[String],
+      rollup = 0,
+      merge = MergeFiles(
+        List(
+          Map("deltaPath" -> getReportName(keyword, reportPath, "summary-report-latest"), "reportPath" -> getReportName(keyword, reportPath, "summary-report-latest")),
+          Map("deltaPath" -> getReportName(keyword, reportPath, s"summary-report-${getDate}"), "reportPath" -> getReportName(keyword, reportPath, s"summary-report-${getDate}"))
+        ),
+        List()),
+      container = container,
+      postContainer = container
+    )
+   CourseUtils.mergeReport(mergeScriptConfig)
   }
 
   def getDate: String = {
