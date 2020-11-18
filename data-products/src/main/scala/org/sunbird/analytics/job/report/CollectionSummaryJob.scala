@@ -160,8 +160,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       rollup = 0,
       merge = MergeFiles(
         List(
-          Map("deltaPath" -> getReportName(keyword, reportPath, "summary-report-latest"), "reportPath" -> getReportName(keyword, reportPath, "summary-report-latest")),
-          Map("deltaPath" -> getReportName(keyword, reportPath, s"summary-report-${getDate}"), "reportPath" -> getReportName(keyword, reportPath, s"summary-report-${getDate}"))
+          Map("deltaPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv"),
+          Map("deltaPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv")
         ),
         List()),
       container = container,
