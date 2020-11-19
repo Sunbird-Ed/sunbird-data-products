@@ -12,12 +12,12 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
-
 
 case class CollectionBatch(batchId: String, courseId: String, startDate: String, endDate: String)
 
@@ -63,8 +63,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     init()
     try {
       val res = CommonUtil.time(prepareReport(spark, fetchData))
-      val modelParams = jobConfig.modelParams.get
-      saveToBlob(res._2, modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]) // Saving report to blob stroage
+      saveToBlob(res._2, jobConfig) // Saving report to blob stroage
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
     } finally {
       frameworkContext.closeContext()
@@ -137,7 +136,9 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
   }
 
-  def saveToBlob(reportData: DataFrame, reportPath: String): Unit = {
+  def saveToBlob(reportData: DataFrame, jobConfig: JobConfig): Unit = {
+    val modelParams = jobConfig.modelParams.get
+    val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
@@ -145,16 +146,35 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val fields = reportData.schema.fieldNames
     val colNames = for (e <- fields) yield columnMapping.getOrElse(e, e)
     val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
-    val columnWithOrder = (columnsOrder ::: dynamicColumns).distinct
+    val columnWithOrder = (modelParams.getOrElse("columns", columnsOrder).asInstanceOf[List[String]] ::: dynamicColumns).distinct
     val finalReportDF = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
-    // Generating two reports one is with date and another one is without date only -latest.
-    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}summary-report-${getDate}", Option(Map("header" -> "true")), None)
-    finalReportDF.saveToBlobStore(storageConfig, "csv", s"${reportPath}summary-report-latest", Option(Map("header" -> "true")), None)
+    val keyword = modelParams.getOrElse("keywords", null).asInstanceOf[String] // If the keyword is not present then report name is generating without keyword.
+    // Generating both csv and json extension two reports one is with date and another one is without date only -latest.
+    finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
+    finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
+    val mergeScriptConfig = MergeScriptConfig(id = reportPath, frequency = "DAY", rollup = 0,
+      basePath = modelParams.getOrElse("baseScriptPath", "/mount/data/analytics/tmp/").asInstanceOf[String],
+      merge = MergeFiles(List(
+          Map("deltaPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv"),
+          Map("deltaPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv")), List()
+      ),
+      container = container,
+      postContainer = Some(container)
+    )
+    // Invoking a merge script to generate json format data.
+   CourseUtils.mergeReport(mergeScriptConfig)
   }
-
   def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
+  }
+
+  def getReportName(keyword: String, reportPath: String, suffix: String): String = {
+    if (null == keyword) {
+      s"${reportPath}${suffix}"
+    } else {
+      s"${reportPath}${keyword}-${suffix}"
+    }
   }
 
   /**
