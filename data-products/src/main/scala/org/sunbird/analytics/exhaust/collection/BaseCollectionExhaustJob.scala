@@ -174,7 +174,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     if (collectionConfig.batchId.isEmpty && (collectionConfig.searchFilter.isEmpty && collectionConfig.batchFilter.isEmpty)) false else true
     // TODO: Check if the requestedBy user role has permission to request for the job
   }
-
   def markRequestAsProcessing(request: JobRequest) = {
     request.status = "PROCESSING";
     updateStatus(request);
@@ -240,7 +239,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "state", "district", "userchannel", "rootorgid")
   }
-
   def getEnrolmentColumns() : Seq[String] = {
     Seq("batchid", "userid", "courseid")
   }
@@ -347,7 +345,6 @@ object UDFUtils extends Serializable {
   }
 
   val toJSON = udf[String, AnyRef](toJSONFun)
-
   def extractFromArrayStringFun(board: String): String = {
     try {
       val str = JSONUtils.deserialize[AnyRef](board);
@@ -359,7 +356,6 @@ object UDFUtils extends Serializable {
   }
 
   val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
-
   def completionPercentageFunction(statusMap: Map[String, Int], leafNodesCount: Int): Int = {
     try {
       val completedContent = statusMap.filter(p => p._2 == 2).size;
