@@ -203,7 +203,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val pendingContributions = if(totalContributions-contents > 0) totalContributions-contents else 0
 
     (totalContributors,totalContributions+correctionPending,pendingContributions,acceptedContents)
-
   }
 
   def getTenantInfo(restUtil: HTTPClient)(implicit sc: SparkContext): RDD[TenantInfo] = {
