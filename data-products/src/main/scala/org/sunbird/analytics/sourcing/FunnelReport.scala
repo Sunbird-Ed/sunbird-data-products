@@ -30,7 +30,7 @@ case class TotalContributionData(facets: List[TotalContributions], count: Int)
 case class TotalContributions(values:List[ContributionData])
 case class ContributionData(name:String,count:Int)
 case class ProgramVisitors(program_id:String, startdate:String, enddate:String, visitors:String)
-case class FunnelResult(program_id:String, reportDate: String, projectName: String, noOfUsers: String, initiatedNominations: String,
+case class FunnelResult(program_id:String, reportDate: String, projectName: String, initiatedNominations: String,
                         rejectedNominations: String, pendingNominations: String, acceptedNominations: String,
                         noOfContributors: String, noOfContributions: String, pendingContributions: String,
                         approvedContributions: String, channel: String)
@@ -96,34 +96,21 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       .map(f => {
         val contributionData = getContributionData(f._1.program_id)
         druidData = ProgramVisitors(f._1.program_id,f._1.startdate,f._1.enddate, "0") :: druidData
-        FunnelResult(f._1.program_id,reportDate,f._1.name,"0",f._2.Initiated,f._2.Rejected,
+        FunnelResult(f._1.program_id,reportDate,f._1.name,f._2.Initiated,f._2.Rejected,
           f._2.Pending,f._2.Approved,contributionData._1.toString,contributionData._2.toString,contributionData._3.toString,
           contributionData._4.toString,f._1.rootorg_id)
       }).toDF()
 
-    val df = report.join(tenantInfo,report.col("channel") === tenantInfo.col("id"),"left")
-      .drop("channel","id")
+    val funnelReport = report.join(tenantInfo,report.col("channel") === tenantInfo.col("id"),"left")
+      .drop("channel","id","program_id")
       .persist(StorageLevel.MEMORY_ONLY)
 
-    val visitorData = druidData.map(f => {
-      val druidData = if(null != f.enddate && null != f.startdate && DateTime.parse(f.enddate.split(" ")(0)).isAfter(DateTime.parse(f.startdate.split(" ")(0)).getMillis)) {
-        val query = getDruidQuery(druidQuery,f.program_id,s"${f.startdate.split(" ")(0)}T00:00:00+00:00/${f.enddate.split(" ")(0)}T00:00:00+00:00")
-        val response = DruidDataFetcher.getDruidData(query).collect()
-        response.map(f => JSONUtils.deserialize[DruidTextbookData](f))
-      } else Array[DruidTextbookData]()
-      val noOfVisitors = if(druidData.nonEmpty) druidData.head.visitors.toString else "0"
-      ProgramVisitors(f.program_id,f.startdate,f.enddate,noOfVisitors)
-    }).toDF().na.fill(0).persist(StorageLevel.MEMORY_ONLY)
-    JobLogger.log(s"FunnelReport Job - Execution completed for visitor count",None, Level.INFO)
-
-    val funnelReport = df
-      .join(visitorData,Seq("program_id"),"inner")
-      .drop("startdate","enddate","program_id","noOfUsers")
     val storageConfig = getStorageConfig("reports", "")
     saveReportToBlob(funnelReport, config, storageConfig, "FunnelReport")
 
-    df.unpersist(true)
-    visitorData.unpersist(true)
+    funnelReport.unpersist(true)
+    JobLogger.end("FunnelReport Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> "FunnelReport")))
+    fc.closeContext()
   }
 
   def getDruidQuery(query: String, programId: String, interval: String): DruidQueryModel = {
@@ -216,7 +203,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val pendingContributions = if(totalContributions-contents > 0) totalContributions-contents else 0
 
     (totalContributors,totalContributions+correctionPending,pendingContributions,acceptedContents)
-
   }
 
   def getTenantInfo(restUtil: HTTPClient)(implicit sc: SparkContext): RDD[TenantInfo] = {
