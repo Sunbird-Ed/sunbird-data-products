@@ -28,7 +28,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
   val contentType = "SelfAssess"
 
   override def preProcess(data: RDD[String], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[V3Event] = {
-    data.map(f => JSONUtils.deserialize[V3Event](f)).filter(f => null != f.eid && f.eid.equals(assessEvent))
+    data.map(f => JSONUtils.deserialize[V3Event](f)).filter(f => null != f.eid && f.eid.equals(assessEvent) && null != f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1)
   }
 
   override def algorithm(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
@@ -53,7 +53,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   def loadDruidData(config: Map[String, AnyRef])(implicit sc: SparkContext, sqlContext: SQLContext, fc: FrameworkContext): DataFrame = {
     import sqlContext.implicits._
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.get("modelParams").get.asInstanceOf[Map[String, AnyRef]].get("druidConfig").get))
+    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.get("druidConfig").get))
     val druidResponse = DruidDataFetcher.getDruidData(druidConfig)
     val dataDF = druidResponse.map(f => JSONUtils.deserialize[DruidOutput](f)).toDF.select("identifier")
     dataDF
@@ -76,6 +76,16 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
     val df = assessEvent.join(userEnrollmentData, Seq("courseid", "userid"))
       .groupBy("contentid", "courseid", "userid", "attemptId", "batchid")
       .agg(collect_list(col("assessEvent")).as("assessEventList"))
+      .withColumn("AttemptId_resolved",
+          when(col("attemptId").equalTo(""), md5(concat(col("contentid"), col("courseid"), col("userid"), col("batchid")))).otherwise(col("attemptId")))
+      .select(
+      col("contentid"),
+      col("courseid"),
+      col("userid"),
+      col("AttemptId_resolved").as("attemptId"),
+      col("batchid"),
+      col("assessEventList")
+    )
     df
   }
 

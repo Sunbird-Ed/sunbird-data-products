@@ -31,7 +31,8 @@ class TestAssessmentCorrectionModel extends SparkSpec(null) with MockFactory {
 
   "AssessmentCorrectionModel" should "provide the event" in {
     val strConfig = """{"model":"org.sunbird.analytics.model.report.AssessmentCorrectionModel","search":{"type":"local","queries":[{"file":"src/test/resources/assessment-correction/test-data.log"}]},"modelParams":{"parallelization":200,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"}],"filters":[{"type":"equals","dimension":"contentType","value":"SelfAssess"}],"descending":"false"}},"output":[{"to":"file","params":{"file":"src/test/resources/assessment-correction"}}],"parallelization":8,"appName":"Assessment Correction Model"}"""
-    val data = loadFile[String]("src/test/resources/assessment-correction/test-data1.log");
+    val strConfig1 = """{"parallelization":200,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"}],"filters":[{"type":"equals","dimension":"contentType","value":"SelfAssess"}],"descending":"false"}}"""
+    val data = loadFile[String]("src/test/resources/assessment-correction/test-data2.log");
 
     val config = JSONUtils.deserialize[JobConfig](strConfig)
     val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
@@ -54,7 +55,7 @@ class TestAssessmentCorrectionModel extends SparkSpec(null) with MockFactory {
     (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
     (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
-    val mapConfig = JSONUtils.deserialize[Map[String, AnyRef]](strConfig)
+    val mapConfig = JSONUtils.deserialize[Map[String, AnyRef]](strConfig1)
     val output = AssessmentCorrectionModel.execute(data, Option(mapConfig))
 
     output.count() should be (1)
