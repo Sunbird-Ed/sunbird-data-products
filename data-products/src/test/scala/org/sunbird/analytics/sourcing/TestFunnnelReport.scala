@@ -49,8 +49,8 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
     val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val sparkCon = spark
-    val funnelReportCount = FunnelReport.execute()
-    funnelReportCount.getOrElse("funnelReportCount",0) should be 2
+    val reportMetrics = FunnelReport.execute()
+    reportMetrics.getOrElse("funnelReportCount",0) should be (2)
   }
 
   it should "return 0 if no resources found for correction pending" in {
