@@ -62,11 +62,53 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     implicit val dryRunEnabled:Boolean = modelParams.getOrElse("mode", "dryrun").asInstanceOf[String].equals("dryrun")
-    logTime(reconcileProgressUpdates(), "Time taken to reconcile progress updates");
-    logTime(reconcileMissingCertsAndEnrolmentDates(modelParams), "Time taken to reconcile progress updates");
+    val preAuditEvent = logTime(audit(), "Time taken to execute pre audit check"); // Pre Audit Check
+    JobLogger.log("Pre Audit Check", Option(preAuditEvent), INFO)
+    
+    val progressMetrics = logTime(reconcileProgressUpdates(), "Time taken to reconcile progress updates");
+    JobLogger.log("Reconcile Missing Completion Dates", Option(progressMetrics), INFO)
+    
+    val certMetrics = logTime(reconcileMissingCertsAndEnrolmentDates(modelParams), "Time taken to reconcile progress updates");
+    JobLogger.log("Reconcile Certificates and Enrolments", Option(certMetrics), INFO)
+    
+    val postAuditEvent = logTime(audit(), "Time taken to execute post audit check"); // Post Audit Check
+    JobLogger.log("Post Audit Check", Option(postAuditEvent), INFO)
+    
+  }
+  
+  def audit()(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean): Map[String, Long] = {
+    val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).select("userid", "batchid", "courseid", "contentstatus", "enrolleddate", "completedon", "certificates");
+    val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType()).select("batchid", "name", "startdate", "enddate");
+    
+    val joinedDF = enrolmentDF.join(courseBatchDF, "batchid").cache();
+    
+    val missingEnrolmentDate = joinedDF.filter(col("enrolleddate").isNull).count()
+    val missingCompletionDate = joinedDF.filter(col("completedon").isNull).count()
+    
+    val enrolmentDateLTBatchStartDate = joinedDF
+      .withColumn("enrolledon", unix_timestamp(col("enrolleddate"), "yyyy-MM-dd HH:mm:ss:SSS"))
+      .withColumn("startedon", unix_timestamp(col("startdate"), "yyyy-MM-dd"))
+      .filter(col("startedon") > col("enrolledon"))
+      .count()
+    
+    val completionDateGTBatchEndDate = joinedDF
+      .withColumn("endedon", unix_timestamp(date_add(to_date(col("enddate"), "yyyy-MM-dd"), 1)))
+      .withColumn("completedts", unix_timestamp(col("completedon")))
+      .filter(col("completedts") > col("endedon"))
+      .count()
+    
+    val distinctCourses = joinedDF.filter(col("completedon").isNull).select("courseid").distinct()
+    val coursesDF = getCollectionLeafNodes();
+    val joinedCoursesDF = distinctCourses.join(coursesDF, "courseid")
+    
+    val progressCompleteDF = joinedDF.join(joinedCoursesDF, "courseid").withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes"))).withColumn("completed", completed(col("contentstatus"), col("leafnodescount"))).cache();
+    val missingCompletionDateCount = progressCompleteDF.filter(col("completed") === "Yes").count();
+
+    joinedDF.unpersist(true);
+    Map("missingEnrolmentDate" -> missingEnrolmentDate, "missingCompletionDate" -> missingCompletionDate, "batchStartDtGTEnrolmentDt" -> enrolmentDateLTBatchStartDate, "completionDtGTBatchEndDt" -> completionDateGTBatchEndDate, "missingCompletionDateCount" -> missingCompletionDateCount)
   }
 
-  def reconcileProgressUpdates()(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) = {
+  def reconcileProgressUpdates()(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) : Map[String, Long] = {
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType());
     val notcompletedEnrolments = enrolmentDF.filter(col("completedon").isNull).cache();
     val distinctCourses = notcompletedEnrolments.select("courseid").distinct()
@@ -91,14 +133,15 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     }
     notcompletedEnrolments.unpersist(true);
     enrolmentCourseJoinedDF.unpersist(true);
+    Map("contentStatusMapUpdCount" -> contentStatusMapUpdCount, "missingCompletionDateCount" -> missingCompletionDateCount)
   }
   
-  def reconcileMissingCertsAndEnrolmentDates(modelParams: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) = {
+  def reconcileMissingCertsAndEnrolmentDates(modelParams: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) : Map[String, Long] = {
 
     implicit val sc = spark.sparkContext;
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).cache();
-    val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType()).select("batchid", "enddate");
-    val courseBatchMinDF = courseBatchDF.withColumn("hasSVGCertificate", hasSVGCertificate(col("cert_templates"))).select("batchid", "name", "hasSVGCertificate", "startdate", "enddate").cache();
+    val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType());
+    val courseBatchMinDF = courseBatchDF.withColumn("hasSVGCertificate", hasSVGCertificate(col("cert_templates"))).select("batchid", "hasSVGCertificate", "startdate", "enddate").cache();
     val joinedDF = enrolmentDF.join(courseBatchMinDF, "batchid").filter(col("completedon").isNotNull).withColumn("certificatestatus", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued")
       .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise("")).cache();
 
@@ -117,6 +160,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     if(blankEnrolmentCount > 0) {
       updateEnrolmentDates(blankEnrolmentDatesDF, courseBatchMinDF);
     }
+    Map("blankEnrolmentCount" -> blankEnrolmentCount, "certIssuedCount" -> certIssueRDD.count());
     
   }
   
