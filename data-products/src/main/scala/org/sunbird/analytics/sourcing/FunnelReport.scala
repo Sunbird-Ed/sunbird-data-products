@@ -40,6 +40,7 @@ case class DruidTextbookData(visitors: Int)
 object FunnelReport extends optional.Application with IJob with BaseReportsJob {
 
   implicit val className = "org.sunbird.analytics.job.report.FunnelReport"
+  val jobName = "Funnel Report Job"
   val db = AppConf.getConfig("postgres.db")
   val url = AppConf.getConfig("postgres.url") + s"$db"
   val connProperties = CommonUtil.getPostgresConnectionProps
@@ -50,8 +51,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
     JobLogger.init("FunnelReport")
     JobLogger.log("Started execution - FunnelReport Job",None, Level.INFO)
-    val jobConfig = JSONUtils.deserialize[JobConfig](config)
-    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
+    implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
 
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig)
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig)
@@ -62,12 +62,25 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val sparkConf = sparkContext.getConf
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
       .set("spark.sql.caseSensitive", AppConf.getConfig(key = "spark.sql.caseSensitive"))
-    val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
-    generateFunnelReport(spark,configMap)
+    implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
+
+    try {
+      val res = CommonUtil.time(execute());
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "funnelReportCount" -> res._2.getOrElse("funnelReportCount",0))))
+    } finally {
+      frameworkContext.closeContext()
+    }
   }
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def generateFunnelReport(spark: SparkSession, config: Map[String,AnyRef])(implicit sc: SparkContext, fc: FrameworkContext) = {
+  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Map[String, Long] = {
+    implicit val sc = spark.sparkContext
+    import spark.implicits._
+    val tenantInfo = getTenantInfo(RestUtil).toDF()
+    process(tenantInfo)
+  }
+
+  def process(tenantInfo: DataFrame)(implicit spark: SparkSession, config: JobConfig): Map[String, Long] = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
 
@@ -86,11 +99,10 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       .map(f => (f.program_id,f))
 
     val reportDate = DateTimeFormat.forPattern("dd-MM-yyyy").print(DateTime.now())
-    val tenantInfo = getTenantInfo(RestUtil).toDF()
 
     val data = programData.leftOuterJoin(nominationRdd).map(f=>(f._2._1,f._2._2.getOrElse(NominationData("","","","",""))))
     var druidData = List[ProgramVisitors]()
-    val druidQuery = JSONUtils.serialize(config("druidConfig"))
+
     val report = data
       .filter(f=> null != f._1.status && (f._1.status.equalsIgnoreCase("Live") || f._1.status.equalsIgnoreCase("Unlisted"))).collect().toList
       .map(f => {
@@ -105,12 +117,13 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       .drop("channel","id","program_id")
       .persist(StorageLevel.MEMORY_ONLY)
 
+    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config))
     val storageConfig = getStorageConfig("reports", "")
-    saveReportToBlob(funnelReport, config, storageConfig, "FunnelReport")
+    saveReportToBlob(funnelReport, configMap, storageConfig, "FunnelReport")
 
     funnelReport.unpersist(true)
     JobLogger.end("FunnelReport Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> "FunnelReport")))
-    fc.closeContext()
+    Map("funnelReportCount"->funnelReport.count())
   }
 
   def getDruidQuery(query: String, programId: String, interval: String): DruidQueryModel = {
