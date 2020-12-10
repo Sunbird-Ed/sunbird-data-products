@@ -8,13 +8,13 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
-import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
 import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.job.report.DruidOutput
 
 case class SelfAssessData(identifier: String, contentType: String)
 case class AssessEvent (contentid: String, attemptId: String, courseid: String, userid: String, assessEvent: String)
-case class AssessOutputEvent(assessmentTs: Long, batchId: String, courseId: String, userId: String, attemptId: String, contentId: String, events: java.util.List[String]) extends AlgoOutput with Output
+case class AssessOutputEvent(assessmentTs: Long, batchId: String, courseId: String, userId: String, attemptId: String, contentId: String, events: java.util.List[Map[String, AnyRef]]) extends AlgoOutput with Output
 
 object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,AssessOutputEvent,AssessOutputEvent] with Serializable with BaseReportsJob {
 
@@ -28,7 +28,8 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
   val contentType = "SelfAssess"
 
   override def preProcess(data: RDD[String], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[V3Event] = {
-    data.map(f => JSONUtils.deserialize[V3Event](f)).filter(f => null != f.eid && f.eid.equals(assessEvent) && null != f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1)
+    JobLogger.log(s"Total input events from backup: ${data.count()}", None, Level.INFO)
+    data.map(f => JSONUtils.deserialize[V3Event](f)).filter(f => null != f.eid && f.eid.equals(assessEvent) && null != f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1 && !f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1.isEmpty)
   }
 
   override def algorithm(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
@@ -48,6 +49,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
   }
 
   override def postProcess(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
+    JobLogger.log(s"Total output events: ${events.count()}", None, Level.INFO)
     events
   }
 
@@ -61,7 +63,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   def getAssessEventData(events: RDD[V3Event])(implicit sqlContext: SQLContext, sc: SparkContext): DataFrame = {
     import sqlContext.implicits._
-
+    JobLogger.log(s"Total events after filter: ${events.count()}", None, Level.INFO)
     val assessEvent = events.map { f =>
       val userId = if (f.actor.`type`.equals("User")) f.actor.id else "" // UserID
     val cData = f.context.cdata.getOrElse(List())
@@ -73,6 +75,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
       AssessEvent(contentId, attemptId, courseId, userId, event)
     }.toDF
     val userEnrollmentData = getUserEnrollData()
+    JobLogger.log(s"Total user enrolment data: ${userEnrollmentData.count()}", None, Level.INFO)
     val df = assessEvent.join(userEnrollmentData, Seq("courseid", "userid"))
       .groupBy("contentid", "courseid", "userid", "attemptId", "batchid")
       .agg(collect_list(col("assessEvent")).as("assessEventList"))
@@ -86,6 +89,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
       col("batchid"),
       col("assessEventList")
     )
+    JobLogger.log(s"Total events after joining with user enroled data: ${df.count()}", None, Level.INFO)
     df
   }
 
