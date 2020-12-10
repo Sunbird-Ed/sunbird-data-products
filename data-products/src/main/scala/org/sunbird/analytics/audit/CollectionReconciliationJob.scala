@@ -38,7 +38,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
     JobLogger.init(jobName)
-    JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
+    JobLogger.start(s"$jobName started executing - version 6", Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
@@ -62,6 +62,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     implicit val dryRunEnabled:Boolean = modelParams.getOrElse("mode", "dryrun").asInstanceOf[String].equals("dryrun")
+    
     val preAuditEvent = logTime(audit(), "Time taken to execute pre audit check"); // Pre Audit Check
     JobLogger.log("Pre Audit Check", Option(preAuditEvent), INFO)
     
@@ -97,13 +98,15 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
       .filter(col("completedts") > col("endedon"))
       .count()
     
-    val distinctCourses = joinedDF.filter(col("completedon").isNull).select("courseid").distinct()
+    val notcompletedEnrolments = joinedDF.filter(col("completedon").isNull).cache();
+    val distinctCourses = notcompletedEnrolments.select("courseid").distinct()
     val coursesDF = getCollectionLeafNodes();
     val joinedCoursesDF = distinctCourses.join(coursesDF, "courseid")
     
-    val progressCompleteDF = joinedDF.join(joinedCoursesDF, "courseid").withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes"))).withColumn("completed", completed(col("contentstatus"), col("leafnodescount"))).cache();
+    val progressCompleteDF = notcompletedEnrolments.join(joinedCoursesDF, "courseid").withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes"))).withColumn("completed", completed(col("contentstatus"), col("leafnodescount"))).cache();
     val missingCompletionDateCount = progressCompleteDF.filter(col("completed") === "Yes").count();
 
+    notcompletedEnrolments.unpersist(true);
     joinedDF.unpersist(true);
     Map("missingEnrolmentDate" -> missingEnrolmentDate, "missingCompletionDate" -> missingCompletionDate, "batchStartDtGTEnrolmentDt" -> enrolmentDateLTBatchStartDate, "completionDtGTBatchEndDt" -> completionDateGTBatchEndDate, "missingCompletionDateCount" -> missingCompletionDateCount)
   }
@@ -117,19 +120,19 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
 
     val nonCompleteEnrolmentsDF = notcompletedEnrolments.select("userid", "batchid", "courseid", "contentstatus", "enrolleddate")
     val enrolmentCourseJoinedDF = nonCompleteEnrolmentsDF.join(joinedCoursesDF, "courseid")
-      .withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes")))
       .withColumn("contentstatusupdated", contentStatusUpdated(col("contentstatus"), col("leafnodes")))
+      .withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes")))
       .withColumn("completed", completed(col("contentstatus"), col("leafnodescount"))).cache();
 
     val contentStatusMapUpdCount = enrolmentCourseJoinedDF.filter(col("contentstatusupdated") === "Yes").count();
     val missingCompletionDateCount = enrolmentCourseJoinedDF.filter(col("completed") === "Yes").count();
 
     if (contentStatusMapUpdCount > 0) {
-      updateContentStatus(enrolmentCourseJoinedDF)
+      logTime(updateContentStatus(enrolmentCourseJoinedDF), "Time taken to update content status map for incomplete enrolments")
     }
 
     if (missingCompletionDateCount > 0) {
-      updateCompletions(enrolmentCourseJoinedDF)
+      logTime(updateCompletions(enrolmentCourseJoinedDF), "Time taken to update completion dates")
     }
     notcompletedEnrolments.unpersist(true);
     enrolmentCourseJoinedDF.unpersist(true);
@@ -197,7 +200,8 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     val enrolmentWithRevisedDtDF = enrolmentJoinedDF.groupBy("userid", "batchid", "courseid").agg(max(col("lastcompletedtime")).alias("lastreviseddate")).withColumn("lastrevisedon", unix_timestamp(col("lastreviseddate"), "yyyy-MM-dd HH:mm:ss:SSS"))
     enrolmentWithRevisedDtDF.join(courseBatchDF, "batchid")
       .withColumn("endedon", unix_timestamp(col("enddate"), "yyyy-MM-dd"))
-      .withColumn("completedon", when(col("endedon").isNotNull, when(col("endedon") < col("lastrevisedon"), col("endedon")).otherwise(col("lastrevisedon"))).otherwise(col("lastrevisedon")))
+      .withColumn("completedts", when(col("endedon").isNotNull, when(col("endedon") < col("lastrevisedon"), col("endedon")).otherwise(col("lastrevisedon"))).otherwise(col("lastrevisedon")))
+      .withColumn("completedon", col("completedts") * 1000)
       .withColumn("status", lit(2))
       .select("userid", "courseid", "batchid", "status", "completedon")
       .write.format(cassandraFormat).options(if(dryRunEnabled) userEnrolmentTempDBSettings else userEnrolmentDBSettings).mode("APPEND").save()
@@ -217,9 +221,14 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     finalEnrolmentDF.join(courseBatchMinDF, "batchid")
       .withColumn("startedon", unix_timestamp(col("startdate"), "yyyy-MM-dd"))
       .withColumn("startedtimestamp", when(col("lastrevisedon").isNotNull, when(col("startedon") > col("lastrevisedon"), col("startedon")).otherwise(col("lastrevisedon"))).otherwise(col("startedon")))
-      .withColumn("enrolleddate", from_unixtime(col("startedtimestamp")))
+      .withColumn("enrolleddate", from_unixtime(col("startedtimestamp"), "MM-dd-yyyy HH:mm:ss:SSSZ"))
       .select("userid", "courseid", "batchid", "enrolleddate")
       .write.format(cassandraFormat).options(if(dryRunEnabled) userEnrolmentTempDBSettings else userEnrolmentDBSettings).mode("APPEND").save()
+
+    blankEnrolmentDatesDF
+      .select("userid", "courseid", "batchid", "active")
+      .withColumn("active", when(col("active").isNull, true).otherwise(col("active")))
+      .write.format(cassandraFormat).options(if (dryRunEnabled) userEnrolmentTempDBSettings else userEnrolmentDBSettings).mode("APPEND").save()
   }
 
   def getCollectionLeafNodes()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
