@@ -108,7 +108,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
     import java.text.SimpleDateFormat
     val yesterday = java.time.LocalDate.now.minusDays(1).toString
-    partitionDF.join(transformedDF.drop("isCertified", "status").dropDuplicates("courseid", "batchid", "userid"), Seq("courseid", "batchid"), "inner")
+    partitionDF.join(transformedDF.drop("isCertified", "status").dropDuplicates("courseid", "batchid", "state", "district"), Seq("courseid", "batchid"), "inner")
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
       .withColumn("timestamp", lit(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(s"$yesterday 23:59:59").getTime))
   }
