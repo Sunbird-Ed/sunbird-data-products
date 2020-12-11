@@ -124,8 +124,11 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
+    // Starting the ingestion task
+    JobLogger.log(s"Submitting Druid Ingestion Task", None, INFO)
     val ingestionSpecPath: String = modelParams.getOrElse("specPath", "").asInstanceOf[String]
-    submitIngestionTask(ingestionSpecPath)
+    val druidIngestionUrl: String = modelParams.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
+    submitIngestionTask(druidIngestionUrl, ingestionSpecPath)
   }
 
   def getDate: String = {
@@ -133,8 +136,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     dateFormat.print(System.currentTimeMillis());
   }
 
-  def submitIngestionTask(specPath: String): Unit = {
-    RestUtil.post("requestURL", s"@$specPath", None)
+  def submitIngestionTask(apiUrl:String, specPath: String): Unit = {
+    RestUtil.post(apiUrl, s"@$specPath", None)
   }
 
 
