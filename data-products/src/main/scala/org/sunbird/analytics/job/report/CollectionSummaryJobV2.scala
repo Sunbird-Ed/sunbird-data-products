@@ -20,12 +20,6 @@ import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
 
-//case class CollectionBatch(batchId: String, courseId: String, startDate: String, endDate: String)
-//
-//case class CourseMetrics(processedBatches: Option[Int], failedBatches: Option[Int], successBatches: Option[Int])
-//
-//case class CollectionBatchResponses(batchId: String, execTime: Long, status: String)
-
 object CollectionSummaryJobV2 extends optional.Application with IJob with BaseReportsJob {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
@@ -129,6 +123,9 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val storageConfig = getStorageConfig(container, objectKey)
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
+    reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
+    val ingestionSpecPath: String = modelParams.getOrElse("specPath", "").asInstanceOf[String]
+    submitIngestionTask(ingestionSpecPath)
   }
 
   def getDate: String = {
@@ -139,7 +136,6 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   def submitIngestionTask(specPath: String): Unit = {
     RestUtil.post("requestURL", s"@$specPath", None)
   }
-
 
 
   /**
