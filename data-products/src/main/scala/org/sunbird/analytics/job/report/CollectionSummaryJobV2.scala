@@ -134,8 +134,11 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     dateFormat.print(System.currentTimeMillis());
   }
 
-  def submitIngestionTask(apiUrl:String, specPath: String): Unit = {
-    RestUtil.post(apiUrl, s"@$specPath", None)
+  def submitIngestionTask(apiUrl: String, specPath: String): Unit = {
+    val source = scala.io.Source.fromFile(specPath)
+    val ingestionData = try source.mkString finally source.close()
+    val response = RestUtil.post(apiUrl, ingestionData, None)
+    JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
   }
 
 
