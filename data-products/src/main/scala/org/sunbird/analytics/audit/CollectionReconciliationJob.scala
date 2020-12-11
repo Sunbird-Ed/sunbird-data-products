@@ -195,7 +195,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     val enrolmentRDD = enrolmentDF.rdd.repartition(30).map(f => UserEnrolment(f.getString(0), f.getString(1), f.getString(2)))
 
     val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime"), SomeColumns("userid", "batchid", "courseid"))
-    val finalRDD = joinedRdd.filter(f => f._2.getInt(1) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getString(2)))
+    val finalRDD = joinedRdd.filter(f => f._2.getIntOption(1).getOrElse(0) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getString(2)))
     val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid").withColumnRenamed("_4", "lastcompletedtime")
     val enrolmentWithRevisedDtDF = enrolmentJoinedDF.groupBy("userid", "batchid", "courseid").agg(max(col("lastcompletedtime")).alias("lastreviseddate")).withColumn("lastrevisedon", unix_timestamp(col("lastreviseddate"), "yyyy-MM-dd HH:mm:ss:SSS"))
     enrolmentWithRevisedDtDF.join(courseBatchDF, "batchid")
