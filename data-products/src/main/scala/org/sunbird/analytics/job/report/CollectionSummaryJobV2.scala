@@ -23,7 +23,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "state", "enrolledUsersCount", "completionUserCount", "certificateIssueCount", "contentStatus", "keywords", "channel", "timestamp")
+  private val filterColumns = Seq("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "state", "district", "enrolledUsersCount", "completionUserCount", "certificateIssueCount", "contentStatus", "keywords", "channel", "timestamp")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
   val jobName = "CollectionSummaryJobV2"
@@ -100,7 +100,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
     // Compute completionCount and enrolCount for state
-    val partitionDF = transformedDF.groupBy("batchid", "courseid").agg(
+    val partitionDF = transformedDF.groupBy("batchid", "courseid", "state", "district").agg(
       count(when(col("completedon").isNotNull, 1)).as("completionUserCount"),
       count(when(col("isCertified") === "Y", 1)).as("certificateIssueCount"),
       count(col("userid")).as("enrolledUsersCount")
@@ -108,7 +108,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
     import java.text.SimpleDateFormat
     val yesterday = java.time.LocalDate.now.minusDays(1).toString
-    partitionDF.join(transformedDF.drop("isCertified", "status").dropDuplicates("courseid", "batchid", "state", "district"), Seq("courseid", "batchid"), "inner")
+    partitionDF.join(transformedDF.drop("isCertified", "status").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
       .withColumn("timestamp", lit(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(s"$yesterday 23:59:59").getTime))
   }
