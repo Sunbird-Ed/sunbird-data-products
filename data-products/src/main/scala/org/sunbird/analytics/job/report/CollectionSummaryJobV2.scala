@@ -7,7 +7,7 @@ import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
@@ -136,9 +136,15 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
   def submitIngestionTask(apiUrl: String, specPath: String): Unit = {
     val source = scala.io.Source.fromFile(specPath)
-    val ingestionData = try source.mkString finally source.close()
+    val ingestionData = try {
+      source.mkString
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(s"Exception Found While reading ingestion spec. ${ex.getMessage}", None, ERROR)
+        ex.printStackTrace()
+        null
+    } finally source.close()
     val response = RestUtil.post[Map[String, String]](apiUrl, ingestionData, None)
-    println("responseis" + response)
     JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
   }
 
