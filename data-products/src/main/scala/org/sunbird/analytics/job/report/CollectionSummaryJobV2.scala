@@ -1,7 +1,5 @@
 package org.sunbird.analytics.job.report
 
-import java.util.Date
-
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
@@ -27,7 +25,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val filterColumns = Seq("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "state", "enrolledUsersCount", "completionUserCount", "certificateIssueCount", "contentStatus", "keywords", "channel", "timestamp")
 
-  implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJob"
+  implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
   val jobName = "CollectionSummaryJobV2"
 
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
