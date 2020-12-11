@@ -137,7 +137,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   def submitIngestionTask(apiUrl: String, specPath: String): Unit = {
     val source = scala.io.Source.fromFile(specPath)
     val ingestionData = try source.mkString finally source.close()
-    val response = RestUtil.post(apiUrl, ingestionData, None)
+    val response = RestUtil.post[Map[String, String]](apiUrl, ingestionData, None)
+    println("responseis" + response)
     JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
   }
 
