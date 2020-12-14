@@ -1,0 +1,314 @@
+#!/usr/bin/env python
+
+import argparse
+import json
+import os
+import pdb
+import sys
+from datetime import date
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='dataproducts')
+    parser.add_argument("-v", "--version", help="Dataproducts version"
+                        , action='store_true', dest='version', default=False)
+    subparsers = parser.add_subparsers(dest='cmd', help='sub-commands')
+
+    parser_ecg = subparsers.add_parser('ecg_learning',
+                                       help='Pulse of nation learning')
+    parser_ecg.add_argument("--data_store_location", type=str,
+                            help="The path to local data folder")
+    parser_ecg.add_argument("--bootstrap", action='store_true',
+                            help="Run for 7 days", default=False)
+
+    parser_lpm = subparsers.add_parser('landing_page',
+                                       help='Landing Page Metrics')
+    parser_lpm.add_argument("--data_store_location", type=str,
+                            help="The path to local data folder")
+    parser_lpm.add_argument("--org_search", type=str,
+                            help="host address for Org API")
+
+    parser_dweekly = subparsers.add_parser('district_weekly',
+                                           help='District wise weekly report')
+    parser_dweekly.add_argument("--data_store_location", type=str,
+                                help="The path to local data folder")
+    parser_dweekly.add_argument("--druid_hostname", type=str,
+                                help="Host address for Druid")
+    parser_dweekly.add_argument("--location_search", type=str,
+                                help="host address for Location API")
+    parser_dweekly.add_argument("--execution_date", type=str,
+                                default=date.today().strftime("%d/%m/%Y"),
+                                help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_dmonthly = subparsers.add_parser('district_monthly',
+                                            help='District wise monthly report')
+    parser_dmonthly.add_argument("--data_store_location", type=str,
+                                 help="The path to local data folder")
+    parser_dmonthly.add_argument("--druid_hostname", type=str,
+                                 help="Host address for Druid")
+    parser_dmonthly.add_argument("--location_search", type=str,
+                                 help="host address for Location API")
+    parser_dmonthly.add_argument("--execution_date", type=str,
+                                 default=date.today().strftime("%d/%m/%Y"),
+                                 help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_cc = subparsers.add_parser('content_consumption',
+                                      help='Content consumption report')
+    parser_cc.add_argument("--data_store_location", type=str,
+                           help="the path to local data folder")
+    parser_cc.add_argument("--org_search", type=str,
+                           help="host address for Org API")
+    parser_cc.add_argument("--druid_hostname", type=str,
+                           help="Host address for Druid")
+    parser_cc.add_argument("--druid_rollup_hostname", type=str,
+                           help="Host address for Druid Rollup")
+    parser_cc.add_argument("--content_search", type=str,
+                           help="Host address for Content Search API")
+    parser_cc.add_argument("--execution_date", type=str,
+                           default=date.today().strftime("%d/%m/%Y"),
+                           help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_dm = subparsers.add_parser('daily_metrics',
+                                      help='Daily Metrics')
+    parser_dm.add_argument("--data_store_location", type=str,
+                           help="the path to local data folder")
+    parser_dm.add_argument("--org_search", type=str,
+                           help="host address for Org API")
+    parser_dm.add_argument("--druid_hostname", type=str,
+                           help="Host address for Druid")
+    parser_dm.add_argument("--content_search", type=str,
+                           help="Host address for Content Search API")
+    parser_dm.add_argument("--content_hierarchy", type=str,
+                           help="Host address for Content Hierarchy API")
+    parser_dm.add_argument("--execution_date", type=str,
+                           default=date.today().strftime("%d/%m/%Y"),
+                           help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_gps = subparsers.add_parser('gps_learning',
+                                       help='Daily Metrics')
+    parser_gps.add_argument("--data_store_location", type=str,
+                            help="the path to local data folder")
+    parser_gps.add_argument("--druid_hostname", type=str,
+                            help="Host address for Druid")
+    parser_gps.add_argument("--org_search", type=str,
+                            help="host address for Org API")
+    parser_gps.add_argument("--content_search", type=str,
+                            help="Host address for Content Search API")
+    parser_gps.add_argument("--content_hierarchy", type=str,
+                            help="Host address for Content Hierarchy API")
+    parser_gps.add_argument("--execution_date", type=str,
+                            default=date.today().strftime("%d/%m/%Y"),
+                            help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_etb = subparsers.add_parser('etb_metrics',
+                                       help='ETB Creation Metrics & Dialcode Exception Report')
+    parser_etb.add_argument("--data_store_location", type=str,
+                            help="the path to local data folder")
+    parser_etb.add_argument("--druid_hostname", type=str,
+                            help="Host address for Druid")
+    parser_etb.add_argument("--org_search", type=str,
+                            help="host address for Org API")
+    parser_etb.add_argument("--content_search", type=str,
+                            help="Host address for Content Search API")
+    parser_etb.add_argument("--content_hierarchy", type=str,
+                            help="Host address for Content Hierarchy API")
+    parser_etb.add_argument("--execution_date", type=str,
+                            default=date.today().strftime("%d/%m/%Y"),
+                            help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_cont_creation = subparsers.add_parser('content_creation',
+                                                 help='Content Creation Report')
+    parser_cont_creation.add_argument("--data_store_location", type=str,
+                                      help="the path to local data folder")
+    parser_cont_creation.add_argument("--org_search", type=str,
+                                      help="host address for Org API")
+    parser_cont_creation.add_argument("--content_search", type=str,
+                                      help="Host address for Content Search API")
+    parser_cont_creation.add_argument("--execution_date", type=str,
+                                      default=date.today().strftime("%d/%m/%Y"),
+                                      help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_cont_progress = subparsers.add_parser('content_progress',
+                                                 help='Content Progress Report')
+    parser_cont_progress.add_argument("--data_store_location", type=str,
+                                      help="the path to local data folder")
+    parser_cont_progress.add_argument("--org_search", type=str,
+                                      help="host address for Org API")
+    parser_cont_progress.add_argument("--content_search", type=str,
+                                      help="Host address for Content Search API")
+    parser_cont_progress.add_argument("--execution_date", type=str,
+                                      default=date.today().strftime("%d/%m/%Y"),
+                                      help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_cmo = subparsers.add_parser('cmo_dashboard',
+                                       help='CMO Dashboard')
+    parser_cmo.add_argument("--data_store_location", type=str,
+                            help="the path to local data folder")
+    parser_cmo.add_argument("--org_search", type=str,
+                            help="host address for Org API")
+    parser_cmo.add_argument("--execution_date", type=str,
+                            default=date.today().strftime("%d/%m/%Y"),
+                            help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_ud = subparsers.add_parser('user_detail',
+                                      help='User detail')
+    parser_ud.add_argument("--data_store_location", type=str,
+                           help="The path to local data folder")
+    parser_ud.add_argument("--states", type=str,
+                           help="State slugs in array")
+    parser_ud.add_argument("--is_private", action='store_true',
+                            help="Upload report to private blob", default=False)
+
+    parser_udd = subparsers.add_parser('user_declared_detail',
+                                      help='User declared details')
+    parser_udd.add_argument("--data_store_location", type=str,
+                           help="The path to local data folder")
+    parser_udd.add_argument("--states", type=str,
+                           help="State slugs in array")
+    parser_udd.add_argument("--is_private", action='store_true',
+                            help="Upload report to private blob", default=False)
+
+    parser_report_merger = subparsers.add_parser('report_merger',
+                                                 help='Report Merger')
+    parser_report_merger.add_argument("--report_config", type=json.loads,
+                                      help="Merger specification")
+
+    parser_ccs = subparsers.add_parser('content_creation_status',
+                                       help='Content creation status')
+    parser_ccs.add_argument("--data_store_location", type=str,
+                            help="The path to local data folder")
+    parser_ccs.add_argument("--org_search", type=str,
+                            help="host address for Org API")
+    parser_ccs.add_argument("--druid_hostname", type=str,
+                            help="Host address for Druid")
+    parser_ccs.add_argument("--execution_date", type=str,
+                            default=date.today().strftime("%d/%m/%Y"),
+                            help="DD/MM/YYYY, optional argument for backfill jobs")
+
+    parser_job_submitter = subparsers.add_parser('submit_druid_jobs',
+                                                 help='Script to submit the druid jobs')
+    parser_job_submitter.add_argument("--report_list_jobs_url", type=str,
+                                      help="The base API endpoint to list the active druid report jobs")
+    parser_job_submitter.add_argument("--auth_token", type=str,
+                                      help="The base API endpoint token for authorization of api")
+    parser_job_submitter.add_argument("--interpolation_config", type=str,
+                                      help="The interpolation config to replace the dynamic properties of the config",
+                                      default="""[{"key":"__store__","value":"azure"},{"key":"__container__","value":"reports"}]""")
+
+    args = parser.parse_args()
+
+    if args.cmd == "ecg_learning":
+        from dataproducts.services.consumption.ecg_learning import ECGLearning
+
+        ecg = ECGLearning(args.data_store_location, args.bootstrap)
+        ecg.init()
+
+    elif args.cmd == "landing_page":
+        from dataproducts.services.consumption.landing_page import LandingPageMetrics
+
+        lpm = LandingPageMetrics(args.data_store_location, args.org_search)
+        lpm.init()
+
+    elif args.cmd == "district_weekly":
+        from dataproducts.services.location.district_weekly import DistrictWeekly
+
+        dist_weekly = DistrictWeekly(args.data_store_location, args.druid_hostname,
+                                     args.execution_date, args.location_search)
+        dist_weekly.init()
+
+    elif args.cmd == "district_monthly":
+        from dataproducts.services.location.district_monthly import DistrictMonthly
+
+        dist_monthly = DistrictMonthly(args.data_store_location, args.druid_hostname,
+                                       args.execution_date, args.location_search)
+        dist_monthly.init()
+
+    elif args.cmd == "content_consumption":
+        from dataproducts.services.consumption.content_consumption import ContentConsumption
+
+        cont_consumption = ContentConsumption(args.data_store_location, args.org_search,
+                                              args.druid_hostname, args.druid_rollup_hostname,
+                                              args.content_search, args.execution_date)
+        cont_consumption.init()
+
+    elif args.cmd == "daily_metrics":
+        from dataproducts.services.consumption.consumption_metrics import DailyMetrics
+
+        daily_metrics = DailyMetrics(args.data_store_location, args.org_search,
+                                     args.druid_hostname, args.content_search,
+                                     args.content_hierarchy, args.execution_date)
+        daily_metrics.init()
+
+    elif args.cmd == "gps_learning":
+        from dataproducts.services.consumption.gps_learning import GPSLearning
+
+        gps_learning = GPSLearning(args.data_store_location,
+                                   args.druid_hostname, args.content_search,
+                                   args.content_hierarchy, args.execution_date,
+                                   args.org_search)
+        gps_learning.init()
+
+    elif args.cmd == "etb_metrics":
+        from dataproducts.services.etb.etb_metrics import ETBMetrics
+
+        etb_metrics = ETBMetrics(args.data_store_location,
+                                 args.druid_hostname, args.content_search,
+                                 args.content_hierarchy, args.execution_date,
+                                 args.org_search)
+        etb_metrics.init()
+
+    elif args.cmd == "content_creation":
+        from dataproducts.services.etb.content_creation import ContentCreation
+
+        content_creation = ContentCreation(args.data_store_location,
+                                           args.content_search, args.execution_date,
+                                           args.org_search)
+        content_creation.init()
+
+    elif args.cmd == "content_progress":
+        from dataproducts.services.etb.content_progress import ContentProgress
+
+        content_progress = ContentProgress(args.data_store_location,
+                                           args.content_search, args.execution_date,
+                                           args.org_search)
+        content_progress.init()
+
+    elif args.cmd == "cmo_dashboard":
+        from dataproducts.services.consumption.cmo_dashboard import CMODashboard
+
+        cmo_dashboard = CMODashboard(args.data_store_location,
+                                     args.execution_date, args.org_search)
+        cmo_dashboard.init()
+
+    elif args.cmd == "user_detail":
+        from dataproducts.services.location.user_detail_report import UserDetailReport
+
+        user_detail = UserDetailReport(args.data_store_location, args.states, args.is_private)
+        user_detail.init()
+
+    elif args.cmd == "user_declared_detail":
+        from dataproducts.services.location.user_declaration_report import UserDeclarationReport
+
+        user_declared_detail = UserDeclarationReport(args.data_store_location, args.states, args.is_private)
+        user_declared_detail.init()
+
+    elif args.cmd == "report_merger":
+        from dataproducts.services.consumption.report_merger import ReportMerger
+
+        report_merger = ReportMerger(args.report_config)
+        report_merger.init()
+
+    elif args.cmd == "content_creation_status":
+        from dataproducts.services.etb.content_creation_status import ContentCreationStatus
+
+        content_creation_status = ContentCreationStatus(args.data_store_location,
+                                                        args.org_search, args.druid_hostname,
+                                                        args.execution_date)
+        content_creation_status.init()
+    elif args.cmd == "submit_druid_jobs":
+        from dataproducts.services.misc.druid_job_submitter import DruidJobSubmitter
+
+        jobSubmitter = DruidJobSubmitter(args.report_list_jobs_url, args.auth_token, args.interpolation_config)
+        jobSubmitter.init()
+
+    if args.version:
+        print("version - 1.0.0")

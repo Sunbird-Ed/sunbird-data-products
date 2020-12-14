@@ -3,3 +3,10 @@
 .DS_Store
 venv/*
 target
+adhoc-scripts/.settings
+*.log
+dependency-reduced-pom.xml
+data-products/.settings
+data-products/data-products.iml
+python-scripts/.pybuilder
+etl-jobs/.settings

@@ -1,0 +1,11 @@
+anytree
+argparse
+azure==4.0.0
+cassandra-driver
+elasticsearch
+findspark
+kafka-python
+natsort
+pandas>0.25.0
+pyspark
+requests
