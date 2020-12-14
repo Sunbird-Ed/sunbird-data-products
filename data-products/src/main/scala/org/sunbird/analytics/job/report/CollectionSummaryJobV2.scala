@@ -148,11 +148,9 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
   }
 
-
   /**
    * Filtering the batches by job config ("generateForAllBatches", "batchEnrolDate")
    */
-
   def filterBatches(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig): DataFrame = {
     import spark.implicits._
     val modelParams = config.modelParams.get
