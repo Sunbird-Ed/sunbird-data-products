@@ -38,7 +38,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
     JobLogger.init(jobName)
-    JobLogger.start(s"$jobName started executing - version 6", Option(Map("config" -> config, "model" -> jobName)))
+    JobLogger.start(s"$jobName started executing - version 7", Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
@@ -69,7 +69,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     val progressMetrics = logTime(reconcileProgressUpdates(), "Time taken to reconcile progress updates");
     JobLogger.log("Reconcile Missing Completion Dates", Option(progressMetrics), INFO)
     
-    val certMetrics = logTime(reconcileMissingCertsAndEnrolmentDates(modelParams), "Time taken to reconcile progress updates");
+    val certMetrics = logTime(reconcileMissingCertsAndEnrolmentDates(modelParams), "Time taken to reconcile enrollment dates");
     JobLogger.log("Reconcile Certificates and Enrolments", Option(certMetrics), INFO)
     
     val postAuditEvent = logTime(audit(), "Time taken to execute post audit check"); // Post Audit Check
@@ -195,7 +195,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     val enrolmentRDD = enrolmentDF.rdd.repartition(30).map(f => UserEnrolment(f.getString(0), f.getString(1), f.getString(2)))
 
     val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime"), SomeColumns("userid", "batchid", "courseid"))
-    val finalRDD = joinedRdd.filter(f => f._2.getInt(1) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getString(2)))
+    val finalRDD = joinedRdd.filter(f => f._2.getIntOption(1).getOrElse(0) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getString(2)))
     val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid").withColumnRenamed("_4", "lastcompletedtime")
     val enrolmentWithRevisedDtDF = enrolmentJoinedDF.groupBy("userid", "batchid", "courseid").agg(max(col("lastcompletedtime")).alias("lastreviseddate")).withColumn("lastrevisedon", unix_timestamp(col("lastreviseddate"), "yyyy-MM-dd HH:mm:ss:SSS"))
     enrolmentWithRevisedDtDF.join(courseBatchDF, "batchid")
@@ -221,7 +221,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     finalEnrolmentDF.join(courseBatchMinDF, "batchid")
       .withColumn("startedon", unix_timestamp(col("startdate"), "yyyy-MM-dd"))
       .withColumn("startedtimestamp", when(col("lastrevisedon").isNotNull, when(col("startedon") > col("lastrevisedon"), col("startedon")).otherwise(col("lastrevisedon"))).otherwise(col("startedon")))
-      .withColumn("enrolleddate", from_unixtime(col("startedtimestamp"), "MM-dd-yyyy HH:mm:ss:SSSZ"))
+      .withColumn("enrolleddate", from_unixtime(col("startedtimestamp"), "yyyy-MM-dd HH:mm:ss:SSSZ"))
       .select("userid", "courseid", "batchid", "enrolleddate")
       .write.format(cassandraFormat).options(if(dryRunEnabled) userEnrolmentTempDBSettings else userEnrolmentDBSettings).mode("APPEND").save()
 
