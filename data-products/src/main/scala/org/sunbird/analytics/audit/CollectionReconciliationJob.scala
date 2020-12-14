@@ -273,7 +273,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
 
   def completedFunction(statusMap: Map[String, Int], leafNodesCount: Int): String = {
     try {
-      if (statusMap != null) {
+      if (statusMap != null && statusMap.size > 0) {
         val completedCount = statusMap.filter(p => p._2 == 2).size
         if (completedCount == leafNodesCount) "Yes" else "No"
       } else "No"
