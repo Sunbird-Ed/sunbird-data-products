@@ -33,7 +33,7 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
   "StateSelfUserExternalID" should "generate reports" in {
     implicit val fc = new FrameworkContext()
     val tempDir = AppConf.getConfig("admin.metrics.temp.dir")
-    DecryptUtil.initialise()
+//    DecryptUtil.initialise()
     val reportDF = StateAdminReportJob.generateExternalIdReport()(spark, fc)
     assert(reportDF.columns.contains("Diksha UUID") === true)
     assert(reportDF.columns.contains("Name") === true)
@@ -54,7 +54,7 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
   "StateSelfUserExternalIDWithZip" should "execute with zip failed to generate" in {
     implicit val fc = new FrameworkContext()
     try {
-      DecryptUtil.initialise()
+//      DecryptUtil.initialise()
       val reportDF = StateAdminReportJob.generateExternalIdReport()(spark, fc)
       StateAdminReportJob.generateSelfUserDeclaredZip(reportDF, JSONUtils.deserialize[JobConfig]("""{"model":"Test"}"""))
     } catch {
