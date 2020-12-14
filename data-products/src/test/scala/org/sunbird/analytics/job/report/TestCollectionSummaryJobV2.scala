@@ -4,9 +4,8 @@ import org.apache.spark.sql.functions.{udf, _}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.job.report.CollectionSummaryJob.saveToBlob
 import org.sunbird.analytics.util.UserData
 
 import scala.collection.mutable
@@ -92,11 +91,10 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
 
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"], "contentType": "Course"},"fields":["identifier","name","organisation","channel", "status", "keywords"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
-    println("config" + strConfig)
-    implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val data = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
     println("data" + data.show(false))
-    CollectionSummaryJobV2.saveToBlob(data, jobConfig)
+    //CollectionSummaryJobV2.saveToBlob(data, jobConfig)
   }
 
 }

@@ -23,7 +23,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "state", "district", "enrolledUsersCount", "completionUserCount", "certificateIssueCount", "contentStatus", "keywords", "channel", "timestamp")
+  private val filterColumns = Seq("publishedby", "batchid", "courseid", "collectionname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
   val jobName = "CollectionSummaryJobV2"
@@ -63,7 +63,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
       .select("courseid", "batchid", "enddate", "startdate", "cert_templates")
-      .withColumn("hasCertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
+      .withColumn("hascertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
   }
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -90,8 +90,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int]).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
       JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
-        .withColumn("collectionName", col("name"))
-        .withColumn("publishedBy", concat_ws(", ", col("organisation")))
+        .withColumn("collectionname", col("name"))
+        .withColumn("publishedby", concat_ws(", ", col("organisation")))
     } else {
       processedBatches
     }
@@ -101,9 +101,9 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   def computeValues(transformedDF: DataFrame): DataFrame = {
     // Compute completionCount and enrolCount for state
     val partitionDF = transformedDF.groupBy("batchid", "courseid", "state", "district").agg(
-      count(when(col("completedon").isNotNull, 1)).as("completionUserCount"),
-      count(when(col("isCertified") === "Y", 1)).as("certificateIssueCount"),
-      count(col("userid")).as("enrolledUsersCount")
+      count(when(col("completedon").isNotNull, 1)).as("completionuserscount"),
+      count(when(col("isCertified") === "Y", 1)).as("certificateissuedcount"),
+      count(col("userid")).as("enrolleduserscount")
     )
 
     import java.text.SimpleDateFormat
@@ -161,9 +161,9 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val filteredBatches = if (searchFilter.nonEmpty) {
       JobLogger.log("Generating reports only search query", None, INFO)
       val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
-        .withColumnRenamed("name", "collectionName")
-        .withColumnRenamed("status", "contentStatus")
-        .withColumn("publishedBy", concat_ws(", ", col("organisation")))
+        .withColumnRenamed("name", "collectionname")
+        .withColumnRenamed("status", "contentstatus")
+        .withColumn("publishedby", concat_ws(", ", col("organisation")))
       courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
