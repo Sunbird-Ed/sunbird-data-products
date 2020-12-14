@@ -100,7 +100,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
     batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
     batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
-    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(getDate("dd/MM/yyyy").format(Calendar.getInstance().getTime()))
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(null)
     batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
 
     val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
