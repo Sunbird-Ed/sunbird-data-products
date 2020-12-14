@@ -41,9 +41,7 @@ object DecryptUtil extends Serializable {
         replacedValue
     }
     
-    def decryptData(data: String): String = {
-        decryptData(data, true)
-    }
+    def decryptData(data: String): String = decryptData(data, false)
     
     private def decryptData(data: String, throwExceptionOnFailure: Boolean): String =
         if (StringUtils.isBlank(data)) {
