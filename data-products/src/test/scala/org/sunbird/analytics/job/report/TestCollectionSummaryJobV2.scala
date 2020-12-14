@@ -10,23 +10,6 @@ import org.sunbird.analytics.util.UserData
 
 import scala.collection.mutable
 
-
-/** *
- * *************************************** START OF TEST INPUT ****************************************
- * Report1 = (batch = (0130320389509939204), course = (do_112636984058314752121), enrolledUsers(c7ef3848-bbdb-4219-8344-817d5b8103fa, user021), channel (b00bc992ef25f1a9a8d63291e20efc8d)
- * Report2 = (batch = (0130293763489873929), course = (do_1130293726460805121168), enrolledUsers(f3dd58a4-a56f-4c1d-95cf-3231927a28e9, user026), channel (013016492159606784174))
- * Report3 = (batch = (01303150537737011211), course = (do_1130314965721088001129), enrolledUsers(user026, user025), channel (b00bc992ef25f1a9a8d63291e20efc8d))
- * Report4 = (batch = (0130271096968396800), course = (do_1130264512015646721166), enrolledUsers(user027), channel (013016492159606784174))
- *
- * channel_org_map = (channel = b00bc992ef25f1a9a8d63291e20efc8d, orgId = 0126391644091351040 , orgName = "MPPS BAYYARAM"), (channel = 013016492159606784174, orgId = 0125302909498654720 , orgName = MPPS SIMHACHALNAGAR)
- * user_org_map = (
- * (orgName = "MPPS BAYYARAM", userId = (c7ef3848-bbdb-4219-8344-817d5b8103fa, user021, f3dd58a4-a56f-4c1d-95cf-3231927a28e9)),
- * orgName = "MPPS SIMHACHALNAGAR", userId = (user026, user025, user027)),
- * )
- * *************************************** END OF TEST INPUT ******************************************
- */
-
-
 class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
 
 
@@ -88,13 +71,41 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
       .anyNumberOfTimes()
       .returning(userDF)
 
-
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"], "contentType": "Course"},"fields":["identifier","name","organisation","channel", "status", "keywords"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel","status","keywords"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val data = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
-    println("data" + data.show(false))
-    //CollectionSummaryJobV2.saveToBlob(data, jobConfig)
-  }
+    val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
+    reportData.count() should be(3)
+    //mockDruid("{\"task\":\"index_collection-summary-v4_ljaphaih_2020-12-11T11:02:48.023Z\"}")
+    reportData.show(false)
+    val batch1 = reportData.filter(col("batchid") === "batch-0130293763489873929" && col("courseid") === "do_1130293726460805121168")
+    batch1.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
+    batch1.select("district").collect().map(_ (0)).toList.contains("BG") should be(true)
+    batch1.select("enrolleduserscount").collect().map(_ (0)).toList.contains(2) should be(true)
+    batch1.select("completionuserscount").collect().map(_ (0)).toList.contains(0) should be(true)
+    batch1.select("hascertified").collect().map(_ (0)).toList.contains("N") should be(true)
+    batch1.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
+    batch1.select("collectionname").collect().map(_ (0)).toList.contains("Test") should be(true)
+    batch1.select("publishedby").collect().map(_ (0)).toList.contains("CBSE ORG") should be(true)
 
+    val batch2 = reportData.filter(col("batchid") === "batch-0130320389509939204" && col("courseid") === "do_112636984058314752121")
+    batch2.select("state").collect().map(_ (0)).toList.contains("GPPS") should be(true)
+    batch2.select("district").collect().map(_ (0)).toList.contains("MPPS") should be(true)
+    batch2.select("enrolleduserscount").collect().map(_ (0)).toList.contains(2) should be(true)
+    batch2.select("completionuserscount").collect().map(_ (0)).toList.contains(2) should be(true)
+    batch2.select("hascertified").collect().map(_ (0)).toList.contains("N") should be(true)
+    batch2.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
+    batch2.select("collectionname").collect().map(_ (0)).toList.contains("SB-6729 course notification test") should be(true)
+    batch2.select("publishedby").collect().map(_ (0)).toList.contains("Sunbird, QA ORG") should be(true)
+
+    val batch3 = reportData.filter(col("batchid") === "batch-01303150537737011211" && col("courseid") === "do_1130314965721088001129")
+    batch3.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
+    batch3.select("district").collect().map(_ (0)).toList.contains("BG") should be(true)
+    batch3.select("enrolleduserscount").collect().map(_ (0)).toList.contains(2) should be(true)
+    batch3.select("completionuserscount").collect().map(_ (0)).toList.contains(0) should be(true)
+    batch3.select("hascertified").collect().map(_ (0)).toList.contains("N") should be(true)
+    batch3.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
+    batch3.select("publishedby").collect().map(_ (0)).toList.contains("Sunbird") should be(true)
+    CollectionSummaryJobV2.saveToBlob(reportData, jobConfig)
+  }
 }
