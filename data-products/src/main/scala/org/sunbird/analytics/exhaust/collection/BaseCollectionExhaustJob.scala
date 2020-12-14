@@ -52,6 +52,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   val cassandraFormat = "org.apache.spark.sql.cassandra";
 
   /** START - Job Execution Methods */
+  // $COVERAGE-OFF$ Disabling scoverage for main and init method
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
     JobLogger.init(jobName)
@@ -88,6 +89,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
   }
 
+  // $COVERAGE-ON$ Enabling scoverage for all other functions
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
@@ -307,12 +309,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       .select(col("user_id").as("userid"), col("consentflag"), col("last_updated_on").as("consentprovideddate"));
   }
 
+  // $COVERAGE-OFF$ Disabling scoverage since logTime function is not in use
   def logTime[R](block: => R, message: String): R = {
     val res = CommonUtil.time(block);
     JobLogger.log(message, Some(Map("timeTaken" -> res._1)), INFO)
     res._2
   }
-
+  // $COVERAGE-ON$ Enabling scoverage for other functions
   def organizeDF(reportDF: DataFrame, finalColumnMapping: Map[String, String], finalColumnOrder: List[String]): DataFrame = {
     val fields = reportDF.schema.fieldNames
     val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
