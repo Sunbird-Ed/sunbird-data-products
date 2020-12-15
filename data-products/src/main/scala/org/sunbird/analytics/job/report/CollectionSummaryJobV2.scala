@@ -39,8 +39,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       val res = CommonUtil.time(prepareReport(spark, fetchData))
       saveToBlob(res._2, jobConfig) // Saving report to blob stroage
       JobLogger.log(s"Submitting Druid Ingestion Task", None, INFO)
-      val ingestionSpecPath: String = jobConfig.modelParams.getOrElse("specPath", "").asInstanceOf[String]
-      val druidIngestionUrl: String = jobConfig.modelParams.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
+      val ingestionSpecPath: String = jobConfig.modelParams.get.getOrElse("specPath", "").asInstanceOf[String]
+      val druidIngestionUrl: String = jobConfig.modelParams.get.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
       submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
     } finally {
