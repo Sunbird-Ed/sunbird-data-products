@@ -76,7 +76,6 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
     reportData.count() should be(3)
-    //mockDruid("{\"task\":\"index_collection-summary-v4_ljaphaih_2020-12-11T11:02:48.023Z\"}")
     reportData.show(false)
     val batch1 = reportData.filter(col("batchid") === "batch-0130293763489873929" && col("courseid") === "do_1130293726460805121168")
     batch1.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
@@ -107,5 +106,31 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch3.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
     batch3.select("publishedby").collect().map(_ (0)).toList.contains("Sunbird") should be(true)
     CollectionSummaryJobV2.saveToBlob(reportData, jobConfig)
+  }
+
+  it should "generate report when search is not defined" in {
+
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
+      .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
+
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
+      .returning(userEnrolments.withColumn("certificates", convertMethod(split(userEnrolments.col("certificates"), ",").cast("array<string>")))
+        .withColumn("issued_certificates", convertMethod(split(userEnrolments.col("issued_certificates"), ",").cast("array<string>")))
+      )
+      .anyNumberOfTimes()
+
+    val schema = Encoders.product[UserData].schema
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid"), "org.apache.spark.sql.redis", schema)
+      .anyNumberOfTimes()
+      .returning(userDF)
+
+    implicit val mockFc: FrameworkContext = mock[FrameworkContext]
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
+    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
+    reportData.count() should be(3)
   }
 }

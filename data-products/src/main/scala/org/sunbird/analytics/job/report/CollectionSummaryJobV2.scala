@@ -27,7 +27,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
   val jobName = "CollectionSummaryJobV2"
-
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
     JobLogger.init(jobName)
     JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
@@ -89,12 +89,13 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       .join(userCachedDF, Seq("userid"), "inner")
     val processedBatches = computeValues(processBatches)
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
-    val reportDF = if (searchFilter.isEmpty) {
+    val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
       val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int]).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
       JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionname", col("name"))
+        .withColumnRenamed("status", "contentstatus")
         .withColumn("publishedby", concat_ws(", ", col("organisation")))
     } else {
       processedBatches
@@ -157,7 +158,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", true).asInstanceOf[Boolean]
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val courseBatchData = getCourseBatch(spark, fetchData)
-    val filteredBatches = if (searchFilter.nonEmpty) {
+    val filteredBatches = if (null != searchFilter && searchFilter.nonEmpty) {
       JobLogger.log("Generating reports only search query", None, INFO)
       val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
         .withColumnRenamed("name", "collectionname")
