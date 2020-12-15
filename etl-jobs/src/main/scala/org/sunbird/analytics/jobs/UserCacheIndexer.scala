@@ -264,7 +264,7 @@ object UserCacheIndexer extends Serializable {
         .select(
           userDF.col("*"),
           subOrgDF.col("orgname").as("declared-school-name"),
-          subOrgDF.col("orgcode").as("declared-school-udise-code"),
+          subOrgDF.col("externalid").as("declared-school-udise-code"),
           subOrgDF.col("state_name"),
           subOrgDF.col("district"),
           subOrgDF.col("block"))
