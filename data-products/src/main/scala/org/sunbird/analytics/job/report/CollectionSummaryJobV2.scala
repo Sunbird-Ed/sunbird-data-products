@@ -125,8 +125,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
-    reportData.saveToBlobStore(storageConfig, "csv", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
-    reportData.saveToBlobStore(storageConfig, "csv", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
+    reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
+    reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
   }
 
   def getDate: String = {
