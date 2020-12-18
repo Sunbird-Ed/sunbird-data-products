@@ -7,52 +7,26 @@ import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
-import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
 
-case class CollectionBatch(batchId: String, courseId: String, startDate: String, endDate: String)
-
-case class CourseMetrics(processedBatches: Option[Int], failedBatches: Option[Int], successBatches: Option[Int])
-
-case class CollectionBatchResponses(batchId: String, execTime: Long, status: String)
-
-object CollectionSummaryJob extends optional.Application with IJob with BaseReportsJob {
+object CollectionSummaryJobV2 extends optional.Application with IJob with BaseReportsJob {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("publishedBy", "batchid", "courseid", "collectionName", "startdate", "enddate", "hasCertified", "state", "enrolledUsersCountByState", "completionUserCountByState", "certificateIssueCount")
+  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname")
 
-  implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJob"
-  val jobName = "CollectionSummaryJob"
-
-  private val columnsOrder = List(
-    "Published by", "Batch id", "Collection id",
-    "Collection name", "Batch start date", "Batch end date",
-    "State", "Total enrolments By State", "Total completion By State",
-    "Has certificate", "Total Certificate issued by State");
-
-  private val columnMapping = Map("batchid" -> "Batch id",
-    "publishedBy" -> "Published by",
-    "courseid" -> "Collection id", "collectionName" -> "Collection name",
-    "startdate" -> "Batch start date",
-    "enddate" -> "Batch end date",
-    "hasCertified" -> "Has certificate",
-    "enrolledUsersCountByState" -> "Total enrolments By State",
-    "completionUserCountByState" -> "Total completion By State",
-    "state" -> "State",
-    "certificateIssueCount" -> "Total Certificate issued by State"
-  )
-
+  implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
+  val jobName = "CollectionSummaryJobV2"
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
     JobLogger.init(jobName)
@@ -64,6 +38,10 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     try {
       val res = CommonUtil.time(prepareReport(spark, fetchData))
       saveToBlob(res._2, jobConfig) // Saving report to blob stroage
+      JobLogger.log(s"Submitting Druid Ingestion Task", None, INFO)
+      val ingestionSpecPath: String = jobConfig.modelParams.get.getOrElse("specPath", "").asInstanceOf[String]
+      val druidIngestionUrl: String = jobConfig.modelParams.get.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
+      submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
     } finally {
       frameworkContext.closeContext()
@@ -89,7 +67,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
       .select("courseid", "batchid", "enddate", "startdate", "cert_templates")
-      .withColumn("hasCertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
+      .withColumn("hascertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
   }
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -105,20 +83,20 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state")
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state", "district", "orgname")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "inner")
-
     val processedBatches = computeValues(processBatches)
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
-    val reportDF = if (searchFilter.isEmpty) {
+    val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
       val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int]).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
       JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
-        .withColumn("collectionName", col("name"))
-        .withColumn("publishedBy", concat_ws(", ", col("organisation")))
+        .withColumn("collectionname", col("name"))
+        .withColumnRenamed("status", "contentstatus")
+        .withColumnRenamed("organisation", "contentorg")
     } else {
       processedBatches
     }
@@ -127,72 +105,63 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
     // Compute completionCount and enrolCount for state
-    val statePartitionDF = transformedDF.groupBy("batchid", "courseid", "state").agg(
-      count(when(col("completedon").isNotNull, 1)).as("completionUserCountByState"),
-      count(when(col("isCertified") === "Y", 1)).as("certificateIssueCount"),
-      count(col("userid")).as("enrolledUsersCountByState")
+    val partitionDF = transformedDF.groupBy("batchid", "courseid", "state", "district").agg(
+      count(when(col("completedon").isNotNull, 1)).as("completionuserscount"),
+      count(when(col("isCertified") === "Y", 1)).as("certificateissuedcount"),
+      count(col("userid")).as("enrolleduserscount")
     )
-    statePartitionDF.join(transformedDF.drop("isCertified", "status", "state").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
+
+    partitionDF.join(transformedDF.drop("isCertified", "status", "state", "district").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
+      .withColumn("timestamp", lit(System.currentTimeMillis()))
   }
 
   def saveToBlob(reportData: DataFrame, jobConfig: JobConfig): Unit = {
     val modelParams = jobConfig.modelParams.get
-    val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]
+    val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports-v2/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
-    val fields = reportData.schema.fieldNames
-    val colNames = for (e <- fields) yield columnMapping.getOrElse(e, e)
-    val dynamicColumns = fields.toList.filter(e => !columnMapping.keySet.contains(e))
-    val columnWithOrder = (modelParams.getOrElse("columns", columnsOrder).asInstanceOf[List[String]] ::: dynamicColumns).distinct
-    val finalReportDF = reportData.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*)
-    val keyword = modelParams.getOrElse("keywords", null).asInstanceOf[String] // If the keyword is not present then report name is generating without keyword.
-    // Generating both csv and json extension two reports one is with date and another one is without date only -latest.
-    finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
-    finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
-    val mergeScriptConfig = MergeScriptConfig(id = reportPath, frequency = "DAY", rollup = 0,
-      basePath = modelParams.getOrElse("baseScriptPath", "/mount/data/analytics/tmp/").asInstanceOf[String],
-      merge = MergeFiles(List(
-          Map("deltaPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv"),
-          Map("deltaPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv")), List()
-      ),
-      container = container,
-      postContainer = Some(container)
-    )
-    // Invoking a merge script to generate json format data.
-   CourseUtils.mergeReport(mergeScriptConfig)
+    reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
+    reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
   }
+
   def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
   }
 
-  def getReportName(keyword: String, reportPath: String, suffix: String): String = {
-    if (null == keyword) {
-      s"${reportPath}${suffix}"
-    } else {
-      s"${reportPath}${keyword}-${suffix}"
-    }
+  def submitIngestionTask(apiUrl: String, specPath: String): Unit = {
+    val source = scala.io.Source.fromFile(specPath)
+    val ingestionData = try {
+      source.mkString
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(s"Exception Found While reading ingestion spec. ${ex.getMessage}", None, ERROR)
+        ex.printStackTrace()
+        null
+    } finally source.close()
+    val response = RestUtil.post[Map[String, String]](apiUrl, ingestionData, None)
+    JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
   }
 
   /**
    * Filtering the batches by job config ("generateForAllBatches", "batchEnrolDate")
    */
-
   def filterBatches(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig): DataFrame = {
     import spark.implicits._
     val modelParams = config.modelParams.get
     val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
-    val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", true).asInstanceOf[Boolean]
+    val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", false).asInstanceOf[Boolean]
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val courseBatchData = getCourseBatch(spark, fetchData)
-    val filteredBatches = if (searchFilter.nonEmpty) {
+    val filteredBatches = if (null != searchFilter && searchFilter.nonEmpty) {
       JobLogger.log("Generating reports only search query", None, INFO)
       val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
-        .withColumnRenamed("name", "collectionName")
-        .withColumn("publishedBy", concat_ws(", ", col("organisation")))
+        .withColumnRenamed("name", "collectionname")
+        .withColumnRenamed("status", "contentstatus")
+        .withColumnRenamed("organisation", "contentorg")
       courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
@@ -210,3 +179,4 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     filteredBatches.persist(StorageLevel.MEMORY_ONLY)
   }
 }
+
