@@ -1,5 +1,7 @@
 package org.sunbird.analytics.job.report
 
+import java.io.File
+
 import org.apache.spark.sql.functions.{udf, _}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
@@ -9,6 +11,7 @@ import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.UserData
 
 import scala.collection.mutable
+
 
 class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
 
@@ -132,6 +135,14 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData).count() should be(3)
   }
 
+  it should "submit the ingestion file" in {
+    val ingestionServerMockURL = "https://httpbin.org/post"
+    val resourceName = "ingestion-spec/summary-ingestion-spec.json"
+    val classLoader = getClass.getClassLoader
+    val file = new File(classLoader.getResource(resourceName).getFile)
+    val absolutePath = file.getAbsolutePath
+    CollectionSummaryJobV2.submitIngestionTask(ingestionServerMockURL, absolutePath)
+  }
   def initializeDefaultMockData() {
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
