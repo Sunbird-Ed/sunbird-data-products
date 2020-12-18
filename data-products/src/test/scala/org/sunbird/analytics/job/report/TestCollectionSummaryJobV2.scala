@@ -141,6 +141,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     val classLoader = getClass.getClassLoader
     val file = new File(classLoader.getResource(resourceName).getFile)
     val absolutePath = file.getAbsolutePath
+    println("absolutePath" + absolutePath)
     CollectionSummaryJobV2.submitIngestionTask(ingestionServerMockURL, absolutePath)
   }
   def initializeDefaultMockData() {
