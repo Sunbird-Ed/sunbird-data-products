@@ -23,7 +23,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("publishedby", "batchid", "courseid", "collectionname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp")
+  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
   val jobName = "CollectionSummaryJobV2"
@@ -83,7 +83,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state", "district")
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state", "district", "orgname")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "inner")
@@ -96,7 +96,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionname", col("name"))
         .withColumnRenamed("status", "contentstatus")
-        .withColumn("publishedby", concat_ws(", ", col("organisation")))
+        .withColumnRenamed("organisation", "contentorg")
     } else {
       processedBatches
     }
@@ -153,7 +153,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     import spark.implicits._
     val modelParams = config.modelParams.get
     val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
-    val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", true).asInstanceOf[Boolean]
+    val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", false).asInstanceOf[Boolean]
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val courseBatchData = getCourseBatch(spark, fetchData)
     val filteredBatches = if (null != searchFilter && searchFilter.nonEmpty) {
@@ -161,7 +161,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
         .withColumnRenamed("name", "collectionname")
         .withColumnRenamed("status", "contentstatus")
-        .withColumn("publishedby", concat_ws(", ", col("organisation")))
+        .withColumnRenamed("organisation", "contentorg")
       courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)

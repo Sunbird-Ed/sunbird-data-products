@@ -67,7 +67,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch1.select("hascertified").collect().map(_ (0)).toList.contains("N") should be(true)
     batch1.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
     batch1.select("collectionname").collect().map(_ (0)).toList.contains("Test") should be(true)
-    batch1.select("publishedby").collect().map(_ (0)).toList.contains("CBSE ORG") should be(true)
+    batch1.select("contentorg").collect().map(_ (0)).toList.size shouldNot be(0)
     batch1.select("channel").collect().map(_ (0)).toList.contains("013016492159606784174") should be(true)
     batch1.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch1.select("startdate").collect().map(_ (0)).toList.contains("2020-05-26") should be(true)
@@ -80,7 +80,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch2.select("hascertified").collect().map(_ (0)).toList.contains("N") should be(true)
     batch2.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
     batch2.select("collectionname").collect().map(_ (0)).toList.contains("SB-6729 course notification test") should be(true)
-    batch2.select("publishedby").collect().map(_ (0)).toList.contains("Sunbird, QA ORG") should be(true)
+    batch1.select("contentorg").collect().map(_ (0)).toList.size shouldNot be(0)
     batch2.select("channel").collect().map(_ (0)).toList.contains("b00bc992ef25f1a9a8d63291e20efc8d") should be(true)
     batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-30") should be(true)
@@ -92,7 +92,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch3.select("completionuserscount").collect().map(_ (0)).toList.contains(0) should be(true)
     batch3.select("hascertified").collect().map(_ (0)).toList.contains("N") should be(true)
     batch3.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
-    batch3.select("publishedby").collect().map(_ (0)).toList.contains("Sunbird") should be(true)
+    batch1.select("contentorg").collect().map(_ (0)).toList.size shouldNot be(0)
     batch3.select("channel").collect().map(_ (0)).toList.contains("b00bc992ef25f1a9a8d63291e20efc8d") should be(true)
     batch3.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch3.select("startdate").collect().map(_ (0)).toList.contains("2020-05-29") should be(true)
@@ -120,6 +120,14 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     initializeDefaultMockData()
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"store":"azure","generateForAllBatches":true,"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
+    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData).count() should be(3)
+  }
+
+  it should "generate report when  generateForAllBatches,searchFilter & startDate configs are not defined in the jobconfig" in {
+    initializeDefaultMockData()
+    implicit val mockFc: FrameworkContext = mock[FrameworkContext]
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData).count() should be(3)
   }
