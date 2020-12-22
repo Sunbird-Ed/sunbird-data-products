@@ -12,7 +12,7 @@ import org.sunbird.analytics.sourcing.FunnelReport.{connProperties, programTable
 import org.sunbird.analytics.sourcing.SourcingMetrics.{getStorageConfig, getTenantInfo, saveReportToBlob}
 
 case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String)
-case class ContentDetails(identifier: String, collectionId: String, name: String, contentType: String, unitIdentifiers: String, createdBy: String, creator: String, mimeType: String)
+case class ContentDetails(identifier: String, collectionId: String, name: String, contentType: String, unitIdentifiers: String, createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String)
 case class ContentReport(programId: String, board: String, medium: String, gradeLevel: String, subject: String, contentId: String,
                          contentName: String, name: String, contentType: String, mimeType: String, chapterId: String, contentStatus: String,
                          creator: String, identifier: String, createdBy: String)
@@ -75,7 +75,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
 
     val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("contentId","contentName","contentType","identifier",
       "name","board","medium","gradeLevel","subject","programId","createdBy",
-      "creator","mimeType","unitIdentifiers")
+      "creator","mimeType","unitIdentifiers", "status","prevStatus")
       .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
     JobLogger.log(s"reportDf count for slug $slug- ${reportDf.count()}",None, Level.INFO)
 
@@ -106,7 +106,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     implicit val sc = spark.sparkContext
     import spark.implicits._
     val contentDf = reportDf.rdd.map(f => {
-      val contentStatus = if(f.getAs[Seq[String]](14).contains(f.getString(0))) "Approved" else if(f.getAs[Seq[String]](15).contains(f.getString(0))) "Rejected" else "Pending"
+      val contentStatus = if(f.getAs[Seq[String]](16).contains(f.getString(0))) "Approved" else if(f.getAs[Seq[String]](17).contains(f.getString(0))) "Rejected" else if(f.getString(14).equalsIgnoreCase("Draft") && f.getString(15).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
       ContentReport(f.getString(9), f.getString(5), f.getString(6), f.getString(7), f.getString(8),
         f.getString(0),f.getString(1),f.getString(4),f.getString(2),f.getString(12),
         f.getString(13),contentStatus,f.getString(11),f.getString(3),f.getString(10))
