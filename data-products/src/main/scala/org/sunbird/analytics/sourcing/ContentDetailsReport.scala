@@ -14,7 +14,7 @@ import org.sunbird.analytics.sourcing.SourcingMetrics.{getStorageConfig, getTena
 case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String)
 case class ContentDetails(identifier: String, collectionId: String, name: String, contentType: String, unitIdentifiers: String, createdBy: String, creator: String, mimeType: String)
 case class ContentReport(programId: String, board: String, medium: String, gradeLevel: String, subject: String, contentId: String,
-                         contentName: String, name: String, chapterName: String, contentType: String, mimeType: String, chapterId: String, contentStatus: String,
+                         contentName: String, name: String, contentType: String, mimeType: String, chapterId: String, contentStatus: String,
                          creator: String, identifier: String, createdBy: String)
 
 object ContentDetailsReport extends optional.Application with IJob with BaseReportsJob {
@@ -108,7 +108,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val contentDf = reportDf.rdd.map(f => {
       val contentStatus = if(f.getAs[Seq[String]](14).contains(f.getString(0))) "Approved" else if(f.getAs[Seq[String]](15).contains(f.getString(0))) "Rejected" else "Pending"
       ContentReport(f.getString(9), f.getString(5), f.getString(6), f.getString(7), f.getString(8),
-        f.getString(0),f.getString(1),f.getString(4),f.getString(16),f.getString(2),f.getString(12),
+        f.getString(0),f.getString(1),f.getString(4),f.getString(2),f.getString(12),
         f.getString(13),contentStatus,f.getString(11),f.getString(3),f.getString(10))
     }).toDF().withColumn("slug",lit(slug))
     JobLogger.log(s"contentDf count for slug $slug- ${contentDf.count()}",None, Level.INFO)
