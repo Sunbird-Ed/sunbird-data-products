@@ -106,7 +106,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     implicit val sc = spark.sparkContext
     import spark.implicits._
     val contentDf = reportDf.rdd.map(f => {
-      val contentStatus = if(f.getAs[Seq[String]](16).contains(f.getString(0))) "Approved" else if(f.getAs[Seq[String]](17).contains(f.getString(0))) "Rejected" else if(f.getString(14).equalsIgnoreCase("Draft") && f.getString(15).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
+      val contentStatus = if(f.getAs[Seq[String]](16).contains(f.getString(0))) "Approved" else if(f.getAs[Seq[String]](17).contains(f.getString(0))) "Rejected" else if(null !=f.getString(14) && f.getString(14).equalsIgnoreCase("Draft") && null != f.getString(15) && f.getString(15).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
       ContentReport(f.getString(9), f.getString(5), f.getString(6), f.getString(7), f.getString(8),
         f.getString(0),f.getString(1),f.getString(4),f.getString(2),f.getString(12),
         f.getString(13),contentStatus,f.getString(11),f.getString(3),f.getString(10))
