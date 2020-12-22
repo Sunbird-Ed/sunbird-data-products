@@ -77,6 +77,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
       "name","board","medium","gradeLevel","subject","programId","createdBy",
       "creator","mimeType","unitIdentifiers")
       .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
+    JobLogger.log(s"reportDf count for slug $slug- ${reportDf.count()}",None, Level.INFO)
 
     val finalDf = getContentDetails(reportDf, slug)
     val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get))
@@ -110,6 +111,8 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
         f.getString(0),f.getString(1),f.getString(4),f.getString(16),f.getString(2),f.getString(12),
         f.getString(13),contentStatus,f.getString(11),f.getString(3),f.getString(10))
     }).toDF().withColumn("slug",lit(slug))
+    JobLogger.log(s"contentDf count for slug $slug- ${contentDf.count()}",None, Level.INFO)
+    contentDf.show()
 
     val programData = spark.read.jdbc(url, programTable, connProperties)
       .select(col("program_id"), col("name").as("programName"))
@@ -117,6 +120,8 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
 
     val finalDf = programData.join(contentDf, programData.col("program_id") === contentDf.col("programId"), "inner")
       .drop("program_id").persist(StorageLevel.MEMORY_ONLY)
+    JobLogger.log(s"finalDf count for slug $slug- ${finalDf.count()}",None, Level.INFO)
+    finalDf.show()
 
     programData.unpersist(true)
     finalDf
