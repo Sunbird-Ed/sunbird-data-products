@@ -12,7 +12,7 @@ import org.sunbird.analytics.sourcing.FunnelReport.{connProperties, programTable
 import org.sunbird.analytics.sourcing.SourcingMetrics.{getStorageConfig, getTenantInfo, saveReportToBlob}
 
 case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String)
-case class ContentDetails(identifier: String, collectionId: String, name: String, contentType: String, unitIdentifiers: String, createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String)
+case class ContentDetails(identifier: String, collectionId: String, name: String, primaryCategory: String, unitIdentifiers: String, createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String)
 case class ContentReport(programId: String, board: String, medium: String, gradeLevel: String, subject: String, contentId: String,
                          contentName: String, name: String, contentType: String, mimeType: String, chapterId: String, contentStatus: String,
                          creator: String, identifier: String, createdBy: String)
