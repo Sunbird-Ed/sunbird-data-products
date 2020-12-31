@@ -95,13 +95,14 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
                 col("locationIds"),
-                concat_ws(" ", col("firstname"), col("lastname")).as("Name"))
+                concat_ws(" ", col("firstname"), col("lastname")).as("Name"), col("usertype"), col("usersubtype"))
         val commonUserDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "inner").
             select(userDf.col("*"))
         val userDenormDF = commonUserDf.withColumn("exploded_location", explode_outer(col("locationids")))
-            .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
-        val userDenormLocationDF = userDenormDF.groupBy("userid", "Name").pivot("loctype").agg(first("locname").as("locname"))
+            .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "cluster" || locationDF.col("loctype") === "block" || locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
+        val userDenormLocationDF = userDenormDF.groupBy("userid", "Name", "usertype", "usersubtype").pivot("loctype").agg(first("locname").as("locname"))
         //listing out the user details with location info, if location details found in user-external-identifier else pick from user dataframe
+        
         saveUserSelfDeclaredExternalInfo(userExternalDecryptData, userDenormLocationDF)
     }
     
@@ -150,16 +151,20 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     private def saveUserSelfDeclaredExternalInfo(userExternalDecryptData: DataFrame, userDenormLocationDF: DataFrame): DataFrame ={
         val resultDf = userExternalDecryptData.join(userDenormLocationDF, userExternalDecryptData.col("userid") === userDenormLocationDF.col("userid"), "left_outer").
+            
             select(col("Name"),
                 userExternalDecryptData.col("userid").as("Diksha UUID"),
                 when(userDenormLocationDF.col("state").isNotNull, userDenormLocationDF.col("state")).otherwise(lit("")).as("State"),
                 when(userDenormLocationDF.col("district").isNotNull, userDenormLocationDF.col("district")).otherwise(lit("")).as("District"),
+                when(userDenormLocationDF.col("block").isNotNull, userDenormLocationDF.col("block")).otherwise(lit("")).as("Block"),
+                when(userDenormLocationDF.col("cluster").isNotNull, userDenormLocationDF.col("cluster")).otherwise(lit("")).as("Cluster"),
                 col("declared-school-name"). as("School Name"),
                 col("declared-school-udise-code").as("School UDISE ID"),
                 col("declared-ext-id").as("State provided ext. ID"),
                 col("decrypted-phone").as("Phone number"),
                 col("decrypted-email").as("Email ID"),
-                col("persona").as("Persona"),
+                col("usertype").as("User Type"),
+                col("usersubtype").as("User-Sub Type"),
                 col("status").as("Status"),
                 col("errortype").as("Error Type"),
                 col("channel").as("Channel"),
