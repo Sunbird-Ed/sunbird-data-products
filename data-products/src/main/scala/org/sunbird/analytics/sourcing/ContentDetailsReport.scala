@@ -21,6 +21,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
   implicit val className = "org.sunbird.analytics.sourcing.ContentDetailsReport"
   val jobName: String = "Content Details Job"
 
+  // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     JobLogger.log(s"Started execution - $jobName",None, Level.INFO)
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
@@ -36,6 +37,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     }
   }
 
+  // $COVERAGE-ON$ Enabling scoverage for all other functions
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
     implicit val sc = spark.sparkContext
     import spark.implicits._
@@ -44,7 +46,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val response = DruidDataFetcher.getDruidData(contentQuery, true)
     val contents = response.map(f => JSONUtils.deserialize[ContentDetails](f)).toDF().withColumnRenamed("identifier","contentId")
       .withColumnRenamed("name","contentName").persist(StorageLevel.MEMORY_ONLY)
-    JobLogger.log(s"contents count - ${contents.count()}",None, Level.INFO)
+    JobLogger.log(s"Total contents - ${contents.count()}",None, Level.INFO)
     process(contents)
   }
 
@@ -71,13 +73,12 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val textbookQuery = getDruidQuery(JSONUtils.serialize(config.modelParams.get.getOrElse("textbookQuery","")), tenantId)
     val response = DruidDataFetcher.getDruidData(textbookQuery,true)
     val textbooks = response.map(f=> JSONUtils.deserialize[TextbookDetails](f)).toDF()
-    JobLogger.log(s"textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
+    JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
 
     val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("contentId","contentName","primaryCategory","identifier",
       "name","board","medium","gradeLevel","subject","programId","createdBy",
       "creator","mimeType","unitIdentifiers", "status","prevStatus")
       .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
-    JobLogger.log(s"reportDf count for slug $slug- ${reportDf.count()}",None, Level.INFO)
 
     val finalDf = getContentDetails(reportDf, slug)
     val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get))
@@ -111,8 +112,6 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
         f.getString(0),f.getString(1),f.getString(4),f.getString(2),f.getString(12),
         f.getString(13),contentStatus,f.getString(11),f.getString(3),f.getString(10))
     }).toDF().withColumn("slug",lit(slug))
-    JobLogger.log(s"contentDf count for slug $slug- ${contentDf.count()}",None, Level.INFO)
-    contentDf.show()
 
     val programData = spark.read.jdbc(url, programTable, connProperties)
       .select(col("program_id"), col("name").as("programName"))
@@ -120,8 +119,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
 
     val finalDf = programData.join(contentDf, programData.col("program_id") === contentDf.col("programId"), "inner")
       .drop("program_id").persist(StorageLevel.MEMORY_ONLY)
-    JobLogger.log(s"finalDf count for slug $slug- ${finalDf.count()}",None, Level.INFO)
-    finalDf.show()
+    JobLogger.log(s"Report count for slug $slug- ${finalDf.count()}",None, Level.INFO)
 
     programData.unpersist(true)
     finalDf
