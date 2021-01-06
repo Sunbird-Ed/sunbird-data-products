@@ -73,6 +73,8 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     }
 
     val updatedRows = filteredRows.map(row => row.copy(status = updatedStatus))
+    print("updatedRowsupdatedRows" + updatedRows.count())
+    updatedRows.map(x => print("CourseBatchResult" + x))
 
     updatedRows.saveToCassandra("sunbird_courses", "course_batch", SomeColumns("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status"))
     // for each of those courseIds, recompute and update courseMetadata
