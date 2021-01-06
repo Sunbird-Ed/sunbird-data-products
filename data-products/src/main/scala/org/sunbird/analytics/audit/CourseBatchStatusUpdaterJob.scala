@@ -23,6 +23,8 @@ case class BatchUpdaterConfig(cassandraHost: Option[String], esHost: Option[Stri
 case class CourseBatch(courseid: String, batchid: String, startdate: Option[String], name: String, enddate: Option[String], enrollmentenddate: Option[String], enrollmenttype: String,
                        createdfor: Option[List[String]], status: Int)
 
+case class CourseBatchStatusMetrics(BatchStartToProgressRecordsCount: Int, BatchInProgressToEndRecordsCount: Int)
+
 object CourseBatchStatusUpdaterJob extends optional.Application with IJob with BaseReportsJob {
   implicit val className: String = "org.sunbird.analytics.util.CourseBatchStatusUpdaterJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra"
@@ -39,7 +41,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
       val res = CommonUtil.time(execute())
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1)));
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "BatchStartToProgressRecordsCount" -> res._2.BatchStartToProgressRecordsCount, "BatchInProgressToEndRecordsCount" -> res._2.BatchInProgressToEndRecordsCount)));
     } finally {
       frameworkContext.closeContext()
       spark.close()
@@ -47,7 +49,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   }
 
-  def updateBatchStatus(existingStatus: Int, updatedStatus: Int, updaterConfig: JobConfig)(implicit sc: SparkContext): Unit = {
+  def updateBatchStatus(existingStatus: Int, updatedStatus: Int, updaterConfig: JobConfig)(implicit sc: SparkContext): Map[String, AnyRef] = {
     // fetch status 0 batches, and update it to on-going.
     val rows = sc.cassandraTable[CourseBatch]("sunbird_courses", "course_batch")
       .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
@@ -72,7 +74,6 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     val updatedRows = filteredRows.map(row => row.copy(status = updatedStatus))
 
     updatedRows.saveToCassandra("sunbird_courses", "course_batch", SomeColumns("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status"))
-    println("Updated Rows: " + updatedRows.count())
     // for each of those courseIds, recompute and update courseMetadata
     val courseIds = updatedRows.map(row => row.courseid)
     val batchIds = updatedRows.map(row => row.batchid)
@@ -80,12 +81,12 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     updateCourseBatchES(batchIds, updatedStatus, updaterConfig)
 
     updateCourseMetadata(courseIds, dateFormatter, updaterConfig)
+    Map("total_updated_records" -> updatedRows.count())
   }
 
 
-  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
-    updateBatchStatus(0, 1, config)
-    updateBatchStatus(1, 2, config)
+  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): CourseBatchStatusMetrics = {
+    CourseBatchStatusMetrics(updateBatchStatus(0, 1, config).getOrElse("total_updated_records", 0).asInstanceOf[Int], updateBatchStatus(1, 2, config).getOrElse("total_updated_records", 0).asInstanceOf[Int])
   }
 
   def updateCourseBatchES(batchIds: RDD[String], status: Int, config: JobConfig)(implicit sc: SparkContext): Unit = {
