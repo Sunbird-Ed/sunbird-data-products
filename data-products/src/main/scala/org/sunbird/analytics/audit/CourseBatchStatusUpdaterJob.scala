@@ -22,7 +22,7 @@ import org.ekstep.analytics.framework.Level.INFO
 case class BatchUpdaterConfig(cassandraHost: Option[String], esHost: Option[String], kpLearningBasePath: Option[String])
 
 case class CourseBatch(courseid: String, batchid: String, startdate: Option[String], name: String, enddate: Option[String], enrollmentenddate: Option[String], enrollmenttype: String,
-                       createdfor: Option[List[String]], status: Int)
+                       createdfor: Option[java.util.List[String]], status: Int)
 
 case class CourseBatchStatusMetrics(BatchStartToProgressRecordsCount: Long, BatchInProgressToEndRecordsCount: Long)
 
@@ -73,8 +73,6 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     }
 
     val updatedRows = filteredRows.map(row => row.copy(status = updatedStatus))
-    print("updatedRowsupdatedRows" + updatedRows.count())
-    updatedRows.map(x => print("CourseBatchResult" + x))
 
     updatedRows.saveToCassandra("sunbird_courses", "course_batch", SomeColumns("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status"))
     // for each of those courseIds, recompute and update courseMetadata
@@ -112,7 +110,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   def updateCourseMetadata(courseIds: RDD[String], dateFormatter: SimpleDateFormat, config: JobConfig)(implicit sc: SparkContext): Unit = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     JobLogger.log("Indexing data into Neo4j", None, INFO)
-    courseIds.foreach(courseId => {
+    courseIds.collect().foreach(courseId => {
       val rows = sc.cassandraTable[CourseBatch]("sunbird_courses", "course_batch")
         .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
         .where("courseid = ?", courseId)
