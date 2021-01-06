@@ -73,7 +73,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val textbooks = response.map(f=> JSONUtils.deserialize[TextbookDetails](f)).toDF()
     JobLogger.log(s"textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
 
-    val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("contentId","contentName","contentType","identifier",
+    val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("contentId","contentName","primaryCategory","identifier",
       "name","board","medium","gradeLevel","subject","programId","createdBy",
       "creator","mimeType","unitIdentifiers", "status","prevStatus")
       .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
