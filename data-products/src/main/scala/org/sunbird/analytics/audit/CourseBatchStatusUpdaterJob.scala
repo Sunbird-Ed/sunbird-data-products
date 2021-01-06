@@ -42,7 +42,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
       val res = CommonUtil.time(execute())
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "BatchStartToProgressRecordsCount" -> res._2.BatchStartToProgressRecordsCount, "BatchInProgressToEndRecordsCount" -> res._2.BatchInProgressToEndRecordsCount)));
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("time-taken" -> res._1, "batch-start-to-inprogress-records-count" -> res._2.BatchStartToProgressRecordsCount, "batch-inprogress-end-records-count" -> res._2.BatchInProgressToEndRecordsCount)));
     } finally {
       frameworkContext.closeContext()
       spark.close()
