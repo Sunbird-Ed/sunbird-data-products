@@ -89,8 +89,9 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
          |    }
          |}
          |""".stripMargin
+
     batchIds.foreach(batchId => {
-      val requestUrl = modelParams.getOrElse("sparkElasticsearchConnectionHost", "localhost") + s""":9200/course-batch/_doc/$batchId/_update"""
+      val requestUrl = s"${modelParams.getOrElse("sparkElasticsearchConnectionHost", "http://localhost:9200")}/course-batch/_doc/$batchId/_update"
       RestUtil.post(requestUrl, body)
     })
     JobLogger.log("Total Batches updates in ES", Option(Map("total_batch" -> batchIds.length)), INFO)
