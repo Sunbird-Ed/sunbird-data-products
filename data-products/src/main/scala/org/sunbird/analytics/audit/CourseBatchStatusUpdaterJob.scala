@@ -23,6 +23,7 @@ case class BatchUpdaterConfig(cassandraHost: Option[String], esHost: Option[Stri
 
 case class CourseBatch(courseid: String, batchid: String, startdate: Option[String], name: String, enddate: Option[String], enrollmentenddate: Option[String], enrollmenttype: String,
                        createdfor: Option[java.util.List[String]], status: Int)
+
 case class CourseBatchMap(courseid: String, batchid: String, status: Int)
 
 case class CourseBatchStatusMetrics(BatchStartToProgressRecordsCount: Long, BatchInProgressToEndRecordsCount: Long)
@@ -56,6 +57,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     val rows = sc.cassandraTable[CourseBatch]("sunbird_courses", "course_batch")
       .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
       .where("status = ?", existingStatus)
+    JobLogger.log(s"Total records of status", Option(Map("total_batch" -> rows.count(), "status" -> existingStatus)), INFO)
     val dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
     dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
     val currentDate = dateFormatter.parse(dateFormatter.format(new Date))
