@@ -23,6 +23,7 @@ case class BatchUpdaterConfig(cassandraHost: Option[String], esHost: Option[Stri
 
 case class CourseBatch(courseid: String, batchid: String, startdate: Option[String], name: String, enddate: Option[String], enrollmentenddate: Option[String], enrollmenttype: String,
                        createdfor: Option[java.util.List[String]], status: Int)
+case class CourseBatchMap(courseid: String, batchid: String, status: Int)
 
 case class CourseBatchStatusMetrics(BatchStartToProgressRecordsCount: Long, BatchInProgressToEndRecordsCount: Long)
 
@@ -73,8 +74,9 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     }
 
     val updatedRows = filteredRows.map(row => row.copy(status = updatedStatus))
-
-    updatedRows.saveToCassandra("sunbird_courses", "course_batch", SomeColumns("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status"))
+    updatedRows.map(x => CourseBatchMap(x.courseid, x.batchid, x.status))
+      .saveToCassandra("sunbird_courses", "course_batch", SomeColumns("courseid", "batchid", "status"))
+    //updatedRows.saveToCassandra("sunbird_courses", "course_batch", SomeColumns("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status"))
     // for each of those courseIds, recompute and update courseMetadata
     val courseIds = updatedRows.map(row => row.courseid)
     val batchIds = updatedRows.map(row => row.batchid)
