@@ -41,7 +41,7 @@ object SelfDeclarationToConsentMigration extends Serializable {
             col("createdon").as("created_on"),
             col("updatedon").as("last_updated_on")).
             withColumn("consumer_type", lit("ORGANISATION")).
-            withColumn("object_type", lit("global")).
+            withColumn("object_type", lit("Organisation")).
             withColumn("id", concat_ws(":", lit("usr-consent"), col("user_id"),col("consumer_id"), col("consumer_id"))).
             withColumn("status", lit("ACTIVE")).
             withColumn("expiry", date_format(from_utc_timestamp(date_add(col("created_on"), 100), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
