@@ -26,6 +26,7 @@ object SelfDeclarationToConsentMigration extends Serializable {
     
     def migrateSelfDeclaredToConsent()(implicit spark: SparkSession): Unit = {
         var userConsentdDF = spark.read.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_consent").load().persist(StorageLevel.MEMORY_ONLY)
+        userConsentdDF = userConsentdDF.where(col("object_type").isin("global", "Organisation"))
         println("user_consent data Count : " + userConsentdDF.count())
         var userDeclaredDF = spark.read.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_declarations").load().persist(StorageLevel.MEMORY_ONLY)
         println("user_declarations data Count : " + userDeclaredDF.count())
