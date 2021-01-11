@@ -25,19 +25,19 @@ object SelfDeclarationToConsentMigration extends Serializable {
     }
     
     def migrateSelfDeclaredToConsent()(implicit spark: SparkSession): Unit = {
-        var userConsentdDF = spark.read.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_consent").load().persist(StorageLevel.MEMORY_ONLY)
-        userConsentdDF = userConsentdDF.where(col("object_type").isin("global", "Organisation"))
-        println("user_consent data Count : " + userConsentdDF.count())
-        var userDeclaredDF = spark.read.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_declarations").load().persist(StorageLevel.MEMORY_ONLY)
+        val userConsentdDF = spark.read.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_consent").load().persist(StorageLevel.MEMORY_ONLY)
+        val userConsentObjectTypedDF = userConsentdDF.where(col("object_type").isin("global", "Organisation")).persist(StorageLevel.MEMORY_ONLY)
+        println("user_consent data Count : " + userConsentObjectTypedDF.count())
+        val userDeclaredDF = spark.read.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_declarations").load().persist(StorageLevel.MEMORY_ONLY)
         println("user_declarations data Count : " + userDeclaredDF.count())
-        userDeclaredDF = userDeclaredDF.join(userConsentdDF, userDeclaredDF.col("userid") === userConsentdDF.col("user_id"), "leftanti")
-        println("userDeclaredDF after join latest data Count : " + userDeclaredDF.count())
-        val saveConsentDF = convertSelfDeclaredToConsentDF(userDeclaredDF)
-        println("user_consent data inserted Count : " + saveConsentDF.count())
+        val userDeclaredWithOutConstentDtlDF = userDeclaredDF.join(userConsentdDF, userDeclaredDF.col("userid") === userConsentObjectTypedDF.col("user_id"), "leftanti").persist();
+        println("userDeclaredDF after join latest data Count : " + userDeclaredWithOutConstentDtlDF.count())
+        val savedConsentDF = convertSelfDeclaredToConsentDF(userDeclaredWithOutConstentDtlDF)
+        println("user_consent data inserted Count : " + savedConsentDF.count())
     }
     
-    def convertSelfDeclaredToConsentDF(userDeclaredDF: DataFrame): DataFrame = {
-        val saveConsentDF = userDeclaredDF.select(col("userid").as("user_id"),col("orgid").as("consumer_id").as("object_id"),
+    def convertSelfDeclaredToConsentDF(userDeclaredWithOutConstentDtlDF: DataFrame): DataFrame = {
+        val savedConsentDF = userDeclaredWithOutConstentDtlDF.select(col("userid").as("user_id"),col("orgid").as("consumer_id").as("object_id"),
             col("createdon").as("created_on"),
             col("updatedon").as("last_updated_on")).
             withColumn("consumer_type", lit("ORGANISATION")).
@@ -45,9 +45,9 @@ object SelfDeclarationToConsentMigration extends Serializable {
             withColumn("id", concat_ws(":", lit("usr-consent"), col("user_id"),col("consumer_id"), col("consumer_id"))).
             withColumn("status", lit("ACTIVE")).
             withColumn("expiry", date_format(from_utc_timestamp(date_add(col("created_on"), 100), "Asia/Kolkata"), "yyyy-MM-dd'T'HH:mm:ss'Z'"))
-        saveConsentDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_consent").
+        savedConsentDF.write.format("org.apache.spark.sql.cassandra").option("keyspace", "sunbird").option("table", "user_consent").
             mode(SaveMode.Append).save()
-        saveConsentDF
+        savedConsentDF
     }
     
     def time[R](block: => R): (Long, R) = {
