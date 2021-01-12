@@ -203,5 +203,4 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       CourseData(courseId, leafNodeCount, level1Data)
     } else prevData
   }
-
 }
