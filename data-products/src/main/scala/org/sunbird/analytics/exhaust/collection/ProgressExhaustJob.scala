@@ -55,7 +55,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     val leafNodesCount = getLeafNodeCount(hierarchyData);
     val enrolmentWithCompletions = userEnrolmentDF.withColumn("completionPercentage", UDFUtils.completionPercentage(col("contentstatus"), lit(leafNodesCount)));
     val enrolledUsersToBatch = updateCertificateStatus(enrolmentWithCompletions).select(filterColumns.head, filterColumns.tail: _*)
-    val assessmentAggDF = getAssessmentDF(collectionBatch, hierarchyData);
+    val assessmentAggDF = getAssessmentDF(collectionBatch, userEnrolmentDF, hierarchyData);
     //val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
     val progressDF = getProgressDF(enrolledUsersToBatch, null, assessmentAggDF);
     organizeDF(progressDF, columnMapping, columnsOrder);
@@ -90,8 +90,16 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
     assessmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
   }
+  
+  def getAssessmentAggData(userEnrolmentDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+    val df = loadData(assessmentAggDBSettings, cassandraFormat, new StructType());
+    val assessmentDF = userEnrolmentDF.join(df, userEnrolmentDF("userid") === df("user_id") && userEnrolmentDF("courseid") === df("course_id") && userEnrolmentDF("batchid") === df("batch_id"), "inner")
+      .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total", "last_attempted_on").persist();
+    persistedDF.append(assessmentDF)
+    assessmentDF
+  }
 
-  def getAssessmentDF(batch: CollectionBatch, hierarchyData: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+  def getAssessmentDF(batch: CollectionBatch, userEnrolmentDF: DataFrame, hierarchyData: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
     import spark.implicits._
     val contentDataDF = hierarchyData.rdd.map(row => {
@@ -101,7 +109,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     }).toDF()
         .select(col("courseid"), explode_outer(col("assessmentIds")).as("contentid"))
 
-    val assessAggdf = filterAssessmentDF(loadData(assessmentAggDBSettings, cassandraFormat, new StructType()))
+    val assessAggdf = filterAssessmentDF(getAssessmentAggData(userEnrolmentDF))
       .where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId).select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total")
       .withColumnRenamed("user_id", "userid")
       .withColumnRenamed("batch_id", "batchid")
