@@ -56,7 +56,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         JobContext.parallelization = 10
         implicit val sparkSession: SparkSession = openSparkSession(jobConfig);
         implicit val frameworkContext = getReportingFrameworkContext();
-        DecryptUtil.initialise();
         execute(jobConfig)
         closeSparkSession()
     }

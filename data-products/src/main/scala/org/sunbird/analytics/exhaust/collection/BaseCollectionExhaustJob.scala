@@ -82,7 +82,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
-    DecryptUtil.initialise();
     spark.setCassandraConf("UserCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.user.cluster.host")))
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     spark.setCassandraConf("ContentCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.content.cluster.host")))
@@ -119,20 +118,28 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase() == "SUCCESS")))
   }
 
-  def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics =  {
+  def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val requests = getRequests(jobId());
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId(), "totalRequests" -> requests.length)), INFO)
     val result = for (request <- requests) yield {
-      val updRequest = if (validateRequest(request)) {
-        val res = processRequest(request, custodianOrgId, userCachedDF, storageConfig)
-        JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-        res
-      } else {
-        JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-        markRequestAsFailed(request, "Invalid request")
+      val updRequest: JobRequest = {
+        try {
+          if (validateRequest(request)) {
+            val res = processRequest(request, custodianOrgId, userCachedDF, storageConfig)
+            JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            res
+          } else {
+            JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            markRequestAsFailed(request, "Invalid request")
+          }
+        } catch {
+          case ex: Exception =>
+            ex.printStackTrace()
+            markRequestAsFailed(request, "Invalid request")
+        }
       }
       saveRequestAsync(storageConfig, updRequest)(spark.sparkContext.hadoopConfiguration, fc)
     }
@@ -166,7 +173,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     if (collectionConfig.batchId.isEmpty && (collectionConfig.searchFilter.isEmpty && collectionConfig.batchFilter.isEmpty)) false else true
     // TODO: Check if the requestedBy user role has permission to request for the job
   }
-  
+
   def markRequestAsProcessing(request: JobRequest) = {
     request.status = "PROCESSING";
     updateStatus(request);
@@ -232,7 +239,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "state", "district", "userchannel", "rootorgid")
   }
-  
+
   def getEnrolmentColumns() : Seq[String] = {
     Seq("batchid", "userid", "courseid")
   }
@@ -339,7 +346,7 @@ object UDFUtils extends Serializable {
   }
 
   val toJSON = udf[String, AnyRef](toJSONFun)
-  
+
   def extractFromArrayStringFun(board: String): String = {
     try {
       val str = JSONUtils.deserialize[AnyRef](board);
@@ -351,7 +358,7 @@ object UDFUtils extends Serializable {
   }
 
   val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
-  
+
   def completionPercentageFunction(statusMap: Map[String, Int], leafNodesCount: Int): Int = {
     try {
       val completedContent = statusMap.filter(p => p._2 == 2).size;
