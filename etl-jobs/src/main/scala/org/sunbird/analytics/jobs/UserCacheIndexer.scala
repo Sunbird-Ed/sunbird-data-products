@@ -77,7 +77,7 @@ object UserCacheIndexer extends Serializable {
         .select(col("userid"), col("organisationid"))
 
       val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
-        .select(col("id"), col("orgname"), col("channel"), col("orgcode"),
+        .select(col("id"), col("orgname"), col("channel"), col("externalid"),
           col("locationids"), col("isrootorg"))
 
       /**
@@ -118,7 +118,7 @@ object UserCacheIndexer extends Serializable {
         .select(col("userid"), col("organisationid")).persist(StorageLevel.MEMORY_ONLY)
 
       val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
-        .select(col("id"), col("orgname"), col("channel"), col("orgcode"), col("locationids"), col("isrootorg")).persist(StorageLevel.MEMORY_ONLY)
+        .select(col("id"), col("orgname"), col("channel"), col("externalid"), col("locationids"), col("isrootorg")).persist(StorageLevel.MEMORY_ONLY)
 
       val locationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "location").option("keyspace", sunbirdKeyspace).load().persist(StorageLevel.MEMORY_ONLY)
 
@@ -248,7 +248,7 @@ object UserCacheIndexer extends Serializable {
         .join(orgDistrictDF, Seq("id"), "left")
         .join(orgBlockDF, Seq("id"), "left")
         .select(organisationDF.col("id").as("orgid"), col("orgname"),
-          col("orgcode"), col("isrootorg"), col("state_name"), col("district"), col("block"))
+          col("externalid"), col("isrootorg"), col("state_name"), col("district"), col("block"))
 
       // exclude the custodian user != custRootOrgId
       // join userDf to user_orgDF and then join with OrgDF to get orgname and orgcode ( filter isrootorg = false)
@@ -264,7 +264,7 @@ object UserCacheIndexer extends Serializable {
         .select(
           userDF.col("*"),
           subOrgDF.col("orgname").as("declared-school-name"),
-          subOrgDF.col("orgcode").as("declared-school-udise-code"),
+          subOrgDF.col("externalid").as("declared-school-udise-code"),
           subOrgDF.col("state_name"),
           subOrgDF.col("district"),
           subOrgDF.col("block"))
