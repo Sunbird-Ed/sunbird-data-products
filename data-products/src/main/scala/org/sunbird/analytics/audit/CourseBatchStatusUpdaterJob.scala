@@ -62,29 +62,32 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
       //        .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
       //        .where("courseid = ?", courseId)
       val filteredRows: DataFrame = collectionBatchDF.filter(col("courseid") === courseId)
+      println("filteredRows" + filteredRows.show(false))
       //val filteredRows = rows.filter(row => row.status < 2)
       val batches: List[Map[String, AnyRef]] = {
         if (!filteredRows.isEmpty) {
-          filteredRows.collect().map(row => Map[String, AnyRef]("batchId" -> row.getAs[String]("batchid"),
-            "startDate" -> row.getAs[String]("startdate"),
-            "endDate" -> row.getAs[String]("enddate"),
-            "enrollmentEndDate" -> {
-              if (row.getAs[String]("enrollmentenddate").nonEmpty || row.getAs[String]("enddate").isEmpty) row.getAs[String]("enrollmentenddate")
-              else {
-                val end = dateFormatter.parse(row.getAs[String]("enddate"))
-                val cal = Calendar.getInstance
-                cal.setTime(end)
-                cal.add(Calendar.DAY_OF_MONTH, -1)
-                dateFormatter.format(cal.getTime)
-              }
-            },
-            "enrollmentType" -> row.getAs[String]("enrollmenttype"),
-            "createdFor" -> row.getAs[List[String]]("createdfor"),
-            "status" -> row.getAs[AnyRef]("status"))).toList
+          filteredRows.collect().map(row =>
+            Map[String, AnyRef]("batchId" -> row.getAs[String]("batchid"),
+              "startDate" -> row.getAs[String]("startdate"),
+              "endDate" -> row.getAs[String]("enddate"),
+              "enrollmentEndDate" -> {
+                if (row.getAs[String]("enrollmentenddate").nonEmpty || row.getAs[String]("enddate").isEmpty) row.getAs[String]("enrollmentenddate")
+                else {
+                  val end = dateFormatter.parse(row.getAs[String]("enddate"))
+                  val cal = Calendar.getInstance
+                  cal.setTime(end)
+                  cal.add(Calendar.DAY_OF_MONTH, -1)
+                  dateFormatter.format(cal.getTime)
+                }
+              },
+              "enrollmentType" -> row.getAs[String]("enrollmenttype"),
+              "createdFor" -> row.getAs[List[String]]("createdfor"),
+              "status" -> row.getAs[AnyRef]("status"))).toList
         } else {
           null
         }
       }
+      println("batchesbatches" + batches)
 
       val request =
         s"""
@@ -113,9 +116,12 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     val finalDF = res.drop("status").withColumnRenamed("updated_status", "status")
     JobLogger.log(s"Total records of status", Option(Map("total_batch" -> finalDF.count())), INFO)
     finalDF.write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
+    println("finalDF" + finalDF.show(false))
     if (!finalDF.isEmpty) {
       updateCourseBatchES(finalDF.select("batchid").collect().map(_ (0)).toList.asInstanceOf[List[String]], updatedStatus, updaterConfig)
       updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]], collectionBatchDF.filter(col("courseid") < 2), dateFormatter, updaterConfig)
+    } else {
+      JobLogger.log("No records found to update the db", None, INFO)
     }
     Map("total_updated_records" -> finalDF.count())
   }
