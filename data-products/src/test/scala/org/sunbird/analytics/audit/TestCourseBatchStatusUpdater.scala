@@ -40,16 +40,18 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
   }
 
   it should "Should update the status of the course/batch" in {
-    println("*************CourseBatchUpdaer*******")
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
-     // .withColumn("createdfor", convertMethod(split(courseBatchDF.col("createdfor"), ",").cast("array<string>"))))
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.audit.CourseBatchStatusUpdaterJob","modelParams":{"store":"azure","sparkElasticsearchConnectionHost":"http://localhost:9200","sparkCassandraConnectionHost":"localhost","kpLearningBasePath":"http://localhost:8080/learning-service","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Course Batch Status Updater Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val sc: SparkContext = spark.sparkContext
-    CourseBatchStatusUpdaterJob.execute(reporterMock.fetchData)
+    val res = CourseBatchStatusUpdaterJob.execute(reporterMock.fetchData)
+    res.inProgress should be(2)
+    res.completed should be(2)
+    res.unStarted should be(0)
+
   }
 
 }
