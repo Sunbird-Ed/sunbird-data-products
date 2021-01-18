@@ -16,7 +16,7 @@ object EmbeddedCassandra {
   EmbeddedCassandraServerHelper.startEmbeddedCassandra(30000L);
   val connector = CassandraConnector(getSparkConf())
   val session: CqlSession = CqlSession.builder()
-    .addContactPoint(new InetSocketAddress("localhost", AppConf.getConfig("cassandra.service.embedded.connection.port").asInstanceOf[Int]))
+    .addContactPoint(new InetSocketAddress("localhost", AppConf.getConfig("cassandra.service.embedded.connection.port").toInt))
     .withLocalDatacenter("datacenter1")
     .build();
   val dataLoader = new CQLDataLoader(session)
