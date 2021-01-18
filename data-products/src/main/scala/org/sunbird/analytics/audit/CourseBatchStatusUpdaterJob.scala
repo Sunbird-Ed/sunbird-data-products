@@ -10,7 +10,6 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
-import org.sunbird.analytics.exhaust.BaseReportsJob
 
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, TimeZone}
@@ -18,6 +17,8 @@ import scala.collection.immutable.List
 import org.apache.spark.sql.cassandra._
 import org.apache.spark.sql.functions.{col, lit}
 import org.ekstep.analytics.framework.Level.INFO
+import org.sunbird.analytics.job.report.BaseReportsJob
+import org.sunbird.analytics.job.report.CollectionSummaryJobV2.{getReportingFrameworkContext, openSparkSession}
 
 
 case class BatchUpdaterConfig(cassandraHost: Option[String], esHost: Option[String], kpLearningBasePath: Option[String])
@@ -44,7 +45,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     implicit val sc: SparkContext = spark.sparkContext
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
-      val res = CommonUtil.time(execute())
+      val res = CommonUtil.time(execute(fetchData))
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("time-taken" -> res._1, "batch-start-to-inprogress-records-count" -> res._2.BatchStartToProgressRecordsCount, "batch-inprogress-end-records-count" -> res._2.BatchInProgressToEndRecordsCount)));
     } finally {
       frameworkContext.closeContext()
@@ -53,82 +54,33 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   }
 
-  def updateBatchStatus(existingStatus: Int, updatedStatus: Int, updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): Map[String, Long] = {
-    val dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
-    dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
-    val currentDate = dateFormatter.format(new Date)
-    val filteredDF = collectionBatchDF.filter(col("status") === existingStatus)
-    val res = if (2 == updatedStatus)
-      filteredDF.filter(lit(currentDate).gt(col("enddate"))).withColumn("updated_status", lit(2))
-    else
-      filteredDF.filter(lit(currentDate).geq(col("startdate"))).withColumn("updated_status", lit(1))
-
-    val finalDF = res.drop("status").withColumnRenamed("updated_status", "status")
-    JobLogger.log(s"Total records of status", Option(Map("total_batch" -> finalDF.count())), INFO)
-    finalDF.write.format("org.apache.spark.sql.cassandra").options( collectionBatchDBSettings ++  Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
-    if (!finalDF.isEmpty) {
-      updateCourseBatchES(finalDF.select("batchid").collect().map(_ (0)).toList.asInstanceOf[List[String]], updatedStatus, updaterConfig)
-      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]], dateFormatter, updaterConfig)
-    }
-    Map("total_updated_records" -> finalDF.count())
-  }
-
-  def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
-    val df = loadData(collectionBatchDBSettings, cassandraFormat, new StructType()).select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
-    if (persist) df.persist() else df
-  }
-
-  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): CourseBatchStatusMetrics = {
-    val collectionBatchDF = getCollectionBatchDF(persist = true)
-    CourseBatchStatusMetrics(updateBatchStatus(0, 1, config, collectionBatchDF).getOrElse("total_updated_records", 0), updateBatchStatus(1, 2, config, collectionBatchDF).getOrElse("total_updated_records", 0))
-  }
-
-  def updateCourseBatchES(batchIds: List[String], status: Int, config: JobConfig)(implicit sc: SparkContext): Unit = {
-    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
-    val body =
-      s"""
-         |{
-         |    "doc" : {
-         |        "status" : $status
-         |    }
-         |}
-         |""".stripMargin
-
-    batchIds.foreach(batchId => {
-      val requestUrl = s"${modelParams.getOrElse("sparkElasticsearchConnectionHost", "http://localhost:9200")}/course-batch/_doc/$batchId/_update"
-      RestUtil.post[Map[String, AnyRef]](requestUrl, body)
-    })
-    JobLogger.log("Total Batches updates in ES", Option(Map("total_batch" -> batchIds.length)), INFO)
-  }
-
-  def updateCourseMetadata(courseIds: List[String], dateFormatter: SimpleDateFormat, config: JobConfig)(implicit sc: SparkContext): Unit = {
+  def updateCourseMetadata(courseIds: List[String], collectionBatchDF: DataFrame, dateFormatter: SimpleDateFormat, config: JobConfig)(implicit sc: SparkContext): Unit = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     JobLogger.log("Indexing data into Neo4j", None, INFO)
     courseIds.foreach(courseId => {
-      val rows = sc.cassandraTable[CourseBatch]("sunbird_courses", "course_batch")
-        .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
-        .where("courseid = ?", courseId)
-
-      val filteredRows = rows.filter(row => row.status < 2)
-
+      //      val rows = sc.cassandraTable[CourseBatch]("sunbird_courses", "course_batch")
+      //        .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
+      //        .where("courseid = ?", courseId)
+      val filteredRows: DataFrame = collectionBatchDF.filter(col("courseid") === courseId)
+      //val filteredRows = rows.filter(row => row.status < 2)
       val batches: List[Map[String, AnyRef]] = {
-        if (null != filteredRows && !filteredRows.isEmpty()) {
-          filteredRows.collect().map(row => Map[String, AnyRef]("batchId" -> row.batchid,
-            "startDate" -> row.startdate.orNull,
-            "endDate" -> row.enddate.orNull,
+        if (!filteredRows.isEmpty) {
+          filteredRows.collect().map(row => Map[String, AnyRef]("batchId" -> row.getAs[String]("batchid"),
+            "startDate" -> row.getAs[String]("startdate"),
+            "endDate" -> row.getAs[String]("enddate"),
             "enrollmentEndDate" -> {
-              if (row.enrollmentenddate.getOrElse("").nonEmpty || row.enddate.getOrElse("").isEmpty) row.enrollmentenddate
+              if (row.getAs[String]("enrollmentenddate").nonEmpty || row.getAs[String]("enddate").isEmpty) row.getAs[String]("enrollmentenddate")
               else {
-                val end = dateFormatter.parse(row.enddate.get)
+                val end = dateFormatter.parse(row.getAs[String]("enddate"))
                 val cal = Calendar.getInstance
                 cal.setTime(end)
                 cal.add(Calendar.DAY_OF_MONTH, -1)
                 dateFormatter.format(cal.getTime)
               }
             },
-            "enrollmentType" -> row.enrollmenttype,
-            "createdFor" -> row.createdfor.getOrElse(List()),
-            "status" -> row.status.asInstanceOf[AnyRef])).toList
+            "enrollmentType" -> row.getAs[String]("enrollmenttype"),
+            "createdFor" -> row.getAs[List[String]]("createdfor"),
+            "status" -> row.getAs[AnyRef]("status"))).toList
         } else {
           null
         }
@@ -148,4 +100,52 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     })
   }
 
+  def updateBatchStatus(existingStatus: Int, updatedStatus: Int, updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): Map[String, Long] = {
+    val dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
+    dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
+    val currentDate = dateFormatter.format(new Date)
+    val filteredDF = collectionBatchDF.filter(col("status") === existingStatus)
+    val res = if (2 == updatedStatus)
+      filteredDF.filter(lit(currentDate).gt(col("enddate"))).withColumn("updated_status", lit(2))
+    else
+      filteredDF.filter(lit(currentDate).geq(col("startdate"))).withColumn("updated_status", lit(1))
+
+    val finalDF = res.drop("status").withColumnRenamed("updated_status", "status")
+    JobLogger.log(s"Total records of status", Option(Map("total_batch" -> finalDF.count())), INFO)
+    finalDF.write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
+    if (!finalDF.isEmpty) {
+      updateCourseBatchES(finalDF.select("batchid").collect().map(_ (0)).toList.asInstanceOf[List[String]], updatedStatus, updaterConfig)
+      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]], collectionBatchDF.filter(col("courseid") < 2), dateFormatter, updaterConfig)
+    }
+    Map("total_updated_records" -> finalDF.count())
+  }
+
+  def getCollectionBatchDF(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+    fetchData(spark, collectionBatchDBSettings, cassandraFormat, new StructType()).select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status").persist()
+  }
+
+  def execute(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): CourseBatchStatusMetrics = {
+    val collectionBatchDF = getCollectionBatchDF(fetchData)
+    CourseBatchStatusMetrics(updateBatchStatus(0, 1, config, collectionBatchDF).getOrElse("total_updated_records", 0), updateBatchStatus(1, 2, config, collectionBatchDF).getOrElse("total_updated_records", 0))
+  }
+
+  def updateCourseBatchES(batchIds: List[String], status: Int, config: JobConfig)(implicit sc: SparkContext): Unit = {
+    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
+    val body =
+      s"""
+         |{
+         |    "doc" : {
+         |        "status" : $status
+         |    }
+         |}
+         |""".stripMargin
+
+    batchIds.foreach(batchId => {
+      val requestUrl = s"${
+        modelParams.getOrElse("sparkElasticsearchConnectionHost", "http: //localhost:9200")
+      }/course-batch/_doc/$batchId/_update"
+      RestUtil.post[Map[String, AnyRef]](requestUrl, body)
+    })
+    JobLogger.log("Total Batches updates in ES", Option(Map("total_batch" -> batchIds.length)), INFO)
+  }
 }
