@@ -35,6 +35,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
 
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     val jobName: String = "CourseBatchStatusUpdaterJob"
@@ -54,16 +55,17 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   }
 
+  // $COVERAGE-ON Enabling the scoverage.
+
   def updateCourseMetadata(courseIds: List[String], collectionBatchDF: DataFrame, dateFormatter: SimpleDateFormat, config: JobConfig)(implicit sc: SparkContext): Unit = {
-    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
+    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
+    println("courseIds" + courseIds)
+    println("collectionBatchDF" + collectionBatchDF.show(false))
     JobLogger.log("Indexing data into Neo4j", None, INFO)
     courseIds.foreach(courseId => {
-      //      val rows = sc.cassandraTable[CourseBatch]("sunbird_courses", "course_batch")
-      //        .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
-      //        .where("courseid = ?", courseId)
+      println("CourseId" + courseId)
       val filteredRows: DataFrame = collectionBatchDF.filter(col("courseid") === courseId)
       println("filteredRows" + filteredRows.show(false))
-      //val filteredRows = rows.filter(row => row.status < 2)
       val batches: List[Map[String, AnyRef]] = {
         if (!filteredRows.isEmpty) {
           filteredRows.collect().map(row =>
@@ -71,7 +73,10 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
               "startDate" -> row.getAs[String]("startdate"),
               "endDate" -> row.getAs[String]("enddate"),
               "enrollmentEndDate" -> {
-                if (row.getAs[String]("enrollmentenddate").nonEmpty || row.getAs[String]("enddate").isEmpty) row.getAs[String]("enrollmentenddate")
+                val enrolmentDate = row.getAs[String]("enrollmentenddate")
+                println("enrolmentDate" + enrolmentDate)
+                val enDate = row.getAs[String]("enddate")
+                if ((null != enrolmentDate && enrolmentDate.nonEmpty) || (null != enDate && enDate.nonEmpty)) row.getAs[String]("enrollmentenddate")
                 else {
                   val end = dateFormatter.parse(row.getAs[String]("enddate"))
                   val cal = Calendar.getInstance
@@ -119,7 +124,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     println("finalDF" + finalDF.show(false))
     if (!finalDF.isEmpty) {
       updateCourseBatchES(finalDF.select("batchid").collect().map(_ (0)).toList.asInstanceOf[List[String]], updatedStatus, updaterConfig)
-      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]], collectionBatchDF.filter(col("courseid") < 2), dateFormatter, updaterConfig)
+      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]], collectionBatchDF.filter(col("status") < 2), dateFormatter, updaterConfig)
     } else {
       JobLogger.log("No records found to update the db", None, INFO)
     }
