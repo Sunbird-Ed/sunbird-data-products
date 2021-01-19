@@ -9,6 +9,8 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.job.report.{BaseReportSpec, BaseReportsJob}
 
+import java.text.SimpleDateFormat
+import java.util.TimeZone
 import scala.collection.mutable
 
 class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
@@ -51,6 +53,14 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
     res.inProgress should be(1)
     res.completed should be(2)
     res.unStarted should be(0)
+  }
+
+  it should "Get the valid getEnrolmentEndDate" in {
+    val dateFormatter = new SimpleDateFormat("yyyy-MM-dd")
+    dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
+    CourseBatchStatusUpdaterJob.getEnrolmentEndDate(null, "2030-06-30", dateFormatter) should be("2030-06-29")
+    CourseBatchStatusUpdaterJob.getEnrolmentEndDate("2030-06-30", null, dateFormatter) should be("2030-06-30")
+    CourseBatchStatusUpdaterJob.getEnrolmentEndDate(null, null, dateFormatter) should be(null)
   }
 
 }

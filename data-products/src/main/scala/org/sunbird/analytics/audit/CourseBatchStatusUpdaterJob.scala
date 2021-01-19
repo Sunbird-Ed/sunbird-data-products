@@ -1,24 +1,20 @@
 package org.sunbird.analytics.audit
 
-import com.datastax.spark.connector._
 import com.datastax.spark.connector.cql.CassandraConnectorConf
-import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.functions.{col, lit, when}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
-import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.sunbird.analytics.job.report.BaseReportsJob
+import org.apache.spark.sql.cassandra._
 
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, TimeZone}
 import scala.collection.immutable.List
-import org.apache.spark.sql.cassandra._
-import org.apache.spark.sql.functions.{col, lit, when}
-import org.ekstep.analytics.framework.Level.INFO
-import org.sunbird.analytics.job.report.BaseReportsJob
-import org.sunbird.analytics.job.report.CollectionSummaryJobV2.{getReportingFrameworkContext, openSparkSession}
 
 case class CourseBatchStatusMetrics(unStarted: Long, inProgress: Long, completed: Long)
 
@@ -52,7 +48,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   }
 
-  // $COVERAGE-ON Enabling the scoverage.
+  // $COVERAGE-ON$ Disabling scoverage for main and execute method
   def execute(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): CourseBatchStatusMetrics = {
     val collectionBatchDF = getCollectionBatchDF(fetchData).persist()
     val metrics = Map("un-started" -> collectionBatchDF.filter(col("status") === 0).count(), "in-progress" -> collectionBatchDF.filter(col("status") === 1).count(), "completed" -> collectionBatchDF.filter(col("status") === 2).count())
@@ -68,10 +64,9 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     val currentDate = dateFormatter.format(new Date)
 
     val finalDF = collectionBatchDF.withColumn("updated_status",
-      when(lit(currentDate).gt(col("enddate")), 2)
-        .otherwise(
-          when(lit(currentDate).geq(col("startdate")), 1).otherwise(col("status"))
-        ))
+      when(lit(currentDate).gt(col("enddate")), 2).otherwise(
+        when(lit(currentDate).geq(col("startdate")), 1).otherwise(col("status"))
+      ))
       .filter(col("updated_status") =!= col("status"))
       .drop("status").withColumnRenamed("updated_status", "status")
     JobLogger.log(s"Writing records into database", None, INFO)
@@ -102,32 +97,28 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   def getEnrolmentEndDate(enrolmentDate: String, enDate: String, dateFormatter: SimpleDateFormat): String = {
     Option(enrolmentDate).map(x => x).getOrElse({
-      val end = dateFormatter.parse(enDate)
-      val cal = Calendar.getInstance
-      cal.setTime(end)
-      cal.add(Calendar.DAY_OF_MONTH, -1)
-      dateFormatter.format(cal.getTime)
+      Option(enDate).map(y => {
+        val cal = Calendar.getInstance
+        cal.setTime(dateFormatter.parse(y))
+        cal.add(Calendar.DAY_OF_MONTH, -1)
+        dateFormatter.format(cal.getTime)
+      }).orNull
     })
   }
 
+  // Update the metadata to neo4j using learning service api
   def updateCourseMetadata(courseIds: List[String], collectionBatchDF: DataFrame, dateFormatter: SimpleDateFormat, config: JobConfig)(implicit sc: SparkContext): Unit = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     JobLogger.log("Indexing course data into Neo4j", Option(Map("total_courseid" -> courseIds.length)), INFO)
     courseIds.foreach(courseId => {
       val filteredRows: DataFrame = collectionBatchDF.filter(col("courseid") === courseId)
-      val batches: List[Map[String, AnyRef]] = {
-        if (!filteredRows.isEmpty) {
-          filteredRows.collect().map(row => getCourseMetaData(row, dateFormatter)).toList
-        } else {
-          null
-        }
-      }
+      val batches: List[Map[String, AnyRef]] = if (!filteredRows.isEmpty) filteredRows.collect().map(row => getCourseMetaData(row, dateFormatter)).toList else null
       val request =
         s"""
            |{
            |  "request": {
            |    "content": {
-           |      "batches": ${JSONUtils.serialize(batches)}
+           |      "batches": ${Option(batches).map(x => JSONUtils.serialize(x)).orNull}
            |    }
            |  }
            |}
@@ -136,6 +127,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     })
   }
 
+  // Method to update the course batch status to elastic search course-batch index.
   def updateCourseBatchES(batchList: Array[Map[String, Any]], config: JobConfig)(implicit sc: SparkContext): Unit = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     batchList.foreach(batch => {
