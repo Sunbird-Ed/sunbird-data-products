@@ -48,10 +48,9 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val sc: SparkContext = spark.sparkContext
     val res = CourseBatchStatusUpdaterJob.execute(reporterMock.fetchData)
-    res.inProgress should be(2)
+    res.inProgress should be(1)
     res.completed should be(2)
     res.unStarted should be(0)
-
   }
 
 }
