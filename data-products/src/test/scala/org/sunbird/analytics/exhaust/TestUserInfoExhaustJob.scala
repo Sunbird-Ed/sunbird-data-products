@@ -83,10 +83,13 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val batch1 = "batch-001"
     val filePath = UserInfoExhaustJob.getFilePath(batch1)
     val jobName = UserInfoExhaustJob.jobName()
-
+    println(s"report generated: $outputLocation/$filePath.csv")
     implicit val responseExhaustEncoder = Encoders.product[UserInfoExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$filePath.csv").as[UserInfoExhaustReport].collectAsList().asScala
+      .load(s"$outputLocation/$filePath.csv")
+      .as[UserInfoExhaustReport]
+      .collectAsList()
+      .asScala
 
     batch1Results.size should be (4)
     batch1Results.map {res => res.`Collection Id`}.toList should contain atLeastOneElementOf List("do_1131350140968632321230")
