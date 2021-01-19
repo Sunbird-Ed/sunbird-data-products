@@ -51,6 +51,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     }
 
   }
+
   // $COVERAGE-ON Enabling the scoverage.
   def execute(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): CourseBatchStatusMetrics = {
     val collectionBatchDF = getCollectionBatchDF(fetchData).persist()
@@ -66,12 +67,12 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
     val currentDate = dateFormatter.format(new Date)
 
-    val res = collectionBatchDF.withColumn("updated_status",
+    val finalDF = collectionBatchDF.withColumn("updated_status",
       when(lit(currentDate).gt(col("enddate")), 2)
         .otherwise(
           when(lit(currentDate).geq(col("startdate")), 1).otherwise(col("status"))
         ))
-      val finalDF = res.filter(col("updated_status") =!= col("status"))
+      .filter(col("updated_status") =!= col("status"))
       .drop("status").withColumnRenamed("updated_status", "status")
     JobLogger.log(s"Writing records into database", None, INFO)
     finalDF.write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
