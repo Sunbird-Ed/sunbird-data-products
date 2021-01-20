@@ -72,7 +72,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   "ProgressExhaustReport" should "generate the report with all the correct data" in {
 
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
-    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'channel-01', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1130928636168192001667_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
 
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
@@ -92,8 +92,8 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
       .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
 
     batch1Results.size should be (4)
-    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1131350140968632321230")
-    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("Test_TextBook_name_5197942513")
+    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
     batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
     batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
     batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
@@ -118,8 +118,8 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
 
     //Test coverage for filterAssessmentsFromHierarchy method
-    val assessmentData = ProgressExhaustJob.filterAssessmentsFromHierarchy(List(), List(), AssessmentData("do_1131350140968632321230", List()))
-    assessmentData.courseid should be ("do_1131350140968632321230")
+    val assessmentData = ProgressExhaustJob.filterAssessmentsFromHierarchy(List(), List(), AssessmentData("do_1130928636168192001667", List()))
+    assessmentData.courseid should be ("do_1130928636168192001667")
     assert(assessmentData.assessmentIds.isEmpty)
 
   }
@@ -134,32 +134,43 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val config = jobConfig
 
-    var collectionBatch = CollectionBatch("batch-001","do_1131350140968632321230","Basic Java","0130107621805015045","channel-01","channel-01","Test_TextBook_name_5197942513",Some("Yes"))
-    var hierarchyData = List(ContentHierarchy("do_1131350140968632321230","""{"identifier":"do_1131350140968632321230","mimeType":"application/vnd.ekstep.content-collection","visibility":"Default","contentType":"Course","children":[{"parent":"do_112876961957437440179","identifier":"do_1131350140968632321230","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","children":[],"status":"Draft"}]}""")).toDF()
+    var collectionBatch = CollectionBatch("batch-001","do_1130928636168192001667","Basic Java","0130107621805015045","channel-01","channel-01","Test_TextBook_name_5197942513",Some("Yes"))
+    var hierarchyData = List(ContentHierarchy("do_1130928636168192001667","""{"identifier":"do_1130928636168192001667","mimeType":"application/vnd.ekstep.content-collection","visibility":"Default","contentType":"Course","children":[{"parent":"do_112876961957437440179","identifier":"do_1130928636168192001667","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","children":[],"status":"Draft"}]}""")).toDF()
 
-    val hierarchyModuleData = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
+    var hierarchyModuleData = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
     hierarchyModuleData.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
-    hierarchyModuleData.map(f => f.getString(1)) should contain allElementsOf List("do_1131350140968632321230")
+    hierarchyModuleData.map(f => f.getString(1)) should contain allElementsOf List("do_1130928636168192001667")
     hierarchyModuleData.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
     hierarchyModuleData.map(f => f.getInt(3)) should contain allElementsOf List(100)
-    hierarchyModuleData.map(f => f.getString(4)) should contain allElementsOf List("do_1131350140968632321230")
+    hierarchyModuleData.map(f => f.getString(4)) should contain allElementsOf List("do_1130928636168192001667")
     hierarchyModuleData.map(f => f.getInt(5)) should contain allElementsOf List(100)
 
     // No mimetype, visibility etc available in hierarchy
-    hierarchyData = List(ContentHierarchy("do_1131350140968632321230","""{"children":[{"parent":"do_112876961957437440179","identifier":"do_1131350140968632321230","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","status":"Draft"}]}""")).toDF()
+    hierarchyData = List(ContentHierarchy("do_1130928636168192001667","""{"children":[{"parent":"do_112876961957437440179","identifier":"do_1130928636168192001667","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","status":"Draft"}]}""")).toDF()
     val hierarchyModuleData1 = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
 
     hierarchyModuleData1.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
-    hierarchyModuleData1.map(f => f.getString(1)) should contain allElementsOf List("do_1131350140968632321230")
+    hierarchyModuleData1.map(f => f.getString(1)) should contain allElementsOf List("do_1130928636168192001667")
     hierarchyModuleData1.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
     hierarchyModuleData1.map(f => f.getInt(3)) should contain allElementsOf List(100)
     hierarchyModuleData1.map(f => f.getString(4)) should contain allElementsOf List(null)
 
     //levelCount is less than depthLevel
-    val data =  List(Map("children" -> List(Map("lastStatusChangedOn" -> "2019-09-19T18:15:56.490+0000","parent" -> "do_112876961957437440179","children" -> List(),"name" -> "content_1","createdOn" -> "2019-09-19T18:15:56.489+0000"," lastUpdatedOn" -> "2019-09-19T18:15:56.490+0000", "identifier" -> "do_1131350140968632321230","description" -> "Test_TextBookUnit_desc_8305852636","versionKey" -> "1568916956489","mimeType" -> "application/vnd.ekstep.content-collection","code" -> "2cb4d698-dc19-4f0c-9990-96f49daff753"," contentType" -> "Course"," status" -> "Draft"," depth" -> "1"," visibility" -> "Default"," index" -> "1))"," identifier" -> "do_1131350140968632321230"," mimeType" -> "application/vnd.ekstep.content-collection"," contentType" -> "Course"," visibility" -> "Default"))))
-    val prevData = CourseData("do_1131350140968632321230","0",List())
-    val parseHierarchyData = ProgressExhaustJob.parseCourseHierarchy(data, 3, prevData, 2)
+    var data =  List(Map("children" -> List(Map("lastStatusChangedOn" -> "2019-09-19T18:15:56.490+0000","parent" -> "do_112876961957437440179","children" -> List(),"name" -> "content_1","createdOn" -> "2019-09-19T18:15:56.489+0000"," lastUpdatedOn" -> "2019-09-19T18:15:56.490+0000", "identifier" -> "do_1130928636168192001667","description" -> "Test_TextBookUnit_desc_8305852636","versionKey" -> "1568916956489","mimeType" -> "application/vnd.ekstep.content-collection","code" -> "2cb4d698-dc19-4f0c-9990-96f49daff753"," contentType" -> "Course"," status" -> "Draft"," depth" -> "1"," visibility" -> "Default"," index" -> "1))"," identifier" -> "do_1130928636168192001667"," mimeType" -> "application/vnd.ekstep.content-collection"," contentType" -> "Course"," visibility" -> "Default"))))
+    var prevData = CourseData("do_1130928636168192001667","0",List())
+    var parseHierarchyData = ProgressExhaustJob.parseCourseHierarchy(data, 3, prevData, 2)
     assert(parseHierarchyData.equals(prevData))
+
+    //unit testcase for identifier and children not available
+    collectionBatch = CollectionBatch("batch-001","do_1130928636168192001667","Basic Java","0130107621805015045","channel-01","channel-01","Test_TextBook_name_5197942513",Some("Yes"))
+    hierarchyData = List(ContentHierarchy("do_1130928636168192001667","""{"mimeType":"application/vnd.ekstep.content-collection","visibility":"Default","contentType":"Course"}""")).toDF()
+
+    hierarchyModuleData = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
+    hierarchyModuleData.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
+    hierarchyModuleData.map(f => f.getString(1)) should contain allElementsOf List("do_1130928636168192001667")
+    hierarchyModuleData.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
+    hierarchyModuleData.map(f => f.getInt(3)) should contain allElementsOf List(100)
+    hierarchyModuleData.map(f => f.getString(4)) should contain allElementsOf List(null)
   }
 
   def getDate(pattern: String): SimpleDateFormat = {

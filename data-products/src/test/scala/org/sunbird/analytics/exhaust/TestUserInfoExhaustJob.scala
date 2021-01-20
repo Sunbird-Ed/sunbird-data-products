@@ -69,7 +69,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   "UserInfoExhaustJob" should "generate the user info report with all the users for a batch" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
-    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'channel-01', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
 
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UserInfo Exhaust"}"""
@@ -92,8 +92,8 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
       .asScala
 
     batch1Results.size should be (4)
-    batch1Results.map {res => res.`Collection Id`}.toList should contain atLeastOneElementOf List("do_1131350140968632321230")
-    batch1Results.map {res => res.`Collection Name`}.toList should contain atLeastOneElementOf List("Test_TextBook_name_5197942513")
+    batch1Results.map {res => res.`Collection Id`}.toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+    batch1Results.map {res => res.`Collection Name`}.toList should contain atLeastOneElementOf List("24 aug course")
     batch1Results.map {res => res.`Batch Name`}.toList should contain atLeastOneElementOf List("Basic Java")
     batch1Results.map {res => res.`Batch Id`}.toList should contain atLeastOneElementOf List("BatchId_batch-001")
     batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
@@ -113,11 +113,13 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     }
 
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
+
+    UserInfoExhaustJob.canZipExceptionBeIgnored() should be (false)
   }
 
   it should "insert status as FAILED as encryption key not provided" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
-    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'channel-01', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
 
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UserInfo Exhaust"}"""
