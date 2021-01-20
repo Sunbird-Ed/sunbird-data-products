@@ -63,17 +63,19 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
     val currentDate = dateFormatter.format(new Date)
 
-    val finalDF = collectionBatchDF.withColumn("updated_status",
+    val computedDF = collectionBatchDF.withColumn("updated_status",
       when(lit(currentDate).gt(col("enddate")), 2).otherwise(
         when(lit(currentDate).geq(col("startdate")), 1).otherwise(col("status"))
       ))
-      .filter(col("updated_status") =!= col("status"))
+    val finalDF = computedDF.filter(col("updated_status") =!= col("status"))
       .drop("status").withColumnRenamed("updated_status", "status")
+
     JobLogger.log(s"Writing records into database", None, INFO)
     finalDF.write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
     if (!finalDF.isEmpty) {
+      val uncompletedCourses = computedDF.filter(col("updated_status") < 2)
       updateCourseBatchES(finalDF.filter(col("status") > 0).select("batchid", "status").collect.map(r => Map(finalDF.select("batchid", "status").columns.zip(r.toSeq): _*)), updaterConfig)
-      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, finalDF.filter(col("status") < 2), dateFormatter, updaterConfig)
+      updateCourseMetadata(uncompletedCourses.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, dateFormatter, updaterConfig)
     } else {
       JobLogger.log("No records found to update the db", None, INFO)
     }
