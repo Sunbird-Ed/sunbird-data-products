@@ -55,7 +55,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
     JobLogger.init(jobName)
-    JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
+    JobLogger.start(s"$jobName started executing - ver3", Option(Map("config" -> config, "model" -> jobName)))
 
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
@@ -92,33 +92,34 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val mode = modelParams.getOrElse("mode", "OnDemand").asInstanceOf[String];
 
     val custodianOrgId = getCustodianOrgId();
+    
     val res = CommonUtil.time({
-      val userDF = getUserCacheDF(getUserCacheColumns(), true)
-      (userDF.count(), userDF)
+      val enrolmentDF = getUserEnrolmentDF(true)
+      (enrolmentDF.count(), enrolmentDF)
     })
-    JobLogger.log("Time to fetch user details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
-    val userCachedDF = res._2._2;
+    JobLogger.log("Time to fetch enrolment details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
+    val userEnrolmentDF = res._2._2;
     mode.toLowerCase() match {
       case "standalone" =>
-        executeStandAlone(custodianOrgId, userCachedDF)
+        executeStandAlone(custodianOrgId, userEnrolmentDF)
       case _ =>
-        executeOnDemand(custodianOrgId, userCachedDF);
+        executeOnDemand(custodianOrgId, userEnrolmentDF);
     }
   }
-
-  def executeStandAlone(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
+  
+  def executeStandAlone(custodianOrgId: String, userEnrolmentDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchId = modelParams.get("batchId").asInstanceOf[Option[String]];
     val batchFilter = modelParams.get("batchFilter").asInstanceOf[Option[List[String]]];
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
-    val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches, storageConfig);
+    val result: List[CollectionBatchResponse] = processBatches(userEnrolmentDF, collectionBatches, storageConfig);
     result.foreach(f => JobLogger.log("Batch Status", Some(Map("status" -> f.status, "batchId" -> f.batchId, "executionTime" -> f.execTime, "message" -> f.statusMsg, "location" -> f.file)), INFO));
     Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase() == "SUCCESS")))
   }
 
-  def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
+  def executeOnDemand(custodianOrgId: String, userEnrolmentDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val requests = getRequests(jobId());
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
@@ -128,7 +129,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       val updRequest: JobRequest = {
         try {
           if (validateRequest(request)) {
-            val res = processRequest(request, custodianOrgId, userCachedDF, storageConfig)
+            val res = processRequest(request, custodianOrgId, userEnrolmentDF, storageConfig)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
           } else {
@@ -148,11 +149,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     Metrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")))
   }
 
-  def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
+  def processRequest(request: JobRequest, custodianOrgId: String, userEnrolmentDF: DataFrame, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
     markRequestAsProcessing(request)
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
     val collectionBatches = getCollectionBatches(collectionConfig.batchId, collectionConfig.batchFilter, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
-    val result = CommonUtil.time(processBatches(userCachedDF, collectionBatches, storageConfig));
+    val result = CommonUtil.time(processBatches(userEnrolmentDF, collectionBatches, storageConfig));
     val response = result._2;
     val failedBatches = response.filter(p => p.status.equals("FAILED"));
     if (response.size == 0) {
@@ -204,21 +205,26 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     }
   }
 
-  def processBatches(userCachedDF: DataFrame, collectionBatches: List[CollectionBatch], storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
+  def processBatches(userEnrolmentDF: DataFrame, collectionBatches: List[CollectionBatch], storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
 
     for (batch <- filterCollectionBatches(collectionBatches)) yield {
-      val userEnrolmentDF = getUserEnrolmentDF(batch.collectionId, batch.batchId, false).join(userCachedDF, Seq("userid"), "inner")
+      
+      val userEnrolmentBatchDF = userEnrolmentDF.where(col("courseid") === batch.collectionId && col("batchid") === batch.batchId)
         .withColumn("collectionName", lit(batch.collectionName))
         .withColumn("batchName", lit(batch.batchName));
-      val filteredDF = filterUsers(batch, userEnrolmentDF).persist();
+      val filteredDF = filterUsers(batch, userEnrolmentBatchDF).persist();
+      val res = CommonUtil.time(filteredDF.count);
+      JobLogger.log("Time to fetch batch enrolment", Some(Map("timeTaken" -> res._1, "count" -> res._2)), INFO)
       try {
         val res = CommonUtil.time(processBatch(filteredDF, batch));
         val reportDF = res._2;
         val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
-        unpersistDFs();
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1);
       } catch {
         case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage, 0);
+      } finally {
+        unpersistDFs();
+        filteredDF.unpersist(true);
       }
     }
   }
@@ -261,13 +267,16 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId").select(col("value")).select("value").first().getString(0)
   }
 
-  def getUserEnrolmentDF(collectionId: String, batchId: String, persist: Boolean)(implicit spark: SparkSession): DataFrame = {
+  def getUserEnrolmentDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
+    
+    val userDF = getUserCacheDF(getUserCacheColumns(), false)
     val cols = getEnrolmentColumns();
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
-      .where(col("courseid") === collectionId && col("batchid") === batchId && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
+      .where(lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
       .select(cols.head, cols.tail: _*);
 
-    if (persist) df.persist() else df
+    val joinedDF = df.join(userDF, Seq("userid"), "inner").repartition(col("courseid"), col("batchid"))
+    if (persist) joinedDF.persist() else joinedDF
   }
 
   def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
