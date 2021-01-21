@@ -3,6 +3,7 @@ package org.sunbird.analytics.job.report
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
+import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
