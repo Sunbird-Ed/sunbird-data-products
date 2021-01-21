@@ -82,7 +82,11 @@ trait BaseReportsJob {
     val reportsStorageAccountSecret = if (privateAcc) AppConf.getConfig("reports_storage_secret") else AppConf.getConfig("public_reports_storage_secret")
     val provider = AppConf.getConfig("cloud_storage_type")
     if (reportsStorageAccountKey != null && reportsStorageAccountSecret.nonEmpty) {
-      org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option("reports_storage_key"), Option("reports_storage_secret"));
+      if (privateAcc)
+        org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option("reports_storage_key"), Option("reports_storage_secret"))
+      else {
+        org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option("public_reports_storage_key"), Option("public_reports_storage_secret"))
+      }
     } else {
       org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(provider), Option(provider));
     }
