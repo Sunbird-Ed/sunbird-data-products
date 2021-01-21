@@ -77,16 +77,15 @@ trait BaseReportsJob {
     }
   }
 
-  def getStorageConfig(container: String, key: String): org.ekstep.analytics.framework.StorageConfig = {
-    val reportsStorageAccountKey = AppConf.getConfig("reports_storage_key")
-    val reportsStorageAccountSecret = AppConf.getConfig("reports_storage_secret")
+  def getStorageConfig(container: String, key: String, privateAcc: Boolean = true): org.ekstep.analytics.framework.StorageConfig = {
+    val reportsStorageAccountKey = if (privateAcc) AppConf.getConfig("reports_storage_key") else AppConf.getConfig("public_reports_storage_key")
+    val reportsStorageAccountSecret = if (privateAcc) AppConf.getConfig("reports_storage_secret") else AppConf.getConfig("public_reports_storage_secret")
     val provider = AppConf.getConfig("cloud_storage_type")
-    if (reportsStorageAccountKey != null && !reportsStorageAccountSecret.isEmpty) {
+    if (reportsStorageAccountKey != null && reportsStorageAccountSecret.nonEmpty) {
       org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option("reports_storage_key"), Option("reports_storage_secret"));
     } else {
       org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(provider), Option(provider));
     }
-
   }
 
   def fetchData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {

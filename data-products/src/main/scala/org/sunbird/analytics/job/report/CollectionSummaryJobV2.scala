@@ -3,7 +3,6 @@ package org.sunbird.analytics.job.report
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -121,7 +120,10 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports-v2/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
-    val storageConfig = getStorageConfig(container, objectKey)
+    val storageConfig = getStorageConfig(
+      container,
+      objectKey,
+      privateAcc = modelParams.getOrElse("apply_private_blob_acc", false).asInstanceOf[Boolean])
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
