@@ -43,6 +43,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       val druidIngestionUrl: String = jobConfig.modelParams.get.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
       submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
+      res._2.unpersist()
     } finally {
       frameworkContext.closeContext()
       spark.close()
@@ -100,7 +101,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     } else {
       processedBatches
     }
-    reportDF.select(filterColumns.head, filterColumns.tail: _*)
+    reportDF.select(filterColumns.head, filterColumns.tail: _*).persist()
   }
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
