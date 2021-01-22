@@ -58,6 +58,7 @@ trait BaseReportsJob {
     val sparkUserDbRedisPort = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("sparkUserDbRedisPort", "6379")
     val readConsistencyLevel = AppConf.getConfig("course.metrics.cassandra.input.consistency")
     val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, Option(readConsistencyLevel), sparkRedisConnectionHost, sparkUserDbRedisIndex, Option(sparkUserDbRedisPort))
+    // Default reports blob storage is private azure account. Send applyPrivateBlobAcc = false in job config to use the public storage acc.
     val privateStorageAcc: Boolean = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("applyPrivateBlobAcc", true).asInstanceOf[Boolean]
     setReportsStorageConfiguration(sparkSession.sparkContext, privateStorageAcc = privateStorageAcc)
     sparkSession;
