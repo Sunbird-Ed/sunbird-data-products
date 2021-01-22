@@ -25,6 +25,7 @@ object EmbeddedCassandra {
     val conf = new SparkConf().setAppName("TestAnalyticsCore");
     conf.setMaster("local[*]");
     conf.set("spark.cassandra.connection.port", AppConf.getConfig("cassandra.service.embedded.connection.port"))
+    conf.set("spark.cassandra.connection.host", "localhost")
     conf;
   }
 
