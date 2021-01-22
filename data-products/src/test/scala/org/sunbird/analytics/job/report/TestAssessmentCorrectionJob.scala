@@ -19,7 +19,7 @@ class TestAssessmentCorrectionJob extends SparkSpec(null) with MockFactory{
   override def beforeAll(): Unit = {
     super.beforeAll()
     // embedded cassandra setup
-    EmbeddedCassandra.loadData("src/test/resources/assessment-correction/assessment_report_data.cql") // Load test data in embedded cassandra server
+    EmbeddedCassandra.loadData("src/test/resources/assessment-correction-report/assessment_report_data.cql") // Load test data in embedded cassandra server
 
   }
   override def afterAll() : Unit = {
