@@ -76,9 +76,6 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
     //Filter batchIds from config
     val batchIds: List[String] = config.getOrElse("batchId", List()).asInstanceOf[List[String]]
     val userEnrollmentData = getUserEnrollData(batchIds)
-    println("assessevents: ")
-    assessEvent.show(false)
-    userEnrollmentData.show(false)
     val df = assessEvent.join(userEnrollmentData, Seq("courseid", "userid"))
       .groupBy("contentid", "courseid", "userid", "attemptId", "batchid")
       .agg(collect_list(col("assessEvent")).as("assessEventList"))
@@ -92,13 +89,11 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
         col("batchid"),
         col("assessEventList")
       )
-    df.show(false)
     df
   }
 
   def getUserEnrollData(batchIds: List[String])(implicit sqlContext: SQLContext): DataFrame = {
     implicit val spark = sqlContext.sparkSession
-    println(batchIds.size)
     if(batchIds.size == 0) {
       JobLogger.log("No batchid provided")
       loadData(userEnrolmentDBSettings,cassandraFormat, new StructType())
