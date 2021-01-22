@@ -37,7 +37,7 @@ object SelfDeclarationToConsentMigration extends Serializable {
     }
     
     def convertSelfDeclaredToConsentDF(userDeclaredWithOutConstentDtlDF: DataFrame): DataFrame = {
-        val savedConsentDF = userDeclaredWithOutConstentDtlDF.select(col("userid").as("user_id"),col("orgid").as("consumer_id").as("object_id"),
+        val savedConsentDF = userDeclaredWithOutConstentDtlDF.select(col("userid").as("user_id"),col("orgid").as("consumer_id"),col("orgid").as("object_id"),
             col("createdon").as("created_on"),
             col("updatedon").as("last_updated_on")).
             withColumn("consumer_type", lit("ORGANISATION")).
