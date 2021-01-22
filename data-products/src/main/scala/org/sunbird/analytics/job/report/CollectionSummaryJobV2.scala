@@ -125,7 +125,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val storageConfig = getStorageConfig(
       container,
       objectKey,
-      privateAcc = modelParams.getOrElse("applyPrivateBlobAcc", false).asInstanceOf[Boolean])
+      privateStorageAcc = modelParams.getOrElse("applyPrivateBlobAcc", false).asInstanceOf[Boolean])
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
