@@ -4,7 +4,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
-import org.ekstep.analytics.framework.util.CommonUtil
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils}
 import org.sunbird.cloud.storage.conf.AppConf
 
 trait BaseReportsJob {
@@ -44,7 +44,7 @@ trait BaseReportsJob {
         CommonUtil.getSparkContext(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, sparkRedisConnectionHost, sparkUserDbRedisIndex)
       }
     }
-    setReportsStorageConfiguration(sparkContext)
+    setReportsStorageConfiguration(sparkContext, config)
     sparkContext;
 
   }
@@ -58,9 +58,7 @@ trait BaseReportsJob {
     val sparkUserDbRedisPort = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("sparkUserDbRedisPort", "6379")
     val readConsistencyLevel = AppConf.getConfig("course.metrics.cassandra.input.consistency")
     val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, Option(readConsistencyLevel), sparkRedisConnectionHost, sparkUserDbRedisIndex, Option(sparkUserDbRedisPort))
-    // Default reports blob storage is private azure account. Send applyPrivateBlobAcc = false in job config to use the public storage acc.
-    val privateStorageAcc: Boolean = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("applyPrivateBlobAcc", true).asInstanceOf[Boolean]
-    setReportsStorageConfiguration(sparkSession.sparkContext, privateStorageAcc = privateStorageAcc)
+    setReportsStorageConfiguration(sparkSession.sparkContext, config)
     sparkSession;
 
   }
@@ -69,26 +67,24 @@ trait BaseReportsJob {
     sparkSession.stop();
   }
 
-  def setReportsStorageConfiguration(sc: SparkContext, privateStorageAcc: Boolean = true) {
-    val reportsStorageAccountKey = if (privateStorageAcc) AppConf.getConfig("reports_storage_key") else AppConf.getConfig("public_reports_storage_key")
-    val reportsStorageAccountSecret = if (privateStorageAcc) AppConf.getConfig("reports_storage_secret") else AppConf.getConfig("public_reports_storage_secret")
+  def setReportsStorageConfiguration(sc: SparkContext, config: JobConfig) {
+    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
+    val reportsStorageAccountKey = modelParams.getOrElse("storageKeyConfig", "reports_storage_key").asInstanceOf[String];
+    val reportsStorageAccountSecret = modelParams.getOrElse("storageSecretConfig", "reports_storage_secret").asInstanceOf[String];
     if (reportsStorageAccountKey != null && reportsStorageAccountSecret.nonEmpty) {
       sc.hadoopConfiguration.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-      sc.hadoopConfiguration.set("fs.azure.account.key." + reportsStorageAccountKey + ".blob.core.windows.net", reportsStorageAccountSecret)
-      sc.hadoopConfiguration.set("fs.azure.account.keyprovider." + reportsStorageAccountKey + ".blob.core.windows.net", "org.apache.hadoop.fs.azure.SimpleKeyProvider")
+      sc.hadoopConfiguration.set("fs.azure.account.key." + AppConf.getConfig(reportsStorageAccountKey) + ".blob.core.windows.net", AppConf.getConfig(reportsStorageAccountSecret))
+      sc.hadoopConfiguration.set("fs.azure.account.keyprovider." + AppConf.getConfig(reportsStorageAccountKey) + ".blob.core.windows.net", "org.apache.hadoop.fs.azure.SimpleKeyProvider")
     }
   }
 
-  def getStorageConfig(container: String, key: String, privateStorageAcc: Boolean = true): org.ekstep.analytics.framework.StorageConfig = {
-    val reportsStorageAccountKey = if (privateStorageAcc) AppConf.getConfig("reports_storage_key") else AppConf.getConfig("public_reports_storage_key")
-    val reportsStorageAccountSecret = if (privateStorageAcc) AppConf.getConfig("reports_storage_secret") else AppConf.getConfig("public_reports_storage_secret")
+  def getStorageConfig(container: String, key: String, config: JobConfig = JSONUtils.deserialize[JobConfig]("""{}""")): org.ekstep.analytics.framework.StorageConfig = {
+    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
+    val reportsStorageAccountKey = modelParams.getOrElse("storageKeyConfig", "reports_storage_key").asInstanceOf[String];
+    val reportsStorageAccountSecret = modelParams.getOrElse("storageSecretConfig", "reports_storage_secret").asInstanceOf[String];
     val provider = AppConf.getConfig("cloud_storage_type")
     if (reportsStorageAccountKey != null && reportsStorageAccountSecret.nonEmpty) {
-      if (privateStorageAcc) {
-        org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option("reports_storage_key"), Option("reports_storage_secret"))
-      } else {
-        org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option("public_reports_storage_key"), Option("public_reports_storage_secret"))
-      }
+      org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(reportsStorageAccountKey), Option(reportsStorageAccountSecret))
     } else {
       org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(provider), Option(provider));
     }
