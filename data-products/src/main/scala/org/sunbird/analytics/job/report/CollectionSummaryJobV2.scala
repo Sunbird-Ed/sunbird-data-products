@@ -43,6 +43,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       val druidIngestionUrl: String = jobConfig.modelParams.get.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
       submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
+      res._2.unpersist()
     } finally {
       frameworkContext.closeContext()
       spark.close()
@@ -100,7 +101,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     } else {
       processedBatches
     }
-    reportDF.select(filterColumns.head, filterColumns.tail: _*)
+    reportDF.select(filterColumns.head, filterColumns.tail: _*).persist()
   }
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
@@ -121,7 +122,10 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports-v2/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
-    val storageConfig = getStorageConfig(container, objectKey)
+    val storageConfig = getStorageConfig(
+      container,
+      objectKey,
+      jobConfig)
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-${getDate}", Option(Map("header" -> "true")), None)
     reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}collection-summary-report-latest", Option(Map("header" -> "true")), None)
