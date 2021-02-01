@@ -13,11 +13,11 @@ jobs:
             git clone https://github.com/project-sunbird/sunbird-analytics-core.git
             ls
             pwd
-            latest_branch=$(cd sunbird-analytics-core && git for-each-ref --count=1 --sort=-committerdate refs/heads/ --format='%(refname:short)' | head -1)
+            latest_branch=$(cd sunbird-analytics-core && git for-each-ref --count=1 --sort=-committerdate refs/remotes --format='%(refname:short)' | head -1)
             echo $latest_branch
             cd sunbird-analytics-core && git checkout $latest_branch
             git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
-            latest_branch=$(cd sunbird-core-dataproducts && git for-each-ref --count=1 --sort=-committerdate refs/heads/ --format='%(refname:short)' | head -1)
+            latest_branch=$(cd sunbird-core-dataproducts && git for-each-ref --count=1 --sort=-committerdate refs/remotes --format='%(refname:short)' | head -1)
             echo $latest_branch
             cd sunbird-core-dataproducts && git checkout $latest_branch
             else
@@ -27,11 +27,11 @@ jobs:
             git clone https://github.com/project-sunbird/sunbird-analytics-core.git
             ls
             pwd
-            latest_branch=$(cd sunbird-analytics-core && git for-each-ref --count=1 --sort=-committerdate refs/heads/ --format='%(refname:short)' | head -1)
+            latest_branch=$(cd sunbird-analytics-core && git for-each-ref --count=1 --sort=-committerdate refs/remotes --format='%(refname:short)' | head -1)
             echo $latest_branch
             cd sunbird-analytics-core && git checkout $latest_branch
             git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
-            latest_branch=$(cd sunbird-core-dataproducts && git for-each-ref --count=1 --sort=-committerdate refs/heads/ --format='%(refname:short)' | head -1)
+            latest_branch=$(cd sunbird-core-dataproducts && git for-each-ref --count=1 --sort=-committerdate refs/remotes --format='%(refname:short)' | head -1)
             echo $latest_branch
             cd sunbird-core-dataproducts && git checkout $latest_branch
             fi
