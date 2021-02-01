@@ -23,7 +23,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname")
+  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "batchname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
   val jobName = "CollectionSummaryJobV2"
@@ -67,7 +67,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
-      .select("courseid", "batchid", "enddate", "startdate", "cert_templates")
+      .select("courseid", "batchid", "enddate", "startdate", "cert_templates" , "name")
+      .withColumnRenamed("name", "batchname")
       .withColumn("hascertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
   }
 
