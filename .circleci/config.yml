@@ -25,6 +25,8 @@ jobs:
                 cd sunbird-analytics-core && git checkout $target_branch
             fi
             cd ../ && git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
+            ls
+            pwd
             branchExists=$(cd sunbird-core-dataproduct && git ls-remote --heads origin $target_branch)
             echo $branchExists
             if [ -z ${branchExists} ]; then
