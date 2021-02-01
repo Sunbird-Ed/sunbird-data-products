@@ -10,19 +10,23 @@ jobs:
             if [ -z $CIRCLE_PR_NUMBER ]; then
             target_branch=$CIRCLE_BRANCH
             git clone https://github.com/project-sunbird/sunbird-analytics-core.git
-            latest_branch = cd sunbird-analytics-core && git branch --sort=-committerdate
+            latest_branch = cd sunbird-analytics-core && git branch --sort=-committerdate | head -1
+            echo $latest_branch
             git checkout $latest_branch
             git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
-            latest_branch = cd sunbird-core-dataproducts && git branch --sort=-committerdate
+            latest_branch = cd sunbird-core-dataproducts && git branch --sort=-committerdate | head -1
+            echo $latest_branch
             git checkout $latest_branch
             else
             prdata=$(curl -X GET -u $GITHUB_USER_TOKEN:x-oauth-basic https://api.github.com/repos/Sunbird-Ed/sunbird-data-products/pulls/$CIRCLE_PR_NUMBER)
             target_branch=$(echo "${prdata}" | jq -r '.base.ref')
             git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
-            latest_branch = cd sunbird-analytics-core && git branch --sort=-committerdate
+            latest_branch = cd sunbird-analytics-core && git branch --sort=-committerdate | head -1
+            echo $latest_branch
             git checkout $latest_branch
             git clone https://github.com/project-sunbird/sunbird-analytics-core.git
-            latest_branch = cd sunbird-core-dataproducts && git branch --sort=-committerdate
+            latest_branch = cd sunbird-core-dataproducts && git branch --sort=-committerdate | head -1
+            echo $latest_branch
             git checkout $latest_branch
             fi
       - restore_cache:
