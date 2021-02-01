@@ -25,16 +25,14 @@ jobs:
                 cd sunbird-analytics-core && git checkout $target_branch
             fi
             cd ../ && git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
-            ls
-            pwd
-            branchExists=$(cd sunbird-core-dataproduct && git ls-remote --heads origin $target_branch)
+            branchExists=$(cd sunbird-core-dataproducts && git ls-remote --heads origin $target_branch)
             echo $branchExists
             if [ -z ${branchExists} ]; then
-               latest_branch=$(cd sunbird-core-dataproduct && git for-each-ref --count=1 --sort=-committerdate 'refs/remotes/**/release*' --format='%(refname:short)' | head -1)
+               latest_branch=$(cd sunbird-core-dataproducts && git for-each-ref --count=1 --sort=-committerdate 'refs/remotes/**/release*' --format='%(refname:short)' | head -1)
                echo $latest_branch
-               cd sunbird-core-dataproduct && git checkout $latest_branch
+               cd sunbird-core-dataproducts && git checkout $latest_branch
             else
-               cd sunbird-core-dataproduct && git checkout $target_branch
+               cd sunbird-core-dataproducts && git checkout $target_branch
             fi
       - restore_cache:
           keys:
