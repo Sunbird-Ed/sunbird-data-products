@@ -198,7 +198,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
                        |         "programId": "$programId",
                        |         "objectType": "content",
                        |         "status": ["Draft","Live","Review"],
-                       |         "contentType": "Textbook",
                        |         "mimeType": "application/vnd.ekstep.content-collection"
                        |       },
                        |       "fields": ["acceptedContents", "rejectedContents"],
