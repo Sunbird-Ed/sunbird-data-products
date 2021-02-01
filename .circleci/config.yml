@@ -23,8 +23,11 @@ jobs:
               git clone https://github.com/project-sunbird/sunbird-analytics-core.git
               latest_branch=$(cd sunbird-analytics-core && git for-each-ref --count=1 --sort=-committerdate refs/remotes --format='%(refname:short)' | head -1)
               echo $latest_branch
+              pwd
               cd sunbird-analytics-core && git checkout $latest_branch
               git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
+              ls
+              pwd
               latest_branch=$(cd sunbird-core-dataproducts && git for-each-ref --count=1 --sort=-committerdate refs/remotes --format='%(refname:short)' | head -1)
               echo $latest_branch
               cd sunbird-core-dataproducts && git checkout $latest_branch
@@ -33,7 +36,7 @@ jobs:
           keys:
             - dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
       - run: cd sunbird-analytics-core && mvn install -DskipTests
-      - run: cd ../sunbird-core-dataproducts && mvn install -DskipTests
+      - run: cd sunbird-core-dataproducts && mvn install -DskipTests
       - run:
           name: Ed-data-products-build
           command: cd data-products && mvn scoverage:report
