@@ -166,7 +166,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       contributionResponse.result.facets
     } else List()
     val totalContributors = contributionResponses.filter(p => null!=p.values).flatMap(f=>f.values).length
-    val totalContributions=contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
+    val totalContributions = contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
 
     val correctionsPendingRequest = s"""{
                                        |    "request": {
