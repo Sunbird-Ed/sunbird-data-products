@@ -508,22 +508,6 @@ CREATE TYPE IF NOT EXISTS sunbird_courses.question (
     duration decimal
 );
 
-CREATE TABLE IF NOT EXISTS sunbird_courses.assessment_aggregator (
-    course_id text,
-    batch_id text,
-    user_id text,
-    content_id text,
-    attempt_id text,
-    created_on timestamp,
-    grand_total text,
-    last_attempted_on timestamp,
-    question list<frozen<question>>,
-    total_max_score double,
-    total_score double,
-    updated_on timestamp,
-    PRIMARY KEY (course_id, batch_id, user_id, content_id, attempt_id)
-);
-
 CREATE TABLE IF NOT EXISTS sunbird.user_consent (
     user_id text,
     consumer_id text,
@@ -540,7 +524,7 @@ CREATE TABLE IF NOT EXISTS sunbird.user_consent (
     PRIMARY KEY (user_id, consumer_id, object_id)
 );
 
-CREATE TABLE sunbird_courses.assessment_aggregator_temp (
+CREATE TABLE sunbird_courses.assessment_aggregator (
     user_id text,
     course_id text,
     batch_id text,
