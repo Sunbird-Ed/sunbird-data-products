@@ -524,7 +524,7 @@ CREATE TABLE IF NOT EXISTS sunbird.user_consent (
     PRIMARY KEY (user_id, consumer_id, object_id)
 );
 
-CREATE TABLE sunbird_courses.assessment_aggregator (
+CREATE TABLE IF NOT EXISTS sunbird_courses.assessment_aggregator (
     user_id text,
     course_id text,
     batch_id text,
