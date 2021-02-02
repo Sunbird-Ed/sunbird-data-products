@@ -71,7 +71,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
       ContentHierarchy("do_13456760076615812","""{"mimeType": "application/vnd.ekstep.content-collection","children": [{"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282","visibility": "Parent","name": "Untitled sub Course Unit 1.2"}],"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1125105431453532161282"}, {"contentType": "CourseUnit","identifier": "do_1125105431453532161282","name": "Untitled Course Unit 2"}],"contentType": "Course","identifier": "do_13456760076615812","visibility": "Default","leafNodesCount": 4}""")).toDF()
   }
 
-  ignore should "generate reports for batches and validate all scenarios" in {
+  "TestUpdateCourseMetricsV2" should "generate reports for batches and validate all scenarios" in {
     (reporterMock.loadData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace),"org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF)
@@ -220,7 +220,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
 
-  ignore should "process the filtered batches" in {
+  it should "process the filtered batches" in {
     implicit val fc = mock[FrameworkContext]
     val strConfig = """{"search": {"type": "none"},"model": "org.sunbird.analytics.job.report.CourseMetricsJob","modelParams": {"batchFilters": ["TPD"],"fromDate": "$(date --date yesterday '+%Y-%m-%d')","toDate": "$(date --date yesterday '+%Y-%m-%d')","sparkCassandraConnectionHost": "127.0.0.0","sparkElasticsearchConnectionHost": "'$sunbirdPlatformElasticsearchHost'","sparkRedisConnectionHost": "'$sparkRedisConnectionHost'","sparkUserDbRedisIndex": "4","contentFilters": {"request": {"filters": {"framework": "TPD"},"sort_by": {"createdOn": "desc"},"limit": 10000,"fields": ["framework", "identifier", "name", "channel"]}},"reportPath": "course-reports/"},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Course Dashboard Metrics","deviceMapping": false}""".stripMargin
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
@@ -276,7 +276,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     CourseMetricsJobV2.prepareReport(spark, storageConfig, reporterMock.loadData, jobConfig, List())
   }
 
-  ignore should "parse and return level 1 data for given course hierarchy" in {
+  it should "parse and return level 1 data for given course hierarchy" in {
     val contentHierarchy = """{"channel": "b00bc992ef25f1a9a8d63291e20efc8d","mimeType": "application/vnd.ekstep.content-collection","leafNodes": ["do_1130314841730334721104", "do_1130314849898332161107", "do_1130314847650037761106", "do_1130314845426565121105"],"children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "Course","identifier": "do_1130934418641469441813","visibility": "Default","leafNodesCount": 2}, {"mimeType": "application/vnd.ekstep.content-collection","children": [{"mimeType": "application/vnd.ekstep.content-collection","contentType": "CourseUnit","identifier": "do_1130934459053342721817","visibility": "Parent","framework": "NCFCOPY","leafNodesCount": 2}],"contentType": "Course","identifier": "do_1130934445218283521816","visibility": "Default","framework": "NCFCOPY","leafNodesCount": 2,"index": 2,"parent": "do_1130934466492252161819"}],"contentType": "Course","identifier": "do_1130934466492252161819","visibility": "Default","prevState": "Review","name": "Report - Course - NC","status": "Live","prevStatus": "Processing","framework": "NCFCOPY","leafNodesCount": 4}""".stripMargin
     val hierarchy = JSONUtils.deserialize[Map[String,AnyRef]](contentHierarchy)
 
@@ -289,7 +289,7 @@ class TestCourseMetricsJobV2 extends BaseReportSpec with MockFactory with BaseRe
     hierarchyData.level1Data.length should be(0)
   }
 
-  ignore should "test redis and cassandra connections" in {
+  it should "test redis and cassandra connections" in {
     implicit val fc = Option(mock[FrameworkContext])
     spark.sparkContext.stop()
 
