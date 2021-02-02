@@ -166,7 +166,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       contributionResponse.result.facets
     } else List()
     val totalContributors = contributionResponses.filter(p => null!=p.values).flatMap(f=>f.values).length
-    val totalContributions=contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
+    val totalContributions = contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
 
     val correctionsPendingRequest = s"""{
                                        |    "request": {
@@ -198,7 +198,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
                        |         "programId": "$programId",
                        |         "objectType": "content",
                        |         "status": ["Draft","Live","Review"],
-                       |         "contentType": "Textbook",
                        |         "mimeType": "application/vnd.ekstep.content-collection"
                        |       },
                        |       "fields": ["acceptedContents", "rejectedContents"],
