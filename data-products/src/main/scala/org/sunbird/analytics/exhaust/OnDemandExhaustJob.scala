@@ -60,7 +60,7 @@ trait OnDemandExhaustJob {
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*)).limit(2);
 
-    val lockedRequests = reportConfigsDf.withColumn("status", lit("READYTOPROCESS")).as[JobRequest](encoder)
+    val lockedRequests = reportConfigsDf.withColumn("status", lit("READYTOPROCESS")).as[JobRequest](encoder).collect();
     lockedRequests.foreach(f => updateStatus(f))
 
 
