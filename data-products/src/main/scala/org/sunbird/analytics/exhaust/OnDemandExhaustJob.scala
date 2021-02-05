@@ -62,10 +62,9 @@ trait OnDemandExhaustJob {
 
     val lockedRequests = reportConfigsDf.withColumn("status", lit("READYTOPROCESS")).as[JobRequest](encoder).collect();
     lockedRequests.foreach(f => updateStatus(f))
-
-
-    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
-    requests;
+    
+//    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
+    lockedRequests;
   }
 
   def updateStatus(request: JobRequest) = {
