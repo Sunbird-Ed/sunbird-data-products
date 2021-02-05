@@ -59,6 +59,7 @@ trait OnDemandExhaustJob {
     val encoder = Encoders.product[JobRequest]
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*));
+    
     val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
     requests;
   }
