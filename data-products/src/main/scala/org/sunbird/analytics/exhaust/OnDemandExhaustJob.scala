@@ -58,11 +58,16 @@ trait OnDemandExhaustJob {
 
     val encoder = Encoders.product[JobRequest]
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
-      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*)).filter(to_date(col("dt_job_completed"), "yyyy-MM-dd").notEqual("2021-02-08")).limit(2);
+      .where(col("job_id") === jobId && col("iteration") < 3)
+      //.filter(col("status").isin(jobStatus: _*)).filter(to_date(col("dt_job_completed"), "yyyy-MM-dd").notEqual("2021-02-08")).limit(2);
 
-    reportConfigsDf.show(false)
+    JobLogger.log("reportConfigsDf count" + reportConfigsDf.count(), None, INFO)
 
-    val lockedRequests = reportConfigsDf.withColumn("status", lit("READYTOPROCESS")).as[JobRequest](encoder).collect();
+    val filteredRequests = reportConfigsDf.filter(col("status").equalTo("SUBMITTED") || (col("status").equalTo("FAILED") && to_date(col("dt_job_completed"), "yyyy-MM-dd").notEqual("2021-02-08"))).limit(2)
+    JobLogger.log("filteredRequests count" + filteredRequests.count(), None, INFO)
+    filteredRequests.show(false)
+
+    val lockedRequests = filteredRequests.withColumn("status", lit("READYTOPROCESS")).as[JobRequest](encoder).collect();
     lockedRequests.foreach(f => updateStatus(f))
 
 //    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
