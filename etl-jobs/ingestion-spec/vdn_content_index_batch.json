@@ -367,6 +367,16 @@
                 },
                 {
                   "type": "path",
+                  "name": "prevStatus",
+                  "expr": "$.data.prevStatus"
+                },
+                {
+                  "type": "path",
+                  "name": "primaryCategory",
+                  "expr": "$.data.primaryCategory"
+                },
+                {
+                  "type": "path",
                   "name": "subject",
                   "expr": "$.data.subject"
                 },
@@ -591,6 +601,14 @@
                 {
                   "type": "string",
                   "name": "status"
+                },
+                {
+                  "type": "string",
+                  "name": "prevStatus"
+                },
+                {
+                  "type": "string",
+                  "name": "primaryCategory"
                 },
                 {
                   "type": "string",

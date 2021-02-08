@@ -13,7 +13,7 @@ import java.net.InetSocketAddress
 object EmbeddedCassandra {
 
   System.setProperty("cassandra.unsafesystem", "true");
-  EmbeddedCassandraServerHelper.startEmbeddedCassandra(30000L);
+  EmbeddedCassandraServerHelper.startEmbeddedCassandra("cassandra.yaml", 30000L);
   val connector = CassandraConnector(getSparkConf())
   val session: CqlSession = CqlSession.builder()
     .addContactPoint(new InetSocketAddress("localhost", AppConf.getConfig("cassandra.service.embedded.connection.port").toInt))
@@ -25,6 +25,7 @@ object EmbeddedCassandra {
     val conf = new SparkConf().setAppName("TestAnalyticsCore");
     conf.setMaster("local[*]");
     conf.set("spark.cassandra.connection.port", AppConf.getConfig("cassandra.service.embedded.connection.port"))
+    conf.set("spark.cassandra.connection.host", "localhost")
     conf;
   }
 
