@@ -58,11 +58,11 @@ trait OnDemandExhaustJob {
 
     val encoder = Encoders.product[JobRequest]
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
-      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*)).limit(2);
+      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*)).filter(to_date(col("dt_job_submitted"), "yyyy-MM-dd").=!=("2021-02-08")).limit(2);
 
     val lockedRequests = reportConfigsDf.withColumn("status", lit("READYTOPROCESS")).as[JobRequest](encoder).collect();
     lockedRequests.foreach(f => updateStatus(f))
-    
+
 //    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
     lockedRequests;
   }
