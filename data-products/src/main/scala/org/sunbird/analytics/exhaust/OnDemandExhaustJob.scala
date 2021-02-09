@@ -58,7 +58,7 @@ trait OnDemandExhaustJob {
 
     val encoder = Encoders.product[JobRequest]
     val selectQuery = s"SELECT * FROM $requestsTable FOR UPDATE SKIP LOCKED"
-    val reportConfigsDf = spark.read.jdbc(url, s"($selectQuery)", connProperties)
+    val reportConfigsDf = spark.read.jdbc(url, s"($selectQuery) AS requests", connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3)
       .filter(col("status").isin(jobStatus: _*)).limit(3);
 
