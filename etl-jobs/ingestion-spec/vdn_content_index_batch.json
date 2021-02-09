@@ -77,6 +77,11 @@
                 },
                 {
                   "type": "path",
+                  "name": "originData",
+                  "expr": "$.data.originData"
+                },
+                {
+                  "type": "path",
                   "name": "compatibilityLevel",
                   "expr": "$.data.compatibilityLevel"
                 },
@@ -485,6 +490,10 @@
                 {
                   "type": "string",
                   "name": "channel"
+                },
+                {
+                  "type": "string",
+                  "name": "originData"
                 },
                 {
                   "type": "long",
