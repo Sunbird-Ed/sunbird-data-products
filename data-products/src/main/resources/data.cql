@@ -477,3 +477,23 @@ CREATE TABLE IF NOT EXISTS sunbird.user_organisation (
  updatedby text,
  updateddate text,
 PRIMARY KEY (userid, organisationid));
+
+CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
+    userid text,
+    courseid text,
+    batchid text,
+    active boolean,
+    addedby text,
+    certificates list<frozen<map<text, text>>>,
+    completedon timestamp,
+    completionpercentage int,
+    contentstatus map<text, int>,
+    datetime timestamp,
+    enrolleddate text,
+    issued_certificates list<frozen<map<text, text>>>,
+    lastreadcontentid text,
+    lastreadcontentstatus int,
+    progress int,
+    status int,
+    PRIMARY KEY (userid, courseid, batchid)
+);

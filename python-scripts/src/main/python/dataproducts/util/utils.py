@@ -386,7 +386,7 @@ def file_missing_exception(raise_except=False):
         return Exception
 
 
-def download_file_from_store(blob_name, file_path, container_name, is_private=False):
+def download_file_from_store(blob_name, file_path, container_name, is_private=True):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
         azure_utils.get_data_from_store(container_name, blob_name, file_path, is_private)
@@ -396,7 +396,7 @@ def download_file_from_store(blob_name, file_path, container_name, is_private=Fa
         pass
 
 
-def upload_file_to_store(blob_name, file_path, container_name, is_private=False):
+def upload_file_to_store(blob_name, file_path, container_name, is_private=True):
     storage_provider = os.environ['STORAGE_PROVIDER']
     if storage_provider == "AZURE":
         azure_utils.post_data_to_store(container_name, blob_name, file_path, is_private)
@@ -427,7 +427,7 @@ def get_data_batch_from_blob(result_loc_, prefix=None, backup=False):
         raise AzureMissingResourceHttpError("Missing resource!", 404)
 
 
-def get_data_from_blob(result_loc_, backup=False, is_private=False):
+def get_data_from_blob(result_loc_, backup=False, is_private=True):
     """
     read a blob storage file
     :param result_loc_: pathlib.Path object to store the file at. the last two names in path structure is used to locate
@@ -485,7 +485,7 @@ def get_dqp_data_from_blob(file_path, result_loc_):
         raise Exception('Could not read from blob!' + str(e))
 
 
-def post_data_to_blob(result_loc_, backup=False, is_private=False):
+def post_data_to_blob(result_loc_, backup=False, is_private=True):
     """
     write a local file to blob storage.
     :param result_loc_: pathlib.Path object to read CSV from
@@ -498,25 +498,25 @@ def post_data_to_blob(result_loc_, backup=False, is_private=False):
             file_name = result_loc_.name
             date_name = result_loc_.parent.name
             report_name = result_loc_.parent.parent.name
-            azure_utils.post_data_to_store(
-                container_name=container_name,
+            upload_file_to_store(
                 blob_name=report_name + '/' + date_name + '/' + file_name,
                 file_path=str(result_loc_),
+                container_name=container_name,
                 is_private=is_private
             )
         else:
             container_name = os.environ['PRIVATE_REPORT_CONTAINER']
-            azure_utils.post_data_to_store(
-                container_name=container_name,
+            upload_file_to_store(
                 blob_name=result_loc_.parent.name + '/' + result_loc_.name,
                 file_path=str(result_loc_),
+                container_name=container_name,
                 is_private=is_private
             )
             if result_loc_.parent.joinpath(result_loc_.name.replace('.csv', '.json')).exists():
-                azure_utils.post_data_to_store(
-                    container_name=container_name,
+                upload_file_to_store(
                     blob_name=result_loc_.parent.name + '/' + result_loc_.name.replace('.csv', '.json'),
                     file_path=str(result_loc_).replace('.csv', '.json'),
+                    container_name=container_name,
                     is_private=is_private
                 )
     except Exception:
@@ -705,8 +705,8 @@ def get_tb_content_mapping(result_loc_, date_, content_search_):
 
 def get_batch_data_from_blob(result_loc_, prefix_, backup=False):
     try:
-        account_name = os.environ['PUBLIC_AZURE_STORAGE_ACCOUNT']
-        account_key = os.environ['PUBLIC_AZURE_STORAGE_ACCESS_KEY']
+        account_name = os.environ['AZURE_STORAGE_ACCOUNT']
+        account_key = os.environ['AZURE_STORAGE_ACCESS_KEY']
         block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
         if backup:
             container_name = os.environ['REPORT_BACKUP_CONTAINER']
