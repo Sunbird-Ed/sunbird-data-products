@@ -94,10 +94,10 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
   def getDruidQuery(query: String, channel: String): DruidQueryModel = {
     val mapQuery = JSONUtils.deserialize[Map[String,AnyRef]](query)
     val filters = JSONUtils.deserialize[List[Map[String, AnyRef]]](JSONUtils.serialize(mapQuery("filters")))
-    val channelId = s"""{\"channel\":\"$channel\"}""".stripMargin
+    val channelId = s"""{"channel":"$channel"}""".stripMargin
     val updatedFilters = filters.map(f => {
       f map {
-        case ("value","channelId") => "value" -> JSONUtils.serialize(channelId)
+        case ("value","channelId") => "value" -> channelId
         case ("dimension","channel") => "dimension" -> "originData"
         case x => x
       }
