@@ -54,25 +54,17 @@ trait OnDemandExhaustJob {
 
   def zipEnabled(): Boolean = true;
 
-  def getRequests(jobId: String)(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
+  def getRequests(jobId: String, batchNumber: Option[AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
 
     val encoder = Encoders.product[JobRequest]
-    val selectQuery = s"SELECT * FROM $requestsTable FOR UPDATE SKIP LOCKED"
-    val reportConfigsDf = spark.read.jdbc(url, s"($selectQuery) AS requests", connProperties)
-      .where(col("job_id") === jobId && col("iteration") < 3)
-      .filter(col("status").isin(jobStatus: _*)).limit(3);
 
-    JobLogger.log("reportConfigsDf count" + reportConfigsDf.count(), None, INFO)
+    val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
+      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*));
 
-//    val filteredRequests = reportConfigsDf.filter(col("status").equalTo("SUBMITTED") || (col("status").equalTo("FAILED") && to_date(col("dt_job_completed"), "yyyy-MM-dd").notEqual("2021-02-08"))).limit(3)
-//    JobLogger.log("filteredRequests count" + filteredRequests.count(), None, INFO)
-//    filteredRequests.show(false)
-//
-//    val lockedRequests = filteredRequests.withColumn("status", lit("READYTOPROCESS")).as[JobRequest](encoder).collect();
-//    lockedRequests.foreach(f => updateStatus(f))
-//    lockedRequests;
+    val filteredReportConfigDf = if (batchNumber.isDefined) reportConfigsDf.filter(col("batch_number").equalTo(batchNumber.get.asInstanceOf[Int])) else reportConfigsDf
+    JobLogger.log("fetched records count" + filteredReportConfigDf.count(), None, INFO)
 
-    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
+    val requests = filteredReportConfigDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
     requests;
   }
 
