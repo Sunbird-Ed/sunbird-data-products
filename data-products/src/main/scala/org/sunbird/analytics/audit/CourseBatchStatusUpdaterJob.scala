@@ -125,7 +125,8 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
            |  }
            |}
            |""".stripMargin
-      RestUtil.patch[Map[String, AnyRef]](modelParams.getOrElse("kpLearningBasePath", "localhost:8080/learning-service") + s"""/system/v3/content/update/$courseId""", request, Some(Map("content-type" -> "application/json")))
+      val response = RestUtil.patch[Map[String, AnyRef]](modelParams.getOrElse("kpLearningBasePath", "localhost:8080/learning-service") + s"""/system/v3/content/update/$courseId""", request, Some(Map("content-type" -> "application/json")))
+      println("response=====" + response)
     })
   }
 
