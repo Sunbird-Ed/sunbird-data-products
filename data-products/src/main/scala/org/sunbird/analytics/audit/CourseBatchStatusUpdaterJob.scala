@@ -75,6 +75,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     if (!finalDF.isEmpty) {
       val uncompletedCourses = computedDF.filter(col("updated_status") < 2)
       updateCourseBatchES(finalDF.filter(col("status") > 0).select("batchid", "status").collect.map(r => Map(finalDF.select("batchid", "status").columns.zip(r.toSeq): _*)), updaterConfig)
+      uncompletedCourses.show(50, truncate = false)
       updateCourseMetadata(uncompletedCourses.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, dateFormatter, updaterConfig)
     } else {
       JobLogger.log("No records found to update the db", None, INFO)
@@ -110,6 +111,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   // Update the metadata to neo4j using learning service api
   def updateCourseMetadata(courseIds: List[String], collectionBatchDF: DataFrame, dateFormatter: SimpleDateFormat, config: JobConfig)(implicit sc: SparkContext): Unit = {
+    println("courseIdscourseIds" + courseIds)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     JobLogger.log("Indexing course data into Neo4j", Option(Map("total_courseid" -> courseIds.length)), INFO)
     courseIds.foreach(courseId => {
