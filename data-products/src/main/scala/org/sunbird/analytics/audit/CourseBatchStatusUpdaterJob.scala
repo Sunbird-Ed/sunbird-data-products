@@ -109,7 +109,6 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   // Update the metadata to neo4j using learning service api
   def updateCourseMetadata(courseIds: List[String], collectionBatchDF: DataFrame, dateFormatter: SimpleDateFormat, config: JobConfig)(implicit sc: SparkContext): Unit = {
-    println("courseIdscourseIds" + courseIds)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     JobLogger.log("Indexing course data into Neo4j", Option(Map("total_courseid" -> courseIds.length)), INFO)
     courseIds.foreach(courseId => {
