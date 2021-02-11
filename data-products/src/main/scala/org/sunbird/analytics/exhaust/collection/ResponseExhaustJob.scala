@@ -44,11 +44,9 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
   def getAssessmentDF(userEnrolmentDF: DataFrame, batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val userEnrolmentDataDF = getEnrolmentData(userEnrolmentDF, batch)
     val assessAggData = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
-      .withColumnRenamed("user_id", "userid")
-      .withColumnRenamed("batch_id", "batchid")
-      .withColumnRenamed("course_id", "courseid")
 
-    assessAggData.join(userEnrolmentDataDF, Seq("userid","courseid"))
+    assessAggData.join(userEnrolmentDataDF, assessAggData.col("user_id") === userEnrolmentDataDF.col("userid") && assessAggData.col("course_id") === userEnrolmentDataDF.col("courseid"), "inner")
+      .select(userEnrolmentDataDF.col("*"), assessAggData.col("question"), col("content_id"), col("attempt_id"), col("last_attempted_on"))
       .withColumn("questiondata",explode_outer(col("question")) )
       .withColumn("questionid" , col("questiondata.id"))
       .withColumn("questiontype", col("questiondata.type"))
@@ -69,6 +67,7 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
         col("userid"),
         col("courseid"),
         col("collectionName"),
-        col("batchName"))
+        col("batchName"),
+        col("batchid"))
   }
 }
