@@ -158,7 +158,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     //levelCount is less than depthLevel
     var data =  List(Map("children" -> List(Map("lastStatusChangedOn" -> "2019-09-19T18:15:56.490+0000","parent" -> "do_112876961957437440179","children" -> List(),"name" -> "content_1","createdOn" -> "2019-09-19T18:15:56.489+0000"," lastUpdatedOn" -> "2019-09-19T18:15:56.490+0000", "identifier" -> "do_1130928636168192001667","description" -> "Test_TextBookUnit_desc_8305852636","versionKey" -> "1568916956489","mimeType" -> "application/vnd.ekstep.content-collection","code" -> "2cb4d698-dc19-4f0c-9990-96f49daff753"," contentType" -> "Course"," status" -> "Draft"," depth" -> "1"," visibility" -> "Default"," index" -> "1))"," identifier" -> "do_1130928636168192001667"," mimeType" -> "application/vnd.ekstep.content-collection"," contentType" -> "Course"," visibility" -> "Default"))))
     var prevData = CourseData("do_1130928636168192001667","0",List())
-    var parseHierarchyData = ProgressExhaustJob.parseCourseHierarchy(data, 3, prevData, 2)
+    var parseHierarchyData = ProgressExhaustJob.logTime(ProgressExhaustJob.parseCourseHierarchy(data, 3, prevData, 2), "Execution of ParseCourseHierarchy method")
     assert(parseHierarchyData.equals(prevData))
 
     //unit testcase for identifier and children not available

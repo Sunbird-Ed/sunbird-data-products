@@ -3,7 +3,7 @@ package org.sunbird.analytics.exhaust
 import org.apache.spark.sql.{Encoders, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.scalamock.scalatest.MockFactory
@@ -83,7 +83,6 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val batch1 = "batch-001"
     val filePath = UserInfoExhaustJob.getFilePath(batch1)
     val jobName = UserInfoExhaustJob.jobName()
-    println(s"report generated: $outputLocation/$filePath.csv")
     implicit val responseExhaustEncoder = Encoders.product[UserInfoExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$filePath.csv")
@@ -229,6 +228,18 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     implicit val config = jobConfig
 
     UserInfoExhaustJob.execute()
+  }
+
+  //Unit test case for save and update requests
+  it should "execute the update and save request method" in {
+    implicit val fc = new FrameworkContext()
+    val jobRequest = JobRequest("'do_1131350140968632321230_batch-001:channel-01'", "123", "userinfo-exhaust", "SUBMITTED", """{\"batchId\": \"batch-001\"}""", "user-002", "channel-01", System.currentTimeMillis(), None, None, None, None, Option(""), Option(0), Option("test-123"))
+    val jobRequestArr = Array(jobRequest)
+    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
+    val storageConfig = StorageConfig("local", "", outputLocation)
+    implicit val conf = spark.sparkContext.hadoopConfiguration
+
+    UserInfoExhaustJob.saveRequests(storageConfig, jobRequestArr)
   }
 
   def getDate(): String = {

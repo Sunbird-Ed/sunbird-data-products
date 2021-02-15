@@ -93,7 +93,6 @@ trait OnDemandExhaustJob {
     pstmt.execute()
   }
 
-  // $COVERAGE-OFF$ Disabling scoverage for update and save Requests method
   private def updateRequests(requests: Array[JobRequest]) = {
     if (requests != null && requests.length > 0) {
       val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
@@ -120,7 +119,6 @@ trait OnDemandExhaustJob {
     val zippedRequests = for (request <- requests) yield processRequestEncryption(storageConfig, request)
     updateRequests(zippedRequests)
   }
-  // $COVERAGE-ON$ Enabling scoverage for all other functions
 
   def saveRequestAsync(storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): CompletableFuture[JobRequest] = {
 

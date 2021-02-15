@@ -42,7 +42,14 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
   }
   
   def getAssessmentDF(userEnrolmentDF: DataFrame, batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    val userEnrolmentDataDF = getEnrolmentData(userEnrolmentDF, batch)
+    val userEnrolmentDataDF = userEnrolmentDF
+      .select(
+        col("userid"),
+        col("courseid"),
+        col("collectionName"),
+        col("batchName"),
+        col("batchid"))
+
     val assessAggData = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
 
     assessAggData.join(userEnrolmentDataDF, assessAggData.col("user_id") === userEnrolmentDataDF.col("userid") && assessAggData.col("course_id") === userEnrolmentDataDF.col("courseid"), "inner")
@@ -58,16 +65,5 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumn("questionresponse", UDFUtils.toJSON(col("questiondata.resvalues")))
       .withColumn("questionoption", UDFUtils.toJSON(col("questiondata.params")))
       .drop("question", "questiondata")
-  }
-
-  def getEnrolmentData(userEnrolmentDataDF: DataFrame, batch: CollectionBatch): DataFrame = {
-    userEnrolmentDataDF
-      .filter(col("courseid") === batch.collectionId && col("batchid") === batch.batchId)
-      .select(
-        col("userid"),
-        col("courseid"),
-        col("collectionName"),
-        col("batchName"),
-        col("batchid"))
   }
 }

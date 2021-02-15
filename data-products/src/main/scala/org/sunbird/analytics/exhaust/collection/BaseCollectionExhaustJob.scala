@@ -314,13 +314,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       .select(col("user_id").as("userid"), col("consentflag"), col("last_updated_on").as("consentprovideddate"));
   }
 
-  // $COVERAGE-OFF$ Disabling scoverage since logTime function is not in use
   def logTime[R](block: => R, message: String): R = {
     val res = CommonUtil.time(block);
     JobLogger.log(message, Some(Map("timeTaken" -> res._1)), INFO)
     res._2
   }
-  // $COVERAGE-ON$ Enabling scoverage for other functions
+
   def organizeDF(reportDF: DataFrame, finalColumnMapping: Map[String, String], finalColumnOrder: List[String]): DataFrame = {
     val fields = reportDF.schema.fieldNames
     val colNames = for (e <- fields) yield finalColumnMapping.getOrElse(e, e)
