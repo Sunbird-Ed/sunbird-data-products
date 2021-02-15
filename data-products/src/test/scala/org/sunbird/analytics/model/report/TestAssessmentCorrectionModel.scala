@@ -31,11 +31,11 @@ class TestAssessmentCorrectionModel extends SparkSpec(null) with MockFactory {
 
   "AssessmentCorrectionModel" should "provide the event" in {
     val strConfig = """{"model":"org.sunbird.analytics.model.report.AssessmentCorrectionModel","search":{"type":"local","queries":[{"file":"src/test/resources/assessment-correction-report/test-data.log"}]},"modelParams":{"batchId":[],"parallelization":200,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"}],"filters":[{"type":"equals","dimension":"contentType","value":"SelfAssess"}],"descending":"false"}},"output":[{"to":"file","params":{"file":"src/test/resources/assessment-correction"}}],"parallelization":8,"appName":"Assessment Correction Model"}"""
-    val strConfig1 = """{"max_request_size": 1000000, "outputFile":"src/test/resources/assessment-correction/","batchId":[], "parallelization":200,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"}],"filters":[{"type":"equals","dimension":"contentType","value":"SelfAssess"}],"descending":"false"}}"""
+    val strConfig1 = """{"batchId":[],"parallelization":200,"druidConfig":{"queryType":"groupBy","dataSource":"content-model-snapshot","intervals":"LastDay","granularity":"all","aggregations":[{"name":"count","type":"count","fieldName":"count"}],"dimensions":[{"fieldName":"identifier","aliasName":"identifier"}],"filters":[{"type":"equals","dimension":"contentType","value":"SelfAssess"}],"descending":"false"},"fileOutputConfig":{"to":"file","params":{"file":"src/test/resources/assessment-correction/failedEvents"}}}"""
     val data = loadFile[String]("src/test/resources/assessment-correction-report/test-data2.log");
 
     val config = JSONUtils.deserialize[JobConfig](strConfig)
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
+    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))s
     //mocking for DruidDataFetcher
     import scala.concurrent.ExecutionContext.Implicits.global
     val json: String =
