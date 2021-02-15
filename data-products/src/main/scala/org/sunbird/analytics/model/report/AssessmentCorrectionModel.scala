@@ -7,6 +7,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.dispatcher.FileDispatcher
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.sunbird.analytics.exhaust.BaseReportsJob
@@ -26,7 +27,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   val cassandraFormat = "org.apache.spark.sql.cassandra";
-
+  val fileName = AppConf.getConfig("assessment.output.path")
   val assessEvent = "ASSESS"
   val contentType = "SelfAssess"
 
@@ -44,7 +45,15 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   override def postProcess(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
     JobLogger.log(s"Total output events: ${events.count()}", None, Level.INFO)
+    dispatchAssessData(events)
     events
+  }
+
+  def dispatchAssessData(events: RDD[AssessOutputEvent])(implicit sc: SparkContext, fc: FrameworkContext): Unit ={
+    val filterDF = events.map(f => JSONUtils.serialize(f)).filter(f => f.getBytes.length.toLong >= 1000000.asInstanceOf[Long])
+    if (filterDF.count() > 0) {
+      FileDispatcher.dispatch(Map("file" -> fileName.asInstanceOf[AnyRef]), filterDF)
+    }
   }
 
   def algorithProcess(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
