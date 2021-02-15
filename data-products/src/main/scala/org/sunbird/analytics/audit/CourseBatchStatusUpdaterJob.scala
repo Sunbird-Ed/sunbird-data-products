@@ -69,13 +69,12 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
       ))
     val finalDF = computedDF.filter(col("updated_status") =!= col("status"))
       .drop("status").withColumnRenamed("updated_status", "status")
-
     JobLogger.log(s"Writing records into database", None, INFO)
     finalDF.write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
     if (!finalDF.isEmpty) {
       val uncompletedCourses = computedDF.filter(col("updated_status") < 2)
       updateCourseBatchES(finalDF.filter(col("status") > 0).select("batchid", "status").collect.map(r => Map(finalDF.select("batchid", "status").columns.zip(r.toSeq): _*)), updaterConfig)
-      updateCourseMetadata(uncompletedCourses.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, dateFormatter, updaterConfig)
+      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, dateFormatter, updaterConfig)
     } else {
       JobLogger.log("No records found to update the db", None, INFO)
     }
@@ -92,7 +91,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
       "startDate" -> row.getAs[String]("startdate"),
       "enrollmentType" -> row.getAs[String]("enrollmenttype"),
       "createdFor" -> row.getAs[List[String]]("createdfor"),
-      "status" -> row.getAs[AnyRef]("status"),
+      "status" -> row.getAs[AnyRef]("updated_status"),
       "enrollmentEndDate" -> getEnrolmentEndDate(row.getAs[String]("enrollmentenddate"), row.getAs[String]("enddate"), dateFormat)
     )
   }
@@ -125,7 +124,8 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
            |  }
            |}
            |""".stripMargin
-      RestUtil.patch[Map[String, AnyRef]](modelParams.getOrElse("kpLearningBasePath", "localhost:8080/learning-service") + s"""/system/v3/content/update/$courseId""", request, Some(Map("content-type" -> "application/json")))
+      val response = RestUtil.patch[Map[String, AnyRef]](modelParams.getOrElse("kpLearningBasePath", "localhost:8080/learning-service") + s"""/system/v3/content/update/$courseId""", request, Some(Map("content-type" -> "application/json")))
+      JobLogger.log("Updated content status", Option(response), INFO)
     })
   }
 
