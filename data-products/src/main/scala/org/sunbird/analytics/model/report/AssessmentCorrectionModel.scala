@@ -27,7 +27,6 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   val cassandraFormat = "org.apache.spark.sql.cassandra";
-  val fileName = AppConf.getConfig("assessment.output.path")
   val assessEvent = "ASSESS"
   val contentType = "SelfAssess"
 
@@ -45,12 +44,15 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   override def postProcess(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
     JobLogger.log(s"Total output events: ${events.count()}", None, Level.INFO)
-    dispatchAssessData(events)
+    dispatchAssessData(events, config)
     events
   }
 
-  def dispatchAssessData(events: RDD[AssessOutputEvent])(implicit sc: SparkContext, fc: FrameworkContext): Unit ={
-    val filterDF = events.map(f => JSONUtils.serialize(f)).filter(f => f.getBytes.length.toLong >= 1000000.asInstanceOf[Long])
+  def dispatchAssessData(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): Unit ={
+    val maxRequestSize = config.get("max_request_size").getOrElse(1000000)
+    val fileName = config.getOrElse("outputFile", "/mount/data/analytics/tmp/assessment-correction/")
+
+    val filterDF = events.map(f => JSONUtils.serialize(f)).filter(f => f.getBytes.length > maxRequestSize.asInstanceOf[Int])
     if (filterDF.count() > 0) {
       FileDispatcher.dispatch(Map("file" -> fileName.asInstanceOf[AnyRef]), filterDF)
     }
