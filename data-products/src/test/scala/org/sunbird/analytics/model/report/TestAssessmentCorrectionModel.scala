@@ -35,7 +35,7 @@ class TestAssessmentCorrectionModel extends SparkSpec(null) with MockFactory {
     val data = loadFile[String]("src/test/resources/assessment-correction-report/test-data2.log");
 
     val config = JSONUtils.deserialize[JobConfig](strConfig)
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))s
+    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.modelParams.get("druidConfig")))
     //mocking for DruidDataFetcher
     import scala.concurrent.ExecutionContext.Implicits.global
     val json: String =
