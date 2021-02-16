@@ -1,7 +1,8 @@
 version: 2.1
 jobs:
   sunbird-ed-dp-build:
-    machine: true
+    machine:
+      image: ubuntu-2004:202008-01
     steps:
       - checkout
       - run:
@@ -20,17 +21,31 @@ jobs:
       - restore_cache:
           keys:
             - dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
-      - run: cd sunbird-analytics-core && mvn install -DskipTests
-      - run: cd sunbird-core-dataproducts && mvn install -DskipTests
+      - run: 
+          name: Build analytics-core dependency jar
+          command: |
+            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+            export PATH=$JAVA_HOME/bin:$PATH
+            cd sunbird-analytics-core && mvn install -DskipTests
+      - run:
+          name: Build core-data-products dependency jar 
+          command:   |
+            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+            export PATH=$JAVA_HOME/bin:$PATH
+            cd sunbird-core-dataproducts && mvn install -DskipTests
       - run:
           name: Ed-data-products-build
-          command: cd data-products && mvn scoverage:report
+          command: |
+            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+            export PATH=$JAVA_HOME/bin:$PATH
+            cd data-products && mvn scoverage:report
       - save_cache:
           key: dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
           paths: ~/.m2
       - run:
           name: sonar
           command: |
+            export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
             cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.exclusions=/home/circleci/project/adhoc-scripts/**,/home/circleci/project/replay-scripts/** -Dsonar.scala.coverage.reportPaths=/home/circleci/project/data-products/target/scoverage.xml -Dsonar.organization=sunbird-ed
 workflows:
   version: 2.1
