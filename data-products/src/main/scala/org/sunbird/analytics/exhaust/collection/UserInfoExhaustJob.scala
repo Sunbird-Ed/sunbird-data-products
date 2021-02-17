@@ -59,11 +59,9 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
   }
 
   def applyConsentRules(collectionBatch: CollectionBatch, userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    // $COVERAGE-OFF$ Disabling scoverage for if condition to-do in release-3.4
     val consentDF = if (collectionBatch.requestedOrgId.equals(collectionBatch.custodianOrgId)) {
       userDF.withColumn("consentflag", lit("false"));
     }
-    // $COVERAGE-ON$ Enabling scoverage for else condition
     else {
       val consentDF = getUserConsentDF(collectionBatch);
       val resultDF = userDF.join(consentDF, Seq("userid"), "left_outer")
