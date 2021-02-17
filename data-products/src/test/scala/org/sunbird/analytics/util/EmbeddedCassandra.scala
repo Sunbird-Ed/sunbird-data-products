@@ -1,6 +1,7 @@
 package org.sunbird.analytics.util
 
 import com.datastax.oss.driver.api.core.CqlSession
+import com.datastax.oss.driver.api.core.config.{DefaultDriverOption, DriverConfigLoader}
 import com.datastax.spark.connector.cql.CassandraConnector
 import org.apache.spark.SparkConf
 import org.cassandraunit.CQLDataLoader
@@ -9,6 +10,7 @@ import org.cassandraunit.utils.EmbeddedCassandraServerHelper
 import org.ekstep.analytics.framework.conf.AppConf
 
 import java.net.InetSocketAddress
+import java.time.Duration
 
 object EmbeddedCassandra {
 
@@ -18,6 +20,7 @@ object EmbeddedCassandra {
   val session: CqlSession = CqlSession.builder()
     .addContactPoint(new InetSocketAddress("localhost", AppConf.getConfig("cassandra.service.embedded.connection.port").toInt))
     .withLocalDatacenter("datacenter1")
+    .withConfigLoader(DriverConfigLoader.programmaticBuilder().withDuration(DefaultDriverOption.REQUEST_TIMEOUT, Duration.ofMillis(15000)).build())
     .build();
   val dataLoader = new CQLDataLoader(session)
 
