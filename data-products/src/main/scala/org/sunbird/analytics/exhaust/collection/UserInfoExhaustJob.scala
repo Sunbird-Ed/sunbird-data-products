@@ -61,8 +61,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
   def applyConsentRules(collectionBatch: CollectionBatch, userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
     val consentDF = if (collectionBatch.requestedOrgId.equals(collectionBatch.custodianOrgId)) {
       userDF.withColumn("consentflag", lit("false"));
-    }
-    else {
+    } else {
       val consentDF = getUserConsentDF(collectionBatch);
       val resultDF = userDF.join(consentDF, Seq("userid"), "left_outer")
       // Org level consent - will be updated in 3.4 to read from user_consent table
