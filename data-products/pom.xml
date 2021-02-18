@@ -307,6 +307,13 @@
 			<artifactId>unirest-java</artifactId>
 			<version>3.7.00</version>
 		</dependency>
+		<!-- Embedded Redis -->
+		<dependency>
+			<groupId>it.ozimov</groupId>
+			<artifactId>embedded-redis</artifactId>
+			<version>0.7.1</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 	<build>
 		<sourceDirectory>src/main/scala</sourceDirectory>
