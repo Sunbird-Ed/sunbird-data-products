@@ -84,7 +84,7 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
 
   }
 
-  it should "generate hierarchy report" in {
+  ignore should "generate hierarchy report" in {
     implicit val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 

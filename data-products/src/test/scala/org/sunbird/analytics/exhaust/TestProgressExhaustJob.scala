@@ -65,6 +65,8 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     jedis.hmset("user:user-008", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anoop", "userid": "user-008", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anoop@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-009", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Kartheek", "userid": "user-009", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01285019302823526477", "email": "kartheekp@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-010", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anand", "userid": "user-010", "state": "Tamil Nadu", "district": "Chennai", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anandp@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-011", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Santhosh", "userid": "user-010", "state": "Tamil Nadu", "district": "Chennai", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anandp@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-012", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Rayulu", "userid": "user-010", "state": "Tamil Nadu", "district": "Chennai", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anandp@ilimi.in", "usersignintype": "Validated"};"""))
 
     jedis.close()
   }
@@ -124,6 +126,95 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   }
 
+  it should "generate the report having batchFilter" in {
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1130928636168192001667_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{\"batchFilter\": [\"batch-001\", \"batch-002\"]}', 'user-002', '0130107621805015045', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    ProgressExhaustJob.execute()
+
+    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
+    val outputDir = "progress-exhaust"
+    val batch = "batch-002"
+    var filePath = ProgressExhaustJob.getFilePath(batch)
+    val jobName = ProgressExhaustJob.jobName()
+
+    implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
+    var batch1Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
+
+    batch1Results.size should be (2)
+    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130505638695649281726")
+    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("Feel Good Book-3.1----Copied")
+    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-002")
+    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic C++")
+    batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-011", "user-012")
+    batch1Results.map {res => res.`State`}.toList should contain allElementsOf List("Tamil Nadu")
+    batch1Results.map {res => res.`District`}.toList should contain allElementsOf List("Chennai")
+    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(null)
+    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
+
+
+    val batch1 = "batch-001"
+    filePath = ProgressExhaustJob.getFilePath(batch1)
+    batch1Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
+
+    batch1Results.size should be (2)
+    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
+    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
+    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
+    batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-002", "user-003")
+    batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh")
+    batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru")
+    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(null)
+    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+
+    while(pResponse.next()) {
+      pResponse.getString("status") should be ("SUCCESS")
+      pResponse.getString("err_message") should be ("")
+      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
+      pResponse.getString("download_urls") should be (s"""{reports/progress-exhaust/batch-002_progress_20210218.zip,reports/progress-exhaust/batch-001_progress_20210218.zip}""")
+      pResponse.getString("dt_file_created") should be (null)
+      pResponse.getString("iteration") should be ("0")
+    }
+
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
+  }
+
+  it should "not generate report if batchid/batchFilter/searchFilter is available" in {
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1130928636168192001667_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{}', 'user-002', '0130107621805015045', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    ProgressExhaustJob.execute()
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+
+    while(pResponse.next()) {
+      pResponse.getString("status") should be ("FAILED")
+      pResponse.getString("err_message") should be ("Invalid request")
+      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
+      pResponse.getString("download_urls") should be (s"""{}""")
+      pResponse.getString("dt_file_created") should be (null)
+      pResponse.getString("iteration") should be ("1")
+    }
+  }
 
   it should "provide hierarchy data on module level" in {
     implicit val sqlContext: SQLContext = spark.sqlContext

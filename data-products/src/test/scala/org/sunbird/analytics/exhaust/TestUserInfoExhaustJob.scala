@@ -243,7 +243,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     UserInfoExhaustJob.execute()
   }
 
-  //Unit test case for save and update requests
+  //Unit test case for save and update requests in OnDemandExhaustJob
   it should "execute the update and save request method" in {
     implicit val fc = new FrameworkContext()
     val jobRequest = JobRequest("'do_1131350140968632321230_batch-001:channel-01'", "123", "userinfo-exhaust", "SUBMITTED", """{\"batchId\": \"batch-001\"}""", "user-002", "channel-01", System.currentTimeMillis(), None, None, None, None, Option(""), Option(0), Option("test-123"))
@@ -253,6 +253,22 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     implicit val conf = spark.sparkContext.hadoopConfiguration
 
     UserInfoExhaustJob.saveRequests(storageConfig, jobRequestArr)
+  }
+
+  //Unit Testcases for test coverage
+  it should "execute the methods and return final results" in {
+    //Testcase1: getUserEnrolmentDF- persist false
+    val userEnrolDF = UserInfoExhaustJob.getUserEnrolmentDF(false)
+    userEnrolDF.storageLevel.useMemory should be (false)
+
+    //Testcase2: getCollectionBatchDF- persist: true
+    val batch = UserInfoExhaustJob.getCollectionBatchDF(true)
+    batch.storageLevel.useMemory should be (true)
+
+    //TestCase3: getUserCacheDF- persist: true
+    val userDF = UserInfoExhaustJob.getUserCacheDF(UserInfoExhaustJob.getUserCacheColumns(),true)
+    userDF.storageLevel.useMemory should be (true)
+
   }
 
   def getDate(): String = {
