@@ -8,11 +8,11 @@ import pdb
 
 from pathlib import Path
 from datetime import datetime, date
-from azure.common import AzureMissingResourceHttpError
 from pandas.errors import EmptyDataError
 
 from dataproducts.util.utils import push_metric_event, get_tenant_info, \
-                                    download_file_from_store, upload_file_to_store
+                                    download_file_from_store, upload_file_to_store,
+                                    file_missing_exception
 
 class LandingPageMetrics:
     def __init__(self, data_store_location, org_search):
@@ -39,17 +39,20 @@ class LandingPageMetrics:
                 download_file_from_store(
                     container_name=self.private_report_container,
                     blob_name=org_path.name + '/daily_metrics.csv',
-                    file_path=org_path.joinpath('daily_metrics.csv')
+                    file_path=org_path.joinpath('daily_metrics.csv'),
+                    is_private=True
                     )
                 download_file_from_store(
                     container_name=self.private_report_container,
                     blob_name=org_path.name + '/DCE_textbook_data.csv',
-                    file_path=org_path.joinpath('DCE_textbook_data.csv')
+                    file_path=org_path.joinpath('DCE_textbook_data.csv'),
+                    is_private=True
                     )
                 download_file_from_store(
                     container_name=self.private_report_container,
                     blob_name=org_path.name + '/content_creation.csv',
-                    file_path=org_path.joinpath('content_creation.csv')
+                    file_path=org_path.joinpath('content_creation.csv'),
+                    is_private=True
                     )
                 dm_df = pd.read_csv(org_path.joinpath('daily_metrics.csv'))
                 dm_df = dm_df.set_index('Date')
@@ -106,7 +109,7 @@ class LandingPageMetrics:
                     )
             except EmptyDataError:
                 pass
-            except AzureMissingResourceHttpError:
+            except file_missing_exception():
                 pass
 
 
