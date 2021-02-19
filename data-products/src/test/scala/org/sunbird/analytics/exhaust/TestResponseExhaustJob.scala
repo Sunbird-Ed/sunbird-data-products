@@ -35,7 +35,6 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     userDF = spark.read.json("src/test/resources/exhaust/user_data.json").cache()
     redisServer = new RedisServer(6379)
-    
     // redis setup
     if(!redisServer.isActive) {
       redisServer.start();
