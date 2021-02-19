@@ -10,10 +10,11 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.sunbird.analytics.exhaust.BaseReportsJob
-import org.sunbird.analytics.job.report.DruidOutput
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+case class DruidOutput(identifier: String, channel: String)
 case class SelfAssessData(identifier: String, contentType: String)
 case class AssessEvent (contentid: String, attemptId: String, courseid: String, userid: String, assessEvent: String)
 @scala.beans.BeanInfo
