@@ -55,7 +55,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   }
 
   def setupRedisData(jedis: Jedis): Unit = {
-    jedis.hmset("user:user-001", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Manju", "userid": "user-001", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "manju@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-001", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Manju", "userid": "user-001", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "manju@ilimi.in", "usersignintype": "Validated", "board": "[\"State (Karnataka)\"]"};"""))
     jedis.hmset("user:user-002", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Mahesh", "userid": "user-002", "state": "Andhra Pradesh", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "mahesh@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-003", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Sowmya", "userid": "user-003", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "sowmya@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-004", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Utkarsha", "userid": "user-004", "state": "Delhi", "district": "babarpur", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "utkarsha@ilimi.in", "usersignintype": "Validated"};"""))
@@ -102,6 +102,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
     batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
     batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
+    batch1Results.map(f => f.`Declared Board`).toList should contain atLeastOneElementOf List("State (Karnataka)")
     batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(null)
     batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
 
@@ -157,7 +158,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     batch1Results.map {res => res.`District`}.toList should contain allElementsOf List("Chennai")
     batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
     batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(null)
-    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
+    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("0")
 
 
     val batch1 = "batch-001"

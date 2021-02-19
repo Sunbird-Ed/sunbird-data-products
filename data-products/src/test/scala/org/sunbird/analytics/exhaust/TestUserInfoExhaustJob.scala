@@ -7,7 +7,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfi
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob
+import org.sunbird.analytics.exhaust.collection.{UDFUtils, UserInfoExhaustJob}
 import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisCacheUtil}
 import redis.clients.jedis.Jedis
@@ -269,6 +269,10 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val userDF = UserInfoExhaustJob.getUserCacheDF(UserInfoExhaustJob.getUserCacheColumns(),true)
     userDF.storageLevel.useMemory should be (true)
 
+    //Testcase4: UDFUtils
+    val userMap = UDFUtils.fromJSONFun("""{"declared-email": "test@gmail.com"}""")
+    userMap.map(f => f._1).toList should contain theSameElementsAs List("declared-email")
+    userMap.map(f => f._2).toList should contain theSameElementsAs List("test@gmail.com")
   }
 
   def getDate(): String = {
