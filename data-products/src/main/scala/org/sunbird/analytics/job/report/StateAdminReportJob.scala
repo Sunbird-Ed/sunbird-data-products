@@ -114,7 +114,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val channels = blockData.select(col("Channel")).distinct().collect.map(_.getString(0)).mkString(",")
         val userDeclaredDetailReportCommand = Seq("bash", "-c",
             s"source $virtualEnvDirectory/bin/activate; " +
-                s"dataproducts user_declared_detail --data_store_location='$scriptOutputDirectory' --states='$channels'")
+                s"dataproducts user_declared_detail --data_store_location='$scriptOutputDirectory' --states='$channels' --is_private")
         JobLogger.log(s"User self-declared detail persona zip report command:: $userDeclaredDetailReportCommand", None, INFO)
         val userDeclaredDetailReportExitCode = ScriptDispatcher.dispatch(userDeclaredDetailReportCommand)
         
