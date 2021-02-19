@@ -184,7 +184,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
       pResponse.getString("status") should be ("SUCCESS")
       pResponse.getString("err_message") should be ("")
       pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
-      pResponse.getString("download_urls") should be (s"""{reports/progress-exhaust/batch-002_progress_20210218.zip,reports/progress-exhaust/batch-001_progress_20210218.zip}""")
+      pResponse.getString("download_urls") should be (s"""{reports/progress-exhaust/batch-002_progress_${reportDate}.zip,reports/progress-exhaust/batch-001_progress_${reportDate}.zip}""")
       pResponse.getString("dt_file_created") should be (null)
       pResponse.getString("iteration") should be ("0")
     }
