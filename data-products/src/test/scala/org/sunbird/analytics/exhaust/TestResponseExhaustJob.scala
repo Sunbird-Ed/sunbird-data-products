@@ -26,7 +26,6 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   val jobRequestTable = "job_request"
   implicit var spark: SparkSession = _
   var userDF: DataFrame = _
-  var reporterMock: BaseReportsJob = mock[BaseReportsJob]
   var redisServer: RedisServer = _
   var jedis: Jedis = _
 
