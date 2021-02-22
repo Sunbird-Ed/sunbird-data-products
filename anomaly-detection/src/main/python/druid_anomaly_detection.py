@@ -1,4 +1,4 @@
-#!anomaly/bin/python
+#!anomaly_venv/bin/python
 import logging
 
 from flask import Flask, request
