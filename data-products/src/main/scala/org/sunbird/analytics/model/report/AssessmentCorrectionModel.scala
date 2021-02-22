@@ -10,10 +10,11 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.sunbird.analytics.exhaust.BaseReportsJob
-import org.sunbird.analytics.job.report.DruidOutput
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+case class DruidOutput(identifier: String, channel: String)
 case class SelfAssessData(identifier: String, contentType: String)
 case class AssessEvent (contentid: String, attemptId: String, courseid: String, userid: String, assessEvent: String)
 @scala.beans.BeanInfo
@@ -26,7 +27,6 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   val cassandraFormat = "org.apache.spark.sql.cassandra";
-
   val assessEvent = "ASSESS"
   val contentType = "SelfAssess"
 
@@ -44,7 +44,19 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   override def postProcess(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
     JobLogger.log(s"Total output events: ${events.count()}", None, Level.INFO)
+    dispatchAssessData(events, config)
     events
+  }
+
+  def dispatchAssessData(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): Unit ={
+    val maxRequestSize = config.get("max_request_size").getOrElse(1000000)
+    val outputConfig = config.getOrElse("fileOutputConfig", """{"to": "file", "params": {"file": "/mount/data/analytics/tmp/assessment-correction/failedEvents"}}""")
+    val dispatcherConfig = JSONUtils.deserialize[Dispatcher](JSONUtils.serialize(outputConfig))
+    val filterDF = events.map(f => JSONUtils.serialize(f)).filter(f => f.getBytes.length > maxRequestSize.asInstanceOf[Int])
+    if (filterDF.count() > 0) {
+      OutputDispatcher.dispatch(dispatcherConfig, events)
+    }
+
   }
 
   def algorithProcess(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {

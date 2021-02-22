@@ -418,7 +418,7 @@ read_request_timeout_in_ms: 10000
 # How long the coordinator should wait for seq or index scans to complete
 range_request_timeout_in_ms: 10000
 # How long the coordinator should wait for writes to complete
-write_request_timeout_in_ms: 5000
+write_request_timeout_in_ms: 40000
 # How long a coordinator should continue to retry a CAS operation
 # that contends with other proposals for the same row
 cas_contention_timeout_in_ms: 1000
@@ -427,7 +427,7 @@ cas_contention_timeout_in_ms: 1000
 # we need to flush first so we can snapshot before removing the data.)
 truncate_request_timeout_in_ms: 60000
 # The default timeout for other, miscellaneous operations
-request_timeout_in_ms: 20000
+request_timeout_in_ms: 80000
 
 # Enable operation timeout information exchange between nodes to accurately
 # measure request timeouts.  If disabled, replicas will assume that requests
