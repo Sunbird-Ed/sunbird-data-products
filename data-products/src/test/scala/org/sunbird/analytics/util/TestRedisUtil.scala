@@ -12,12 +12,12 @@ class TestRedisUtil extends BaseSpec {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    redisServer = new RedisServer(6379)
+    redisServer = new RedisServer(6381)
     // redis setup
     if(!redisServer.isActive) {
       redisServer.start();
     }
-    val redisConnect = new RedisCacheUtil()
+    val redisConnect = new RedisCacheUtil("127.0.0.1", 6381)
     jedis = redisConnect.getConnection(0, 10000)
     setupRedisData(jedis)
   }
