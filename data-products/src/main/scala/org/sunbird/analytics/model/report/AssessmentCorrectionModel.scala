@@ -53,8 +53,9 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
     val outputConfig = config.getOrElse("fileOutputConfig", """{"to": "file", "params": {"file": "/mount/data/analytics/tmp/assessment-correction/failedEvents"}}""")
     val dispatcherConfig = JSONUtils.deserialize[Dispatcher](JSONUtils.serialize(outputConfig))
     val filteredEvents: RDD[String] = events.map(f => JSONUtils.serialize(f)).filter(f => f.getBytes.length > maxRequestSize.asInstanceOf[Int])
-    if (filteredEvents.count() > 0) {
-      JobLogger.log(s"Total Skipped Events: ${filteredEvents.count()}", None, Level.INFO)
+    val filteredEventsSize = filteredEvents.count()
+    if (filteredEventsSize > 0) {
+      JobLogger.log(s"Total Skipped Events: ${filteredEventsSize}", None, Level.INFO)
       OutputDispatcher.dispatch(dispatcherConfig, filteredEvents)
     }
 
