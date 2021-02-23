@@ -35,9 +35,8 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     redisServer = new RedisServer(6379)
     // redis setup
-    if(!redisServer.isActive) {
-      redisServer.start();
-    }
+    redisServer.stop()
+    redisServer.start();
     val redisConnect = new RedisCacheUtil()
     jedis = redisConnect.getConnection(0)
     setupRedisData(jedis)
