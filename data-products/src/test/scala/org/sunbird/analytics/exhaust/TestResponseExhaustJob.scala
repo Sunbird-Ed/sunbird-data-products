@@ -33,7 +33,6 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     super.beforeAll()
     spark = getSparkSession();
 
-    userDF = spark.read.json("src/test/resources/exhaust/user_data.json").cache()
     redisServer = new RedisServer(6379)
     // redis setup
     if(!redisServer.isActive) {
@@ -74,7 +73,8 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   "TestResponseExhaustJob" should "generate final output as csv and zip files" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
     EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:01250894314817126443', '37564CF8F134EE7532F125651B51D17F', 'response-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
-
+    println("redis: " + jedis.isConnected)
+    println("redis port: " + redisServer.ports())
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"", "storageContainer": ""},"parallelization":8,"appName":"Progress Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
