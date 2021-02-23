@@ -53,8 +53,9 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
     val dispatcherConfig = JSONUtils.deserialize[Dispatcher](JSONUtils.serialize(outputConfig))
     val skippedEvents: RDD[AssessOutputEvent] = events.filter(event => isLargerSizeMessage(event, config))
     val validEvents: RDD[AssessOutputEvent] = events.filter(event => !isLargerSizeMessage(event, config))
-    JobLogger.log(s"Total Skipped Events: ${skippedEvents.count()}", None, Level.INFO)
-    OutputDispatcher.dispatch(dispatcherConfig, skippedEvents)
+    val skippedEventsCount = skippedEvents.count()
+    JobLogger.log(s"Total Skipped Events: ${skippedEventsCount}", None, Level.INFO)
+    if (skippedEventsCount > 0) OutputDispatcher.dispatch(dispatcherConfig, skippedEvents)
     validEvents
   }
 
