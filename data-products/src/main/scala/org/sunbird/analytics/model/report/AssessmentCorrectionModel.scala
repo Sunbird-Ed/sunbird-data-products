@@ -43,20 +43,25 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
   }
 
   override def postProcess(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
-    JobLogger.log(s"Total output events: ${events.count()}", None, Level.INFO)
-    dispatchAssessData(events, config)
-    events
+    val validEvents = filterEvents(events, config)
+    JobLogger.log(s"Total Events Pushing to Kafka: ${validEvents.count()}", None, Level.INFO)
+    validEvents
   }
 
-  def dispatchAssessData(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): Unit ={
-    val maxRequestSize = config.get("max_request_size").getOrElse(1000000)
+  def filterEvents(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
     val outputConfig = config.getOrElse("fileOutputConfig", """{"to": "file", "params": {"file": "/mount/data/analytics/tmp/assessment-correction/failedEvents"}}""")
     val dispatcherConfig = JSONUtils.deserialize[Dispatcher](JSONUtils.serialize(outputConfig))
-    val filterDF = events.map(f => JSONUtils.serialize(f)).filter(f => f.getBytes.length > maxRequestSize.asInstanceOf[Int])
-    if (filterDF.count() > 0) {
-      OutputDispatcher.dispatch(dispatcherConfig, events)
-    }
+    val skippedEvents: RDD[AssessOutputEvent] = events.filter(event => isLargerSizeMessage(event, config))
+    val validEvents: RDD[AssessOutputEvent] = events.filter(event => !isLargerSizeMessage(event, config))
+    val skippedEventsCount = skippedEvents.count()
+    JobLogger.log(s"Total Skipped Events: ${skippedEventsCount}", None, Level.INFO)
+    if (skippedEventsCount > 0) OutputDispatcher.dispatch(dispatcherConfig, skippedEvents)
+    validEvents
+  }
 
+  def isLargerSizeMessage(event: AssessOutputEvent, config: Map[String, AnyRef]): Boolean = {
+    val maxRequestSize = config.getOrElse("max_request_size", 1000000)
+    JSONUtils.serialize(event).getBytes.length > maxRequestSize.asInstanceOf[Int]
   }
 
   def algorithProcess(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
