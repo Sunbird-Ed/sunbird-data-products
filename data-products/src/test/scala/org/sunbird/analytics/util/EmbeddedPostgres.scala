@@ -42,6 +42,31 @@ object EmbeddedPostgresql {
     execute(query)
   }
 
+  def createJobRequestTable(): Unit = {
+    val tableName: String = "job_request"
+    val query =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |   tag TEXT,
+         |   request_id TEXT PRIMARY KEY,
+         |   job_id TEXT,
+         |   status TEXT,
+         |   request_data json,
+         |   requested_by TEXT,
+         |   requested_channel TEXT,
+         |   dt_job_submitted TIMESTAMP,
+         |   download_urls TEXT[],
+         |   dt_file_created TIMESTAMP,
+         |   dt_job_completed TIMESTAMP,
+         |   execution_time bigint,
+         |   err_message TEXT,
+         |   iteration int,
+         |   encryption_key TEXT
+         |)
+      """.stripMargin
+    execute(query)
+  }
+
   def execute(sqlString: String): Boolean = {
     stmt.execute(sqlString)
   }

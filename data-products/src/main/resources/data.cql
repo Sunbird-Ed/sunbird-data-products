@@ -497,3 +497,58 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
     status int,
     PRIMARY KEY (userid, courseid, batchid)
 );
+
+CREATE TABLE IF NOT EXISTS sunbird_courses.user_activity_agg (
+    activity_type text,
+    activity_id text,
+    user_id text,
+    context_id text,
+    agg map<text, int>,
+    agg_last_updated map<text, timestamp>,
+    PRIMARY KEY ((activity_type, activity_id, user_id), context_id)
+);
+
+CREATE TYPE IF NOT EXISTS sunbird_courses.question (
+    id text,
+    assess_ts timestamp,
+    max_score double,
+    score double,
+    type text,
+    title text,
+    resvalues list<frozen<map<text, text>>>,
+    params list<frozen<map<text, text>>>,
+    description text,
+    duration decimal
+);
+
+CREATE TABLE IF NOT EXISTS sunbird.user_consent (
+    user_id text,
+    consumer_id text,
+    object_id text,
+    categories list<text>,
+    consent_data text,
+    consumer_type text,
+    created_on timestamp,
+    expiry timestamp,
+    id text,
+    last_updated_on timestamp,
+    object_type text,
+    status text,
+    PRIMARY KEY (user_id, consumer_id, object_id)
+);
+
+CREATE TABLE IF NOT EXISTS sunbird_courses.assessment_aggregator (
+    user_id text,
+    course_id text,
+    batch_id text,
+    content_id text,
+    attempt_id text,
+    created_on timestamp,
+    grand_total text,
+    last_attempted_on timestamp,
+    question list<frozen<question>>,
+    total_max_score double,
+    total_score double,
+    updated_on timestamp,
+    PRIMARY KEY ((user_id, course_id), batch_id, content_id, attempt_id)
+);
