@@ -33,6 +33,7 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     spark = getSparkSession();
     redisServer = new RedisServer(6379)
     // redis setup
+    println("redis is active? response: " + redisServer.isActive)
     if(!redisServer.isActive) {
       redisServer.start();
     }
@@ -49,6 +50,7 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   override def afterAll() : Unit = {
     super.afterAll();
     redisServer.stop();
+    println("redis server closed? response: " + redisServer.isActive)
     EmbeddedCassandra.close()
     EmbeddedPostgresql.close()
   }
