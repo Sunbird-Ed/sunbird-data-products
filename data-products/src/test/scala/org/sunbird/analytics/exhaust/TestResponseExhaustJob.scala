@@ -25,14 +25,12 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   val jobRequestTable = "job_request"
   implicit var spark: SparkSession = _
-  var userDF: DataFrame = _
   var redisServer: RedisServer = _
   var jedis: Jedis = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = getSparkSession();
-    userDF = spark.read.json("src/test/resources/exhaust/user_data.json").cache()
     redisServer = new RedisServer(6379)
     // redis setup
     if(!redisServer.isActive) {
