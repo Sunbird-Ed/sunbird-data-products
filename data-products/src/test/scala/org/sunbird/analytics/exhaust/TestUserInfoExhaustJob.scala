@@ -48,7 +48,10 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   override def afterAll() : Unit = {
     super.afterAll();
+    println("jedis instance connected or not?: userinfo " + jedis.isConnected)
+    jedis.shutdown()
     redisServer.stop();
+    println("jedis instance closed or not?: userinfo " + jedis.isConnected)
     println("redis server closed? userinfo: " + redisServer.isActive)
     EmbeddedCassandra.close()
     EmbeddedPostgresql.close()
