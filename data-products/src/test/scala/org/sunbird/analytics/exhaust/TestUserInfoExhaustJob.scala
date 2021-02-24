@@ -253,6 +253,8 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     implicit val conf = spark.sparkContext.hadoopConfiguration
 
     UserInfoExhaustJob.saveRequests(storageConfig, jobRequestArr)
+
+    redisServer.stop();
   }
 
   def getDate(): String = {
