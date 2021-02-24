@@ -30,12 +30,12 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     super.beforeAll()
     spark = getSparkSession();
 
-    redisServer = new RedisServer(6379)
+    redisServer = new RedisServer(6381)
     // redis setup
     if(!redisServer.isActive) {
       redisServer.start();
     }
-    val redisConnect = new RedisCacheUtil(Option("127.0.0.1"), Option(6379))
+    val redisConnect = new RedisCacheUtil(Option("127.0.0.1"), Option(6381))
     jedis = redisConnect.getConnection(0)
     setupRedisData(jedis)
     // embedded cassandra setup
