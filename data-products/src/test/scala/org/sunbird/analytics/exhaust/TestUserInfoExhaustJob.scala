@@ -50,6 +50,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     super.afterAll();
     println("jedis instance connected or not?: userinfo " + jedis.isConnected)
     jedis.shutdown()
+    jedis.close()
     redisServer.stop();
     println("jedis instance closed or not?: userinfo " + jedis.isConnected)
     println("redis server closed? userinfo: " + redisServer.isActive)
