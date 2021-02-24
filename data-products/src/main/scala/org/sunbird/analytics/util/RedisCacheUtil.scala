@@ -7,12 +7,12 @@ import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
 import redis.clients.jedis.{Jedis, JedisPool, JedisPoolConfig}
 
 
-class RedisCacheUtil {
+class RedisCacheUtil(redisHost: Option[String], redisPort: Option[Int]) {
 
   implicit val className = "org.sunbird.analytics.util.RedisCacheUtil"
 
-  private val redisHost = "127.0.0.1"
-  private val redisPort = 6379
+//  private val redisHost = "127.0.0.1"
+//  private val redisPort = 6379
   private val index: Int = 12
 
   private def buildPoolConfig = {
@@ -27,7 +27,7 @@ class RedisCacheUtil {
     poolConfig
   }
 
-  var jedisPool = new JedisPool(buildPoolConfig, redisHost, redisPort)
+  var jedisPool = new JedisPool(buildPoolConfig, redisHost.getOrElse("127.0.0.1"), redisPort.getOrElse(6379))
 
   private def getConnection(backoffTimeInMillis: Long): Jedis = {
     if (backoffTimeInMillis > 0) try Thread.sleep(backoffTimeInMillis)

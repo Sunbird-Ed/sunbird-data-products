@@ -17,7 +17,7 @@ class TestRedisUtil extends BaseSpec {
     if(!redisServer.isActive) {
       redisServer.start();
     }
-    val redisConnect = new RedisCacheUtil()
+    val redisConnect = new RedisCacheUtil(Option("127.0.0.1"), Option(6379))
     jedis = redisConnect.getConnection(0, 10000)
     setupRedisData(jedis)
   }
