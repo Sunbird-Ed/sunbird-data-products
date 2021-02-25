@@ -9,10 +9,11 @@ import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.exhaust.collection.ResponseExhaustJob
 import org.sunbird.analytics.job.report.BaseReportSpec
-import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisCacheUtil}
+import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
 
+import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 
 
@@ -28,33 +29,34 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   var redisServer: RedisServer = _
   var jedis: Jedis = _
 
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = getSparkSession();
 
-    redisServer = new RedisServer(6379)
-    // redis setup
-    if(!redisServer.isActive) {
-      redisServer.start();
-    }
-    val redisConnect = new RedisCacheUtil(Option("127.0.0.1"), Option(6379))
-    jedis = redisConnect.getConnection(0)
-    setupRedisData(jedis)
-    // embedded cassandra setup
+    redisServer = new RedisServer(6341)
+    redisServer.start()
+    setupRedisData()
     EmbeddedCassandra.loadData("src/test/resources/exhaust/report_data.cql") // Load test data in embedded cassandra server
-    // embedded postgres setup
     EmbeddedPostgresql.start()
     EmbeddedPostgresql.createJobRequestTable()
   }
 
   override def afterAll() : Unit = {
-    super.afterAll();
-    redisServer.stop();
+    super.afterAll()
+    redisServer.stop()
+    spark.close()
+
+    println("******** closing the redis connection **********" + redisServer.isActive)
     EmbeddedCassandra.close()
     EmbeddedPostgresql.close()
+    TimeUnit.SECONDS.sleep(10)
   }
 
-  def setupRedisData(jedis: Jedis): Unit = {
+  def setupRedisData(): Unit = {
+    val redisConnect = new RedisConnect("localhost", 6341)
+    val jedis = redisConnect.getConnection(0, 100000)
+    println("Is JedisConnected" + jedis.isConnected)
     jedis.hmset("user:user-001", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Manju", "userid": "user-001", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "manju@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-002", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Mahesh", "userid": "user-002", "state": "Andhra Pradesh", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01285019302823526477", "email": "mahesh@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-003", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Sowmya", "userid": "user-003", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "sowmya@ilimi.in", "usersignintype": "Validated"};"""))
@@ -65,8 +67,7 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     jedis.hmset("user:user-008", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anoop", "userid": "user-008", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anoop@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-009", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Kartheek", "userid": "user-009", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01285019302823526477", "email": "kartheekp@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-010", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anand", "userid": "user-010", "state": "Tamil Nadu", "district": "Chennai", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anandp@ilimi.in", "usersignintype": "Validated"};"""))
-
-//    jedis.close()
+    jedis.close()
   }
 
   "TestResponseExhaustJob" should "generate final output as csv and zip files" in {
@@ -74,7 +75,7 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:01250894314817126443', '37564CF8F134EE7532F125651B51D17F', 'response-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
 
     implicit val fc = new FrameworkContext()
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ResponseExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"127.0.0.1","sparkUserDbRedisIndex":"12", "sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"", "storageContainer": ""},"parallelization":8,"appName":"ResponseExhaustJob Exhaust"}"""
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ResponseExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"0", "sparkUserDbRedisPort":6341,  "sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"", "storageContainer": ""},"parallelization":8,"appName":"ResponseExhaustJob Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val config = jobConfig
 

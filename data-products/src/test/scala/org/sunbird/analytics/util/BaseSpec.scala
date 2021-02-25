@@ -23,6 +23,9 @@ class BaseSpec extends FlatSpec with Matchers with BeforeAndAfterAll {
     conf.set("spark.memory.storageFraction", "0.5")
     conf.set("spark.cassandra.connection.port", AppConf.getConfig("cassandra.service.embedded.connection.port"))
     conf.set("es.nodes", "http://localhost")
+    conf.set("spark.redis.host", "localhost")
+    conf.set("spark.redis.port", "6341")
+    conf.set("spark.redis.db", "0")
     conf;
   }
 
