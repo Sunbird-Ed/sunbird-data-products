@@ -9,7 +9,6 @@ import org.sunbird.cloud.storage.conf.AppConf
 trait BaseReportsJob {
 
   def loadData(settings: Map[String, String], url: String, schema: StructType)(implicit spark: SparkSession): DataFrame = {
-    println("spark session in load data: " + spark.conf.getAll)
     if (schema.nonEmpty) {
       spark.read.schema(schema).format(url).options(settings).load()
     } else {
@@ -39,7 +38,6 @@ trait BaseReportsJob {
     JobContext.parallelization = CommonUtil.getParallelization(config)
     val readConsistencyLevel = modelParams.getOrElse("cassandraReadConsistency", "LOCAL_QUORUM").asInstanceOf[String];
     val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, Option(readConsistencyLevel), sparkRedisConnectionHost, sparkUserDbRedisIndex, sparkUserDbRedisPort)
-    println("spark session: " + sparkSession.conf.getAll)
     setReportsStorageConfiguration(config)(sparkSession)
     sparkSession;
 
