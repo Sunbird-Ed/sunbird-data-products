@@ -174,20 +174,7 @@ CREATE KEYSPACE IF NOT EXISTS dev_hierarchy_store WITH replication = {
 CREATE TABLE IF NOT EXISTS dev_hierarchy_store.content_hierarchy (
     identifier text PRIMARY KEY,
     hierarchy text
-) WITH bloom_filter_fp_chance = 0.01
-    AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
-    AND comment = ''
-    AND compaction = {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
-    AND compression = {'chunk_length_in_kb': '64', 'class': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-    AND crc_check_chance = 1.0
-    AND dclocal_read_repair_chance = 0.1
-    AND default_time_to_live = 0
-    AND gc_grace_seconds = 864000
-    AND max_index_interval = 2048
-    AND memtable_flush_period_in_ms = 0
-    AND min_index_interval = 128
-    AND read_repair_chance = 0.0
-    AND speculative_retry = '99PERCENTILE';
+);
 
 CREATE KEYSPACE IF NOT EXISTS sunbird WITH replication = {
   'class': 'SimpleStrategy',
@@ -478,6 +465,16 @@ CREATE TABLE IF NOT EXISTS sunbird.user_organisation (
  updateddate text,
 PRIMARY KEY (userid, organisationid));
 
+CREATE TABLE IF NOT EXISTS sunbird_courses.user_activity_agg (
+    activity_type text,
+    activity_id text,
+    user_id text,
+    context_id text,
+    agg map<text, int>,
+    agg_last_updated map<text, timestamp>,
+    PRIMARY KEY ((activity_type, activity_id, user_id), context_id)
+);
+
 CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
     userid text,
     courseid text,
@@ -496,4 +493,49 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
     progress int,
     status int,
     PRIMARY KEY (userid, courseid, batchid)
+);
+
+CREATE TYPE IF NOT EXISTS sunbird_courses.question (
+    id text,
+    assess_ts timestamp,
+    max_score double,
+    score double,
+    type text,
+    title text,
+    resvalues list<frozen<map<text, text>>>,
+    params list<frozen<map<text, text>>>,
+    description text,
+    duration decimal
+);
+
+CREATE TABLE IF NOT EXISTS sunbird.user_consent (
+    user_id text,
+    consumer_id text,
+    object_id text,
+    categories list<text>,
+    consent_data text,
+    consumer_type text,
+    created_on timestamp,
+    expiry timestamp,
+    id text,
+    last_updated_on timestamp,
+    object_type text,
+    status text,
+    PRIMARY KEY (user_id, consumer_id, object_id)
+);
+
+CREATE TABLE IF NOT EXISTS sunbird_courses.assessment_aggregator (
+    user_id text,
+    course_id text,
+    batch_id text,
+    content_id text,
+    attempt_id text,
+    created_on timestamp,
+    grand_total text,
+    last_attempted_on timestamp,
+    question list<frozen<question>>,
+    total_max_score double,
+    total_score double,
+    updated_on timestamp,
+    PRIMARY KEY ((user_id, course_id), batch_id, content_id, attempt_id)
 );

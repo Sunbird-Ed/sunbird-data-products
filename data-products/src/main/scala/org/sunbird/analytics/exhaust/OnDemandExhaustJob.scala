@@ -178,13 +178,14 @@ trait OnDemandExhaustJob {
     }
     val objKey = url.replace(filePrefix, "");
     if (storageConfig.store.equals("local")) {
-      fc.getHadoopFileUtil().copy(objKey, localPath, conf)
+      fc.getHadoopFileUtil().copy(filePrefix, localPath, conf)
     } else {
       storageService.download(storageConfig.container, objKey, tempDir, Some(false));
     }
 
     val zipPath = localPath.replace("csv", "zip")
     val zipObjectKey = objKey.replace("csv", "zip")
+    val zipLocalObjKey = url.replace("csv", "zip")
 
     request.encryption_key.map(key => {
       val zipParameters = new ZipParameters();
@@ -196,7 +197,7 @@ trait OnDemandExhaustJob {
       new ZipFile(zipPath).addFile(new File(localPath));
     })
     val resultFile = if (storageConfig.store.equals("local")) {
-      fc.getHadoopFileUtil().copy(zipPath, zipObjectKey, conf)
+      fc.getHadoopFileUtil().copy(zipPath, zipLocalObjKey, conf)
     } else {
       storageService.upload(storageConfig.container, zipPath, zipObjectKey, Some(false), Some(0), Some(3), None);
     }

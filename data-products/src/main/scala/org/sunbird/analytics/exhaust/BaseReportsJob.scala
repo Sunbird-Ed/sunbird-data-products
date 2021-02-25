@@ -1,15 +1,10 @@
 package org.sunbird.analytics.exhaust
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.JobConfig
-import org.ekstep.analytics.framework.JobContext
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext, StorageConfig}
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.sunbird.cloud.storage.conf.AppConf
-import org.ekstep.analytics.framework.StorageConfig
 
 trait BaseReportsJob {
 
