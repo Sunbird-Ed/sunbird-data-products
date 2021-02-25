@@ -50,13 +50,11 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     println("******** closing the redis connection **********" + redisServer.isActive)
     EmbeddedCassandra.close()
     EmbeddedPostgresql.close()
-    TimeUnit.SECONDS.sleep(10)
   }
 
   def setupRedisData(): Unit = {
     val redisConnect = new RedisConnect("localhost", 6341)
     val jedis = redisConnect.getConnection(0, 100000)
-    println("Is JedisConnected" + jedis.isConnected)
     jedis.hmset("user:user-001", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Manju", "userid": "user-001", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "manju@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-002", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Mahesh", "userid": "user-002", "state": "Andhra Pradesh", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01285019302823526477", "email": "mahesh@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-003", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Sowmya", "userid": "user-003", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "sowmya@ilimi.in", "usersignintype": "Validated"};"""))
