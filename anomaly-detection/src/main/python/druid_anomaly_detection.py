@@ -1,7 +1,6 @@
-#!anomaly_venv/bin/python
+#!/usr/bin/env python
 import logging
 
-from flask import Flask, request
 import requests
 import json
 import jsons
@@ -81,182 +80,170 @@ class Job:
 class Jobs:
     jobs: List[Job]
 
-logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
-logging.getLogger('apscheduler').setLevel(logging.INFO)
+class DruidAnomalyDetection:
+    def __init__(self, config_file_location, data_dir, druid_broker_host, druid_broker_port):
+        self.config_file_location = config_file_location
+        self.data_dir = data_dir
+        self.druid_broker_host = druid_broker_host
+        self.druid_broker_port = druid_broker_port
 
-druid_host = "localhost"
-druid_broker_port = "8082"
-druid_endpoint = "druid/v2/sql"
-execution_jobs = []
-sql_agg_fn_list = ['SUM', 'AVG', 'MAX', 'MIN', '*', '/']
-data_dir = "/home/analytics/anomaly_detection"
+    # Function to compute start_time and end_time based on the job configuration
+    def compute_dates(self, execution_time, query_granularity = 'day', offset_in_mins=0, current_interval = True):
+        interval = self.granularity.get(query_granularity,(24*60*60))(1)
+        if current_interval:
+            start_time = execution_time - datetime.timedelta(seconds=interval + offset_in_mins*60)
+            end_time = execution_time - datetime.timedelta(seconds=offset_in_mins*60)
+        else:
+            start_time = execution_time - 2 * datetime.timedelta(seconds=interval + offset_in_mins*60)
+            end_time = execution_time - datetime.timedelta(seconds=interval + offset_in_mins*60)
+        return QueryDate(start_time, end_time)
 
-granularity = {
-    'day': lambda x: x * 24 * 60 * 60,
-    'second': lambda x: x * 1,
-    'minute': lambda x: x * 60,
-    'hour': lambda x: x * 60 * 60
-}
+    # Function to execute Druid query and parse dimensions, metric values
+    def query_druid(self, druid_query, start_time, end_time):
+        logging.info("Query start_time: {}, end_time: {}".format(start_time, end_time))
+        json_payload = {}
+        json_payload['query'] = druid_query.format(start_time=start_time, end_time=end_time)
+        query = json_payload['query']
+        logging.debug("Exectuting query: {}".format(query))
+        columns = self.parse_sql_columns(query)
+        logging.info("columns: {}".format(columns))
+        
+        headers = {'Content-Type': 'application/json; charset=utf-8'}
+        response = requests.post(self.druid_endpoint, data=json.dumps(json_payload), headers=headers)
+        query_result = self.parseDruidResponse(response.json(), columns)
+        return query_result
 
-# config.json is expected to be present in the same directory as
-# this script. e.g.:
-# {
-#   "jobs": [
-#     {
-#       "job_id": "job-1",
-#       "query_granularity": "hour",
-#       "query": "query",
-#       "cron": "*/1 * * * *",
-#       "frequency": "minute",
-#       "offset_in_mins": 120
-#     }
-#   ]
-# }
-try:
-    with open('config.json') as config_file:
-        json_dict = json.load(config_file)
-        execution_jobs = jsons.load(json_dict, Jobs)
-except IOError:
-    logging.error("Job config.json not found in the root directory...")
-    raise IOError
+    # Function to parse name of the dimensions and metrics from the Druid query
+    def parse_sql_columns(self, sql):
+        dimensions = []
+        parsed = sqlparse.parse(sql)
+        stmt = parsed[0]
+        for token in stmt.tokens:
+            if isinstance(token, IdentifierList):
+                for identifier in token.get_identifiers():
+                    is_metric = [agg_fn for agg_fn in self.sql_agg_fn_list if(agg_fn in str(identifier))]
+                    if is_metric:
+                        metric = identifier.get_name()
+                    else:
+                        dimensions.append(identifier.get_name())
+            if isinstance(token, Identifier):
+                pass
+            if token.ttype is Keyword:  # from
+                break
+        return QueryColumns(dimensions, metric)
 
-# Function to compute start_time and end_time based on the job configuration
-def compute_dates(execution_time, query_granularity = 'day', offset_in_mins=0, current_interval = True):
-    interval = granularity.get(query_granularity,(24*60*60))(1)
-    if current_interval:
-        start_time = execution_time - datetime.timedelta(seconds=interval + offset_in_mins*60)
-        end_time = execution_time - datetime.timedelta(seconds=offset_in_mins*60)
-    else:
-        start_time = execution_time - 2 * datetime.timedelta(seconds=interval + offset_in_mins*60)
-        end_time = execution_time - datetime.timedelta(seconds=interval + offset_in_mins*60)
-    return QueryDate(start_time, end_time)
+    # Function to parse query response from Druid according to the dimensions and metric in the query
+    def parseDruidResponse(self, response_json, columns):
+        dimensions = columns.dimensions
+        metric = columns.metric
 
-# Function to execute Druid query and parse dimensions, metric values
-def query_druid(druid_query, start_time, end_time):
-    logging.info("Query start_time: {}, end_time: {}".format(start_time, end_time))
-    json_payload = {}
-    json_payload['query'] = druid_query.format(start_time=start_time, end_time=end_time)
-    query = json_payload['query']
-    logging.debug("Exectuting query: {}".format(query))
-    columns = parse_sql_columns(query)
-    
-    headers = {'Content-Type': 'application/json; charset=utf-8'}
-    response = requests.post('http://{}:{}/{}'.format(druid_host, druid_broker_port, druid_endpoint), data=json.dumps(json_payload), headers=headers)
-    query_result = parseDruidResponse(response.json(), columns)
-    return query_result
+        query_result = list()
+        for elem in response_json:
+            dimensions_values_list = list()
+            for dim in dimensions:
+                dimensions_values_list.append(Dimension(id=dim, value=elem[dim]))
+            query_result.append(QueryResult(dimensions_values_list, Metric(id=metric, value=round(elem[metric], 2))))
+        return query_result
 
-# Function to parse name of the dimensions and metrics from the Druid query
-def parse_sql_columns(sql):
-    dimensions = []
-    parsed = sqlparse.parse(sql)
-    stmt = parsed[0]
-    for token in stmt.tokens:
-        if isinstance(token, IdentifierList):
-            for identifier in token.get_identifiers():
-                is_metric = [agg_fn for agg_fn in sql_agg_fn_list if(agg_fn in str(identifier))]
-                if is_metric:
-                    metric = identifier.get_name()
+    # Function to compute percentage difference between current interval and 
+    # previous interval
+    def compare_with_previous_interval(self, job):
+        logging.info("Exectuting {} job".format(job.job_id))
+        execution_time = dtime.now().replace(minute=0, second=0, microsecond=0)
+        # execution_time = ciso8601.parse_datetime('2020-12-17')
+        current_datetime = self.compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins)
+        previous_datetime = self.compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins, current_interval=False) 
+
+        current_result = self.query_druid(job.query, current_datetime.start_time, current_datetime.end_time)
+        previous_result = self.query_druid(job.query, previous_datetime.start_time, previous_datetime.end_time)
+
+        data_points_list = self.find_result_intersection(current_result, previous_result)
+
+        result = QueryResult.schema().dumps(data_points_list, many=True)
+        self.write_result(data_points_list)
+        logging.info("Execution of {} job completed".format(job.job_id))
+        return result
+
+    def find_result_intersection(self, current_result, previous_result):
+        data_points_list = list()
+        for res in current_result:
+            index = previous_result.index(res) if res in previous_result else -1
+            if (index != -1):
+                prev_res = previous_result[index]
+                cur_val = res.metric.value
+                prev_val = prev_res.metric.value
+                if (prev_val != 0):
+                    perc_diff = (cur_val - prev_val) * 100.0/prev_val
                 else:
-                    dimensions.append(identifier.get_name())
-        if isinstance(token, Identifier):
-            pass
-        if token.ttype is Keyword:  # from
-            break
-    return QueryColumns(dimensions, metric)
-
-# Function to parse query response from Druid according to the dimensions and metric in the query
-def parseDruidResponse(response_json, columns):
-    dimensions = columns.dimensions
-    metric = columns.metric
-
-    query_result = list()
-    for elem in response_json:
-        dimensions_values_list = list()
-        for dim in dimensions:
-            dimensions_values_list.append(Dimension(id=dim, value=elem[dim]))
-        query_result.append(QueryResult(dimensions_values_list, Metric(id=metric, value=round(elem[metric], 2))))
-    return query_result
-
-# Function to compute percentage difference between current interval and 
-# previous interval
-def compare_with_previous_interval(job):
-    logging.info("Exectuting {} job".format(job.job_id))
-    execution_time = dtime.now().replace(minute=0, second=0, microsecond=0)
-    # execution_time = ciso8601.parse_datetime('2020-12-17')
-    current_datetime = compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins)
-    previous_datetime = compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins, current_interval=False) 
-
-    current_result = query_druid(job.query, current_datetime.start_time, current_datetime.end_time)
-    previous_result = query_druid(job.query, previous_datetime.start_time, previous_datetime.end_time)
-
-    data_points_list = find_result_intersection(current_result, previous_result)
-
-    result = QueryResult.schema().dumps(data_points_list, many=True)
-    write_result(data_points_list)
-    logging.info("Execution of {} job completed".format(job.job_id))
-    return result
-
-def find_result_intersection(current_result, previous_result):
-    data_points_list = list()
-    for res in current_result:
-        index = previous_result.index(res) if res in previous_result else -1
-        if (index != -1):
-            prev_res = previous_result[index]
-            cur_val = res.metric.value
-            prev_val = prev_res.metric.value
-            if (prev_val != 0):
-                perc_diff = (cur_val - prev_val) * 100.0/prev_val
+                    perc_diff = 100.0
+                data_points_list.append(
+                    self.createResult(res.dimensions, Metric(res.metric.id, round(perc_diff, 2))))
             else:
-                perc_diff = 100.0
+                data_points_list.append(
+                    self.createResult(res.dimensions, Metric(res.metric.id, 100.0)))
+        return data_points_list
+
+    # Function to fetch data for the Druid query for the current interval
+    def fetch_data_for_interval(self, job):
+        logging.info("Exectuting {} job".format(job.job_id))
+        data_points_list = list()
+        execution_time = dtime.now().replace(minute=0, second=0, microsecond=0)
+        execution_times = self.compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins)
+        result = self.query_druid(job.query, execution_times.start_time, execution_times.end_time)
+
+        for res in result:
             data_points_list.append(
-                createResult(res.dimensions, Metric(res.metric.id, round(perc_diff, 2))))
-        else:
-            data_points_list.append(
-                createResult(res.dimensions, Metric(res.metric.id, 100.0)))
-    return data_points_list
+                    self.createResult(res.dimensions, Metric(res.metric.id, round(res.metric.value, 2))))
+        result = QueryResult.schema().dumps(data_points_list, many=True)
+        self.write_result(data_points_list)
+        logging.info("Execution of {} job completed".format(job.job_id))
 
-# Function to fetch data for the Druid query for the current interval
-def fetch_data_for_interval(job):
-    logging.info("Exectuting {} job".format(job.job_id))
-    data_points_list = list()
-    execution_time = dtime.now().replace(minute=0, second=0, microsecond=0)
-    execution_times = compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins)
-    result = query_druid(job.query, execution_times.start_time, execution_times.end_time)
+    def write_result(self, query_result):
+        with open("{}/anomaly_data.log".format(self.data_dir), "a") as data_file:
+            for data in query_result:
+                data_file.write(f'{QueryResult.schema().dumps(data)}\n')
 
-    for res in result:
-        data_points_list.append(
-                createResult(res.dimensions, Metric(res.metric.id, round(res.metric.value, 2))))
-    result = QueryResult.schema().dumps(data_points_list, many=True)
-    write_result(data_points_list)
-    logging.info("Execution of {} job completed".format(job.job_id))
+    # Script entry point to schedule jobs from configuration
+    def execute(self):
+        logging.info("Starting scheduling of jobs...")
+        scheduler = BlockingScheduler()
+        for job in self.execution_jobs.jobs:
+            if len(job.cron) != 0:
+                logging.info("cron expression: {}".format(job.cron))
+                scheduler.add_job(self.fetch_data_for_interval, CronTrigger.from_crontab(job.cron), args=[job])
+            else:
+                if job.frequency == 'day':
+                    scheduler.add_job(self.fetch_data_for_interval, trigger='cron', args=[job], hour='04', minute='00')
+                
+                if job.frequency == 'hour':
+                    scheduler.add_job(self.fetch_data_for_interval, 'interval', args=[job], hours=1)
 
-def write_result(query_result):
-    with open("{}/anomaly_data.log".format(data_dir), "a") as data_file:
-        for data in query_result:
-            data_file.write(f'{QueryResult.schema().dumps(data)}\n')
+                if job.frequency == 'minute':
+                    scheduler.add_job(self.fetch_data_for_interval, 'interval', args=[job], minutes=1)
+        logging.info("Scheduling jobs completed...")
+        scheduler.start()
 
-# Script entry point to schedule jobs from configuration
-def execute():
-    logging.info("Starting scheduling of jobs...")
-    scheduler = BlockingScheduler()
-    for job in execution_jobs.jobs:
-        if len(job.cron) != 0:
-            logging.info("cron expression: {}".format(job.cron))
-            scheduler.add_job(fetch_data_for_interval, CronTrigger.from_crontab(job.cron), args=[job])
-        else:
-            if job.frequency == 'day':
-                scheduler.add_job(fetch_data_for_interval, trigger='cron', args=[job], hour='04', minute='00')
-            
-            if job.frequency == 'hour':
-                scheduler.add_job(fetch_data_for_interval, 'interval', args=[job], hours=1)
+    def createResult(self, dimensions, metric):
+        return QueryResult(dimensions=dimensions, metric=metric)
 
-            if job.frequency == 'minute':
-                scheduler.add_job(fetch_data_for_interval, 'interval', args=[job], minutes=1)
-    logging.info("Scheduling jobs completed...")
-    scheduler.start()
+    def init(self):
+        logging.basicConfig(filename='{}/anomaly_detection.log'.format(self.data_dir), filemode='a', format='%(asctime)s - %(message)s', level=logging.INFO)
+        logging.getLogger('apscheduler').setLevel(logging.INFO)
 
-def createResult(dimensions, metric):
-    return QueryResult(dimensions=dimensions, metric=metric)
+        self.granularity = {
+            'day': lambda x: x * 24 * 60 * 60,
+            'second': lambda x: x * 1,
+            'minute': lambda x: x * 60,
+            'hour': lambda x: x * 60 * 60
+        }
+        self.druid_endpoint = "{}:{}/{}".format(self.druid_broker_host, self.druid_broker_port, "druid/v2/sql")
+        self.execution_jobs = []
+        self.sql_agg_fn_list = ['SUM', 'AVG', 'MAX', 'MIN', '*', '/']
 
-if __name__ == '__main__':
-    execute()
+        try:
+            with open(self.config_file_location) as config_file:
+                json_dict = json.load(config_file)
+                self.execution_jobs = jsons.load(json_dict, Jobs)
+        except IOError:
+            logging.error("Job config.json not found in the root directory...")
+            raise IOError

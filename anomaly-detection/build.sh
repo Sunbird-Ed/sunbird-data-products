@@ -8,7 +8,7 @@ pybuilderInstalled=`pip3 freeze | grep 'pybuilder' | wc -l`
 if [ $pybuilderInstalled != 1 ]
 then
    echo "Installing pybuilder"
-   pip3 install pybuilder --pre
+   pip3 install -U pybuilder --pre
 fi
 export PATH=$PATH:$(pwd)/.local/bin
 
