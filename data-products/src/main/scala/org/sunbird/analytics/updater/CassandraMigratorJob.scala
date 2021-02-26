@@ -2,7 +2,7 @@ package org.sunbird.analytics.updater
 
 import com.datastax.spark.connector.cql.{CassandraConnector, CassandraConnectorConf}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions.col
 import org.ekstep.analytics.framework.Level.INFO
@@ -19,7 +19,6 @@ object CassandraMigratorJob extends optional.Application with IJob {
   def name(): String = "CassandraMigratorJob"
 
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
-
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val sparkContext = if (sc.isEmpty) CommonUtil.getSparkContext(JobContext.parallelization, jobConfig.appName.getOrElse(jobConfig.model)) else sc.get
     val jobName = jobConfig.appName.getOrElse(name)
@@ -31,7 +30,7 @@ object CassandraMigratorJob extends optional.Application with IJob {
   }
 
   def migrateData(jobConfig: JobConfig)(implicit sc: SparkContext): Unit = {
-    implicit val sqlContext = new SQLContext(sc)
+    val sqlContext = new SQLContext(sc)
     val modelParams =jobConfig.modelParams.get.asInstanceOf[Map[String,String]]
     val spark = sqlContext.sparkSession
     val cassandraFormat = "org.apache.spark.sql.cassandra";
