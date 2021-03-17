@@ -46,7 +46,7 @@ object CassandraMigratorJob extends optional.Application with IJob {
         ConnectionPortParam.option(modelParams.getOrElse("cassandraMigratePort","9042")))
 
       spark.read.format(cassandraFormat).options(Map("table" -> tableName,
-        "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load().repartition(col("userid"))
+        "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load()
     }
       val dataRepartitionColumns = if (!modelParams.getOrElse("dataRepartitionColumns", "").toString.isEmpty)
         modelParams.getOrElse("dataRepartitionColumns", "").split(",").toSeq else Seq.empty[String]
