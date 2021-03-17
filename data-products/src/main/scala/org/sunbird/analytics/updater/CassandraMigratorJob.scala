@@ -46,9 +46,15 @@ object CassandraMigratorJob extends optional.Application with IJob {
         ConnectionPortParam.option(modelParams.getOrElse("cassandraMigratePort","9042")))
 
       spark.read.format(cassandraFormat).options(Map("table" -> tableName,
-        "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load()
+        "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load().repartition(col("userid"))
     }
-      (data.count(),data)
+      val dataRepartitionColumns = if (!modelParams.getOrElse("dataRepartitionColumns", "").toString.isEmpty)
+        modelParams.getOrElse("dataRepartitionColumns", "").split(",").toSeq else Seq.empty[String]
+      val resultDf = if (dataRepartitionColumns.size > 0) {
+        data.repartition(dataRepartitionColumns.map(f => col(f)): _*)
+      }
+      else data
+      (resultDf.count(),resultDf)
     })
     JobLogger.log("Time to fetch data cassandra data", Some(Map("timeTaken" -> result._1, "count" -> result._2._1)), INFO)
     val dataDf = result._2._2
