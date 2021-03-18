@@ -48,7 +48,13 @@ object CassandraMigratorJob extends optional.Application with IJob {
       spark.read.format(cassandraFormat).options(Map("table" -> tableName,
         "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load()
     }
-      (data.count(),data)
+       val repartitionColumns = if (!modelParams.getOrElse("repartitionColumns", "").toString.isEmpty)
+        modelParams.getOrElse("repartitionColumns", "").split(",").toSeq else Seq.empty[String]
+      val repartitionDF = if (repartitionColumns.size > 0) {
+        data.repartition(repartitionColumns.map(f => col(f)): _*)
+      }
+      else data
+      (repartitionDF.count(),repartitionDF)
     })
     JobLogger.log("Time to fetch data cassandra data", Some(Map("timeTaken" -> result._1, "count" -> result._2._1)), INFO)
     val dataDf = result._2._2
@@ -61,13 +67,7 @@ object CassandraMigratorJob extends optional.Application with IJob {
           .withSessionDo { session =>
             session.execute(s"""TRUNCATE TABLE $keyspaceName.$tableName""")
           }
-        val repartitionColumns = if (!modelParams.getOrElse("repartitionColumns", "").toString.isEmpty)
-          modelParams.getOrElse("repartitionColumns", "").split(",").toSeq else Seq.empty[String]
-        val repartitionDF = if (repartitionColumns.size > 0) {
-          dataDf.repartition(repartitionColumns.map(f => col(f)): _*)
-        }
-        else dataDf
-        repartitionDF.write.format(cassandraFormat).options(Map("table" -> tableName,
+        dataDf.write.format(cassandraFormat).options(Map("table" -> tableName,
           "keyspace" -> keyspaceName, "cluster" -> "MigrateCluster"))
           .mode("append")
           .save()
