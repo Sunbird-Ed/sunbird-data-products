@@ -43,7 +43,7 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
     assert(reportDF.columns.contains("School Name") === true)
     assert(reportDF.columns.contains("School UDISE ID") === true)
     assert(reportDF.columns.contains("State provided ext. ID") === true)
-    assert(reportDF.columns.contains("Org phone") === true)
+    assert(reportDF.columns.contains("Org Phone") === true)
     assert(reportDF.columns.contains("Org Email ID") === true)
     assert(reportDF.columns.contains("User Type") === true)
     assert(reportDF.columns.contains("User-Sub Type") === true)

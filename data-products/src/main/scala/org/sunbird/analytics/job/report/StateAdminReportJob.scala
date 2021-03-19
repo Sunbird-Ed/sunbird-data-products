@@ -85,7 +85,9 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             select(userSelfDeclaredUserInfoDataDF.col("*"), orgExternalIdDf.col("*"))
         //decrypting email and phone values
         //check declared-email and declared-phone positions in the DF while decrypting
-        val userDecrpytedDataDF = decryptDF(userSelfDeclaredExtIdDF)
+        val emailMap = userSelfDeclaredExtIdDF.rdd.map(r => (r.getAs[String]("userid"), r.getAs[String]("declared-email"))).collectAsMap()
+        val phoneMap = userSelfDeclaredExtIdDF.rdd.map(r => (r.getAs[String]("userid"), r.getAs[String]("declared-phone"))).collectAsMap()
+        val userDecrpytedDataDF = decryptDF(emailMap, phoneMap)
         //appending decrypted values to the user-external-identifier dataframe
         val userExternalDecryptData  = userSelfDeclaredExtIdDF.join(userDecrpytedDataDF, userSelfDeclaredExtIdDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
             select(userSelfDeclaredExtIdDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
@@ -102,9 +104,11 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "cluster" || locationDF.col("loctype") === "block" || locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
         val userDenormLocationDF = userDenormDF.groupBy("userid", "Name", "usertype", "usersubtype", "profileemail", "profilephone", "rootorgid").
             pivot("loctype").agg(first("locname").as("locname"))
-        val decryptedUserProfileDF = decryptUserProfile(userDenormLocationDF);
+        val profileEmailMap = userDenormLocationDF.rdd.map(r => (r.getAs[String]("userid"), r.getAs[String]("profileemail"))).collectAsMap()
+        val profilePhoneMap = userDenormLocationDF.rdd.map(r => (r.getAs[String]("userid"), r.getAs[String]("profilephone"))).collectAsMap()
+        val decryptedUserProfileDF = decryptDF(profileEmailMap, profilePhoneMap);
         val denormLocationUserDecryptData  = userDenormLocationDF.join(decryptedUserProfileDF, userDenormLocationDF.col("userid") === decryptedUserProfileDF.col("userId"), "left_outer").
-            select(userDenormLocationDF.col("*"), decryptedUserProfileDF.col("decrypted-profile-email"), decryptedUserProfileDF.col("decrypted-profile-phone"))
+            select(userDenormLocationDF.col("*"), decryptedUserProfileDF.col("decrypted-email"), decryptedUserProfileDF.col("decrypted-phone"))
         val finalUserDf = denormLocationUserDecryptData.join(orgExternalIdDf, denormLocationUserDecryptData.col("rootorgid") === orgExternalIdDf.col("id"), "left_outer").
             select(denormLocationUserDecryptData.col("*"), orgExternalIdDf.col("orgName").as("userroororg"))
         saveUserSelfDeclaredExternalInfo(userExternalDecryptData, finalUserDf)
@@ -131,11 +135,9 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         }
     }
     
-    private def decryptDF(userSelfDeclaredWithSubOrgDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) : DataFrame = {
+    private def decryptDF(emailMap: collection.Map[String, String], phoneMap: collection.Map[String, String]) (implicit sparkSession: SparkSession, fc: FrameworkContext) : DataFrame = {
         import sparkSession.implicits._
         //check declared-email and declared-phone position in the RDD
-        val emailMap = userSelfDeclaredWithSubOrgDF.rdd.map(r => (r.getString(0), r.getString(5))).collectAsMap()
-        val phoneMap = userSelfDeclaredWithSubOrgDF.rdd.map(r => (r.getString(0), r.getString(6))).collectAsMap()
         val decEmailMap = collection.mutable.Map[String, String]()
         val decPhoneMap = collection.mutable.Map[String, String]()
         emailMap.foreach(email => {
@@ -153,26 +155,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         userDecrpytedDataDF
     }
     
-    private def decryptUserProfile(userSelfDeclaredWithSubOrgDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) : DataFrame = {
-        import sparkSession.implicits._
-        val emailMap = userSelfDeclaredWithSubOrgDF.rdd.map(r => (r.getAs[String]("userid"), r.getAs[String]("profileemail"))).collectAsMap()
-        val phoneMap = userSelfDeclaredWithSubOrgDF.rdd.map(r => (r.getAs[String]("userid"), r.getAs[String]("profilephone"))).collectAsMap()
-        val decEmailMap = collection.mutable.Map[String, String]()
-        val decPhoneMap = collection.mutable.Map[String, String]()
-        emailMap.foreach(email => {
-            val decEmail = DecryptUtil.decryptData(email._2)
-            decEmailMap += (email._1 -> decEmail)
-        })
-        phoneMap.foreach(phone => {
-            val decPhone = DecryptUtil.decryptData(phone._2)
-            decPhoneMap += (phone._1 -> decPhone)
-        })
-        val decryptEmailDF = decEmailMap.toSeq.toDF("userId", "decrypted-profile-email")
-        val decryptPhoneDF = decPhoneMap.toSeq.toDF("userId", "decrypted-profile-phone")
-        val userDecrpytedDataDF = decryptEmailDF.join(decryptPhoneDF, decryptEmailDF.col("userId") === decryptPhoneDF.col("userId"), "left_outer").
-            select(decryptEmailDF.col("*"), decryptPhoneDF.col("decrypted-profile-phone"))
-        userDecrpytedDataDF
-    }
     private def saveUserSelfDeclaredExternalInfo(userExternalDecryptData: DataFrame, userDenormLocationDF: DataFrame): DataFrame ={
         val resultDf = userExternalDecryptData.join(userDenormLocationDF, userExternalDecryptData.col("userid") === userDenormLocationDF.col("userid"), "left_outer").
             
@@ -185,10 +167,10 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("declared-school-name"). as("School Name"),
                 col("declared-school-udise-code").as("School UDISE ID"),
                 col("declared-ext-id").as("State provided ext. ID"),
-                col("decrypted-profile-email").as("Profile Email"),
-                col("decrypted-profile-phone").as("Profile Phone number"),
-                col("decrypted-phone").as("Org phone"),
-                col("decrypted-email").as("Org Email ID"),
+                userDenormLocationDF.col("decrypted-email").as("Profile Email"),
+                userDenormLocationDF.col("decrypted-phone").as("Profile Phone number"),
+                userExternalDecryptData.col("decrypted-phone").as("Org Phone"),
+                userExternalDecryptData.col("decrypted-email").as("Org Email ID"),
                 col("usertype").as("User Type"),
                 col("usersubtype").as("User-Sub Type"),
                 col("userroororg").as("Root Org of user"),
