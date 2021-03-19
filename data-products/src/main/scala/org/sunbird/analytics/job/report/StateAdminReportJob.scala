@@ -116,7 +116,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val virtualEnvDirectory = params.getOrElse("adhoc_scripts_virtualenv_dir", "/mount/venv")
         val scriptOutputDirectory = params.getOrElse("adhoc_scripts_output_dir", "/mount/portal_data")
         
-        val channels = blockData.select(col("Channel")).distinct().collect.map(_.getString(0)).mkString(",")
+        val channels = blockData.select(col("provider")).distinct().collect.map(_.getString(0)).mkString(",")
         val userDeclaredDetailReportCommand = Seq("bash", "-c",
             s"source $virtualEnvDirectory/bin/activate; " +
                 s"dataproducts user_declared_detail --data_store_location='$scriptOutputDirectory' --states='$channels' --is_private")
