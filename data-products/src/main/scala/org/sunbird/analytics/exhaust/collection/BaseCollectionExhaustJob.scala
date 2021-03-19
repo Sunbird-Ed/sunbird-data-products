@@ -26,10 +26,9 @@ import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
 
-case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
-                    firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""), phone: Option[String] = Option(""), maskedemail: Option[String] = Option(""),
-                    maskedphone: Option[String] = Option(""), rootorgid: String, block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""),
-                    schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""), userinfo: Option[String])
+case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
+                    phone: Option[String] = Option(""), rootorgid: String, block: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""), cluster: Option[String] = Option(""),
+                    usertype: Option[String] = Option(""), usersubtype: Option[String] = Option(""))
 
 case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]], batchFilter: Option[List[String]])
 case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"))
@@ -240,7 +239,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "state", "district", "userchannel", "rootorgid")
+    Seq("userid", "state", "district", "rootorgid")
   }
 
   def getEnrolmentColumns() : Seq[String] = {

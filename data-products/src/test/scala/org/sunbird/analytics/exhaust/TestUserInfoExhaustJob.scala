@@ -13,12 +13,12 @@ import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisC
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
 
-import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 
 
-case class UserInfoExhaustReport(`Collection Id`: String, `Collection Name`: String, `Batch Id`: String, `Batch Name`: String, `User UUID`: String, `User Name`: String, `State`: String, `District`: String, `Org Name`: String, `External ID`: String,
-                                 `Email ID`: String, `Mobile Number`: String, `Consent Provided`: String, `Consent Provided Date`: String)
+case class UserInfoExhaustReport(`Collection Id`: String, `Collection Name`: String, `Batch Id`: String, `Batch Name`: String, `User UUID`: String, `User Name`: String,
+                                 `User Type`: String,`User Sub Type`: String, `State`: String, `District`: String, `Block`: String, `Cluster`: String,
+                                 `Org Name`: String, `Email ID`: String, `Mobile Number`: String, `Consent Provided`: String, `Consent Provided Date`: String)
 
 class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseReportsJob {
 
@@ -50,16 +50,17 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   def setupRedisData(): Unit = {
     val redisConnect = new RedisConnect("localhost", 6341)
     val jedis = redisConnect.getConnection(0, 100000)
-    jedis.hmset("user:user-001", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Manju", "userid": "user-001","orgname": "Pre-prod Custodian Organization", "externalid": "1234", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "manju@ilimi.in", "usersignintype": "Validated"};"""))
-    jedis.hmset("user:user-002", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Mahesh", "userid": "user-002","orgname": "Pre-prod Custodian Organization", "externalid": "1234", "state": "Andhra Pradesh", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "mahesh@ilimi.in", "usersignintype": "Validated"};"""))
-    jedis.hmset("user:user-003", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Sowmya", "userid": "user-003","orgname": "Pre-prod Custodian Organization", "externalid": "1234", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "sowmya@ilimi.in", "usersignintype": "Validated"};"""))
-    jedis.hmset("user:user-004", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Utkarsha", "userid": "user-004","orgname": "Pre-prod Custodian Organization", "externalid": "1234", "state": "Delhi", "district": "babarpur", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "utkarsha@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-001", JSONUtils.deserialize[java.util.Map[String, String]]("""{"cluster":"CLUSTER1","firstname":"Manju","subject":"[\"IRCS\"]","schooludisecode":"3183211","usertype":"administrator","usersignintype":"Validated","language":"[\"English\"]","medium":"[\"English\"]","userid":"a962a4ff-b5b5-46ad-a9fa-f54edf1bcccb","schoolname":"DPS, MATHURA","rootorgid":"01250894314817126443","lastname":"Kapoor","framework":"[\"igot_health\"]","orgname":"Root Org2","phone":"","usersubtype":"deo","district":"bengaluru","grade":"[\"Volunteers\"]","block":"BLOCK1","state":"Karnataka","board":"[\"IGOT-Health\"]","email":""};"""))
+    jedis.hmset("user:user-002", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Mahesh", "userid": "user-002","orgname": "Pre-prod Custodian Organization", "state": "Andhra Pradesh", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "mahesh@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-003", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Sowmya", "userid": "user-003","orgname": "Pre-prod Custodian Organization", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "sowmya@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-004", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Utkarsha", "userid": "user-004","orgname": "Pre-prod Custodian Organization",  "state": "Delhi", "district": "babarpur", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "utkarsha@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-005", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Isha", "userid": "user-005", "state": "MP", "district": "Jhansi", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "isha@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-006", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Revathi", "userid": "user-006", "state": "Andhra Pradesh", "district": "babarpur", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "revathi@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-007", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Sunil", "userid": "user-007", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0126391644091351040", "email": "sunil@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-008", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anoop", "userid": "user-008", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anoop@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-009", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Kartheek", "userid": "user-011", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01285019302823526477", "email": "kartheekp@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-010", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anand", "userid": "user-012", "state": "Tamil Nadu", "district": "Chennai", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anandp@ilimi.in", "usersignintype": "Validated"};"""))
+
     jedis.close()
   }
 
@@ -95,6 +96,10 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Karnataka", "Andhra Pradesh", "Delhi")
     batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
     batch1Results.map {res => res.`Org Name`}.toList should contain atLeastOneElementOf List("Pre-prod Custodian Organization")
+    batch1Results.map {res => res.`Block`}.toList should contain atLeastOneElementOf List("BLOCK1")
+    batch1Results.map {res => res.`Cluster`}.toList should contain atLeastOneElementOf List("CLUSTER1")
+    batch1Results.map {res => res.`User Type`}.toList should contain atLeastOneElementOf List("administrator")
+    batch1Results.map {res => res.`User Sub Type`}.toList should contain atLeastOneElementOf List("deo")
 
     val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
 
