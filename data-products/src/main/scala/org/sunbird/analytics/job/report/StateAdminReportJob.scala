@@ -100,10 +100,10 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             select(userDf.col("*"))
         val userDenormDF = commonUserDf.withColumn("exploded_location", explode_outer(col("locationids")))
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "cluster" || locationDF.col("loctype") === "block" || locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
-        val userDenormLocationDF = userDenormDF.groupBy("userid", "Name", "usertype", "usersubtype", "profileemail", "profilephone").
+        val userDenormLocationDF = userDenormDF.groupBy("userid", "Name", "usertype", "usersubtype", "profileemail", "profilephone", "rootorgid").
             pivot("loctype").agg(first("locname").as("locname"))
         val decryptedUserProfileDF = decryptUserProfile(userDenormLocationDF);
-        val denormLocationUserDecryptData  = userDenormLocationDF.join(userDecrpytedDataDF, userDenormLocationDF.col("userid") === decryptedUserProfileDF.col("userid"), "left_outer").
+        val denormLocationUserDecryptData  = userDenormLocationDF.join(decryptedUserProfileDF, userDenormLocationDF.col("userid") === decryptedUserProfileDF.col("userId"), "left_outer").
             select(userDenormLocationDF.col("*"), decryptedUserProfileDF.col("decrypted-profile-email"), decryptedUserProfileDF.col("decrypted-profile-phone"))
         val finalUserDf = denormLocationUserDecryptData.join(orgExternalIdDf, denormLocationUserDecryptData.col("rootorgid") === orgExternalIdDf.col("id"), "left_outer").
             select(denormLocationUserDecryptData.col("*"), orgExternalIdDf.col("orgName").as("userroororg"))
