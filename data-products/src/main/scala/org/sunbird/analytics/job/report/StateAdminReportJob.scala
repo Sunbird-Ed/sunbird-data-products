@@ -185,12 +185,12 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("declared-school-name"). as("School Name"),
                 col("declared-school-udise-code").as("School UDISE ID"),
                 col("declared-ext-id").as("State provided ext. ID"),
+                col("decrypted-profile-email").as("Profile Email"),
+                col("decrypted-profile-phone").as("Profile Phone number"),
                 col("decrypted-phone").as("Org phone"),
                 col("decrypted-email").as("Org Email ID"),
                 col("usertype").as("User Type"),
                 col("usersubtype").as("User-Sub Type"),
-                col("decrypted-profile-email").as("Profile Email"),
-                col("decrypted-profile-phone").as("Profile Phone number"),
                 col("userroororg").as("Root Org of user"),
                 col("channel").as("provider"))
         resultDf.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
