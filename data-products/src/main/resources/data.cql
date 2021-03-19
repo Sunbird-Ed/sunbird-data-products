@@ -227,6 +227,7 @@ CREATE TABLE IF NOT EXISTS sunbird.organisation (
     datetime timestamp,
     description text,
     email text,
+    phone text,
     externalid text,
     hashtagid text,
     homeurl text,
