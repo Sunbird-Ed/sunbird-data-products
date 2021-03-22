@@ -66,7 +66,7 @@ object UserCacheIndexer extends Serializable {
 
       val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load()
           .select(col("firstname"),col("lastname"), col("email"), col("phone"),
-            col("rootorgid"), col("framework"), col("userid"))
+            col("rootorgid"), col("framework"), col("userid"), col("language"))
         .filter(col("userid").isNotNull))
         .withColumn("medium", col("framework.medium"))  // Flattening the BGMS
         .withColumn("subject", col("framework.subject"))
