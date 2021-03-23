@@ -9,6 +9,8 @@ import org.apache.spark.storage.StorageLevel
 import org.sunbird.analytics.util.JSONUtils
 
 case class AnonymousData(userid:String, usersignintype: String, userlogintype: String)
+case class LocationId(userid: String, locationids: List[String])
+case class ProfileUserType(userid: String, usertype: String, usersubtype: String)
 
 object UserCacheIndexer extends Serializable {
 
@@ -58,7 +60,13 @@ object UserCacheIndexer extends Serializable {
 
     def populateUserData() {
 
+      // Get CustodianOrgID
+      val custRootOrgId = getCustodianOrgId()
+      Console.println("#### custRootOrgId ####", custRootOrgId)
+
       val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load()
+          .select(col("firstname"),col("lastname"), col("email"), col("phone"),
+            col("rootorgid"), col("framework"), col("userid"), col("language"))
         .filter(col("userid").isNotNull))
         .withColumn("medium", col("framework.medium"))  // Flattening the BGMS
         .withColumn("subject", col("framework.subject"))
@@ -67,6 +75,7 @@ object UserCacheIndexer extends Serializable {
         .withColumn("framework_id", explode_outer(col("framework.id")))
         .drop("framework")
         .withColumnRenamed("framework_id", "framework")
+        .withColumn("usersignintype", when(col("rootorgid") === lit(custRootOrgId), "Self-Signed-In").otherwise("Validated"))
         .persist(StorageLevel.MEMORY_ONLY)
 
       Console.println("User records count:", userDF.count());
@@ -85,11 +94,11 @@ object UserCacheIndexer extends Serializable {
         */
       val userRootOrgDF = userDF
         .join(userOrgDF, userOrgDF.col("userid") === userDF.col("userid") && userOrgDF.col("organisationid") === userDF.col("rootorgid"))
-        .select(userDF.col("userid"), col("rootorgid"), col("organisationid"), userDF.col("channel"))
+        .select(userDF.col("userid"), col("rootorgid"), col("organisationid"))
 
       val userSubOrgDF = userDF
         .join(userOrgDF, userOrgDF.col("userid") === userDF.col("userid") && userOrgDF.col("organisationid") =!= userDF.col("rootorgid"))
-        .select(userDF.col("userid"), col("rootorgid"), col("organisationid"), userDF.col("channel"))
+        .select(userDF.col("userid"), col("rootorgid"), col("organisationid"))
 
       val rootOnlyOrgDF = userRootOrgDF.join(userSubOrgDF, Seq("userid"), "leftanti").select(userRootOrgDF.col("*"))
       val userOrgDenormDF = rootOnlyOrgDF.union(userSubOrgDF)
@@ -108,80 +117,108 @@ object UserCacheIndexer extends Serializable {
       Console.println("Time taken to insert user org records", res2._1)
     }
 
-    def denormUserData(): Unit = {
-
-      val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load()
-        .filter(col("userid").isNotNull))
-        .select("userid", "locationids", "rootorgid","channel").persist(StorageLevel.MEMORY_ONLY)
-
-      val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_organisation").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
-        .select(col("userid"), col("organisationid")).persist(StorageLevel.MEMORY_ONLY)
-
-      val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
-        .select(col("id"), col("orgname"), col("channel"), col("externalid"), col("locationids"), col("isrootorg")).persist(StorageLevel.MEMORY_ONLY)
-
-      val locationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "location").option("keyspace", sunbirdKeyspace).load().persist(StorageLevel.MEMORY_ONLY)
-
-      val externalIdentityDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "usr_external_identity").option("keyspace", sunbirdKeyspace).load()
-        .select(col("provider"), col("idtype"), col("externalid"), col("userid"))
-
-      val userDeclarationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_declarations").option("keyspace", sunbirdKeyspace).load()
-        .filter(f => f.getAs[String]("persona").equalsIgnoreCase("teacher"))
-        .select(col("userid"), col("userinfo"), col("orgid"))
-
-      // Get CustodianOrgID
-      val custRootOrgId = getCustodianOrgId()
-      Console.println("#### custRootOrgId ####", custRootOrgId)
-
-      val custodianUserDF = generateCustodianOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, userDeclarationDF)
-
-      val filteredCustoDian = custodianUserDF.select(
-        col("schoolname"),
-        col("externalid"),
-        col("state_name").as("state"),
-        col("district"), col("block"),
-        col("schooludisecode"),
-        col("user_channel").as("userchannel"), col("userid"), col("usersignintype"))
-
-      val res1 = time(populateToRedis(filteredCustoDian.distinct()))
-      Console.println("Time taken to insert custodian details", res1._1)
-
-      val stateUserDF = generateStateOrgUserData(custRootOrgId, userDF, organisationDF, locationDF, externalIdentityDF, userOrgDF)
-
-      val filteredStateDF = stateUserDF.select(
-        col("declared-school-name").as("schoolname"),
-        col("declared-ext-id").as("externalid"),
-        col("state_name").as("state"),
-        col("district"), col("block"),
-        col("declared-school-udise-code").as("schooludisecode"),
-        col("user_channel").as("userchannel"), col("userid"), col("usersignintype"))
-
-      val res2 = time(populateToRedis(filteredStateDF.distinct()))
-      Console.println("Time taken to insert state user details", res2._1)
-      userDF.unpersist()
-
-    }
-
     def getCustodianOrgId(): String = {
       val systemSettingDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "system_settings").option("keyspace", sunbirdKeyspace).load()
       val df = systemSettingDF.where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId").select(col("value"))
       df.select("value").first().getString(0)
     }
 
-    def generateCustodianOrgUserData(custodianOrgId: String, userDF: DataFrame, organisationDF: DataFrame,
-                                     locationDF: DataFrame, userDeclarationDF: DataFrame): DataFrame = {
-      /**
-        * Resolve the state, district and block information for CustodianOrg Users
-        * CustodianOrg Users will have state, district and block (optional) information
-        */
+    def denormUserData(): Unit = {
 
-      val userExplodedLocationDF = userDF
+      val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load()
+        .filter(col("userid").isNotNull))
+        .select(col("userid"), col("profilelocation"), col("profileusertype")).persist(StorageLevel.MEMORY_ONLY)
+
+      val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_organisation").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
+        .select(col("userid"), col("organisationid")).persist(StorageLevel.MEMORY_ONLY)
+
+      val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
+        .select(col("id"), col("orgname"), col("externalid"), col("organisationtype")).persist(StorageLevel.MEMORY_ONLY)
+
+      val locationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "location").option("keyspace", sunbirdKeyspace).load().persist(StorageLevel.MEMORY_ONLY)
+
+      val userDetailsDF = generateUserData(userDF, locationDF, userOrgDF, organisationDF)
+      val res2 = time(populateToRedis(userDetailsDF.distinct()))
+      Console.println("Time taken to insert report details", res2._1)
+      userDF.unpersist()
+    }
+
+    def generateUserData(userDF: DataFrame, locationDF: DataFrame, userOrgDF: DataFrame, organisationDF: DataFrame): DataFrame = {
+      implicit val sqlContext = new SQLContext(spark.sparkContext)
+      val userLocationDF = getLocationDetails(userDF, locationDF)
+
+      val profileUserTypeDF = getProfileUserType(userDF)
+
+      val userLocationTypeDF = userLocationDF.join(profileUserTypeDF, Seq("userid"), "left")
+        .drop("profilelocation", "profileusertype")
+
+      val UserPivotDF = userLocationTypeDF
+        .join(userOrgDF, userOrgDF.col("userid") === userLocationTypeDF.col("userid"), "left")
+        .join(organisationDF, userOrgDF.col("organisationid") === organisationDF.col("id")
+          && organisationDF.col("organisationtype").equalTo(2), "left")
+        .withColumn("schoolname", organisationDF.col("orgname"))
+        .withColumn("schooludisecode", organisationDF.col("externalid"))
+        .select(
+          userLocationTypeDF.col("userid"),
+          col("schoolname"),
+          col("schooludisecode"))
+
+      val custodianUserDF = userLocationTypeDF.as("userLocDF")
+        .join(UserPivotDF, Seq("userid"), "left")
+        .select("userLocDF.*","schoolname", "schooludisecode")
+
+      custodianUserDF
+    }
+
+    /***
+      *
+      * @param userDF, locationDF
+      * @return userLocationDF (containing fields: userid, state,district,block,cluster)
+      *
+      * INPUT:
+      * profilelocation (String)
+      * ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      * [{"id":"b38057d1-d41c-4b96-a548-939e335517aa","type":"district"},{"id":"1c0f7219-a0ec-4db0-83f7-e095fd2324ed","type":"block"},
+      * {"id":"30a4dcf2-8990-4fbb-acd2-577692127aba","type":"state"}]
+      *
+      *  LOGIC: Get the locationIds from the profilelocation string and map it with the locationDF where type=state/district/block/cluster
+      *
+      *  OUTPUT:
+      *    +------------------------------------+------+---------+---------------+
+      *    |userid                              |state |district |block          |
+      *    +------------------------------------+------+---------+----------------
+      *    |56c2d9a3-fae9-4341-9862-4eeeead2e9a1|Andhra|Chittooor|Chittooorblock1|
+      *    +------------------------------------+------+---------+----------------
+      *
+      */
+    def getLocationDetails(userDF: DataFrame, locationDF: DataFrame)(implicit sqlContext: SQLContext): DataFrame = {
+      import sqlContext.implicits._
+
+     val userLocationIdDF =  userDF.select(col("profilelocation"), col("userid")).rdd.map(f => {
+        var locList: List[String] = List()
+        val userid = f.getString(1)
+        if (null != f.getString(0)) {
+          val loc = JSONUtils.deserialize[List[Map[String, String]]](f.getString(0))
+          val stateIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("state")).map(f => f.getOrElse("id", ""))
+          val stateId = if (!stateIdList.isEmpty) stateIdList.head else ""
+          val districtIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("district")).map(f => f.getOrElse("id", ""))
+          val districtId = if (!districtIdList.isEmpty) districtIdList.head else ""
+          val blockIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("block")).map(f => f.getOrElse("id", ""))
+          val blockId = if (!blockIdList.isEmpty) blockIdList.head else ""
+          val clusterIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("cluster")).map(f => f.getOrElse("id", ""))
+          val clusterId = if (!clusterIdList.isEmpty) clusterIdList.head else ""
+          locList = List(stateId, districtId, blockId, clusterId)
+        }
+        LocationId(userid, locList)
+      }).toDF
+
+      val userExplodedLocationDF = userLocationIdDF
         .withColumn("exploded_location", explode_outer(col("locationids")))
         .select(col("userid"), col("exploded_location"), col("locationids"))
 
       val userStateDF = userExplodedLocationDF
         .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
-        .select(userExplodedLocationDF.col("userid"), col("name").as("state_name"))
+        .select(userExplodedLocationDF.col("userid"), col("name").as("state"))
 
       val userDistrictDF = userExplodedLocationDF
         .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
@@ -191,92 +228,58 @@ object UserCacheIndexer extends Serializable {
         .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
         .select(userExplodedLocationDF.col("userid"), col("name").as("block"))
 
-      /**
-        * Join with the userDF to get one record per user with district and block information
-        */
+      val userClusterDF = userExplodedLocationDF
+        .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "cluster")
+        .select(userExplodedLocationDF.col("userid"), col("name").as("cluster"))
 
-      val custodianOrguserLocationDF = userDF.filter(col("rootorgid") === lit(custodianOrgId))
-        .join(userStateDF, Seq("userid"), "inner")
+      userDF
+        .join(userStateDF, Seq("userid"), "left")
         .join(userDistrictDF, Seq("userid"), "left")
         .join(userBlockDF, Seq("userid"), "left")
+        .join(userClusterDF, Seq("userid"), "left")
         .select(
           userDF.col("*"),
-          col("state_name"),
+          col("state"),
           col("district"),
-          col("block"))
-        .withColumn("usersignintype", lit("Self-Signed-In"))
-      // .drop(col("locationids"))
-
-      val custodianUserPivotDF = custodianOrguserLocationDF
-        .join(userDeclarationDF, userDeclarationDF.col("userid") === custodianOrguserLocationDF.col("userid"), "left")
-        .join(organisationDF, userDeclarationDF.col("orgid") === organisationDF.col("id")
-          && organisationDF.col("isrootorg").equalTo(true), "left")
-        .withColumn("externalid", col("userinfo.declared-ext-id"))
-        .withColumn("schoolname", col("userinfo.declared-school-name"))
-        .withColumn("schooludisecode", col("userinfo.declared-school-udise-code"))
-        .select(
-          custodianOrguserLocationDF.col("userid"),
-          col("externalid"),
-          col("schoolname"),
-          col("schooludisecode"),
-          organisationDF.col("id").as("user_channel"))
-
-      val custodianUserDF = custodianOrguserLocationDF.as("userLocDF")
-        .join(custodianUserPivotDF, Seq("userid"), "left")
-        .select("userLocDF.*", "externalid", "schoolname", "schooludisecode", "user_channel")
-      custodianUserDF
+          col("block"),
+          col("cluster"))
     }
 
-    def generateStateOrgUserData(custRootOrgId: String, userDF: DataFrame, organisationDF: DataFrame, locationDF: DataFrame,
-                                 externalIdentityDF: DataFrame, userOrgDF: DataFrame): DataFrame = {
-      val stateOrgExplodedDF = organisationDF.withColumn("exploded_location", explode_outer(col("locationids")))
-        .select(col("id"), col("exploded_location"))
+    /***
+      *
+      * @param userDF
+      * @return userProfileTypeDF (containing fields: userid, usertype, usersubtype)
+      *
+      * INPUT:
+      * profileusertype (String)
+      * ------------------------------------------------------------------------------------------------------------------------------
+      * {"subType":deo,"type":"teacher"}
+      *
+      *  LOGIC: usertype: profileusertype.type
+      *         usersubtype: profileusertype.subType
+      *
+      *  OUTPUT:
+      *    +------------------------------------+------+---------------+
+      *    |userid                              |usertype |usersubtype |
+      *    +------------------------------------+---------+------------+
+      *    |56c2d9a3-fae9-4341-9862-4eeeead2e9a1|teacher  |deo         |
+      *    +------------------------------------+---------+------------+
+      *
+      */
 
-      val orgStateDF = stateOrgExplodedDF.join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "state")
-        .select(stateOrgExplodedDF.col("id"), col("name").as("state_name"))
+    def getProfileUserType(userDF: DataFrame)(implicit sqlContext: SQLContext): DataFrame = {
+      import sqlContext.implicits._
 
-      val orgDistrictDF = stateOrgExplodedDF
-        .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "district")
-        .select(stateOrgExplodedDF.col("id"), col("name").as("district"))
-
-      val orgBlockDF = stateOrgExplodedDF
-        .join(locationDF, col("exploded_location") === locationDF.col("id") && locationDF.col("type") === "block")
-        .select(stateOrgExplodedDF.col("id"), col("name").as("block"))
-
-      val stateOrgLocationDF = organisationDF
-        .join(orgStateDF, Seq("id"))
-        .join(orgDistrictDF, Seq("id"), "left")
-        .join(orgBlockDF, Seq("id"), "left")
-        .select(organisationDF.col("id").as("orgid"), col("orgname"),
-          col("externalid"), col("isrootorg"), col("state_name"), col("district"), col("block"))
-
-      // exclude the custodian user != custRootOrgId
-      // join userDf to user_orgDF and then join with OrgDF to get orgname and orgcode ( filter isrootorg = false)
-
-      val subOrgDF = userOrgDF
-        .join(stateOrgLocationDF, userOrgDF.col("organisationid") === stateOrgLocationDF.col("orgid")
-          && stateOrgLocationDF.col("isrootorg").equalTo(false))
-        .dropDuplicates(Seq("userid"))
-        .select(col("userid"), stateOrgLocationDF.col("*"))
-
-      val stateUserLocationResolvedDF = userDF.filter(col("rootorgid") =!= lit(custRootOrgId))
-        .join(subOrgDF, Seq("userid"), "left")
-        .select(
-          userDF.col("*"),
-          subOrgDF.col("orgname").as("declared-school-name"),
-          subOrgDF.col("externalid").as("declared-school-udise-code"),
-          subOrgDF.col("state_name"),
-          subOrgDF.col("district"),
-          subOrgDF.col("block"))
-        .withColumn("usersignintype", lit("Validated"))
-      // .drop(col("locationids"))
-
-      val stateUserDF = stateUserLocationResolvedDF.as("state_user")
-        .join(externalIdentityDF, externalIdentityDF.col("idtype") === col("state_user.rootorgid")
-          && externalIdentityDF.col("provider") === col("state_user.rootorgid")
-          && externalIdentityDF.col("userid") === col("state_user.userid"), "left")
-        .select(col("state_user.*"), externalIdentityDF.col("externalid").as("declared-ext-id"), col("rootorgid").as("user_channel"))
-      stateUserDF
+      userDF.select(col("profileusertype"), col("userid")).rdd.map{f =>
+        if (null != f.getString(0)) {
+          val profileUserType = JSONUtils.deserialize[Map[String, String]](f.getString(0))
+          val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
+          val usertype = if (!usertypeList.isEmpty) usertypeList.head else ""
+          val usersubtypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
+          val usersubtype = if (!usersubtypeList.isEmpty) usersubtypeList.head else ""
+          ProfileUserType(f.getString(1), usertype, usersubtype)
+        } else ProfileUserType(f.getString(1),"","")
+      }.toDF()
     }
 
     def populateToRedis(dataFrame: DataFrame): Unit = {
