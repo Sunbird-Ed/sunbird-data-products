@@ -197,7 +197,7 @@ object UserCacheIndexer extends Serializable {
      val userLocationIdDF =  userDF.select(col("profilelocation"), col("userid")).rdd.map(f => {
         var locList: List[String] = List()
         val userid = f.getString(1)
-        if (null != f.getString(0) && !f.getString(0).isEmpty) {
+        if (null != f.getString(0) && f.getString(0).nonEmpty) {
           val loc = JSONUtils.deserialize[List[Map[String, String]]](f.getString(0))
           val stateIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("state")).map(f => f.getOrElse("id", ""))
           val stateId = if (!stateIdList.isEmpty) stateIdList.head else ""
@@ -271,7 +271,7 @@ object UserCacheIndexer extends Serializable {
       import sqlContext.implicits._
 
       userDF.select(col("profileusertype"), col("userid")).rdd.map{f =>
-        if (null != f.getString(0) && !f.getString(0).isEmpty) {
+        if (null != f.getString(0) && f.getString(0).nonEmpty) {
           val profileUserType = JSONUtils.deserialize[Map[String, String]](f.getString(0))
           val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
           val usertype = if (!usertypeList.isEmpty) usertypeList.head else ""
