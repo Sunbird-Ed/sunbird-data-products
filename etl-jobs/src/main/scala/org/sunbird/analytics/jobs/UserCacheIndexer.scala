@@ -41,7 +41,9 @@ object UserCacheIndexer extends Serializable {
         .config("spark.redis.port", config.getString("redis.port"))
         .config("spark.redis.db", redisIndex)
         .config("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
-        .config("spark.cassandra.read.timeoutMS", "300000")
+        .config("spark.cassandra.read.timeoutMS", config.getString("cassandra.read.timeoutMS"))
+        .config("spark.cassandra.query.retry.count", config.getString("cassandra.query.retry.count"))
+        .config("spark.cassandra.input.consistency.level", config.getString("cassandra.input.consistency.level"))
         .config("spark.redis.scan.count", config.getString("redis.scan.count"))
         .getOrCreate()
 
@@ -86,8 +88,7 @@ object UserCacheIndexer extends Serializable {
         .select(col("userid"), col("organisationid"))
 
       val organisationDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "organisation").option("keyspace", sunbirdKeyspace).load()
-        .select(col("id"), col("orgname"), col("channel"), col("externalid"),
-          col("locationids"), col("isrootorg"))
+        .select(col("id"), col("orgname"))
 
       /**
         * Get a union of RootOrg and SubOrg information for a User
