@@ -13,6 +13,7 @@ import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisC
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 
 
@@ -78,7 +79,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
     val outputDir = "response-exhaust"
     val batch1 = "batch-001"
-    val filePath = UserInfoExhaustJob.getFilePath(batch1)
+    val filePath = UserInfoExhaustJob.getFilePath(batch1, UUID.randomUUID().toString)
     val jobName = UserInfoExhaustJob.jobName()
     implicit val responseExhaustEncoder = Encoders.product[UserInfoExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")

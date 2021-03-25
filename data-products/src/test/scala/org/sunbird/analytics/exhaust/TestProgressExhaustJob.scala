@@ -1,8 +1,7 @@
 package org.sunbird.analytics.exhaust
 
 import java.text.SimpleDateFormat
-import java.util.Calendar
-
+import java.util.{Calendar, UUID}
 import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
@@ -78,7 +77,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
     val outputDir = "progress-exhaust"
     val batch1 = "batch-001"
-    val filePath = ProgressExhaustJob.getFilePath(batch1)
+    val filePath = ProgressExhaustJob.getFilePath(batch1, UUID.randomUUID().toString)
     val jobName = ProgressExhaustJob.jobName()
 
     implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]

@@ -110,7 +110,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
-    val result: List[CollectionBatchResponse] = processBatches(userEnrolmentDF, collectionBatches, storageConfig);
+    val result: List[CollectionBatchResponse] = processBatches(userEnrolmentDF, collectionBatches, storageConfig, None);
     result.foreach(f => JobLogger.log("Batch Status", Some(Map("status" -> f.status, "batchId" -> f.batchId, "executionTime" -> f.execTime, "message" -> f.statusMsg, "location" -> f.file)), INFO));
     Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase() == "SUCCESS")))
   }
@@ -149,7 +149,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     markRequestAsProcessing(request)
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
     val collectionBatches = getCollectionBatches(collectionConfig.batchId, collectionConfig.batchFilter, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
-    val result = CommonUtil.time(processBatches(userEnrolmentDF, collectionBatches, storageConfig));
+    val result = CommonUtil.time(processBatches(userEnrolmentDF, collectionBatches, storageConfig, Some(request.request_id)));
     val response = result._2;
     val failedBatches = response.filter(p => p.status.equals("FAILED"));
     if (response.size == 0) {
@@ -201,7 +201,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     }
   }
 
-  def processBatches(userEnrolmentDF: DataFrame, collectionBatches: List[CollectionBatch], storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
+  def processBatches(userEnrolmentDF: DataFrame, collectionBatches: List[CollectionBatch], storageConfig: StorageConfig, requestId: Option[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
 
     for (batch <- filterCollectionBatches(collectionBatches)) yield {
       
@@ -214,7 +214,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       try {
         val res = CommonUtil.time(processBatch(filteredDF, batch));
         val reportDF = res._2;
-        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
+        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId, requestId.getOrElse("")), Option(Map("header" -> "true")), None);
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1);
       } catch {
         case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage, 0);
@@ -249,8 +249,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   /** START - Utility Methods */
 
-  def getFilePath(batchId: String)(implicit config: JobConfig): String = {
-    getReportPath() + batchId + "_" + getReportKey() + "_" + getDate()
+  def getFilePath(batchId: String, requestId: String)(implicit config: JobConfig): String = {
+    val requestIdSubKey = requestId.substring(0, Math.min(requestId.length, 8)) // Max limiting to 8 char.
+    getReportPath() +  batchId + "_" + requestIdSubKey + "_" + getReportKey() + "_" + getDate()
   }
 
   def getDate(): String = {
