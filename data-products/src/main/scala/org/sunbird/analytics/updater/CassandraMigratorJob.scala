@@ -2,8 +2,8 @@ package org.sunbird.analytics.updater
 
 import com.datastax.spark.connector.cql.{CassandraConnector, CassandraConnectorConf}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.functions.col
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
@@ -68,7 +68,7 @@ object CassandraMigratorJob extends optional.Application with IJob {
             session.execute(s"""TRUNCATE TABLE $keyspaceName.$tableName""")
           }
         dataDf.write.format(cassandraFormat).options(Map("table" -> tableName,
-          "keyspace" -> keyspaceName, "cluster" -> "MigrateCluster"))
+          "keyspace" -> keyspaceName, "cluster" -> "MigrateCluster")).option("spark.cassandra.output.ignoreNulls", true)
           .mode("append")
           .save()
       }
