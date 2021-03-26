@@ -250,8 +250,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   /** START - Utility Methods */
 
   def getFilePath(batchId: String, requestId: String)(implicit config: JobConfig): String = {
-    val requestIdSubKey = requestId.substring(0, Math.min(requestId.length, 8)) // Max limiting to 8 char.
-    getReportPath() +  batchId + "_" + requestIdSubKey + "_" + getReportKey() + "_" + getDate()
+    getReportPath() +  batchId + "_" + requestId.takeRight(4) + "_" + getReportKey() + "_" + getDate()
   }
 
   def getDate(): String = {

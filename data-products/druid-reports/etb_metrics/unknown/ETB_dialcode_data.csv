@@ -1,0 +1,5 @@
+TextBook ID,Medium,Grade,Subject,TextBook Name,Status,nodeType,l1Name,l2Name,l3Name,l4Name,l5Name,dialcode,noOfContent,sum(scans)
+do_11298391390121984011,English,"Class 1,Class 2",Mathematics,Kayal_Book,Live,"","","","","","","",0,""
+do_11298391390121984011,English,"Class 1,Class 2",Mathematics,Kayal_Book,Live,"",Unit1,"","","","","",0,""
+do_11298391390121984011,English,"Class 1,Class 2",Mathematics,Kayal_Book,Live,"",Unit2,"","","","","",0,""
+do_11298391390121984011,English,"Class 1,Class 2",Mathematics,Kayal_Book,Live,"",u3,"","","","","",0,""

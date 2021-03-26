@@ -77,7 +77,8 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
     val outputDir = "progress-exhaust"
     val batch1 = "batch-001"
-    val filePath = ProgressExhaustJob.getFilePath(batch1, UUID.randomUUID().toString)
+    val requestId = "37564CF8F134EE7532F125651B51D17F"
+    val filePath = ProgressExhaustJob.getFilePath(batch1, requestId.takeRight(4))
     val jobName = ProgressExhaustJob.jobName()
 
     implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
