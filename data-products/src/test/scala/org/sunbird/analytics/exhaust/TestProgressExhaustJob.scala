@@ -170,6 +170,20 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     hierarchyModuleData.map(f => f.getString(4)) should contain allElementsOf List(null)
   }
 
+  it should "validate the report path" in {
+    val batch1 = "batch-001"
+    val requestId = "37564CF8F134EE7532F125651B51D17F"
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    val onDemandModeFilepath = ProgressExhaustJob.getFilePath(batch1, requestId)
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+    onDemandModeFilepath should be(s"progress-exhaust/$requestId/batch-001_progress_$reportDate")
+
+    val standAloneModeFilePath = ProgressExhaustJob.getFilePath(batch1, "")
+    standAloneModeFilePath should be(s"progress-exhaust/batch-001_progress_$reportDate")
+  }
+
   def getDate(pattern: String): SimpleDateFormat = {
     new SimpleDateFormat(pattern)
   }
