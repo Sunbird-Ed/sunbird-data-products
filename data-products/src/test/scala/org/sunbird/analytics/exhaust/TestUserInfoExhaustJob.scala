@@ -13,7 +13,6 @@ import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisC
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
 
-import java.util.UUID
 import scala.collection.JavaConverters._
 
 
