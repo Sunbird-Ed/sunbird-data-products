@@ -100,6 +100,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
         when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0
           || col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       .select(col("batchid"), col("userid"), col("courseid"), col("enrolleddate"), col("completedon"), col("status"), col("isCertified"))
+      .persist()
   }
 
   def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
