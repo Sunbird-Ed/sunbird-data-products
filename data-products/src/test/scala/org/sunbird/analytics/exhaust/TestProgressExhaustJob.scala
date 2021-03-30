@@ -1,10 +1,8 @@
 package org.sunbird.analytics.exhaust
 
-import java.text.SimpleDateFormat
-import java.util.{Calendar, UUID}
 import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
+import org.ekstep.analytics.framework.util.{HTTPClient, HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.exhaust.collection.{AssessmentData, CollectionBatch, CourseData, ProgressExhaustJob}
@@ -12,6 +10,8 @@ import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
 import redis.embedded.RedisServer
 
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import scala.collection.JavaConverters._
 case class ProgressExhaustReport(`Collection Id`: String, `Collection Name`: String, `Batch Id`: String, `Batch Name`: String, `User UUID`: String, `State`: String, `District`: String, `Org Name`: String,
                                  `School Id`: String, `School Name`: String, `Block Name`: String, `Declared Board`: String, `Enrolment Date`: String, `Completion Date`: String, `Certificate Status`: String, `Progress`: String,
@@ -186,5 +186,37 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   def getDate(pattern: String): SimpleDateFormat = {
     new SimpleDateFormat(pattern)
+  }
+
+
+  it should "Generate a report for StandAlone Mode" in {
+   implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"standalone","batchFilters":["TPD"],"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel"],"limit":10}},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    ProgressExhaustJob.execute()
+    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
+    val batch1 = "batch-001"
+    val filePath = ProgressExhaustJob.getFilePath(batch1, "")
+    implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
+    val batch1Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
+    println("batch1Results" + batch1Results)
+
+
+    batch1Results.size should be (4)
+    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
+    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
+    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
+    batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
+    batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
+    batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
+    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(null)
+    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
+    batch1Results.map(f => f.`Cluster Name`).toList should contain atLeastOneElementOf List("CLUSTER1")
+    batch1Results.map(f => f.`User Type`).toList should contain atLeastOneElementOf List("administrator")
+    batch1Results.map(f => f.`User Sub Type`).toList should contain atLeastOneElementOf List("deo")
   }
 }
