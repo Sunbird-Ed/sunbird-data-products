@@ -14,7 +14,7 @@ class TestRedisUtil extends BaseSpec {
     redisServer = new RedisServer(6341)
     redisServer.start()
     val redisConnect = new RedisConnect("localhost", 6341)
-    jedis = redisConnect.getConnection(0, 10000)
+    jedis = redisConnect.getConnection
     setupRedisData(jedis)
   }
 
