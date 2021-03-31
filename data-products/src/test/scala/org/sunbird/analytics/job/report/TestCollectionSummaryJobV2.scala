@@ -58,7 +58,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
   it should "generate the report for all the batches" in {
     initializeDefaultMockData()
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel","status","keywords"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel","status","keywords","createdFor","medium", "subject"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
     reportData.count() should be(3)
@@ -74,6 +74,11 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch1.select("channel").collect().map(_ (0)).toList.contains("013016492159606784174") should be(true)
     batch1.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch1.select("startdate").collect().map(_ (0)).toList.contains("2020-05-26") should be(true)
+    batch1.select("createdFor").collect().map(_(0)).map(x => {
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("013016492159606784174")
+    })
+    batch1.select("medium").collect().map(_(0)).toList.mkString("") should be("null")
+    batch1.select("subject").collect().map(_(0)).toList.mkString("") should be("null")
 
     val batch2 = reportData.filter(col("batchid") === "batch-0130320389509939204" && col("courseid") === "do_112636984058314752121")
     batch2.select("state").collect().map(_ (0)).toList.contains("GPPS") should be(true)
@@ -87,7 +92,17 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch2.select("channel").collect().map(_ (0)).toList.contains("b00bc992ef25f1a9a8d63291e20efc8d") should be(true)
     batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-30") should be(true)
+    batch2.select("createdFor").collect().map(_(0)).map(x => {
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("0123653943740170242")
+    })
 
+    batch2.select("medium").collect().map(_(0)).map(x => {
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("English")
+    })
+
+    batch2.select("subject").collect().map(_(0)).map(x => {
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("English")
+    })
     val batch3 = reportData.filter(col("batchid") === "batch-01303150537737011211" && col("courseid") === "do_1130314965721088001129")
     batch3.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
     batch3.select("district").collect().map(_ (0)).toList.contains("BG") should be(true)
@@ -99,6 +114,15 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch3.select("channel").collect().map(_ (0)).toList.contains("b00bc992ef25f1a9a8d63291e20efc8d") should be(true)
     batch3.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch3.select("startdate").collect().map(_ (0)).toList.contains("2020-05-29") should be(true)
+    batch3.select("createdFor").collect().map(_(0)).map(x => {
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("ORG_001")
+    })
+    batch3.select("medium").collect().map(_(0)).map(x => {
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("Kannada")
+    })
+    batch3.select("subject").collect().map(_(0)).map(x => {
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("Physics")
+    })
     CollectionSummaryJobV2.saveToBlob(reportData, jobConfig)
   }
 

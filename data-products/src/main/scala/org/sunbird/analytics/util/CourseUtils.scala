@@ -27,7 +27,7 @@ case class CourseInfo(channel: String, identifier: String, name: String)
 
 case class CourseResponse(result: CourseResult, responseCode: String)
 case class CourseResult(count: Int, content: List[CourseBatchInfo])
-case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo], organisation: List[String], status: String, keywords:List[String])
+case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo], organisation: List[String], status: String, keywords:List[String], createdFor: List[String], medium: List[String], subject: List[String])
 case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
@@ -164,28 +164,6 @@ object CourseUtils {
       JobLogger.log(s"Merge report script failed with exit code $mergeReportExitCode", None, ERROR)
       throw new Exception(s"Merge report script failed with exit code $mergeReportExitCode")
     }
-  }
-
-  def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
-    implicit val sqlContext = new SQLContext(spark.sparkContext)
-    val apiUrl = Constants.COMPOSITE_SEARCH_URL
-    val request =
-      s"""{
-         |	"request": {
-         |		"filters": {
-         |      "identifier": "$courseId"
-         |		},
-         |		"sort_by": {
-         |			"createdOn": "desc"
-         |		},
-         |		"limit": 10000,
-         |		"fields": ["framework", "identifier", "name", "channel", "batches"]
-         |	}
-         |}""".stripMargin
-    val response = RestUtil.post[CourseResponse](apiUrl, request)
-    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
-      response.result.content.head
-    } else CourseBatchInfo("","","","",List(), List(), "", List())
   }
 
   def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
