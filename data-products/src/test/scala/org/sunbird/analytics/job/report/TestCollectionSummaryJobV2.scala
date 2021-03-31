@@ -105,7 +105,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     })
 
     batch2.select("subject").collect().map(_(0)).map(x => {
-      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("subject")
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("English")
     })
 
 
