@@ -31,6 +31,7 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
 
   override def afterAll() {
     super.afterAll()
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, "sourcing")
     EmbeddedPostgresql.dropTable(programTable)
     EmbeddedPostgresql.dropTable(nominationTable)
     EmbeddedPostgresql.close()

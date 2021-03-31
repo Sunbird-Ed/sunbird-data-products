@@ -19,6 +19,7 @@ trait BaseReportsJob {
 
   }
 
+  // $COVERAGE-OFF$ Disabling scoverage
   def getReportingFrameworkContext()(implicit fc: Option[FrameworkContext]): FrameworkContext = {
     fc match {
       case Some(value) => {
@@ -77,6 +78,7 @@ trait BaseReportsJob {
       sc.hadoopConfiguration.set("fs.azure.account.keyprovider." + AppConf.getConfig(reportsStorageAccountKey) + ".blob.core.windows.net", "org.apache.hadoop.fs.azure.SimpleKeyProvider")
     }
   }
+  // $COVERAGE-ON$ Enabling scoverage for all other functions
 
   def getStorageConfig(container: String, key: String, config: JobConfig = JSONUtils.deserialize[JobConfig]("""{}""")): org.ekstep.analytics.framework.StorageConfig = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())

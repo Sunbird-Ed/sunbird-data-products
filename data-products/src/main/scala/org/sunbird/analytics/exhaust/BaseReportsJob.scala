@@ -43,10 +43,6 @@ trait BaseReportsJob {
 
   }
 
-  def closeSparkSession()(implicit sparkSession: SparkSession) {
-    sparkSession.stop();
-  }
-
   def setReportsStorageConfiguration(config: JobConfig)(implicit spark: SparkSession) {
     
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());

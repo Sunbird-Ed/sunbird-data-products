@@ -28,6 +28,11 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
     EmbeddedCassandra.loadData("src/test/resources/reports/reports_textbook_data.cql")
   }
 
+  override def afterAll() : Unit = {
+    super.afterAll()
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, "sourcing")
+  }
+
   it should "execute generate SourcingMetrics report" in {
     implicit val sc = spark.sparkContext
     implicit val mockFc = mock[FrameworkContext]
