@@ -165,29 +165,7 @@ object CourseUtils {
       throw new Exception(s"Merge report script failed with exit code $mergeReportExitCode")
     }
   }
-
-  def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
-    implicit val sqlContext = new SQLContext(spark.sparkContext)
-    val apiUrl = Constants.COMPOSITE_SEARCH_URL
-    val request =
-      s"""{
-         |	"request": {
-         |		"filters": {
-         |      "identifier": "$courseId"
-         |		},
-         |		"sort_by": {
-         |			"createdOn": "desc"
-         |		},
-         |		"limit": 10000,
-         |		"fields": ["framework", "identifier", "name", "channel", "batches"]
-         |	}
-         |}""".stripMargin
-    val response = RestUtil.post[CourseResponse](apiUrl, request)
-    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
-      response.result.content.head
-    } else CourseBatchInfo("","","","",List(), List(), "", List(), List(), List(), List())
-  }
-
+  
   def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
     val apiUrl = Constants.COMPOSITE_SEARCH_URL
     val response = RestUtil.post[CourseResponse](apiUrl, query)
