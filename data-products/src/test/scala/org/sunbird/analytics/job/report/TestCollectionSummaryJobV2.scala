@@ -62,7 +62,6 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
     reportData.count() should be(3)
-    println("collection summary v2")
     reportData.show(100, false)
     val batch1 = reportData.filter(col("batchid") === "batch-0130293763489873929" && col("courseid") === "do_1130293726460805121168")
     batch1.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
@@ -79,7 +78,6 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch1.select("createdFor").collect().map(_(0)).map(x => {
       x.asInstanceOf[mutable.WrappedArray[String]](0) should be("013016492159606784174")
     })
-    println("batch1.select(\"medium\").collect().map(_(0)).toList.mkString(\"\")" + batch1.select("medium").collect().map(_(0)).toList.mkString(""))
     batch1.select("medium").collect().map(_(0)).toList.mkString("") should be("null")
     batch1.select("subject").collect().map(_(0)).toList.mkString("") should be("null")
 
