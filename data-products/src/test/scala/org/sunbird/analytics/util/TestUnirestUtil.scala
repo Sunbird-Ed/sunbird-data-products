@@ -13,7 +13,7 @@ class TestUnirestUtil extends BaseSpec {
     try {
       UnirestUtil.post(url, JSONUtils.serialize(request))
     } catch {
-      case ex: UnirestException => println("exmess: " + ex.getMessage)
+      case ex: UnirestException => Console.println(s"Invalid Request for url: ${url}. The job failed with: " + ex.getMessage)
     }
   }
 }

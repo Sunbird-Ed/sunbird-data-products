@@ -169,20 +169,24 @@ trait OnDemandExhaustJob {
     val localPath = tempDir + path.getFileName;
     fc.getHadoopFileUtil().delete(conf, tempDir);
     val filePrefix = storageConfig.store.toLowerCase() match {
+      // $COVERAGE-OFF$ Disabling scoverage
       case "s3" =>
         CommonUtil.getS3File(storageConfig.container, "");
       case "azure" =>
         CommonUtil.getAzureFile(storageConfig.container, "", storageConfig.accountKey.getOrElse("azure_storage_key"))
+      // $COVERAGE-ON$ for case: local
       case _ =>
         storageConfig.fileName
     }
     val objKey = url.replace(filePrefix, "");
     if (storageConfig.store.equals("local")) {
       fc.getHadoopFileUtil().copy(filePrefix, localPath, conf)
-    } else {
+    }
+    // $COVERAGE-OFF$ Disabling scoverage
+    else {
       storageService.download(storageConfig.container, objKey, tempDir, Some(false));
     }
-
+    // $COVERAGE-ON$
     val zipPath = localPath.replace("csv", "zip")
     val zipObjectKey = objKey.replace("csv", "zip")
     val zipLocalObjKey = url.replace("csv", "zip")
@@ -198,9 +202,12 @@ trait OnDemandExhaustJob {
     })
     val resultFile = if (storageConfig.store.equals("local")) {
       fc.getHadoopFileUtil().copy(zipPath, zipLocalObjKey, conf)
-    } else {
+    }
+    // $COVERAGE-OFF$ Disabling scoverage
+    else {
       storageService.upload(storageConfig.container, zipPath, zipObjectKey, Some(false), Some(0), Some(3), None);
     }
+    // $COVERAGE-ON$
     fc.getHadoopFileUtil().delete(conf, tempDir);
     resultFile;
   }

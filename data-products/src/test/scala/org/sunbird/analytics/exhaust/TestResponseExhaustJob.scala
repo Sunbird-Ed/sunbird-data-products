@@ -27,7 +27,7 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   implicit var spark: SparkSession = _
   var redisServer: RedisServer = _
   var jedis: Jedis = _
-
+  val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -43,10 +43,10 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   override def afterAll() : Unit = {
     super.afterAll()
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
     redisServer.stop()
     spark.close()
 
-    println("******** closing the redis connection **********" + redisServer.isActive)
     EmbeddedCassandra.close()
     EmbeddedPostgresql.close()
   }
@@ -78,7 +78,6 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     ResponseExhaustJob.execute()
 
-    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
     val outputDir = "response-exhaust"
     val batch1 = "batch-001"
     val filePath = getFilePath(batch1)
@@ -116,7 +115,6 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
       pResponse.getString("iteration") should be ("0")
     }
 
-    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
 
   it should "execute main method" in {
@@ -126,8 +124,6 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ResponseExhaustJob","modelParams":{"mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"127.0.0.1","sparkUserDbRedisIndex":"12", "sparkUserDbRedisPort":"6341","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"", "storageContainer": ""},"parallelization":8,"appName":"Response Exhaust"}"""
     ResponseExhaustJob.main(strConfig)
 
-    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
-    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
 
   def getFilePath(batchId: String)(implicit config: JobConfig): String = {

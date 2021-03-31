@@ -271,6 +271,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   it should "execute the update and save request method" in {
     implicit val fc = new FrameworkContext()
     val jobRequest = JobRequest("'do_1131350140968632321230_batch-001:channel-01'", "123", "userinfo-exhaust", "SUBMITTED", """{\"batchId\": \"batch-001\"}""", "user-002", "channel-01", System.currentTimeMillis(), None, None, None, None, Option(""), Option(0), Option("test-123"))
+    val req = new JobRequest()
     val jobRequestArr = Array(jobRequest)
     val storageConfig = StorageConfig("local", "", outputLocation)
     implicit val conf = spark.sparkContext.hadoopConfiguration
