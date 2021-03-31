@@ -62,7 +62,6 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
     reportData.count() should be(3)
-    reportData.show(100, false)
     val batch1 = reportData.filter(col("batchid") === "batch-0130293763489873929" && col("courseid") === "do_1130293726460805121168")
     batch1.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
     batch1.select("district").collect().map(_ (0)).toList.contains("BG") should be(true)
