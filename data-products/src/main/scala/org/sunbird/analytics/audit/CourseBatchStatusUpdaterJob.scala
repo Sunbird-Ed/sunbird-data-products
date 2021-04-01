@@ -143,7 +143,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
            |""".stripMargin
 
       val requestUrl = s"${
-        modelParams.getOrElse("sparkElasticsearchConnectionHost", "http: //localhost:9200")
+        modelParams.getOrElse("sparkElasticsearchConnectionHost", "http://localhost:9200")
       }/course-batch/_doc/${batch("batchid")}/_update"
       RestUtil.post[Map[String, AnyRef]](requestUrl, body)
     })

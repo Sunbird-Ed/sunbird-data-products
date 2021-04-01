@@ -46,7 +46,8 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     val objectKey = AppConf.getConfig("admin.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey);
     
-    def name(): String = "StateAdminReportJob"
+  //$COVERAGE-OFF$ Disabling scoverage for main and execute method
+  def name(): String = "StateAdminReportJob"
 
     def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
@@ -71,7 +72,8 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         JobLogger.end("ExternalIdReportJob zip completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
     }
     
-    def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
+  // $COVERAGE-ON$ Enabling scoverage for other methods
+   def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
         import sparkSession.implicits._
         val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
         //loading user_declarations table details based on declared values and location details and appending org-external-id if present
@@ -127,9 +129,11 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         JobLogger.log(s"User self-declared detail persona zip report command:: $userDeclaredDetailReportCommand", None, INFO)
         val userDeclaredDetailReportExitCode = ScriptDispatcher.dispatch(userDeclaredDetailReportCommand)
         
+      //$COVERAGE-OFF$ Disabling scoverage for if condition
         if (userDeclaredDetailReportExitCode == 0) {
             JobLogger.log(s"Self-Declared user level zip generation::Success", None, INFO)
-        } else {
+        }  // $COVERAGE-ON$ Enabling scoverage for else condition
+        else {
             JobLogger.log(s"Self-Declared user level zip generation failed with exit code $userDeclaredDetailReportExitCode", None, ERROR)
             throw new Exception(s"Self-Declared user level zip generation failed with exit code $userDeclaredDetailReportExitCode")
         }
@@ -380,10 +384,4 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
 
   }
 
-}
-
-object StateAdminReportJobTest {
-    def main(args: Array[String]): Unit = {
-        StateAdminReportJob.main("""{"model":"Test"}""")
-    }
 }
