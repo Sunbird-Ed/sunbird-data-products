@@ -3,8 +3,9 @@ package org.sunbird.analytics.job.report
 import org.apache.spark.sql.functions.{udf, _}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
-import org.ekstep.analytics.framework.util.JSONUtils
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
+import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.job.report.CollectionSummaryJob.saveToBlob
 import org.sunbird.analytics.util.UserData
@@ -95,6 +96,12 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val data = CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData)
     saveToBlob(data, jobConfig)
+
+    val modelParams = jobConfig.modelParams.get
+    val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]
+    val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
+    println("reportPath: " + reportPath + " " + objectKey)
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, objectKey + reportPath)
   }
 
 }

@@ -5,7 +5,8 @@ import java.io.File
 import org.apache.spark.sql.functions.{udf, _}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
-import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.util.UserData
@@ -47,6 +48,12 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     userDF = spark.read.json("src/test/resources/collection-summary/user_data.json")
       .cache()
 
+  }
+
+  override def afterAll() : Unit = {
+    super.afterAll()
+    val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, objectKey + "collection-summary-reports-v2/")
   }
 
   val convertMethod = udf((value: mutable.WrappedArray[String]) => {
