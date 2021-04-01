@@ -80,7 +80,8 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     val outputDir = "response-exhaust"
     val batch1 = "batch-001"
-    val filePath = getFilePath(batch1)
+    val requestId = "37564CF8F134EE7532F125651B51D17F"
+    val filePath = ResponseExhaustJob.getFilePath(batch1, requestId)
     val jobName = ResponseExhaustJob.jobName()
 
     implicit val responseExhaustEncoder = Encoders.product[ResponseExhaustReport]
@@ -110,7 +111,7 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     while(pResponse.next()) {
       pResponse.getString("err_message") should be ("")
       pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
-      pResponse.getString("download_urls") should be (s"{reports/response-exhaust/batch-001_response_${getDate()}.zip}")
+      pResponse.getString("download_urls") should be (s"{reports/response-exhaust/$requestId/batch-001_response_${getDate()}.zip}")
       pResponse.getString("dt_file_created") should be (null)
       pResponse.getString("iteration") should be ("0")
     }
@@ -126,9 +127,6 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   }
 
-  def getFilePath(batchId: String)(implicit config: JobConfig): String = {
-    ResponseExhaustJob.getReportPath() + batchId + "_" + ResponseExhaustJob.getReportKey() + "_" + getDate()
-  }
 
   def getDate(): String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));

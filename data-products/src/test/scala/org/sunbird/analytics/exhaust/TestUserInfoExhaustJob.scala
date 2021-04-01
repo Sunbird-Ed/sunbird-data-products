@@ -79,7 +79,8 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     val outputDir = "response-exhaust"
     val batch1 = "batch-001"
-    val filePath = UserInfoExhaustJob.getFilePath(batch1)
+    val requestId = "37564CF8F134EE7532F125651B51D17F"
+    val filePath = UserInfoExhaustJob.getFilePath(batch1, requestId)
     val jobName = UserInfoExhaustJob.jobName()
     implicit val responseExhaustEncoder = Encoders.product[UserInfoExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
@@ -108,7 +109,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
       pResponse.getString("status") should be ("SUCCESS")
       pResponse.getString("err_message") should be ("")
       pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
-      pResponse.getString("download_urls") should be (s"{reports/userinfo-exhaust/batch-001_userinfo_${getDate()}.zip}")
+      pResponse.getString("download_urls") should be (s"{reports/userinfo-exhaust/$requestId/batch-001_userinfo_${getDate()}.zip}")
       pResponse.getString("dt_file_created") should be (null)
       pResponse.getString("iteration") should be ("0")
     }
