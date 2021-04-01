@@ -24,6 +24,7 @@ import org.ekstep.analytics.framework.Dispatcher
 
 object CollectionReconciliationJob extends optional.Application with IJob with BaseReportsJob {
 
+  // $COVERAGE-OFF$ Disabling scoverage because the job will be deprecated
   implicit val className: String = "org.sunbird.analytics.audit.CollectionReconciliationJob"
   val jobName = "CollectionReconciliationJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra";

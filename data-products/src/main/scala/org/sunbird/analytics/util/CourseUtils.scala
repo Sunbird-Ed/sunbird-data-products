@@ -1,24 +1,20 @@
 package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, lit, to_date}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
-import org.joda.time.format.DateTimeFormat
-import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.immutable.List
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Future, _}
 import scala.concurrent.duration._
+import scala.concurrent.{Future, _}
 
 //Getting live courses from compositesearch
 case class CourseDetails(result: Result)
@@ -33,22 +29,6 @@ case class BatchInfo(batchId: String, startDate: String, endDate: String)
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), maskedemail: Option[String] = Option(""), maskedphone: Option[String] = Option(""),
                     block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""))
-
-object UserCache {
-  val userid = "userid"
-  val userchannel = "userchannel"
-  val firstname = "firstname"
-  val lastname = "lastname"
-  val maskedemail = "maskedemail"
-  val maskedphone = "maskedphone"
-  val state = "state"
-  val district = "district"
-  val block = "block"
-  val externalid = "externalid"
-  val schoolname = "schoolname"
-  val schooludisecode = "schooludisecode"
-  val orgname = "orgname"
-}
 
 trait CourseReport {
   def getCourse(config: Map[String, AnyRef])(sc: SparkContext): DataFrame
@@ -165,61 +145,6 @@ object CourseUtils {
       throw new Exception(s"Merge report script failed with exit code $mergeReportExitCode")
     }
   }
-
-  def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
-    implicit val sqlContext = new SQLContext(spark.sparkContext)
-    val apiUrl = Constants.COMPOSITE_SEARCH_URL
-    val request =
-      s"""{
-         |	"request": {
-         |		"filters": {
-         |      "identifier": "$courseId"
-         |		},
-         |		"sort_by": {
-         |			"createdOn": "desc"
-         |		},
-         |		"limit": 10000,
-         |		"fields": ["framework", "identifier", "name", "channel", "batches"]
-         |	}
-         |}""".stripMargin
-    val response = RestUtil.post[CourseResponse](apiUrl, request)
-    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
-      response.result.content.head
-    } else CourseBatchInfo("","","","",List(), List(), "", List())
-  }
-
-  def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
-    val apiUrl = Constants.COMPOSITE_SEARCH_URL
-    val response = RestUtil.post[CourseResponse](apiUrl, query)
-    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
-      response.result.content
-    } else List[CourseBatchInfo]()
-  }
-
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String], sunbirdCoursesKeyspace: String)
-                      (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    implicit val sqlContext: SQLContext = spark.sqlContext
-    val courseBatchDF = if (batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .filter(batch => batchList.contains(batch.getString(1)))
-        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
-    }
-    else {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
-    }
-
-    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
-
-    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.toDF()
-    JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
-    courseBatchDF.unpersist(true)
-    activeBatchList
-  }
-
 
   def getCourseInfo(courseIds: List[String], request: Option[Map[String, AnyRef]], maxSize: Int): List[CourseBatchInfo] = {
     if (courseIds.nonEmpty) {

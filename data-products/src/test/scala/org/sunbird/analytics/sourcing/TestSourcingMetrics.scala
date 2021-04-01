@@ -9,7 +9,7 @@ import io.circe.Json
 import io.circe.parser.parse
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.{Encoders, SQLContext, SparkSession}
-import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, StorageConfig}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
@@ -26,6 +26,11 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
     super.beforeAll()
     spark = getSparkSession()
     EmbeddedCassandra.loadData("src/test/resources/reports/reports_textbook_data.cql")
+  }
+
+  override def afterAll() : Unit = {
+    super.afterAll()
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, "sourcing")
   }
 
   it should "execute generate SourcingMetrics report" in {

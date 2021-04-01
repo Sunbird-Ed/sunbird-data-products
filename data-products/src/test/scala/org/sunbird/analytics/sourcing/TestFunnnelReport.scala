@@ -8,6 +8,7 @@ import ing.wbaa.druid._
 import io.circe.Json
 import io.circe.parser.parse
 import org.apache.spark.sql.SparkSession
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
@@ -31,6 +32,7 @@ class TestFunnnelReport extends SparkSpec with Matchers with MockFactory {
 
   override def afterAll() {
     super.afterAll()
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, "sourcing")
     EmbeddedPostgresql.dropTable(programTable)
     EmbeddedPostgresql.dropTable(nominationTable)
     EmbeddedPostgresql.close()
