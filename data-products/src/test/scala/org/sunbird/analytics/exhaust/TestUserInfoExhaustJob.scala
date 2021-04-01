@@ -283,7 +283,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   it should "generate the report without modelParams present" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
-    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'channel-01', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
 
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob","parallelization":8,"appName":"UserInfo Exhaust"}"""
@@ -291,6 +291,43 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     implicit val config = jobConfig
 
     UserInfoExhaustJob.execute()
+
+    val outputDir = "response-exhaust"
+    val batch1 = "batch-001"
+    val requestId = "37564CF8F134EE7532F125651B51D17F"
+    val filePath = UserInfoExhaustJob.getFilePath(batch1, requestId)
+    val jobName = UserInfoExhaustJob.jobName()
+    implicit val responseExhaustEncoder = Encoders.product[UserInfoExhaustReport]
+    val batch1Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv")
+      .as[UserInfoExhaustReport]
+      .collectAsList()
+      .asScala
+
+    batch1Results.size should be (4)
+    batch1Results.map {res => res.`Collection Id`}.toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+    batch1Results.map {res => res.`Collection Name`}.toList should contain atLeastOneElementOf List("24 aug course")
+    batch1Results.map {res => res.`Batch Name`}.toList should contain atLeastOneElementOf List("Basic Java")
+    batch1Results.map {res => res.`Batch Id`}.toList should contain atLeastOneElementOf List("BatchId_batch-001")
+    batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
+    batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Karnataka", "Andhra Pradesh", "Delhi")
+    batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
+    batch1Results.map {res => res.`Org Name`}.toList should contain atLeastOneElementOf List("Pre-prod Custodian Organization")
+    batch1Results.map {res => res.`Block`}.toList should contain atLeastOneElementOf List("BLOCK1")
+    batch1Results.map {res => res.`Cluster`}.toList should contain atLeastOneElementOf List("CLUSTER1")
+    batch1Results.map {res => res.`User Type`}.toList should contain atLeastOneElementOf List("administrator")
+    batch1Results.map {res => res.`User Sub Type`}.toList should contain atLeastOneElementOf List("deo")
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
+
+    while(pResponse.next()) {
+      pResponse.getString("status") should be ("SUCCESS")
+      pResponse.getString("err_message") should be ("")
+      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
+      pResponse.getString("download_urls") should be (s"{reports/userinfo-exhaust/$requestId/batch-001_userinfo_${getDate()}.zip}")
+      pResponse.getString("dt_file_created") should be (null)
+      pResponse.getString("iteration") should be ("0")
+    }
   }
 
   def getDate(): String = {
