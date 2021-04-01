@@ -231,7 +231,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     val outputDir = "response-exhaust"
     val batch1 = "batch-001"
-    val filePath = UserInfoExhaustJob.getFilePath(batch1)
+    val filePath = UserInfoExhaustJob.getFilePath(batch1, "")
     val jobName = UserInfoExhaustJob.jobName()
     implicit val responseExhaustEncoder = Encoders.product[UserInfoExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
