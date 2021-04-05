@@ -75,20 +75,14 @@ jobs:
       - run: 
           name: Build analytics-core dependency jar
           command: |
-            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
-            export PATH=$JAVA_HOME/bin:$PATH
             cd sunbird-analytics-core && mvn install -DskipTests
       - run:
           name: Build core-data-products dependency jar 
           command:   |
-            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
-            export PATH=$JAVA_HOME/bin:$PATH
             cd sunbird-core-dataproducts && mvn install -DskipTests
       - run:
           name: Build analytics ed dataproducts
           command:   |
-            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
-            export PATH=$JAVA_HOME/bin:$PATH
             cd data-products && mvn install -DskipTests  
       - save_cache:
           key: dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
