@@ -1,4 +1,4 @@
-version: 2.1
+version: 2.0
 jobs:
   test:
     docker:
@@ -95,7 +95,7 @@ jobs:
             export PATH=$JAVA_HOME/bin:$PATH
             cd data-products && mvn install -DskipTests      
 workflows:
-  version: 2.1
+  version: 2
   build-then-test:
     jobs:
       - build
