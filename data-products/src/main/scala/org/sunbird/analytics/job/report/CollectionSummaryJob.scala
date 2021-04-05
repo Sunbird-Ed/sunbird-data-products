@@ -10,9 +10,8 @@ import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
-import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, MergeUtil}
+import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, MergeConfig, MergeFiles}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.util.{CourseUtils, UserData}
@@ -59,6 +58,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
+    implicit val sc: SparkContext = spark.sparkContext
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     init()
     try {
@@ -138,7 +138,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
   }
 
-  def saveToBlob(reportData: DataFrame, jobConfig: JobConfig): Unit = {
+  def saveToBlob(reportData: DataFrame, jobConfig: JobConfig)(implicit sc:SparkContext,fc:FrameworkContext): Unit = {
     val modelParams = jobConfig.modelParams.get
     val reportPath: String = modelParams.getOrElse("reportPath", "collection-summary-reports/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
@@ -154,7 +154,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     // Generating both csv and json extension two reports one is with date and another one is without date only -latest.
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, s"summary-report-${getDate}"), Option(Map("header" -> "true")), None)
     finalReportDF.saveToBlobStore(storageConfig, "csv", getReportName(keyword, reportPath, "summary-report-latest"), Option(Map("header" -> "true")), None)
-    val mergeScriptConfig = MergeScriptConfig(id = reportPath, frequency = "DAY", rollup = 0,
+    val mergeConfig = MergeConfig(`type` = None,id = reportPath, frequency = "DAY", rollup = 0,
       basePath = modelParams.getOrElse("baseScriptPath", "/mount/data/analytics/tmp/").asInstanceOf[String],
       merge = MergeFiles(List(
           Map("deltaPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv"),
@@ -163,8 +163,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       container = container,
       postContainer = Some(container)
     )
-    // Invoking a merge script to generate json format data.
-   CourseUtils.mergeReport(mergeScriptConfig)
+    new MergeUtil().mergeFile(mergeConfig)
   }
   def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));

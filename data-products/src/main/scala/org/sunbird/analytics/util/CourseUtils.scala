@@ -5,20 +5,19 @@ import org.apache.spark.sql.functions.{col, lit, to_date}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.Level.{ERROR, INFO}
-import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
-import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
-import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
+import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, MergeUtil, RestUtil}
+import org.ekstep.analytics.framework.{FrameworkContext, MergeConfig, MergeFiles, StorageConfig}
+import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.immutable.List
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Future, _}
 import scala.concurrent.duration._
+import scala.concurrent.{Future, _}
 
 //Getting live courses from compositesearch
 case class CourseDetails(result: Result)
@@ -118,19 +117,19 @@ object CourseUtils {
     val reportId = config.getOrElse("reportId", "").asInstanceOf[String]
     val fileParameters = config.getOrElse("fileParameters", List("")).asInstanceOf[List[String]]
     val dims = config.getOrElse("folderPrefix", List()).asInstanceOf[List[String]]
-    val mergeConfig = reportConfig.mergeConfig
+    val reportMergeConfig = reportConfig.mergeConfig
     val deltaFiles = if (dims.nonEmpty) {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), Option(dims))
     } else {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), None)
     }
-    if(mergeConfig.nonEmpty) {
-      val mergeConf = mergeConfig.get
+    if(reportMergeConfig.nonEmpty) {
+      val mergeConf = reportMergeConfig.get
       val reportPath = mergeConf.reportPath
       val fileList = getDeltaFileList(deltaFiles,reportId,reportPath,storageConfig)
-      val mergeScriptConfig = MergeScriptConfig(reportId, mergeConf.frequency, mergeConf.basePath, mergeConf.rollup,
-        mergeConf.rollupAge, mergeConf.rollupCol, mergeConf.rollupRange, MergeFiles(fileList, List("Date")), container, mergeConf.postContainer)
-      mergeReport(mergeScriptConfig)
+      val mergeConfig = MergeConfig(None,reportId, mergeConf.frequency, mergeConf.basePath, mergeConf.rollup,
+        mergeConf.rollupAge, mergeConf.rollupCol, None, mergeConf.rollupRange, MergeFiles(fileList, List("Date")), container, mergeConf.postContainer)
+      new MergeUtil().mergeFile(mergeConfig)
     } else {
       JobLogger.log(s"Merge report is not configured, hence skipping that step", None, INFO)
     }
@@ -150,21 +149,6 @@ object CourseUtils {
     }
   }
 
-  def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")): Unit = {
-    val mergeConfigStr = JSONUtils.serialize(mergeConfig)
-    println("merge config: " + mergeConfigStr)
-    val mergeReportCommand = Seq("bash", "-c",
-      s"source ${virtualEnvDir.get}/bin/activate; " +
-        s"dataproducts report_merger --report_config='$mergeConfigStr'")
-    JobLogger.log(s"Merge report script command:: $mergeReportCommand", None, INFO)
-    val mergeReportExitCode = ScriptDispatcher.dispatch(mergeReportCommand)
-    if (mergeReportExitCode == 0) {
-      JobLogger.log(s"Merge report script::Success", None, INFO)
-    } else {
-      JobLogger.log(s"Merge report script failed with exit code $mergeReportExitCode", None, ERROR)
-      throw new Exception(s"Merge report script failed with exit code $mergeReportExitCode")
-    }
-  }
 
   def getCourseInfo(spark: SparkSession, courseId: String): CourseBatchInfo = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
