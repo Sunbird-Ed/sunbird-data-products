@@ -23,7 +23,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "ReportCluster");
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "batchname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname")
+  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "batchname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname", "createdfor", "medium", "subject")
+  private val contentFields = Seq("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords", "createdFor", "medium", "subject")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
   val jobName = "CollectionSummaryJobV2"
@@ -95,12 +96,13 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int]).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
+      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int]).toDF(contentFields:_*)
       JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionname", col("name"))
         .withColumnRenamed("status", "contentstatus")
         .withColumnRenamed("organisation", "contentorg")
+        .withColumnRenamed("createdFor", "createdfor")
     } else {
       processedBatches
     }
@@ -165,10 +167,11 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val courseBatchData = getCourseBatch(spark, fetchData)
     val filteredBatches = if (null != searchFilter && searchFilter.nonEmpty) {
       JobLogger.log("Generating reports only search query", None, INFO)
-      val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
+      val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF(contentFields: _*)
         .withColumnRenamed("name", "collectionname")
         .withColumnRenamed("status", "contentstatus")
         .withColumnRenamed("organisation", "contentorg")
+        .withColumnRenamed("createdFor", "createdfor")
       courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
