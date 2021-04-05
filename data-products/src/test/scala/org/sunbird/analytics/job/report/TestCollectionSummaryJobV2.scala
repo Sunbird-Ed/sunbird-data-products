@@ -74,7 +74,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch1.select("channel").collect().map(_ (0)).toList.contains("013016492159606784174") should be(true)
     batch1.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch1.select("startdate").collect().map(_ (0)).toList.contains("2020-05-26") should be(true)
-    batch1.select("createdFor").collect().map(_(0)).map(x => {
+    batch1.select("createdfor").collect().map(_(0)).map(x => {
       x.asInstanceOf[mutable.WrappedArray[String]](0) should be("013016492159606784174")
     })
     batch1.select("medium").collect().map(_(0)).toList.mkString("") should be("null")
@@ -92,7 +92,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch2.select("channel").collect().map(_ (0)).toList.contains("b00bc992ef25f1a9a8d63291e20efc8d") should be(true)
     batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-30") should be(true)
-    batch2.select("createdFor").collect().map(_(0)).map(x => {
+    batch2.select("createdfor").collect().map(_(0)).map(x => {
       x.asInstanceOf[mutable.WrappedArray[String]](0) should be("0123653943740170242")
     })
 
@@ -114,7 +114,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch3.select("channel").collect().map(_ (0)).toList.contains("b00bc992ef25f1a9a8d63291e20efc8d") should be(true)
     batch3.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch3.select("startdate").collect().map(_ (0)).toList.contains("2020-05-29") should be(true)
-    batch3.select("createdFor").collect().map(_(0)).map(x => {
+    batch3.select("createdfor").collect().map(_(0)).map(x => {
       x.asInstanceOf[mutable.WrappedArray[String]](0) should be("ORG_001")
     })
     batch3.select("medium").collect().map(_(0)).map(x => {

@@ -23,7 +23,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "batchname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname", "createdFor", "medium", "subject")
+  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "batchname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname", "createdfor", "medium", "subject")
   private val contentFields = Seq("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords", "createdFor", "medium", "subject")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
@@ -100,6 +100,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
         .withColumn("collectionname", col("name"))
         .withColumnRenamed("status", "contentstatus")
         .withColumnRenamed("organisation", "contentorg")
+        .withColumnRenamed("createdFor", "createdfor")
     } else {
       processedBatches
     }
@@ -168,6 +169,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
         .withColumnRenamed("name", "collectionname")
         .withColumnRenamed("status", "contentstatus")
         .withColumnRenamed("organisation", "contentorg")
+        .withColumnRenamed("createdFor", "createdfor")
       courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
