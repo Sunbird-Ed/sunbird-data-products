@@ -1,5 +1,6 @@
 package org.sunbird.analytics.job.report
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{udf, _}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
@@ -77,7 +78,7 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
       .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
 
     (reporterMock.fetchData _)
-      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "ReportCluster"), "org.apache.spark.sql.cassandra", new StructType())
       .returning(userEnrolments.withColumn("certificates", convertMethod(split(userEnrolments.col("certificates"), ",").cast("array<string>")))
         .withColumn("issued_certificates", convertMethod(split(userEnrolments.col("issued_certificates"), ",").cast("array<string>")))
       )
@@ -91,6 +92,7 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
 
 
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
+    implicit val sc: SparkContext = spark.sparkContext
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJob","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course","keywords":["Training"]},"fields":["identifier","name","organisation","channel"],"limit":10000}},"coloumns":["Published by","Batch id","Collection id","Collection name","Batch start date","Batch end date","State","Total enrolments By State","Total completion By State"],"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val data = CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData)
