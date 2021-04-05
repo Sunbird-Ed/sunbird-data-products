@@ -1,6 +1,43 @@
 version: 2.1
 jobs:
-  sunbird-ed-dp-build:
+  test:
+    docker:
+      - image: circleci/openjdk:stretch
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
+      - run:
+          name: Ed-data-products-build
+          command: |
+            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+            export PATH=$JAVA_HOME/bin:$PATH
+            cd data-products && mvn -Dtest=$(for file in $(circleci tests glob "./src/test/scala/**/*.scala" \
+            |  circleci tests split --split-by=timings --timings-type=classname); \
+            do basename $file \
+            | sed -e "s/.scala/,/"; \
+            done | tr -d '\r\n') \
+            -e test
+      - run:
+          name: Save test results
+          command: |
+            mkdir -p ~/test-results/junit/
+            find . -type f -regex ".*/target/surefire-reports/.*xml" -exec cp {} ~/test-results/junit/ \;
+          when: always
+
+      - store_test_results:
+          path: ~/test-results
+                    
+      - save_cache:
+          key: dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
+          paths: ~/.m2
+      - run:
+          name: sonar
+          command: |
+            export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
+            cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.exclusions=/home/circleci/project/adhoc-scripts/**,/home/circleci/project/replay-scripts/** -Dsonar.scala.coverage.reportPaths=/home/circleci/project/data-products/target/scoverage.xml -Dsonar.organization=sunbird-ed          
+  build:
     parallelism: 2 # parallel containers to split the test cases
     docker:
       - image: circleci/openjdk:stretch
@@ -57,48 +94,11 @@ jobs:
             export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
             export PATH=$JAVA_HOME/bin:$PATH
             cd data-products && mvn install -DskipTests      
-  sunbird-ed-dp-test:
-    docker:
-      - image: circleci/openjdk:stretch
-    steps:
-      - checkout
-      - restore_cache:
-          keys:
-            - dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
-      - run:
-          name: Ed-data-products-build
-          command: |
-            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
-            export PATH=$JAVA_HOME/bin:$PATH
-            cd data-products && mvn -Dtest=$(for file in $(circleci tests glob "./src/test/scala/**/*.scala" \
-            |  circleci tests split --split-by=timings --timings-type=classname); \
-            do basename $file \
-            | sed -e "s/.scala/,/"; \
-            done | tr -d '\r\n') \
-            -e test
-      - run:
-          name: Save test results
-          command: |
-            mkdir -p ~/test-results/junit/
-            find . -type f -regex ".*/target/surefire-reports/.*xml" -exec cp {} ~/test-results/junit/ \;
-          when: always
-
-      - store_test_results:
-          path: ~/test-results
-                    
-      - save_cache:
-          key: dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
-          paths: ~/.m2
-      - run:
-          name: sonar
-          command: |
-            export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
-            cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.exclusions=/home/circleci/project/adhoc-scripts/**,/home/circleci/project/replay-scripts/** -Dsonar.scala.coverage.reportPaths=/home/circleci/project/data-products/target/scoverage.xml -Dsonar.organization=sunbird-ed          
 workflows:
   version: 2.1
   build-then-test:
     jobs:
-      - sunbird-ed-dp-build
-      - sunbird-ed-dp-test:
+      - build
+      - test:
         requires:
             - build
