@@ -11,12 +11,14 @@ import org.ekstep.analytics.framework.IJob
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.JobConfig
-import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.JobContext
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.OutputDispatcher
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.sunbird.analytics.util.DecryptUtil
+import org.ekstep.analytics.framework.util.JSONUtils
+
+import scala.collection.mutable.ListBuffer
 
 case class ValidatedUserDistrictSummary(index: Int, districtName: String, blocks: Long, schools: Long, registered: Long)
 case class UserStatus(id: Long, status: String)
@@ -37,6 +39,7 @@ case class UserSelfDeclared(userid: String, orgid: String, persona: String, erro
 
 // Shadow user summary in the json will have this POJO
 case class UserSummary(accounts_validated: Long, accounts_rejected: Long, accounts_unclaimed: Long, accounts_failed: Long)
+case class UserProfileLocationType(userid: String, usertype: String, usersubtype: String, locationids: List[String])
 
 object StateAdminReportJob extends optional.Application with IJob with StateAdminReportHelper {
 
@@ -93,13 +96,14 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             select(userSelfDeclaredExtIdDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
     
         //loading user data with location-details based on the user's from the user-external-identifier table
-        val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
+        var userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
-                col("locationIds"),
-                concat_ws(" ", col("firstname"), col("lastname")).as("Name"), col("usertype"), col("usersubtype"),
-                col("email").as("profileemail"), col("phone").as("profilephone"), col("rootorgid"))
-        val commonUserDf = userDf.join(userExternalDecryptData, userDf.col("userid") === userExternalDecryptData.col("userid"), "inner").
-            select(userDf.col("*"))
+                concat_ws(" ", col("firstname"), col("lastname")).as("Name"),
+                col("email").as("profileemail"), col("phone").as("profilephone"), col("rootorgid"), col("profileusertype"), col("profilelocation"))
+        val userWithProfileDF = appendUserProfileTypeWithLocation(userDf);
+        
+        val commonUserDf = userWithProfileDF.join(userExternalDecryptData, userWithProfileDF.col("userid") === userExternalDecryptData.col("userid"), "inner").
+            select(userWithProfileDF.col("*"))
         val userDenormDF = commonUserDf.withColumn("exploded_location", explode_outer(col("locationids")))
             .join(locationDF, col("exploded_location") === locationDF.col("locid") && (locationDF.col("loctype") === "cluster" || locationDF.col("loctype") === "block" || locationDF.col("loctype") === "district" || locationDF.col("loctype") === "state"), "left_outer")
         val userDenormLocationDF = userDenormDF.groupBy("userid", "Name", "usertype", "usersubtype", "profileemail", "profilephone", "rootorgid").
@@ -112,6 +116,37 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val finalUserDf = denormLocationUserDecryptData.join(orgExternalIdDf, denormLocationUserDecryptData.col("rootorgid") === orgExternalIdDf.col("id"), "left_outer").
             select(denormLocationUserDecryptData.col("*"), orgExternalIdDf.col("orgName").as("userroororg"))
         saveUserSelfDeclaredExternalInfo(userExternalDecryptData, finalUserDf)
+    }
+    
+    def appendUserProfileTypeWithLocation(userDf: DataFrame)(implicit sparkSession: SparkSession): DataFrame = {
+        import sparkSession.implicits._
+        val userProfileDf = userDf.select(col("profileusertype"), col("profilelocation"), col("userid")).rdd.map{f =>
+            var usertype: String = "";
+            var usersubtype: String = "";
+            if (null != f.getString(0) && f.getString(0).nonEmpty) {
+                val profileUserType = JSONUtils.deserialize[Map[String, String]](f.getString(0))
+                val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
+                usertype = if (!usertypeList.isEmpty) usertypeList.head else ""
+                val usersubtypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
+                usersubtype = if (!usersubtypeList.isEmpty) usersubtypeList.head else ""
+            }
+            var locations = new ListBuffer[String]()
+            if (null != f.getString(1) && f.getString(1).nonEmpty) {
+                val loc = JSONUtils.deserialize[List[Map[String, String]]](f.getString(1))
+                val stateIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("state")).map(f => f.getOrElse("id", ""))
+                if (!stateIdList.isEmpty) locations += stateIdList.head
+                val districtIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("district")).map(f => f.getOrElse("id", ""))
+                if (!districtIdList.isEmpty) locations += districtIdList.head
+                val blockIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("block")).map(f => f.getOrElse("id", ""))
+                if (!blockIdList.isEmpty) locations += blockIdList.head
+                val clusterIdList = loc.filter(f => f.getOrElse("type", "").equalsIgnoreCase("cluster")).map(f => f.getOrElse("id", ""))
+                if (!clusterIdList.isEmpty) locations += clusterIdList.head
+            }
+            UserProfileLocationType(f.getString(2), usertype, usersubtype, locations.toList)
+        }.toDF()
+        val userProfileDtl = userProfileDf.join(userDf, userProfileDf.col("userid") === userDf.col("userid"), "inner").
+            select(userProfileDf.col("*"), col("Name"), col("profileemail"), col("profilephone"), col("rootorgid"))
+        userProfileDtl
     }
     
     def generateSelfUserDeclaredZip(blockData: DataFrame, jobConfig: JobConfig): Unit = {
