@@ -378,6 +378,8 @@ CREATE TABLE IF NOT EXISTS sunbird.user (
     username text,
     usertype text,
     usersubtype text,
+    profileusertype text,
+    profilelocation text,
     webpages list<frozen<map<text, text>>>
 ) WITH bloom_filter_fp_chance = 0.01
     AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
