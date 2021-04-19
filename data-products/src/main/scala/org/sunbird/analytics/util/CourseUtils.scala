@@ -3,23 +3,12 @@ package org.sunbird.analytics.util
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-<<<<<<< HEAD
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
-import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
-import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
-=======
-import org.apache.spark.storage.StorageLevel
-import org.ekstep.analytics.framework.Level.INFO
-import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, MergeUtil, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, MergeConfig, MergeFiles, StorageConfig}
-import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
-import org.joda.time.format.DateTimeFormat
-import org.joda.time.{DateTime, DateTimeZone}
->>>>>>> upstream/release-3.8.0
+import org.ekstep.analytics.model.{MergeScriptConfig, OutputConfig, ReportConfig}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.immutable.List
@@ -141,7 +130,6 @@ object CourseUtils {
     }
   }
 
-<<<<<<< HEAD
   def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")): Unit = {
     val mergeConfigStr = JSONUtils.serialize(mergeConfig)
     println("merge config: " + mergeConfigStr)
@@ -158,42 +146,6 @@ object CourseUtils {
     }
   }
 
-=======
-
-  def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
-    val apiUrl = Constants.COMPOSITE_SEARCH_URL
-    val response = RestUtil.post[CourseResponse](apiUrl, query)
-    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
-      response.result.content
-    } else List[CourseBatchInfo]()
-  }
-
-  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String], sunbirdCoursesKeyspace: String)
-                      (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    implicit val sqlContext: SQLContext = spark.sqlContext
-    val courseBatchDF = if (batchList.nonEmpty) {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .filter(batch => batchList.contains(batch.getString(1)))
-        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
-    }
-    else {
-      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
-        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
-    }
-
-    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
-
-    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
-    val activeBatchList = activeBatches.toDF()
-    JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
-    courseBatchDF.unpersist(true)
-    activeBatchList
-  }
-
-
->>>>>>> upstream/release-3.8.0
   def getCourseInfo(courseIds: List[String], request: Option[Map[String, AnyRef]], maxSize: Int): List[CourseBatchInfo] = {
     if (courseIds.nonEmpty) {
       val subCourseIds = courseIds.grouped(maxSize).toList
