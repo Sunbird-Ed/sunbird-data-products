@@ -3,12 +3,23 @@ package org.sunbird.analytics.util
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+<<<<<<< HEAD
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
 import org.ekstep.analytics.model.{MergeFiles, MergeScriptConfig, OutputConfig, ReportConfig}
+=======
+import org.apache.spark.storage.StorageLevel
+import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.util.DatasetUtil.extensions
+import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, MergeUtil, RestUtil}
+import org.ekstep.analytics.framework.{FrameworkContext, MergeConfig, MergeFiles, StorageConfig}
+import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
+import org.joda.time.format.DateTimeFormat
+import org.joda.time.{DateTime, DateTimeZone}
+>>>>>>> upstream/release-3.8.0
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.immutable.List
@@ -23,7 +34,7 @@ case class CourseInfo(channel: String, identifier: String, name: String)
 
 case class CourseResponse(result: CourseResult, responseCode: String)
 case class CourseResult(count: Int, content: List[CourseBatchInfo])
-case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo], organisation: List[String], status: String, keywords:List[String])
+case class CourseBatchInfo(framework: String, identifier: String, name: String, channel: String, batches: List[BatchInfo], organisation: List[String], status: String, keywords:List[String], createdFor: List[String], medium: List[String], subject: List[String])
 case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
@@ -98,19 +109,19 @@ object CourseUtils {
     val reportId = config.getOrElse("reportId", "").asInstanceOf[String]
     val fileParameters = config.getOrElse("fileParameters", List("")).asInstanceOf[List[String]]
     val dims = config.getOrElse("folderPrefix", List()).asInstanceOf[List[String]]
-    val mergeConfig = reportConfig.mergeConfig
+    val reportMergeConfig = reportConfig.mergeConfig
     val deltaFiles = if (dims.nonEmpty) {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), Option(dims))
     } else {
       data.saveToBlobStore(storageConfig, format, reportId, Option(Map("header" -> "true")), None)
     }
-    if(mergeConfig.nonEmpty) {
-      val mergeConf = mergeConfig.get
+    if(reportMergeConfig.nonEmpty) {
+      val mergeConf = reportMergeConfig.get
       val reportPath = mergeConf.reportPath
       val fileList = getDeltaFileList(deltaFiles,reportId,reportPath,storageConfig)
-      val mergeScriptConfig = MergeScriptConfig(reportId, mergeConf.frequency, mergeConf.basePath, mergeConf.rollup,
-        mergeConf.rollupAge, mergeConf.rollupCol, mergeConf.rollupRange, MergeFiles(fileList, List("Date")), container, mergeConf.postContainer)
-      mergeReport(mergeScriptConfig)
+      val mergeConfig = MergeConfig(None,reportId, mergeConf.frequency, mergeConf.basePath, mergeConf.rollup,
+        mergeConf.rollupAge, mergeConf.rollupCol, None, mergeConf.rollupRange, MergeFiles(fileList, List("Date")), container, mergeConf.postContainer)
+      new MergeUtil().mergeFile(mergeConfig)
     } else {
       JobLogger.log(s"Merge report is not configured, hence skipping that step", None, INFO)
     }
@@ -130,6 +141,7 @@ object CourseUtils {
     }
   }
 
+<<<<<<< HEAD
   def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")): Unit = {
     val mergeConfigStr = JSONUtils.serialize(mergeConfig)
     println("merge config: " + mergeConfigStr)
@@ -146,6 +158,42 @@ object CourseUtils {
     }
   }
 
+=======
+
+  def filterContents(spark: SparkSession, query: String): List[CourseBatchInfo] = {
+    val apiUrl = Constants.COMPOSITE_SEARCH_URL
+    val response = RestUtil.post[CourseResponse](apiUrl, query)
+    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+      response.result.content
+    } else List[CourseBatchInfo]()
+  }
+
+  def getActiveBatches(loadData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchList: List[String], sunbirdCoursesKeyspace: String)
+                      (implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+    implicit val sqlContext: SQLContext = spark.sqlContext
+    val courseBatchDF = if (batchList.nonEmpty) {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
+        .filter(batch => batchList.contains(batch.getString(1)))
+        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
+    }
+    else {
+      loadData(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace), "org.apache.spark.sql.cassandra", new StructType())
+        .select("courseid", "batchid", "enddate", "startdate").persist(StorageLevel.MEMORY_ONLY)
+    }
+
+    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+    val comparisonDate = fmt.print(DateTime.now(DateTimeZone.UTC).minusDays(1))
+    JobLogger.log("Filtering out inactive batches where date is >= " + comparisonDate, None, INFO)
+
+    val activeBatches = courseBatchDF.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate)))
+    val activeBatchList = activeBatches.toDF()
+    JobLogger.log("Total number of active batches:" + activeBatchList.count(), None, INFO)
+    courseBatchDF.unpersist(true)
+    activeBatchList
+  }
+
+
+>>>>>>> upstream/release-3.8.0
   def getCourseInfo(courseIds: List[String], request: Option[Map[String, AnyRef]], maxSize: Int): List[CourseBatchInfo] = {
     if (courseIds.nonEmpty) {
       val subCourseIds = courseIds.grouped(maxSize).toList
