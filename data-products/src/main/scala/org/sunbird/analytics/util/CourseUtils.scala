@@ -3,12 +3,11 @@ package org.sunbird.analytics.util
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.ekstep.analytics.framework.Level.{ERROR, INFO}
-import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, MergeUtil, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, MergeConfig, MergeFiles, StorageConfig}
-import org.ekstep.analytics.model.{MergeScriptConfig, OutputConfig, ReportConfig}
+import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
 import org.sunbird.cloud.storage.conf.AppConf
 
 import scala.collection.immutable.List
@@ -127,22 +126,6 @@ object CourseUtils {
         val reportPrefix = f.substring(0, f.lastIndexOf("/")).split(reportId)(1)
         Map("reportPath" -> (reportPrefix + "/" + reportPath), "deltaPath" -> f.substring(f.indexOf(storageConfig.fileName, 0)))
       }
-    }
-  }
-
-  def mergeReport(mergeConfig: MergeScriptConfig, virtualEnvDir: Option[String] = Option("/mount/venv")): Unit = {
-    val mergeConfigStr = JSONUtils.serialize(mergeConfig)
-    println("merge config: " + mergeConfigStr)
-    val mergeReportCommand = Seq("bash", "-c",
-      s"source ${virtualEnvDir.get}/bin/activate; " +
-        s"dataproducts report_merger --report_config='$mergeConfigStr'")
-    JobLogger.log(s"Merge report script command:: $mergeReportCommand", None, INFO)
-    val mergeReportExitCode = ScriptDispatcher.dispatch(mergeReportCommand)
-    if (mergeReportExitCode == 0) {
-      JobLogger.log(s"Merge report script::Success", None, INFO)
-    } else {
-      JobLogger.log(s"Merge report script failed with exit code $mergeReportExitCode", None, ERROR)
-      throw new Exception(s"Merge report script failed with exit code $mergeReportExitCode")
     }
   }
 
