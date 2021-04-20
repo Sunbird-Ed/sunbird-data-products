@@ -137,6 +137,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         } catch {
           case ex: Exception =>
             ex.printStackTrace()
+            Console.println(ex.printStackTrace())
+            Console.println("the requestid" + request.request_id + "failed  with  below error" + ex.getMessage)
             markRequestAsFailed(request, "Invalid request")
         }
       }
@@ -217,7 +219,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       try {
         val res = CommonUtil.time(processBatch(filteredDF, batch));
         val reportDF = res._2;
-        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None);
+        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId), Option(Map("header" -> "true")), None)
         CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1);
       } catch {
         case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage, 0);
