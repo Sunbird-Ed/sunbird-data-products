@@ -14,6 +14,7 @@ import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, Me
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, MergeConfig, MergeFiles}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.exhaust.collection.UDFUtils
 import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
@@ -43,8 +44,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
   private val columnMapping = Map("batchid" -> "Batch id",
     "publishedBy" -> "Published by",
     "courseid" -> "Collection id", "collectionName" -> "Collection name",
-    "startdate" -> "Batch start date",
-    "enddate" -> "Batch end date",
+    "batchStartDate" -> "Batch start date",
+    "batchEndDate" -> "Batch end date",
     "hasCertified" -> "Has certificate",
     "enrolledUsersCountByState" -> "Total enrolments By State",
     "completionUserCountByState" -> "Total completion By State",
@@ -89,7 +90,9 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
 
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
-      .select("courseid", "batchid", "enddate", "startdate", "cert_templates")
+      .withColumn("batchStartDate", UDFUtils.getLatestDateFieldValue(col("start_date"), col("startdate")))
+      .withColumn("batchEndDate", UDFUtils.getLatestDateFieldValue(col("end_date"), col("enddate")))
+      .select("courseid", "batchid", "batchEndDate", "batchStartDate", "cert_templates")
       .withColumn("hasCertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
   }
 
@@ -99,7 +102,8 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       .withColumn("isCertified",
         when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0
           || col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
-      .select(col("batchid"), col("userid"), col("courseid"), col("enrolleddate"), col("completedon"), col("status"), col("isCertified"))
+      .withColumn("userEnrolledDate", UDFUtils.getLatestDateFieldValue(col("enrolled_date"), col("enrolleddate")))
+      .select(col("batchid"), col("userid"), col("courseid"), col("userEnrolledDate"), col("completedon"), col("status"), col("isCertified"))
       .persist()
   }
 
@@ -197,7 +201,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
     } else if (startDate.nonEmpty) {
       JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
-      courseBatchData.filter(col("startdate").isNotNull && to_date(col("startdate"), "yyyy-MM-dd").geq(lit(startDate))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
+      courseBatchData.filter(col("batchStartDate").isNotNull && to_date(col("batchStartDate"), "yyyy-MM-dd").geq(lit(startDate))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
     } else if (generateForAllBatches) {
       JobLogger.log(s"Generating reports for all the batches irrespective of whether the batch is live or expired", None, INFO)
       courseBatchData // Irrespective of whether the batch is live or expired
@@ -205,7 +209,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       // only report for batches which are ongoing and not expired
       JobLogger.log(s"Generating reports only for batches which are ongoing and not expired", None, INFO)
       val comparisonDate = DateTimeFormat.forPattern("yyyy-MM-dd").print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-      courseBatchData.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate))).toDF()
+      courseBatchData.filter(col("batchEndDate").isNull || to_date(col("batchEndDate"), "yyyy-MM-dd").geq(lit(comparisonDate))).toDF()
     }
     JobLogger.log(s"Computing summary agg report for ${filteredBatches.count()}", None, INFO)
     filteredBatches.persist(StorageLevel.MEMORY_ONLY)
