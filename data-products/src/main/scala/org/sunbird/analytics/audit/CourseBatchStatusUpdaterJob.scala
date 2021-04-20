@@ -11,6 +11,7 @@ import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, Re
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.sunbird.analytics.job.report.BaseReportsJob
 import org.apache.spark.sql.cassandra._
+import org.sunbird.analytics.exhaust.collection.UDFUtils
 
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, TimeZone}
@@ -82,7 +83,11 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   }
 
   def getCollectionBatchDF(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-    fetchData(spark, collectionBatchDBSettings, cassandraFormat, new StructType()).select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
+    fetchData(spark, collectionBatchDBSettings, cassandraFormat, new StructType())
+      .withColumn("startdate", UDFUtils.getLatestDateFieldValue(col("start_date"), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestDateFieldValue(col("end_date"), col("enddate")))
+      .withColumn("enrollmentenddate", UDFUtils.getLatestDateFieldValue(col("enrollment_enddate"), col("enrollmentenddate")))
+      .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
   }
 
   def getCourseMetaData(row: Row, dateFormat: SimpleDateFormat): Map[String, AnyRef] = {

@@ -1,7 +1,7 @@
 package org.sunbird.analytics.audit
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{lit, split, udf}
+import org.apache.spark.sql.functions.{col, lit, split, to_date, udf}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
@@ -44,7 +44,12 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
   it should "Should update the status of the course/batch" in {
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
-      .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
+      .returning(
+        courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType))))
+          .withColumn("start_date", to_date(col("start_date"), "yyyy-MM-dd"))
+          .withColumn("end_date", to_date(col("end_date"), "yyyy-MM-dd"))
+          .withColumn("enrollment_enddate", to_date(col("enrollment_enddate"), "yyyy-MM-dd"))
+      )
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.audit.CourseBatchStatusUpdaterJob","modelParams":{"store":"azure","sparkElasticsearchConnectionHost":"http://localhost:9200","sparkCassandraConnectionHost":"localhost","kpLearningBasePath":"http://localhost:8080/learning-service","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Course Batch Status Updater Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
@@ -73,7 +78,12 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
-      .returning(courseBatchDF2.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
+      .returning(
+        courseBatchDF2.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType))))
+          .withColumn("start_date", to_date(col("start_date"), "yyyy-MM-dd"))
+          .withColumn("end_date", to_date(col("end_date"), "yyyy-MM-dd"))
+          .withColumn("enrollment_enddate", to_date(col("enrollment_enddate"), "yyyy-MM-dd"))
+      )
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.audit.CourseBatchStatusUpdaterJob","modelParams":{"store":"azure","sparkElasticsearchConnectionHost":"http://localhost:9200","sparkCassandraConnectionHost":"localhost","kpLearningBasePath":"http://localhost:8080/learning-service","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Course Batch Status Updater Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
