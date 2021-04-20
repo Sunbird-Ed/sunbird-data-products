@@ -88,14 +88,18 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   def filterAssessmentDF(assessmentDF: DataFrame): DataFrame = {
     val bestScoreReport = AppConf.getConfig("assessment.metrics.bestscore.report").toBoolean
     val columnName: String = if (bestScoreReport) "total_score" else "last_attempted_on"
+
     val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc(columnName))
-    assessmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
+    val partitionedDf =assessmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum").persist()
+    persistedDF.append(partitionedDf)
+    partitionedDf
   }
   
   def getAssessmentAggData(userEnrolmentDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    val df = loadData(assessmentAggDBSettings, cassandraFormat, new StructType());
-    val assessmentDF = userEnrolmentDF.join(df, userEnrolmentDF("userid") === df("user_id") && userEnrolmentDF("courseid") === df("course_id") && userEnrolmentDF("batchid") === df("batch_id"), "inner")
-      .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total", "last_attempted_on").persist();
+    val df = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
+      .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total", "last_attempted_on")
+    val assessmentDF = userEnrolmentDF.join(df, userEnrolmentDF("userid") === df("user_id") &&
+      userEnrolmentDF("courseid") === df("course_id") && userEnrolmentDF("batchid") === df("batch_id"), "inner").persist()
     Console.println(assessmentDF.explain())
     persistedDF.append(assessmentDF)
     assessmentDF
@@ -116,12 +120,12 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumnRenamed("batch_id", "batchid")
       .withColumnRenamed("course_id", "courseid")
 
-    val dataDF = contentDataDF.join(assessAggdf, contentDataDF.col("courseid") === assessAggdf.col("courseid") && contentDataDF.col("contentid") === assessAggdf.col("content_id"), "inner").select(assessAggdf.col("*"))
-
+    val dataDF = contentDataDF.join(assessAggdf, contentDataDF.col("courseid") === assessAggdf.col("courseid")
+      && contentDataDF.col("contentid") === assessAggdf.col("content_id"), "inner").select(assessAggdf.col("*"))
     val assessmentAggSpec = Window.partitionBy("userid", "batchid", "courseid")
     val df = dataDF.withColumn("agg_score", sum("total_score") over assessmentAggSpec)
       .withColumn("agg_max_score", sum("total_max_score") over assessmentAggSpec)
-      .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%"))).cache();
+      .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%"))).persist()
     persistedDF.append(df);
     df;
   }
