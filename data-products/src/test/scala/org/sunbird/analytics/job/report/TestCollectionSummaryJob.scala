@@ -8,7 +8,7 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.job.report.CollectionSummaryJob.saveToBlob
+import org.sunbird.analytics.job.report.CollectionSummaryJob.{saveToBlob, prepareReport}
 import org.sunbird.analytics.util.UserData
 
 import scala.collection.mutable
@@ -76,7 +76,11 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
-      .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
+      .returning(
+        courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType))))
+          .withColumn("start_date", to_date(col("start_date"), "yyyy-MM-dd"))
+          .withColumn("end_date", to_date(col("end_date"), "yyyy-MM-dd"))
+      )
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "ReportCluster"), "org.apache.spark.sql.cassandra", new StructType())
@@ -96,7 +100,7 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
     implicit val sc: SparkContext = spark.sparkContext
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJob","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course","keywords":["Training"]},"fields":["identifier","name","organisation","channel"],"limit":10000}},"coloumns":["Published by","Batch id","Collection id","Collection name","Batch start date","Batch end date","State","Total enrolments By State","Total completion By State"],"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val data = CollectionSummaryJob.prepareReport(spark, reporterMock.fetchData)
+    val data = prepareReport(spark, reporterMock.fetchData)
     saveToBlob(data, jobConfig)
 
     val modelParams = jobConfig.modelParams.get
