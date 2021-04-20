@@ -92,7 +92,9 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
       "enrollmentType" -> row.getAs[String]("enrollmenttype"),
       "createdFor" -> row.getAs[List[String]]("createdfor"),
       "status" -> row.getAs[AnyRef]("updated_status"),
-      "enrollmentEndDate" -> getEnrolmentEndDate(row.getAs[String]("enrollmentenddate"), row.getAs[String]("enddate"), dateFormat)
+      "enrollmentEndDate" -> getEnrolmentEndDate(row.getAs[String]("enrollmentenddate"), row.getAs[String]("enddate"), dateFormat),
+      "endDate" -> row.getAs[String]("enddate"),
+      "name" -> row.getAs[String]("name")
     )
   }
 

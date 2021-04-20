@@ -378,6 +378,8 @@ CREATE TABLE IF NOT EXISTS sunbird.user (
     username text,
     usertype text,
     usersubtype text,
+    profileusertype text,
+    profilelocation text,
     webpages list<frozen<map<text, text>>>
 ) WITH bloom_filter_fp_chance = 0.01
     AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
@@ -539,3 +541,34 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.assessment_aggregator (
     updated_on timestamp,
     PRIMARY KEY ((user_id, course_id), batch_id, content_id, attempt_id)
 );
+
+
+CREATE KEYSPACE IF NOT EXISTS test_keyspace WITH replication = {
+  'class': 'SimpleStrategy',
+  'replication_factor': '1'
+};
+
+CREATE TABLE IF NOT EXISTS test_keyspace.user_enrolment_test(
+    batchid text,
+    active boolean,
+    addedby text,
+    certificates list<frozen<map<text, text>>>,
+    certstatus int,
+    completedon timestamp,
+    completionpercentage int,
+    contentstatus map<text, int>,
+    courseid text,
+    datetime timestamp,
+    enrolleddate text,
+    issued_certificates list<frozen<map<text, text>>>,
+    lastreadcontentid text,
+    lastreadcontentstatus int,
+    progress int,
+    status int,
+    userid text,
+    PRIMARY KEY(userid, courseid, batchid))
+    WITH COMPACTION = { 'class': 'SizeTieredCompactionStrategy', 'enabled': 'false' };
+
+
+INSERT INTO test_keyspace.user_enrolment_test(batchid, userid,courseid) VALUES ('b1','u1','c1');
+
