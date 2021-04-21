@@ -21,6 +21,7 @@ import org.apache.spark.sql.Row
 import java.util.UUID
 import org.ekstep.analytics.framework.OutputDispatcher
 import org.ekstep.analytics.framework.Dispatcher
+import org.sunbird.analytics.exhaust.collection.UDFUtils
 
 object CollectionReconciliationJob extends optional.Application with IJob with BaseReportsJob {
 
@@ -79,8 +80,13 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
   }
   
   def audit()(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean): Map[String, Long] = {
-    val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).select("userid", "batchid", "courseid", "contentstatus", "enrolleddate", "completedon", "certificates");
-    val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType()).select("batchid", "name", "startdate", "enddate");
+    val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
+      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
+      .select("userid", "batchid", "courseid", "contentstatus", "enrolleddate", "completedon", "certificates");
+    val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
+      .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
+      .select("batchid", "name", "startdate", "enddate");
     
     val joinedDF = enrolmentDF.join(courseBatchDF, "batchid").cache();
     
@@ -143,9 +149,13 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
   def reconcileMissingCertsAndEnrolmentDates(modelParams: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) : Map[String, Long] = {
 
     implicit val sc = spark.sparkContext;
-    val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).cache();
+    val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
+      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate"))).cache();
     val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType());
-    val courseBatchMinDF = courseBatchDF.withColumn("hasSVGCertificate", hasSVGCertificate(col("cert_templates"))).select("batchid", "hasSVGCertificate", "startdate", "enddate").cache();
+    val courseBatchMinDF = courseBatchDF.withColumn("hasSVGCertificate", hasSVGCertificate(col("cert_templates")))
+      .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
+      .select("batchid", "hasSVGCertificate", "startdate", "enddate").cache();
     val joinedDF = enrolmentDF.join(courseBatchMinDF, "batchid").filter(col("completedon").isNotNull).withColumn("certificatestatus", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued")
       .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise("")).cache();
 
@@ -191,7 +201,9 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
   def updateCompletions(enrolmentCourseJoinedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) = {
 
     import spark.implicits._
-    val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType()).select("batchid", "enddate");
+    val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
+      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
+      .select("batchid", "enddate");
     val enrolmentDF = enrolmentCourseJoinedDF.filter(col("completed") === "Yes").select("userid", "courseid", "batchid");
     val enrolmentRDD = enrolmentDF.rdd.repartition(30).map(f => UserEnrolment(f.getString(0), f.getString(1), f.getString(2)))
 

@@ -285,7 +285,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
-    val df = loadData(collectionBatchDBSettings, cassandraFormat, new StructType()).select("courseid", "batchid", "enddate", "startdate", "name")
+    val df = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
+      .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
+      .select("courseid", "batchid", "enddate", "startdate", "name")
     if (persist) df.persist() else df
   }
 
@@ -388,4 +391,12 @@ object UDFUtils extends Serializable {
   }
 
   val getLatestDateFieldValue = udf[String, java.sql.Date, String](getLatestDateFieldValueFun)
+
+  def getLatestValueFun(newValue: String, staleValue: String): String = {
+    Option(newValue)
+      .map(xValue => if(xValue.nonEmpty) xValue else Option(staleValue).map(yValue => yValue).orNull)
+      .getOrElse(Option(staleValue).map(yValue => yValue).orNull)
+  }
+
+  val getLatestValue = udf[String, String, String](getLatestValueFun)
 }

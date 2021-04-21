@@ -174,6 +174,33 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     val absolutePath = file.getAbsolutePath
     CollectionSummaryJobV2.submitIngestionTask(ingestionServerMockURL, absolutePath)
   }
+
+  it should "get the latest value for date" in {
+    val dbDateValue = userEnrolments.select("enrolleddate", "enrolled_date").collect()
+
+    (dbDateValue.map(_ (0)).toList(0) == null) should be(true)
+    dbDateValue.map(_ (0)).toList(1) should be("2020-02-25 13:18:36:051+0000")
+    dbDateValue.map(_ (0)).toList(6) should be("2018-10-29 17:47:52:601+0000")
+
+    dbDateValue.map(_ (1)).toList(0) should be("2020-02-25 13:18:36:051+0000")
+    (dbDateValue.map(_ (1)).toList(1) == null) should be(true)
+    dbDateValue.map(_ (1)).toList(6) should be("2018-10-31 17:47:52:601+0000")
+
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "ReportCluster"), "org.apache.spark.sql.cassandra", new StructType())
+      .returning(userEnrolments.withColumn("certificates", convertMethod(split(userEnrolments.col("certificates"), ",").cast("array<string>")))
+        .withColumn("issued_certificates", convertMethod(split(userEnrolments.col("issued_certificates"), ",").cast("array<string>")))
+      )
+
+    val resultDf = CollectionSummaryJobV2.getUserEnrollment(spark, reporterMock.fetchData)
+
+    val resultDateValue =  resultDf.select("enrolleddate").collect().map(_ (0)).toList
+
+    resultDateValue(0) should be("2020-02-25 13:18:36:051+0000")
+    resultDateValue(1) should be("2020-02-25 13:18:36:051+0000")
+    resultDateValue(6) should be("2018-10-31 17:47:52:601+0000")
+  }
+
   def initializeDefaultMockData() {
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())

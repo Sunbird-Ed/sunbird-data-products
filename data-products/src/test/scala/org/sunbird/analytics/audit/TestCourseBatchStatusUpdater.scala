@@ -44,12 +44,7 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
   it should "Should update the status of the course/batch" in {
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
-      .returning(
-        courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType))))
-          .withColumn("start_date", to_date(col("start_date"), "yyyy-MM-dd"))
-          .withColumn("end_date", to_date(col("end_date"), "yyyy-MM-dd"))
-          .withColumn("enrollment_enddate", to_date(col("enrollment_enddate"), "yyyy-MM-dd"))
-      )
+      .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.audit.CourseBatchStatusUpdaterJob","modelParams":{"store":"azure","sparkElasticsearchConnectionHost":"http://localhost:9200","sparkCassandraConnectionHost":"localhost","kpLearningBasePath":"http://localhost:8080/learning-service","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Course Batch Status Updater Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
@@ -78,12 +73,7 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
-      .returning(
-        courseBatchDF2.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType))))
-          .withColumn("start_date", to_date(col("start_date"), "yyyy-MM-dd"))
-          .withColumn("end_date", to_date(col("end_date"), "yyyy-MM-dd"))
-          .withColumn("enrollment_enddate", to_date(col("enrollment_enddate"), "yyyy-MM-dd"))
-      )
+      .returning(courseBatchDF2.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.audit.CourseBatchStatusUpdaterJob","modelParams":{"store":"azure","sparkElasticsearchConnectionHost":"http://localhost:9200","sparkCassandraConnectionHost":"localhost","kpLearningBasePath":"http://localhost:8080/learning-service","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Course Batch Status Updater Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
@@ -107,5 +97,35 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
     res.inProgress should be(1)
     res.completed should be(2)
     res.unStarted should be(0)
+  }
+
+  it should "get the latest value for date" in {
+    val courseBatchDF = spark
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "true")
+      .load("src/test/resources/course-batch-status-updater/course_batch_status_updater_temp.csv")
+      .cache()
+
+    val dbDateValue = courseBatchDF.select("startdate", "start_date").collect()
+
+    dbDateValue.map(_ (0)).toList(0) should be("2020-05-30")
+    (dbDateValue.map(_ (0)).toList(1) == null) should be(true)
+    dbDateValue.map(_ (0)).toList(3) should be("2020-05-23")
+
+    (dbDateValue.map(_ (1)).toList(0) == null) should be(true)
+    dbDateValue.map(_ (1)).toList(1) should be("2020-05-26")
+    dbDateValue.map(_ (1)).toList(3) should be("2020-05-25")
+
+    (reporterMock.fetchData _)
+      .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
+      .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
+
+    val resultDf = CourseBatchStatusUpdaterJob.getCollectionBatchDF(reporterMock.fetchData)
+    val resultDateValue =  resultDf.select("startdate").collect().map(_ (0)).toList
+
+    resultDateValue(0) should be("2020-05-30")
+    resultDateValue(1) should be("2020-05-26")
+    resultDateValue(3) should be("2020-05-25")
   }
 }
