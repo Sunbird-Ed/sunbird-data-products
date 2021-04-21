@@ -76,11 +76,7 @@ class TestCollectionSummaryJob extends BaseReportSpec with MockFactory {
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
-      .returning(
-        courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType))))
-          .withColumn("start_date", to_date(col("start_date"), "yyyy-MM-dd"))
-          .withColumn("end_date", to_date(col("end_date"), "yyyy-MM-dd"))
-      )
+      .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
 
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "user_enrolments", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "ReportCluster"), "org.apache.spark.sql.cassandra", new StructType())

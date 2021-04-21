@@ -84,9 +84,9 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   def getCollectionBatchDF(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
     fetchData(spark, collectionBatchDBSettings, cassandraFormat, new StructType())
-      .withColumn("startdate", UDFUtils.getLatestDateFieldValue(col("start_date"), col("startdate")))
-      .withColumn("enddate", UDFUtils.getLatestDateFieldValue(col("end_date"), col("enddate")))
-      .withColumn("enrollmentenddate", UDFUtils.getLatestDateFieldValue(col("enrollment_enddate"), col("enrollmentenddate")))
+      .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
+      .withColumn("enrollmentenddate", UDFUtils.getLatestValue(col("enrollment_enddate"), col("enrollmentenddate")))
       .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
   }
 

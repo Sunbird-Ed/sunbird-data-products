@@ -14,6 +14,7 @@ import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, Re
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.exhaust.collection.UDFUtils
 import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
@@ -69,6 +70,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
   def getCourseBatch(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(spark, courseBatchDBSettings, cassandraUrl, new StructType())
+      .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
       .select("courseid", "batchid", "enddate", "startdate", "cert_templates" , "name")
       .withColumnRenamed("name", "batchname")
       .withColumn("hascertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
@@ -80,6 +83,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       .withColumn("isCertified",
         when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0
           || col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
+      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
       .select(col("batchid"), col("userid"), col("courseid"), col("enrolleddate"), col("completedon"), col("status"), col("isCertified"))
       .persist()
   }
