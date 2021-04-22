@@ -271,7 +271,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
     val cols = getEnrolmentColumns();
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
-      .where(col("batchid") === batchId && col("courseid") === collectionId  && lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull).select(cols.head, cols.tail: _*);
+      .where(col("batchid") === batchId && col("courseid") === collectionId  && lower(col("active")).equalTo("true") && (col("enrolleddate").isNotNull || col("enrolled_date").isNotNull))
+      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
+      .select(cols.head, cols.tail: _*);
 
     if (persist) df.persist() else df
   }
