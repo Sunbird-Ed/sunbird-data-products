@@ -78,8 +78,9 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     JobLogger.log("Post Audit Check", Option(postAuditEvent), INFO)
     
   }
-  
+
   def audit()(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean): Map[String, Long] = {
+    // $COVERAGE-OFF$ Disabling scoverage for main and execute method
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
       .select("userid", "batchid", "courseid", "contentstatus", "enrolleddate", "completedon", "certificates");
@@ -146,9 +147,9 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     Map("contentStatusMapUpdCount" -> contentStatusMapUpdCount, "missingCompletionDateCount" -> missingCompletionDateCount)
   }
 
-  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def reconcileMissingCertsAndEnrolmentDates(modelParams: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) : Map[String, Long] = {
 
+    // $COVERAGE-OFF$ Disabling scoverage for main and execute method
     implicit val sc = spark.sparkContext;
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate"))).cache();
@@ -199,9 +200,8 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     enrolmentCourseJoinedDF.select("userid", "batchid", "courseid", "contentstatus").write.format(cassandraFormat).options(if(dryRunEnabled) userEnrolmentTempDBSettings else userEnrolmentDBSettings).mode("APPEND").save()
   }
 
-  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def updateCompletions(enrolmentCourseJoinedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) = {
-
+    // $COVERAGE-OFF$ Disabling scoverage for main and execute method
     import spark.implicits._
     val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
