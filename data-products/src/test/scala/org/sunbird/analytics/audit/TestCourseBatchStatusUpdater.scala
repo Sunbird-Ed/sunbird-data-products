@@ -99,6 +99,21 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
     res.unStarted should be(0)
   }
 
+  /*
+   * Testcase for getting the latest value from migrated date fields
+   * enrolleddate: (Old Field)
+   *   null
+   *   2020-02-25 13:18:36:051+0000
+   *   2018-10-29 17:47:52:601+0000
+   * enrolled_date: (New Field)
+   *   2020-02-25 13:18:36:051+0000
+   *   null
+   *   2018-10-31 17:47:52:601+0000
+   * expected result enrolleddate:
+   *   2020-02-25 13:18:36:051+0000
+   *   2020-02-25 13:18:36:051+0000
+   *   2018-10-31 17:47:52:601+0000
+   */
   it should "get the latest value for date" in {
     val courseBatchDF = spark
       .read
