@@ -145,7 +145,8 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     enrolmentCourseJoinedDF.unpersist(true);
     Map("contentStatusMapUpdCount" -> contentStatusMapUpdCount, "missingCompletionDateCount" -> missingCompletionDateCount)
   }
-  
+
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def reconcileMissingCertsAndEnrolmentDates(modelParams: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) : Map[String, Long] = {
 
     implicit val sc = spark.sparkContext;
@@ -198,6 +199,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     enrolmentCourseJoinedDF.select("userid", "batchid", "courseid", "contentstatus").write.format(cassandraFormat).options(if(dryRunEnabled) userEnrolmentTempDBSettings else userEnrolmentDBSettings).mode("APPEND").save()
   }
 
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def updateCompletions(enrolmentCourseJoinedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) = {
 
     import spark.implicits._

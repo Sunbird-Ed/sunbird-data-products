@@ -133,6 +133,26 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     CollectionSummaryJobV2.saveToBlob(reportData, jobConfig)
   }
 
+  it should "generate the report with the latest value from date columns" in {
+    initializeDefaultMockData()
+    implicit val mockFc: FrameworkContext = mock[FrameworkContext]
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel","status","keywords","createdFor","medium", "subject"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
+    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
+    reportData.count() should be(3)
+    val batch1 = reportData.filter(col("batchid") === "batch-0130293763489873929" && col("courseid") === "do_1130293726460805121168")
+    batch1.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
+    batch1.select("startdate").collect().map(_ (0)).toList.contains("2020-05-26") should be(true)
+
+    val batch2 = reportData.filter(col("batchid") === "batch-0130320389509939204" && col("courseid") === "do_112636984058314752121")
+    batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
+    batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-30") should be(true)
+
+    val batch3 = reportData.filter(col("batchid") === "batch-01303150537737011211" && col("courseid") === "do_1130314965721088001129")
+    batch3.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
+    batch3.select("startdate").collect().map(_ (0)).toList.contains("2020-05-29") should be(true)
+  }
+
   it should "generate report when searchfilter config is not defined in the jobconfig" in {
     initializeDefaultMockData()
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
@@ -175,6 +195,21 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     CollectionSummaryJobV2.submitIngestionTask(ingestionServerMockURL, absolutePath)
   }
 
+  /*
+   * Testcase for getting the latest value from migrated date fields
+   * enrolleddate: (Old Field)
+   *   null
+   *   2020-02-25 13:18:36:051+0000
+   *   2018-10-29 17:47:52:601+0000
+   * enrolled_date: (New Field)
+   *   2020-02-25 13:18:36:051+0000
+   *   null
+   *   2018-10-31 17:47:52:601+0000
+   * expected result enrolleddate:
+   *   2020-02-25 13:18:36:051+0000
+   *   2020-02-25 13:18:36:051+0000
+   *   2018-10-31 17:47:52:601+0000
+   */
   it should "get the latest value for date" in {
     val dbDateValue = userEnrolments.select("enrolleddate", "enrolled_date").collect()
 
