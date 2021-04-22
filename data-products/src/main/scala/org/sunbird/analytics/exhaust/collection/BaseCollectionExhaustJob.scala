@@ -383,17 +383,6 @@ object UDFUtils extends Serializable {
 
   val completionPercentage = udf[Int, Map[String, Int], Int](completionPercentageFunction)
 
-  def getLatestDateFieldValueFun(newDate: java.sql.Date, staleDate: String): String = {
-    if (newDate != null) {
-      val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyy-MM-dd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
-      dateFormat.print(newDate.getTime)
-    } else {
-      staleDate
-    }
-  }
-
-  val getLatestDateFieldValue = udf[String, java.sql.Date, String](getLatestDateFieldValueFun)
-
   def getLatestValueFun(newValue: String, staleValue: String): String = {
     Option(newValue)
       .map(xValue => if(xValue.nonEmpty) xValue else Option(staleValue).map(yValue => yValue).orNull)
