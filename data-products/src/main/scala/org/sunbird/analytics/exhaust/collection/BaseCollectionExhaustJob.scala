@@ -384,9 +384,9 @@ object UDFUtils extends Serializable {
   val completionPercentage = udf[Int, Map[String, Int], Int](completionPercentageFunction)
 
   def getLatestValueFun(newValue: String, staleValue: String): String = {
-    Option(newValue)
-      .map(xValue => if(xValue.nonEmpty) xValue else Option(staleValue).map(yValue => yValue).orNull)
-      .getOrElse(Option(staleValue).map(yValue => yValue).orNull)
+      Option(newValue)
+        .map(xValue => if (xValue.nonEmpty) xValue else staleValue)
+        .getOrElse(staleValue)
   }
 
   val getLatestValue = udf[String, String, String](getLatestValueFun)
