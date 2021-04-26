@@ -87,29 +87,22 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch1.select("medium").collect().map(_(0)).toList.mkString("") should be("null")
     batch1.select("subject").collect().map(_(0)).toList.mkString("") should be("null")
 
-    val batch2 = reportData.filter(col("batchid") === "batch-0130320389509939204" && col("courseid") === "do_112636984058314752121")
-    batch2.select("state").collect().map(_ (0)).toList.contains("GPPS") should be(true)
-    batch2.select("district").collect().map(_ (0)).toList.contains("MPPS") should be(true)
-    batch2.select("enrolleduserscount").collect().map(_ (0)).toList.contains(2) should be(true)
-    batch2.select("completionuserscount").collect().map(_ (0)).toList.contains(2) should be(true)
+    val batch2 = reportData.filter(col("batchid") === "batch-0130271096968396800" && col("courseid") === "do_1130264512015646721166")
+    batch2.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
+    batch2.select("district").collect().map(_ (0)).toList.contains("BG") should be(true)
+    batch2.select("enrolleduserscount").collect().map(_ (0)).toList.contains(1) should be(true)
+    batch2.select("completionuserscount").collect().map(_ (0)).toList.contains(0) should be(true)
     batch2.select("hascertified").collect().map(_ (0)).toList.contains("N") should be(true)
     batch2.select("certificateissuedcount").collect().map(_ (0)).toList.contains(0) should be(true)
-    batch2.select("collectionname").collect().map(_ (0)).toList.contains("SB-6729 course notification test") should be(true)
+    batch2.select("collectionname").collect().map(_ (0)).toList.contains("Test_CurriculumCourse") should be(true)
     batch1.select("contentorg").collect().map(_ (0)).toList.size shouldNot be(0)
-    batch2.select("channel").collect().map(_ (0)).toList.contains("b00bc992ef25f1a9a8d63291e20efc8d") should be(true)
-    batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
-    batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-30") should be(true)
+    batch2.select("channel").collect().map(_ (0)).toList.contains("013016492159606784174") should be(true)
+    batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-05-30") should be(true)
+    batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-25") should be(true)
     batch2.select("createdfor").collect().map(_(0)).map(x => {
-      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("0123653943740170242")
+      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("ORG_001")
     })
 
-    batch2.select("medium").collect().map(_(0)).map(x => {
-      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("English")
-    })
-
-    batch2.select("subject").collect().map(_(0)).map(x => {
-      x.asInstanceOf[mutable.WrappedArray[String]](0) should be("English")
-    })
     val batch3 = reportData.filter(col("batchid") === "batch-01303150537737011211" && col("courseid") === "do_1130314965721088001129")
     batch3.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
     batch3.select("district").collect().map(_ (0)).toList.contains("BG") should be(true)
@@ -144,9 +137,9 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch1.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
     batch1.select("startdate").collect().map(_ (0)).toList.contains("2020-05-26") should be(true)
 
-    val batch2 = reportData.filter(col("batchid") === "batch-0130320389509939204" && col("courseid") === "do_112636984058314752121")
-    batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
-    batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-30") should be(true)
+    val batch2 = reportData.filter(col("batchid") === "batch-0130271096968396800" && col("courseid") === "do_1130264512015646721166")
+    batch2.select("enddate").collect().map(_ (0)).toList.contains("2030-05-30") should be(true)
+    batch2.select("startdate").collect().map(_ (0)).toList.contains("2020-05-25") should be(true)
 
     val batch3 = reportData.filter(col("batchid") === "batch-01303150537737011211" && col("courseid") === "do_1130314965721088001129")
     batch3.select("enddate").collect().map(_ (0)).toList.contains("2030-06-30") should be(true)
@@ -167,7 +160,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"store":"azure","batchStartDate":"2020-05-29","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val report = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
-    report.count() should be(2)
+    report.count() should be(1)
   }
 
   it should "generate report when only generateForAllBatches defined in the jobconfig" in {
