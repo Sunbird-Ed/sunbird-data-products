@@ -202,7 +202,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val postgresQuery = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
     while (postgresQuery.next()) {
       postgresQuery.getString("status") should be ("FAILED")
-      postgresQuery.getString("err_message") should be ("""Invalid request""")
+      postgresQuery.getString("err_message") should be ("""Invalid request. User info exhaust is not applicable for collections which don't request for user consent to share data""")
       postgresQuery.getString("download_urls") should be ("{}")
       postgresQuery.getString("iteration") should be ("1")
     }
