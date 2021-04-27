@@ -202,6 +202,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
 
   def updateCompletions(enrolmentCourseJoinedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) = {
     // $COVERAGE-OFF$ Disabling scoverage for main and execute method
+    import spark.implicits._
     val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
       .select("batchid", "enddate");
