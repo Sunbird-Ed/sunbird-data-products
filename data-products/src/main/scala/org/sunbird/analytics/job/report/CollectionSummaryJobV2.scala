@@ -165,32 +165,39 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   def filterBatches(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig): DataFrame = {
     import spark.implicits._
     val modelParams = config.modelParams.get
-    val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
-    val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", false).asInstanceOf[Boolean]
+//    val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
+//    val generateForAllBatches = modelParams.getOrElse("generateForAllBatches", false).asInstanceOf[Boolean]
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val courseBatchData = getCourseBatch(spark, fetchData)
-    val filteredBatches = if (null != searchFilter && searchFilter.nonEmpty) {
-      JobLogger.log("Generating reports only search query", None, INFO)
-      val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF(contentFields: _*)
-        .withColumnRenamed("name", "collectionname")
-        .withColumnRenamed("status", "contentstatus")
-        .withColumnRenamed("organisation", "contentorg")
-        .withColumnRenamed("createdFor", "createdfor")
-      courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
-    } else if (startDate.nonEmpty) {
-      JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
-      courseBatchData.filter(col("startdate").isNotNull && to_date(col("startdate"), "yyyy-MM-dd").geq(lit(startDate))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
-    } else if (generateForAllBatches) {
-      JobLogger.log(s"Generating reports for all the batches irrespective of whether the batch is live or expired", None, INFO)
-      courseBatchData // Irrespective of whether the batch is live or expired
-    } else {
-      // only report for batches which are ongoing and not expired
-      JobLogger.log(s"Generating reports only for batches which are ongoing and not expired", None, INFO)
-      val comparisonDate = DateTimeFormat.forPattern("yyyy-MM-dd").print(DateTime.now(DateTimeZone.UTC).minusDays(1))
-      courseBatchData.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate))).toDF()
-    }
-    JobLogger.log(s"Computing summary agg report for ${filteredBatches.count()}", None, INFO)
-    filteredBatches.persist(StorageLevel.MEMORY_ONLY)
+    //    val filteredBatches = if (null != searchFilter && searchFilter.nonEmpty) {
+    //      JobLogger.log("Generating reports only search query", None, INFO)
+    //      val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF(contentFields: _*)
+    //        .withColumnRenamed("name", "collectionname")
+    //        .withColumnRenamed("status", "contentstatus")
+    //        .withColumnRenamed("organisation", "contentorg")
+    //        .withColumnRenamed("createdFor", "createdfor")
+    //      courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"), "inner")
+    //    } else if (startDate.nonEmpty) {
+    //      JobLogger.log(s"Generating reports only for the batches which are started from $startDate date ", None, INFO)
+    //      courseBatchData.filter(col("startdate").isNotNull && to_date(col("startdate"), "yyyy-MM-dd").geq(lit(startDate))) // Generating a report for only for the batches are started on specific date (enrolledFrom)
+    //    } else if (generateForAllBatches) {
+    //      JobLogger.log(s"Generating reports for all the batches irrespective of whether the batch is live or expired", None, INFO)
+    //      courseBatchData // Irrespective of whether the batch is live or expired
+    //    } else {
+    //      // only report for batches which are ongoing and not expired
+    //      JobLogger.log(s"Generating reports only for batches which are ongoing and not expired", None, INFO)
+    //      val comparisonDate = DateTimeFormat.forPattern("yyyy-MM-dd").print(DateTime.now(DateTimeZone.UTC).minusDays(1))
+    //      courseBatchData.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate))).toDF()
+    //    }
+    //    JobLogger.log(s"Computing summary agg report for ${filteredBatches.count()}", None, INFO)
+    //    filteredBatches.persist(StorageLevel.MEMORY_ONLY)
+    val collectionDF = CourseUtils.getCourseInfo(List(), Some(searchFilter.get), 0).toDF(contentFields: _*)
+      .withColumnRenamed("name", "collectionname")
+      .withColumnRenamed("status", "contentstatus")
+      .withColumnRenamed("organisation", "contentorg")
+      .withColumnRenamed("createdFor", "createdfor")
+    val filteredDF = courseBatchData.join(collectionDF, courseBatchData("courseid") === collectionDF("identifier"),"inner")
+    filteredDF
   }
 }
 
