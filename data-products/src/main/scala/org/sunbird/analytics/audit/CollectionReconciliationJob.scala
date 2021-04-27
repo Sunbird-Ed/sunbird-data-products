@@ -202,7 +202,6 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
 
   def updateCompletions(enrolmentCourseJoinedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) = {
     // $COVERAGE-OFF$ Disabling scoverage for main and execute method
-    import spark.implicits._
     val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
       .select("batchid", "enddate");
@@ -210,7 +209,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     val enrolmentRDD = enrolmentDF.rdd.repartition(30).map(f => UserEnrolment(f.getString(0), f.getString(1), f.getString(2)))
 
     val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime", "last_completed_time"), SomeColumns("userid", "batchid", "courseid"))
-    val finalRDD = joinedRdd.filter(f => f._2.getIntOption(1).getOrElse(0) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getString(2), f._2.getString(3)))
+    val finalRDD = joinedRdd.filter(f => f._2.getIntOption(1).getOrElse(0) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getString(2), f._2.getStringOption(3).orNull))
     val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid")
       .withColumnRenamed("_4", "lastcompletedtime").withColumnRenamed("_5", "last_completed_time")
       .withColumn("lastcompletedtime", UDFUtils.getLatestValue(col("last_completed_time"), col("lastcompletedtime")))
@@ -230,9 +229,10 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     import spark.implicits._
     val enrolmentDF = blankEnrolmentDatesDF.select("userid", "courseid", "batchid");
     val enrolmentRDD = enrolmentDF.rdd.repartition(30).map(f => UserEnrolment(f.getString(0), f.getString(1), f.getString(2)))
-    val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime"), SomeColumns("userid", "batchid", "courseid")).cache();
-    val finalRDD = joinedRdd.map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getStringOption(2).getOrElse(null))).filter(f => f._4 != null)
-    val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid").withColumnRenamed("_4", "lastcompletedtime")
+    val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime", "last_completed_time"), SomeColumns("userid", "batchid", "courseid")).cache();
+    val finalRDD = joinedRdd.map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getStringOption(2).getOrElse(null), f._2.getStringOption(3).orNull)).filter(f => f._4 != null || f._5 != null)
+    val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid").withColumnRenamed("_4", "lastcompletedtime").withColumnRenamed("_5", "last_completed_time")
+      .withColumn("lastcompletedtime", UDFUtils.getLatestValue(col("last_completed_time"), col("lastcompletedtime")))
     val enrolmentWithRevisedDtDF = enrolmentJoinedDF.groupBy("userid", "batchid", "courseid").agg(min(col("lastcompletedtime")).alias("lastreviseddate")).withColumn("lastrevisedon", unix_timestamp(col("lastreviseddate"), "yyyy-MM-dd HH:mm:ss:SSS"))
     
     val finalEnrolmentDF = enrolmentDF.join(enrolmentWithRevisedDtDF, Seq("userid", "batchid", "courseid"), "left_outer")
