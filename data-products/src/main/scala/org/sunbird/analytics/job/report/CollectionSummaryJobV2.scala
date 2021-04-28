@@ -162,7 +162,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   /**
    * Filtering the batches by job config ("generateForAllBatches", "batchEnrolDate")
    */
-  def filterBatches(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig): DataFrame = {
+ def filterBatches(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, config: JobConfig): DataFrame = {
     import spark.implicits._
     val modelParams = config.modelParams.get
     val startDate = modelParams.getOrElse("batchStartDate", "").asInstanceOf[String]
@@ -190,7 +190,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       courseBatchData.filter(col("enddate").isNull || to_date(col("enddate"), "yyyy-MM-dd").geq(lit(comparisonDate))).toDF()
     }
     JobLogger.log(s"Computing summary agg report for ${filteredBatches.count()}", None, INFO)
-    filteredBatches.persist(StorageLevel.MEMORY_ONLY)
+    filteredBatches
   }
 }
 
