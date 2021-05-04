@@ -121,26 +121,14 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
       .option("header", "true")
       .load("src/test/resources/course-batch-status-updater/course_batch_status_updater_temp.csv")
       .cache()
-
-    val dbDateValue = courseBatchDF.select("startdate", "start_date").collect()
-
-    dbDateValue.map(_ (0)).toList(0) should be("2020-05-30")
-    (dbDateValue.map(_ (0)).toList(1) == null) should be(true)
-    dbDateValue.map(_ (0)).toList(3) should be("2020-05-23")
-
-    (dbDateValue.map(_ (1)).toList(0) == null) should be(true)
-    dbDateValue.map(_ (1)).toList(1) should be("2020-05-26")
-    dbDateValue.map(_ (1)).toList(3) should be("2020-05-25")
-
     (reporterMock.fetchData _)
       .expects(spark, Map("table" -> "course_batch", "keyspace" -> sunbirdCoursesKeyspace, "cluster" -> "LMSCluster"), "org.apache.spark.sql.cassandra", new StructType())
       .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
-
     val resultDf = CourseBatchStatusUpdaterJob.getCollectionBatchDF(reporterMock.fetchData)
     val resultDateValue =  resultDf.select("startdate").collect().map(_ (0)).toList
-
-    resultDateValue(0) should be("2020-05-30")
+    resultDateValue(0) should be("2021-04-28 00:00:00.000000+0000")
     resultDateValue(1) should be("2020-05-26")
+    resultDateValue(2) should be("2020-05-29")
     resultDateValue(3) should be("2020-05-25")
   }
 }

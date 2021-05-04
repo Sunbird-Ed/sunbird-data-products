@@ -305,6 +305,7 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.course_batch (
      enddate text,
      end_date timestamp,
      enrollmentenddate text,
+     enrollment_enddate timestamp,
      enrollmenttype text,
      mentors list<text>,
      name text,
