@@ -60,22 +60,19 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   }
 
   def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): CourseBatchStatusMetrics = {
-    val dateFormatter = new SimpleDateFormat("yyyy-MM-dd")
-    dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
-    val currentDate = dateFormatter.format(new Date)
-
+    val currentDate = getDateFormat().format(new Date)
     val computedDF = collectionBatchDF.withColumn("updated_status",
       when(lit(currentDate).gt(col("enddate")), 2).otherwise(
         when(lit(currentDate).geq(col("startdate")), 1).otherwise(col("status"))
       ))
     val finalDF = computedDF.filter(col("updated_status") =!= col("status"))
       .drop("status").withColumnRenamed("updated_status", "status")
-    JobLogger.log(s"Writing records into database", None, INFO)
-    finalDF.write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
     if (!finalDF.isEmpty) {
+      JobLogger.log(s"Writing records into database", None, INFO)
+      finalDF.select("courseid", "batchid", "status").write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
       val uncompletedCourses = computedDF.filter(col("updated_status") < 2)
       updateCourseBatchES(finalDF.filter(col("status") > 0).select("batchid", "status").collect.map(r => Map(finalDF.select("batchid", "status").columns.zip(r.toSeq): _*)), updaterConfig)
-      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, dateFormatter, updaterConfig)
+      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, getDateFormat(), updaterConfig)
     } else {
       JobLogger.log("No records found to update the db", None, INFO)
     }
@@ -93,12 +90,12 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   def getCourseMetaData(row: Row, dateFormat: SimpleDateFormat): Map[String, AnyRef] = {
     Map[String, AnyRef](
       "batchId" -> row.getAs[String]("batchid"),
-      "startDate" -> row.getAs[String]("startdate"),
+      "startDate" -> formatDate(row.getAs[String]("startdate")),
       "enrollmentType" -> row.getAs[String]("enrollmenttype"),
       "createdFor" -> row.getAs[List[String]]("createdfor"),
       "status" -> row.getAs[AnyRef]("updated_status"),
-      "enrollmentEndDate" -> getEnrolmentEndDate(row.getAs[String]("enrollmentenddate"), row.getAs[String]("enddate"), dateFormat),
-      "endDate" -> row.getAs[String]("enddate"),
+      "enrollmentEndDate" -> formatDate(getEnrolmentEndDate(row.getAs[String]("enrollmentenddate"), row.getAs[String]("enddate"), dateFormat)),
+      "endDate" -> formatDate(row.getAs[String]("enddate")),
       "name" -> row.getAs[String]("name")
     )
   }
@@ -156,4 +153,18 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     })
     JobLogger.log("Total Batches updates in ES", Option(Map("total_batch" -> batchList.length)), INFO)
   }
+
+  def getDateFormat(): SimpleDateFormat = {
+    val dateFormatter = new SimpleDateFormat("yyyy-MM-dd")
+    dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
+    dateFormatter
+  }
+
+  def formatDate(date: String): String = {
+    Option(date).map(x => {
+      val dateFormatter = getDateFormat()
+      dateFormatter.format(dateFormatter.parse(x))
+    }).orNull
+  }
+
 }
