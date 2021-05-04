@@ -23,8 +23,6 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   implicit val className: String = "org.sunbird.analytics.audit.CourseBatchStatusUpdaterJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val dateFormatter = new SimpleDateFormat("yyyy-MM-dd")
-  dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
@@ -62,7 +60,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   }
 
   def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): CourseBatchStatusMetrics = {
-    val currentDate = dateFormatter.format(new Date)
+    val currentDate = getDateFormat().format(new Date)
     val computedDF = collectionBatchDF.withColumn("updated_status",
       when(lit(currentDate).gt(col("enddate")), 2).otherwise(
         when(lit(currentDate).geq(col("startdate")), 1).otherwise(col("status"))
@@ -74,7 +72,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
       finalDF.select("courseid", "batchid", "status").write.format("org.apache.spark.sql.cassandra").options(collectionBatchDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
       val uncompletedCourses = computedDF.filter(col("updated_status") < 2)
       updateCourseBatchES(finalDF.filter(col("status") > 0).select("batchid", "status").collect.map(r => Map(finalDF.select("batchid", "status").columns.zip(r.toSeq): _*)), updaterConfig)
-      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, dateFormatter, updaterConfig)
+      updateCourseMetadata(finalDF.select("courseid").collect().map(_ (0)).toList.asInstanceOf[List[String]].distinct, uncompletedCourses, getDateFormat(), updaterConfig)
     } else {
       JobLogger.log("No records found to update the db", None, INFO)
     }
@@ -156,8 +154,17 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     JobLogger.log("Total Batches updates in ES", Option(Map("total_batch" -> batchList.length)), INFO)
   }
 
+  def getDateFormat(): SimpleDateFormat = {
+    val dateFormatter = new SimpleDateFormat("yyyy-MM-dd")
+    dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
+    dateFormatter
+  }
+
   def formatDate(date: String): String = {
-    dateFormatter.format(dateFormatter.parse(date))
+    Option(date).map(x => {
+      val dateFormatter = getDateFormat()
+      dateFormatter.format(dateFormatter.parse(x))
+    }).orNull
   }
 
 }
