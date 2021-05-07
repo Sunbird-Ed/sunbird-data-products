@@ -52,7 +52,7 @@ node() {
             }
         }
 
-    catch (err) {a
+    catch (err) {
         currentBuild.result = "FAILURE"
         throw err
     }
