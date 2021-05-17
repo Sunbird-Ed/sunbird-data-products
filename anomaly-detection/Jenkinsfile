@@ -19,8 +19,8 @@ node() {
 
         stage('Build') {
             sh '''
-                cd python-scripts
-                docker run --rm -v /etc/passwd:/etc/passwd -u $(id -u):$(id -g) -v$(pwd):/home/work -e HOME=/home/work -w /home/work python:3.7 ./build.sh
+                cd anomaly-detection
+                docker run --rm -v /etc/passwd:/etc/passwd -u $(id -u):$(id -g) -v$(pwd):/home/work -e HOME=/home/work -w /home/work python:3.8 ./build.sh
             '''
         }
 
