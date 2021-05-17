@@ -18,7 +18,7 @@ import scala.collection.JavaConverters._
 
 case class UserInfoExhaustReport(`Collection Id`: String, `Collection Name`: String, `Batch Id`: String, `Batch Name`: String, `User UUID`: String, `User Name`: String,
                                  `User Type`: String,`User Sub Type`: String, `State`: String, `District`: String, `Block`: String, `Cluster`: String,
-                                 `Org Name`: String, `Email ID`: String, `Mobile Number`: String, `Consent Provided`: String, `Consent Provided Date`: String)
+                                 `School Id`: String, `School Name`: String, `Org Name`: String, `Email ID`: String, `Mobile Number`: String, `Consent Provided`: String, `Consent Provided Date`: String)
 
 class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseReportsJob {
 
@@ -103,6 +103,18 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     batch1Results.map {res => res.`User Type`}.toList should contain atLeastOneElementOf List("administrator")
     batch1Results.map {res => res.`User Sub Type`}.toList should contain atLeastOneElementOf List("deo")
 
+    val user001 = batch1Results.filter(f => f.`User UUID`.equals("user-001"))
+    user001.map {f => f.`User UUID`}.head should be ("user-001")
+    user001.map {f => f.`State`}.head should be ("Karnataka")
+    user001.map {f => f.`District`}.head should be ("bengaluru")
+    user001.map {f => f.`Org Name`}.head should be ("Root Org2")
+    user001.map {f => f.`Block`}.head should be ("BLOCK1")
+    user001.map {f => f.`Cluster`}.head should be ("CLUSTER1")
+    user001.map {f => f.`User Type`}.head should be ("administrator")
+    user001.map {f => f.`User Sub Type`}.head should be ("deo")
+    user001.map {f => f.`School Id`}.head should be ("3183211")
+    user001.map {f => f.`School Name`}.head should be ("DPS, MATHURA")
+    
     val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
 
     while(pResponse.next()) {
