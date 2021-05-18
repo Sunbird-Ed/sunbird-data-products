@@ -209,10 +209,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
 
     val fieldsList = data.columns
     val filteredDf = data.select(fieldsList.head, fieldsList.tail: _*)
-    filteredDf.show(2)
-    println(reportConfig)
-    println(reportConfig.labels)
-    //    val lab = Map("projectName" -> "Project Name", "noOfContributions" -> "No. of contributions to the project", "acceptedNominations" -> "No. of accepted nominations to the project", "initiatedNominations" -> "No. of initiated nominations", "approvedContributions" -> "No. of approved contributions", "noOfContributors" -> "No. of contributors to the project", "pendingNominations" -> "No. of nominations pending review", "reportDate" -> "Report generation date", "visitors" -> "No. of users opening the project", "pendingContributions" -> "No. of contributions pending review", "rejectedNominations" -> "No. of rejected nominations")
     val labelsLookup = reportConfig.labels ++ Map("date" -> "Date")
     val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*)
       .withColumn("reportName",lit(reportName))
@@ -225,4 +221,3 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
   }
 
 }
-
