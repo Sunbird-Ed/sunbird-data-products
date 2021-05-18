@@ -403,7 +403,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val optLocation = Option(location)
         var locations = new ListBuffer[String]()
         try {
-            if (optLocation != null && !optLocation.isEmpty) {
+            if (optLocation.isDefined) {
                 val profileLocation = JSONUtils.deserialize[List[Map[String, String]]](optLocation.get)
                 val stateIdList = profileLocation.filter(f => f.getOrElse("type", "").equalsIgnoreCase("state")).map(f => f.getOrElse("id", ""))
                 if (!stateIdList.isEmpty) locations += stateIdList.head
@@ -426,7 +426,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     def profileTypeFunction(profileType: String) : String = {
         val optProfileType = Option(profileType)
-        if(optProfileType != null && !optProfileType.isEmpty) {
+        if(optProfileType.isDefined) {
             val profileUserType = JSONUtils.deserialize[Map[String, String]](optProfileType.get)
             val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
             if (!usertypeList.isEmpty) usertypeList.head else ""
@@ -436,7 +436,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     def profileSubTypeFunction(profileSubType: String) : String = {
         val optProfileSubType = Option(profileSubType)
-        if(optProfileSubType != null && !optProfileSubType.isEmpty) {
+        if(optProfileSubType.isDefined) {
             val profileUserSubType = JSONUtils.deserialize[Map[String, String]](optProfileSubType.get)
             val userSubTypeList = profileUserSubType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
             if (!userSubTypeList.isEmpty) userSubTypeList.head else ""
@@ -444,5 +444,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     val addUserSubType = udf[String, String](profileSubTypeFunction)
+    
 
 }
