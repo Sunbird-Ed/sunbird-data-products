@@ -102,11 +102,12 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
 
     val data = programData.leftOuterJoin(nominationRdd).map(f=>(f._2._1,f._2._2.getOrElse(NominationData("","","","",""))))
     var druidData = List[ProgramVisitors]()
+    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config))
 
     val report = data
       .filter(f=> null != f._1.status && (f._1.status.equalsIgnoreCase("Live") || f._1.status.equalsIgnoreCase("Unlisted"))).collect().toList
       .map(f => {
-        val contributionData = getContributionData(f._1.program_id)
+        val contributionData = getContributionData(f._1.program_id, configMap("modelParams").asInstanceOf[Map[String, AnyRef]])
         druidData = ProgramVisitors(f._1.program_id,f._1.startdate,f._1.enddate, "0") :: druidData
         FunnelResult(f._1.program_id,reportDate,f._1.name,f._2.Initiated,f._2.Rejected,
           f._2.Pending,f._2.Approved,contributionData._1.toString,contributionData._2.toString,contributionData._3.toString,
@@ -117,7 +118,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       .drop("channel","id","program_id")
       .persist(StorageLevel.MEMORY_ONLY)
 
-    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config))
     val storageConfig = getStorageConfig("reports", "")
     saveReportToBlob(funnelReport, configMap, storageConfig, "FunnelReport")
 
@@ -142,25 +142,24 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(finalMap))
   }
 
-  def getContributionData(programId: String): (Int,Int,Int,Int) = {
-    val url = Constants.COMPOSITE_SEARCH_URL
+  def getContributionRequest(query: String, programId: String): String = {
+    val mapQuery = JSONUtils.deserialize[Map[String,AnyRef]](query)
+    val request = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(mapQuery("request")))
+    val filters = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(request("filters")))
+    val updatedFilters = filters map {
+      case ("programId","programIdentifier") => "programId" -> programId
+      case x => x
+    }
 
-    val contributionRequest = s"""{
-                                 |    "request": {
-                                 |        "filters": {
-                                 |            "objectType": "content",
-                                 |            "status": ["Live"],
-                                 |            "programId": "$programId",
-                                 |            "mimeType": {"!=": "application/vnd.ekstep.content-collection"},
-                                 |            "contentType": {"!=": "Asset"}
-                                 |        },
-                                 |        "not_exists": [
-                                 |            "sampleContent"
-                                 |        ],
-                                 |        "facets":["createdBy"],
-                                 |        "limit":0
-                                 |    }
-                                 |}""".stripMargin
+    val finalMap = mapQuery.updated("request",request.updated("filters",updatedFilters))
+    JSONUtils.serialize(finalMap)
+  }
+
+  def getContributionData(programId: String, config: Map[String, AnyRef]): (Int,Int,Int,Int) = {
+    val url = Constants.COMPOSITE_SEARCH_URL
+    val contributionConfig = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config("contributionConfig")))
+
+    val contributionRequest = getContributionRequest(JSONUtils.serialize(contributionConfig("contributionRequest")), programId)
     val contributionResponse = RestUtil.post[TotalContributionResult](url,contributionRequest)
     val contributionResponses =if(null != contributionResponse && contributionResponse.responseCode.equalsIgnoreCase("OK") && contributionResponse.result.count>0) {
       contributionResponse.result.facets
@@ -168,42 +167,14 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val totalContributors = contributionResponses.filter(p => null!=p.values).flatMap(f=>f.values).length
     val totalContributions = contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
 
-    val correctionsPendingRequest = s"""{
-                                       |    "request": {
-                                       |        "filters": {
-                                       |            "objectType": "content",
-                                       |            "status": "Draft",
-                                       |            "prevStatus": "Live",
-                                       |            "programId": "$programId",
-                                       |            "mimeType": {"!=": "application/vnd.ekstep.content-collection"},
-                                       |            "contentType": {"!=": "Asset"}
-                                       |        },
-                                       |        "not_exists": [
-                                       |            "sampleContent"
-                                       |        ],
-                                       |        "facets":["createdBy"],
-                                       |        "limit":0
-                                       |    }
-                                       |}
-                                       |""".stripMargin
+    val correctionsPendingRequest = getContributionRequest(JSONUtils.serialize(contributionConfig("correctionsPendingRequest")), programId)
     val correctionsPendingResponse = RestUtil.post[TotalContributionResult](url,correctionsPendingRequest)
     val correctionResponses =if(null != correctionsPendingResponse && correctionsPendingResponse.responseCode.equalsIgnoreCase("OK") && correctionsPendingResponse.result.count>0) {
       correctionsPendingResponse.result.facets
     } else List()
     val correctionPending=correctionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
 
-    val tbRequest = s"""{
-                       |	"request": {
-                       |       "filters": {
-                       |         "programId": "$programId",
-                       |         "objectType": "content",
-                       |         "status": ["Draft","Live","Review"],
-                       |         "mimeType": "application/vnd.ekstep.content-collection"
-                       |       },
-                       |       "fields": ["acceptedContents", "rejectedContents"],
-                       |       "limit": 10000
-                       |     }
-                       |}""".stripMargin
+    val tbRequest =getContributionRequest(JSONUtils.serialize(contributionConfig("contentRequest")), programId)
     val response = RestUtil.post[ContributionResult](url,tbRequest)
 
     val contentData = if(null != response && response.responseCode.equalsIgnoreCase("OK") && response.result.count>0) {
@@ -238,6 +209,10 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
 
     val fieldsList = data.columns
     val filteredDf = data.select(fieldsList.head, fieldsList.tail: _*)
+    filteredDf.show(2)
+    println(reportConfig)
+    println(reportConfig.labels)
+    //    val lab = Map("projectName" -> "Project Name", "noOfContributions" -> "No. of contributions to the project", "acceptedNominations" -> "No. of accepted nominations to the project", "initiatedNominations" -> "No. of initiated nominations", "approvedContributions" -> "No. of approved contributions", "noOfContributors" -> "No. of contributors to the project", "pendingNominations" -> "No. of nominations pending review", "reportDate" -> "Report generation date", "visitors" -> "No. of users opening the project", "pendingContributions" -> "No. of contributions pending review", "rejectedNominations" -> "No. of rejected nominations")
     val labelsLookup = reportConfig.labels ++ Map("date" -> "Date")
     val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*)
       .withColumn("reportName",lit(reportName))
@@ -250,3 +225,4 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
   }
 
 }
+
