@@ -400,10 +400,11 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
   }
     
     def locationIdListFunction(location: String): List[String] = {
+        val optLocation = Option(location)
         var locations = new ListBuffer[String]()
         try {
-            if (location != null) {
-                val profileLocation = JSONUtils.deserialize[List[Map[String, String]]](location)
+            if (optLocation.isDefined) {
+                val profileLocation = JSONUtils.deserialize[List[Map[String, String]]](optLocation.get)
                 val stateIdList = profileLocation.filter(f => f.getOrElse("type", "").equalsIgnoreCase("state")).map(f => f.getOrElse("id", ""))
                 if (!stateIdList.isEmpty) locations += stateIdList.head
                 val districtIdList = profileLocation.filter(f => f.getOrElse("type", "").equalsIgnoreCase("district")).map(f => f.getOrElse("id", ""))
@@ -424,8 +425,9 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     val locationIdList = udf[List[String], String](locationIdListFunction)
     
     def profileTypeFunction(profileType: String) : String = {
-        if(profileType != null) {
-            val profileUserType = JSONUtils.deserialize[Map[String, String]](profileType)
+        val optProfileType = Option(profileType)
+        if(optProfileType.isDefined) {
+            val profileUserType = JSONUtils.deserialize[Map[String, String]](optProfileType.get)
             val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
             if (!usertypeList.isEmpty) usertypeList.head else ""
         } else ""
@@ -433,13 +435,15 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     val addUserType = udf[String, String](profileTypeFunction)
     
     def profileSubTypeFunction(profileSubType: String) : String = {
-        if(profileSubType != null) {
-            val profileUserSubType = JSONUtils.deserialize[Map[String, String]](profileSubType)
+        val optProfileSubType = Option(profileSubType)
+        if(optProfileSubType.isDefined) {
+            val profileUserSubType = JSONUtils.deserialize[Map[String, String]](optProfileSubType.get)
             val userSubTypeList = profileUserSubType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
             if (!userSubTypeList.isEmpty) userSubTypeList.head else ""
         } else ""
     }
     
     val addUserSubType = udf[String, String](profileSubTypeFunction)
+    
 
 }
