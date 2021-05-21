@@ -416,7 +416,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             } else locations.toList
         }catch {
             case ex: Exception =>
-                JobLogger.log(s"StateAdminReportJob: error in locationIdListFunction = ${ex.getMessage}", None, INFO)
+                JobLogger.log(s"StateAdminReportJob: error in locationIdListFunction = ${ex.getMessage}", None, ERROR)
                 locations.toList
         }
     }
