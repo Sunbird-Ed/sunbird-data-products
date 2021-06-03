@@ -3,7 +3,6 @@ package org.sunbird.analytics.sourcing
 import java.io.File
 import java.sql.{Connection, Statement}
 import java.time.{ZoneOffset, ZonedDateTime}
-
 import cats.syntax.either._
 import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResponseTimeseriesImpl, DruidResult, QueryType}
 import ing.wbaa.druid.client.DruidClient
@@ -61,7 +60,15 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
     EmbeddedPostgresql.execute(userOrgQuery)
   }
 
-  def createVUserOrgTable() {}
+  def insertData(): Unit = {
+    val tableName: String = "\"V_User\""
+    val orgtableName: String = "\"V_User_Org\""
+    val userId = "\"userId\""
+    val userQuery = s"""INSERT INTO $tableName($userId) VALUES('0124698765480987654')""".stripMargin
+    val orgQuery = s"""INSERT INTO $orgtableName($userId, roles) VALUES('0124698765480987654','["admin"]')""".stripMargin
+    EmbeddedPostgresql.execute(userQuery)
+    EmbeddedPostgresql.execute(orgQuery)
+  }
 
   it should "generate the sourcing report" in {
     implicit val sc = spark.sparkContext
@@ -96,6 +103,46 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
     (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     SourcingSummaryReport.execute()
+
+    val report = sqlContext.sparkSession.read
+      .option("header","false")
+      .json("sourcing/SourcingReport.json")
+
+    report.first().getString(0) should be ("0124698765480987654")
+    report.first().getString(1) should be ("Practise Question Set")
+    report.first().getLong(3) should be (2L)
+    report.first().getString(4) should be ("Individual")
+  }
+
+  it should "get correct userType for users" in {
+    implicit val sc = spark.sparkContext
+    implicit val mockFc = mock[FrameworkContext]
+    val config = s"""{"search": {"type": "none"},"model": "org.ekstep.analytics.job.report.SourcingReports","modelParams": {"druidIngestionUrl":"https://httpbin.org/post","specPath":"absolutePath","dbName":"postgres","druidQuery": {"queryType": "groupBy","dataSource": "vdn-content-model-snapshot","intervals": "1901-01-01T00:00:00+00:00/2101-01-01T00:00:00+00:00","aggregations": [{"name": "count","type": "count"}],"dimensions": [{"fieldName": "primaryCategory","aliasName": "primaryCategory"},{"fieldName": "createdBy","aliasName": "createdBy"}],  "filters": [{"type": "equals","dimension": "objectType","value": "Content"}, {"type": "equals","dimension": "sampleContent","value": "false"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}},"reportConfig": {"id": "funnel_report","metrics": [],"labels": {"reportDate": "Report generation date","visitors": "No. of users opening the project","projectName": "Project Name","initiatedNominations": "No. of initiated nominations","rejectedNominations": "No. of rejected nominations","pendingNominations": "No. of nominations pending review","acceptedNominations": "No. of accepted nominations to the project","noOfContributors": "No. of contributors to the project","noOfContributions": "No. of contributions to the project","pendingContributions": "No. of contributions pending review","approvedContributions": "No. of approved contributions"},"output": [{"type": "csv","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}, {"type": "json","dims": ["identifier", "channel", "name"],"fileParameters": ["id", "dims"]}]},"store": "azure","format": "csv","key": "druid-reports/","filePath": "druid-reports/","container": "reportPostContainer","folderPrefix": ["slug", "reportName"]},"sparkCassandraConnectionHost": "sunbirdPlatformCassandraHost","druidConfig": {"queryType": "timeseries","dataSource": "telemetry-events-syncts","intervals": "startdate/enddate","aggregations": [{"name": "visitors","type": "count","fieldName": "actor_id"}],"filters": [{"type": "equals","dimension": "context_cdata_id","value": "program_id"}, {"type": "equals","dimension": "edata_pageid","value": "contribution_project_contributions"}, {"type": "equals","dimension": "context_pdata_pid","value": "creation-portal.programs"}, {"type": "equals","dimension": "context_cdata_type","value": "project"}, {"type": "equals","dimension": "context_env","value": "creation-portal"}, {"type": "equals","dimension": "eid","value": "IMPRESSION"}],"postAggregation": [],"descending": "false","limitSpec": {"type": "default","limit": 1000000,"columns": [{"dimension": "count","direction": "descending"}]}},"output": [{"to": "console","params": {"printEvent": false}}],"parallelization": 8,"appName": "Funnel Report Job","deviceMapping": false}""".stripMargin
+    implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
+    insertData()
+    //mocking for DruidDataFetcher
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val json: String =
+      """
+        |{
+        |    "primaryCategory": "Practise Question Set",
+        |    "createdBy": "0124698765480987654",
+        |    "count": 2.0
+        |  }
+      """.stripMargin
+
+    val doc: Json = parse(json).getOrElse(Json.Null)
+    val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc))
+    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
+
+    implicit val mockDruidConfig = DruidConfig.DefaultConfig
+    val mockDruidClient = mock[DruidClient]
+    (mockDruidClient.doQuery[DruidResponse](_: DruidQuery)(_: DruidConfig)).expects(*, mockDruidConfig).returns(Future(druidResponse)).anyNumberOfTimes()
+    (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
+
+    val userDf = SourcingSummaryReport.getUserDetails()
+    userDf.select("userId").first().getString(0) should be ("0124698765480987654")
+    userDf.select("userType").first().getString(0) should be ("Organization")
   }
 
 }
