@@ -1,6 +1,7 @@
 package org.sunbird.analytics.sourcing
 
 import java.util.Properties
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.Encoders
 import org.sunbird.analytics.util.{CourseUtils, TextBookUtils}
@@ -9,7 +10,7 @@ import org.apache.spark.sql._
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, IJob, JobConfig, Level, StorageConfig}
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.model.{QueryDateRange, ReportConfig}
 import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.sourcing.FunnelReport.getStorageConfig
@@ -68,7 +69,23 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val storageConfig = StorageConfig(AppConf.getConfig("cloud_storage_type"), "reports", "", Option(modelParams.getOrElse("storageKey","druid_storage_account_key").toString), Option(modelParams.getOrElse("storageSecret","druid_storage_account_secret").toString))
     resultDf.saveToBlobStore(storageConfig, "json", "sourcing",
       Option(Map("header" -> "true")), Option(List("reportName")))
+    submitReportToDruid(modelParams)
+  }
+
+  def submitReportToDruid(modelParams: Map[String, AnyRef]): Unit = {
     JobLogger.log(s"Submitting Druid Ingestion Task", None, Level.INFO)
+    val segmentUrl = modelParams.getOrElse("druidSegmentUrl", "http://localhost:8081/druid/coordinator/v1/metadata/datasources/sourcing-model-snapshot/segments").asInstanceOf[String]
+    val deleteSegmentUrl = modelParams.getOrElse("deleteSegmentUrl", "http://localhost:8081/druid/coordinator/v1/datasources/sourcing-model-snapshot/segments/").asInstanceOf[String]
+    val olderSegments = RestUtil.get[List[String]](segmentUrl)
+    //disable older segments
+    if(null != olderSegments) {
+      olderSegments.foreach(segmentId => {
+        val apiUrl = deleteSegmentUrl+segmentId
+        RestUtil.delete(apiUrl)
+      })
+    }
+    JobLogger.log(s"Druid: deleted older segments", None, Level.INFO)
+
     val ingestionSpecPath: String = modelParams.getOrElse("specPath", "").asInstanceOf[String]
     val druidIngestionUrl: String = modelParams.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
     CollectionSummaryJobV2.submitIngestionTask(druidIngestionUrl, ingestionSpecPath)
