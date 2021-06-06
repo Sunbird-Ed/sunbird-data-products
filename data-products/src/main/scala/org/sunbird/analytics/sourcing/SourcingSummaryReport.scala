@@ -77,14 +77,15 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val segmentUrl = modelParams.getOrElse("druidSegmentUrl", "http://localhost:8081/druid/coordinator/v1/metadata/datasources/sourcing-model-snapshot/segments").asInstanceOf[String]
     val deleteSegmentUrl = modelParams.getOrElse("deleteSegmentUrl", "http://localhost:8081/druid/coordinator/v1/datasources/sourcing-model-snapshot/segments/").asInstanceOf[String]
     val olderSegments = RestUtil.get[List[String]](segmentUrl)
+    JobLogger.log(s"olderSegments - $olderSegments",None, Level.INFO)
     //disable older segments
     if(null != olderSegments) {
       olderSegments.foreach(segmentId => {
         val apiUrl = deleteSegmentUrl+segmentId
         RestUtil.delete(apiUrl)
+        JobLogger.log(s"Deleted $segmentId",None, Level.INFO)
       })
     }
-    JobLogger.log(s"Druid: deleted older segments", None, Level.INFO)
 
     val ingestionSpecPath: String = modelParams.getOrElse("specPath", "").asInstanceOf[String]
     val druidIngestionUrl: String = modelParams.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
