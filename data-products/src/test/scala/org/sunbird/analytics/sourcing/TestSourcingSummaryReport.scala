@@ -13,7 +13,6 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.Matchers
-import org.sunbird.analytics.util.EmbeddedPostgresql.{execute, pg}
 import org.sunbird.analytics.util.{EmbeddedPostgresql, SparkSpec}
 
 import scala.concurrent.Future
@@ -47,14 +46,16 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
     val tableName: String = "\"V_User\""
     val orgtableName: String = "\"V_User_Org\""
     val userId = "\"userId\""
-    val userQuery = s"""
-                   |CREATE TABLE IF NOT EXISTS $tableName (
-                   |    $userId TEXT)""".stripMargin
+    val userQuery =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |    $userId TEXT)""".stripMargin
 
-    val userOrgQuery = s"""
-                          |CREATE TABLE IF NOT EXISTS $orgtableName (
-                          |    $userId TEXT,
-                          |    roles TEXT)""".stripMargin
+    val userOrgQuery =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $orgtableName (
+         |    $userId TEXT,
+         |    roles TEXT)""".stripMargin
 
     EmbeddedPostgresql.execute(userQuery)
     EmbeddedPostgresql.execute(userOrgQuery)
@@ -105,13 +106,13 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
     SourcingSummaryReport.execute()
 
     val report = sqlContext.sparkSession.read
-      .option("header","false")
+      .option("header", "false")
       .json("sourcing/SourcingSummaryReport.json")
 
-    report.first().getString(0) should be ("0124698765480987654")
-    report.first().getString(1) should be ("Practise Question Set")
-    report.first().getLong(3) should be (2L)
-    report.first().getString(4) should be ("Individual")
+    report.first().getString(0) should be("0124698765480987654")
+    report.first().getString(1) should be("Practise Question Set")
+    report.first().getLong(3) should be(2L)
+    report.first().getString(4) should be("Individual")
   }
 
   it should "get correct userType for users" in {
@@ -141,8 +142,8 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
     (mockFc.getDruidRollUpClient _).expects().returns(mockDruidClient).anyNumberOfTimes()
 
     val userDf = SourcingSummaryReport.getUserDetails()
-    userDf.select("userId").first().getString(0) should be ("0124698765480987654")
-    userDf.select("userType").first().getString(0) should be ("Organization")
+    userDf.select("userId").first().getString(0) should be("0124698765480987654")
+    userDf.select("userType").first().getString(0) should be("Organization")
   }
 
 }

@@ -15,7 +15,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.collection.UDFUtils
-import org.sunbird.analytics.util.{CourseUtils, ReportUtil, UserData}
+import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
 
@@ -43,7 +43,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       JobLogger.log(s"Submitting Druid Ingestion Task", None, INFO)
       val ingestionSpecPath: String = jobConfig.modelParams.get.getOrElse("specPath", "").asInstanceOf[String]
       val druidIngestionUrl: String = jobConfig.modelParams.get.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
-      ReportUtil.submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
+      CourseUtils.submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
       res._2.unpersist()
     } finally {

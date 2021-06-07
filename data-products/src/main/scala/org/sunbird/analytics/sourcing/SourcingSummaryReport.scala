@@ -3,8 +3,7 @@ package org.sunbird.analytics.sourcing
 import java.util.Properties
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.Encoders
-import org.sunbird.analytics.util.{CourseUtils, ReportUtil, TextBookUtils}
+import org.sunbird.analytics.util.CourseUtils
 import org.apache.spark.sql.functions.{when, _}
 import org.apache.spark.sql._
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -14,7 +13,6 @@ import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, Re
 import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.cloud.storage.conf.AppConf
 
-case class PostgresData(programId: String, programName: String)
 case class SourcingContents(primaryCategory: String, createdBy: String, count: Int)
 
 object SourcingSummaryReport extends optional.Application with IJob with BaseReportsJob {
@@ -27,7 +25,7 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
-    JobLogger.log(s"Started execution - $jobName",None, Level.INFO)
+    JobLogger.log(s"Started execution - $jobName", None, Level.INFO)
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     implicit val spark = openSparkSession(jobConfig)
@@ -43,11 +41,11 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
-    val tables = JSONUtils.deserialize[Map[String,String]](JSONUtils.serialize(config.modelParams.get.getOrElse("tables",Map())))
-    val programData = loadData(url, tables("programTable")).withColumnRenamed("status","programStatus")
+    val tables = JSONUtils.deserialize[Map[String, String]](JSONUtils.serialize(config.modelParams.get.getOrElse("tables", Map())))
+    val programData = loadData(url, tables("programTable")).withColumnRenamed("status", "programStatus")
     val nominationData = loadData(url, tables("nominationTable"))
-    val projectDf = programData.join(nominationData, Seq("program_id"),"outer")
-      .select("program_id","status","rootorg_id","user_id")
+    val projectDf = programData.join(nominationData, Seq("program_id"), "outer")
+      .select("program_id", "status", "rootorg_id", "user_id")
 
     process(projectDf)
   }
@@ -55,13 +53,13 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
   def process(projectDf: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
     val userDf = getUserDetails()
     val resultDf = userDf.join(projectDf, userDf.col("userId") === projectDf.col("user_id"), "outer")
-      .withColumnRenamed("user_id","contributorId")
+      .withColumnRenamed("user_id", "contributorId")
       .withColumn("reportName", lit("SourcingSummaryReport"))
       .withColumn("timestamp", lit(System.currentTimeMillis()))
-    JobLogger.log(s"resultDf count - ${resultDf.count()}",None, Level.INFO)
+    JobLogger.log(s"resultDf count - ${resultDf.count()}", None, Level.INFO)
 
     val modelParams = config.modelParams.get
-    val storageConfig = StorageConfig(AppConf.getConfig("cloud_storage_type"), "reports", "", Option(modelParams.getOrElse("storageKey","druid_storage_account_key").toString), Option(modelParams.getOrElse("storageSecret","druid_storage_account_secret").toString))
+    val storageConfig = StorageConfig(AppConf.getConfig("cloud_storage_type"), "reports", "", Option(modelParams.getOrElse("storageKey", "druid_storage_account_key").toString), Option(modelParams.getOrElse("storageSecret", "druid_storage_account_secret").toString))
     resultDf.saveToBlobStore(storageConfig, "json", "sourcing",
       Option(Map("header" -> "true")), Option(List("reportName")))
     submitReportToDruid(modelParams)
@@ -76,19 +74,19 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val segmentUrl = modelParams.getOrElse("druidSegmentUrl", "http://localhost:8081/druid/coordinator/v1/metadata/datasources/sourcing-model-snapshot/segments").asInstanceOf[String]
     val deleteSegmentUrl = modelParams.getOrElse("deleteSegmentUrl", "http://localhost:8081/druid/coordinator/v1/datasources/sourcing-model-snapshot/segments/").asInstanceOf[String]
     val olderSegments = RestUtil.get[List[String]](segmentUrl)
-    JobLogger.log(s"olderSegments - $olderSegments",None, Level.INFO)
+    JobLogger.log(s"olderSegments - $olderSegments", None, Level.INFO)
     //disable older segments
-    if(null != olderSegments) {
+    if (null != olderSegments) {
       olderSegments.foreach(segmentId => {
-        val apiUrl = deleteSegmentUrl+segmentId
+        val apiUrl = deleteSegmentUrl + segmentId
         RestUtil.delete(apiUrl)
-        JobLogger.log(s"Deleted $segmentId",None, Level.INFO)
+        JobLogger.log(s"Deleted $segmentId", None, Level.INFO)
       })
     }
 
     val ingestionSpecPath: String = modelParams.getOrElse("specPath", "").asInstanceOf[String]
     val druidIngestionUrl: String = modelParams.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
-    ReportUtil.submitIngestionTask(druidIngestionUrl, ingestionSpecPath)
+    CourseUtils.submitIngestionTask(druidIngestionUrl, ingestionSpecPath)
     JobLogger.log(s"Druid ingestion completed", None, Level.INFO)
   }
 
@@ -99,12 +97,12 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val vUserData = loadData(dbUrl, "\"V_User\"")
       .select("userId")
     val vUserOrgData = loadData(dbUrl, "\"V_User_Org\"")
-      .select("userId","roles")
+      .select("userId", "roles")
 
-    val userDf = vUserData.join(vUserOrgData, Seq("userId"),"left")
-      .withColumn("userType", when(col("roles").contains("admin"),"Organization")
+    val userDf = vUserData.join(vUserOrgData, Seq("userId"), "left")
+      .withColumn("userType", when(col("roles").contains("admin"), "Organization")
         .when(col("roles").isNull, "Individual").otherwise("Other"))
-      .select("userId","userType")
+      .select("userId", "userType")
 
     val contentDf = getContents()
     userDf.join(contentDf, userDf.col("userId") === contentDf.col("createdBy"),
@@ -119,8 +117,8 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val query = JSONUtils.serialize(config.modelParams.get("druidQuery"))
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](query)
     val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
-    druidResponse.map(f=> JSONUtils.deserialize[SourcingContents](f)).toDF()
-      .withColumnRenamed("count","totalContributedContent")
+    druidResponse.map(f => JSONUtils.deserialize[SourcingContents](f)).toDF()
+      .withColumnRenamed("count", "totalContributedContent")
   }
 
 }

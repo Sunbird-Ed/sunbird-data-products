@@ -9,7 +9,7 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.util.{ReportUtil, UserData}
+import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.mutable
 
@@ -185,7 +185,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     val classLoader = getClass.getClassLoader
     val file = new File(classLoader.getResource(resourceName).getFile)
     val absolutePath = file.getAbsolutePath
-    ReportUtil.submitIngestionTask(ingestionServerMockURL, absolutePath)
+    CourseUtils.submitIngestionTask(ingestionServerMockURL, absolutePath)
   }
 
   /*
