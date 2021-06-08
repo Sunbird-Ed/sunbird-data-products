@@ -3,7 +3,7 @@ package org.sunbird.analytics.util
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, MergeUtil, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, MergeConfig, MergeFiles, StorageConfig}
@@ -152,4 +152,19 @@ object CourseUtils {
       } else List[CourseBatchInfo]()
     }
   }
+
+  def submitIngestionTask(apiUrl: String, specPath: String): Unit = {
+    val source = scala.io.Source.fromFile(specPath)
+    val ingestionData = try {
+      source.mkString
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(s"Exception Found While reading ingestion spec. ${ex.getMessage}", None, ERROR)
+        ex.printStackTrace()
+        null
+    } finally source.close()
+    val response = RestUtil.post[Map[String, String]](apiUrl, ingestionData, None)
+    JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
+  }
+
 }
