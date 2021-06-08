@@ -41,9 +41,8 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
-    val tables = JSONUtils.deserialize[Map[String, String]](JSONUtils.serialize(config.modelParams.get.getOrElse("tables", Map())))
-    val programData = loadData(url, tables("programTable")).withColumnRenamed("status", "programStatus")
-    val nominationData = loadData(url, tables("nominationTable"))
+    val programData = loadData(url, AppConf.getConfig("postgres.program.table")).withColumnRenamed("status", "programStatus")
+    val nominationData = loadData(url, AppConf.getConfig("postgres.nomination.table"))
     val projectDf = programData.join(nominationData, Seq("program_id"), "outer")
       .select("program_id", "status", "rootorg_id", "user_id")
 
@@ -71,8 +70,11 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
 
   def submitReportToDruid(modelParams: Map[String, AnyRef]): Unit = {
     JobLogger.log(s"Submitting Druid Ingestion Task", None, Level.INFO)
-    val segmentUrl = modelParams.getOrElse("druidSegmentUrl", "http://localhost:8081/druid/coordinator/v1/metadata/datasources/sourcing-model-snapshot/segments").asInstanceOf[String]
-    val deleteSegmentUrl = modelParams.getOrElse("deleteSegmentUrl", "http://localhost:8081/druid/coordinator/v1/datasources/sourcing-model-snapshot/segments/").asInstanceOf[String]
+    val dataSource = modelParams.getOrElse("dataSource", "sourcing-summary-snapshot").asInstanceOf[String]
+    val druidHost = modelParams.getOrElse("druidHost", "http://localhost:8081").asInstanceOf[String]
+
+    val segmentUrl = druidHost + AppConf.getConfig("druid.segment.path") + dataSource + "/segments"
+    val deleteSegmentUrl = druidHost + AppConf.getConfig("druid.deletesegment.path") + dataSource + "/segments/"
     val olderSegments = RestUtil.get[List[String]](segmentUrl)
     JobLogger.log(s"olderSegments - $olderSegments", None, Level.INFO)
     //disable older segments
@@ -85,7 +87,7 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     }
 
     val ingestionSpecPath: String = modelParams.getOrElse("specPath", "").asInstanceOf[String]
-    val druidIngestionUrl: String = modelParams.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
+    val druidIngestionUrl = druidHost + AppConf.getConfig("druid.ingestion.path")
     CourseUtils.submitIngestionTask(druidIngestionUrl, ingestionSpecPath)
     JobLogger.log(s"Druid ingestion completed", None, Level.INFO)
   }
@@ -94,9 +96,9 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val openSaberDb = config.modelParams.get.getOrElse("dbName", "opensaberdb")
     val dbUrl = AppConf.getConfig("postgres.url") + openSaberDb
 
-    val vUserData = loadData(dbUrl, "\"V_User\"")
+    val vUserData = loadData(dbUrl, AppConf.getConfig("postgres.user.table"))
       .select("userId")
-    val vUserOrgData = loadData(dbUrl, "\"V_User_Org\"")
+    val vUserOrgData = loadData(dbUrl, AppConf.getConfig("postgres.org.table"))
       .select("userId", "roles")
 
     val userDf = vUserData.join(vUserOrgData, Seq("userId"), "left")
