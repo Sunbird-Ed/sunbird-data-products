@@ -41,6 +41,7 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
+    println("in execute")
     val programData = loadData(url, AppConf.getConfig("postgres.program.table")).withColumnRenamed("status", "programStatus")
     val nominationData = loadData(url, AppConf.getConfig("postgres.nomination.table"))
     val projectDf = programData.join(nominationData, Seq("program_id"), "outer")
@@ -96,7 +97,7 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val openSaberDb = config.modelParams.get.getOrElse("dbName", "opensaberdb")
     val dbUrl = AppConf.getConfig("postgres.url") + openSaberDb
 
-    val vUserData = loadData(dbUrl, AppConf.getConfig("postgres.user.table"))
+    val vUserData = loadData(dbUrl, AppConf.getConfig("postgres.usertable"))
       .select("userId")
     val vUserOrgData = loadData(dbUrl, AppConf.getConfig("postgres.org.table"))
       .select("userId", "roles")
