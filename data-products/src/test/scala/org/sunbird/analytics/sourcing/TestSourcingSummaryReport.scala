@@ -143,7 +143,7 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
 
     val userDf = SourcingSummaryReport.getUserDetails()
     userDf.select("userId").first().getString(0) should be("0124698765480987654")
-    userDf.select("userType").first().getString(0) should be("Organization")
+    userDf.select("user_type").first().getString(0) should be("Organization")
   }
 
 }
