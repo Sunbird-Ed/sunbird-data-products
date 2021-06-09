@@ -160,12 +160,20 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     ProgressExhaustJob.execute()
 
     val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust' and request_id='37564CF8F134EE7532F125651B51D17F-4'")
-    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
 
     while(pResponse.next()) {
       pResponse.getString("status") should be ("SUBMITTED")
       pResponse.getString("download_urls") should be ("{}")
       pResponse.getString("processed_batches") should not be (null)
+    }
+
+    val pResponse2 = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust' and request_id='37564CF8F134EE7532F125651B51D17F-3'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+
+    while(pResponse2.next()) {
+      pResponse2.getString("status") should be ("SUCCESS")
+      pResponse2.getString("download_urls") should be ("{reports/progress-exhaust/37564CF8F134EE7532F125651B51D17F-3/batch-004_progress_20210609.zip}")
+      pResponse2.getString("processed_batches") should not be (null)
     }
   }
 
@@ -184,12 +192,20 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     ProgressExhaustJob.execute()
 
     val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust' and request_id='37564CF8F134EE7532F125651B51D17F-3'")
-    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
 
     while(pResponse.next()) {
       pResponse.getString("status") should be ("SUBMITTED")
       pResponse.getString("download_urls") should be ("{}")
       pResponse.getString("processed_batches") should not be (null)
+    }
+
+    val pResponse2 = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust' and request_id='37564CF8F134EE7532F125651B51D17F-2'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+
+    while(pResponse2.next()) {
+      pResponse2.getString("status") should be ("SUCCESS")
+      pResponse2.getString("download_urls") should be ("{reports/progress-exhaust/37564CF8F134EE7532F125651B51D17F-2/batch-001_progress_20210609.zip}")
+      pResponse2.getString("processed_batches") should not be (null)
     }
   }
 
@@ -206,13 +222,21 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     ProgressExhaustJob.execute()
 
-    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust' and request_id='37564CF8F134EE7532F125651B51D17F-2'")
-    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+    val pResponse1 = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust' and request_id='37564CF8F134EE7532F125651B51D17F-1'")
 
-    while(pResponse.next()) {
-      pResponse.getString("status") should be ("FAILED")
-      pResponse.getString("download_urls") should be ("{}")
-      pResponse.getString("processed_batches") should not be (null)
+    while(pResponse1.next()) {
+      pResponse1.getString("status") should be ("FAILED")
+      pResponse1.getString("download_urls") should be ("{}")
+      pResponse1.getString("processed_batches") should not be (null)
+
+    }
+
+    val pResponse2 = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust' and request_id='37564CF8F134EE7532F125651B51D17F-2'")
+
+    while(pResponse2.next()) {
+      pResponse2.getString("status") should be ("FAILED")
+      pResponse2.getString("download_urls") should be ("{}")
+      pResponse2.getString("processed_batches") should not be (null)
 
     }
   }

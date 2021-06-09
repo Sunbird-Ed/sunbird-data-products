@@ -140,9 +140,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         try {
           val processedCount = if(requestsCompleted.isEmpty) 0 else requestsCompleted.filter(f => f.channel.equals(request.requested_channel)).size
           val processedSize = if(requestsCompleted.isEmpty) 0 else requestsCompleted.filter(f => f.channel.equals(request.requested_channel)).map(f => f.fileSize).sum
-          Console.println("Total file size of completed batches per channel: " + processedSize + " Total completed batches per channel: " + processedCount)
+          JobLogger.log("Channel details at executeOnDemand", Some(Map("file size" -> processedSize, "completed batches" -> processedCount)), INFO)
 
-          if (processedCount < AppConf.getConfig("exhaust.batches.limit").toLong && processedSize < AppConf.getConfig("exhaust.file.size.limit").toLong) {
+          if (checkRequestProcessCriteria(processedCount, processedSize)) {
             if (validateRequest(request)) {
               val res = processRequest(request, custodianOrgId, userCachedDF, storageConfig, requestsCompleted)
               requestsCompleted.++=(JSONUtils.deserialize[ListBuffer[ProcessedRequest]](res.processed_batches.getOrElse("[]")))
@@ -160,7 +160,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         } catch {
           case ex: Exception =>
             ex.printStackTrace()
-            Console.println("the requestid" + request.request_id + "failed  with  below error" + ex.getMessage)
             markRequestAsFailed(request, "Invalid request")
         }
       }
@@ -181,13 +180,20 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def markDuplicateRequest(request: JobRequest, referenceRequest: JobRequest): JobRequest = {
-    val completedBatches = JSONUtils.deserialize[ListBuffer[ProcessedRequest]](referenceRequest.processed_batches.getOrElse("{}"))
     request.status = referenceRequest.status;
-    request.download_urls = Option(completedBatches.map(f => f.filePath).toList);
-    request.execution_time = referenceRequest.execution_time;
-    request.dt_job_completed = Option(System.currentTimeMillis)
-    request.processed_batches = Option(JSONUtils.serialize(completedBatches))
+    request.download_urls = referenceRequest.download_urls
+    request.execution_time = referenceRequest.execution_time
+    request.dt_job_completed = referenceRequest.dt_job_completed
+    request.processed_batches = referenceRequest.processed_batches
+    request.iteration = referenceRequest.iteration
+    request.err_message = referenceRequest.err_message
     request
+  }
+
+  def checkRequestProcessCriteria(processedCount: Long, processedSize: Long): Boolean = {
+    if (processedCount < AppConf.getConfig("exhaust.batches.limit").toLong && processedSize < AppConf.getConfig("exhaust.file.size.limit").toLong)
+      true
+    else false
   }
 
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig, processedRequests: ListBuffer[ProcessedRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
@@ -220,8 +226,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       request.processed_batches = Option(JSONUtils.serialize(completedBatches))
       request
     }
-
-
   }
 
   def validateRequest(request: JobRequest): Boolean = {
@@ -264,12 +268,12 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
     var processedCount = if(processedRequests.isEmpty) 0 else processedRequests.filter(f => f.channel.equals(requestChannel.getOrElse(""))).size
     var processedSize = if(processedRequests.isEmpty) 0 else processedRequests.filter(f => f.channel.equals(requestChannel.getOrElse(""))).map(f => f.fileSize).sum
-    Console.println("Total file size of completed batches per channel: " + processedSize + " Total completed batches per channel: " + processedCount)
+    JobLogger.log("Channel details at processBatches", Some(Map("file size" -> processedSize, "completed batches" -> processedCount)), INFO)
 
     var newFileSize: Long = 0
 
     for (batch <- filterCollectionBatches(collectionBatches)) yield {
-      if (processedCount < AppConf.getConfig("exhaust.batches.limit").toLong && processedSize < AppConf.getConfig("exhaust.file.size.limit").toLong) {
+      if (checkRequestProcessCriteria(processedCount, processedSize)) {
         val userEnrolmentBatchDF = getUserEnrolmentDF(batch.collectionId, batch.batchId, false)
           .join(userCachedDF, Seq("userid"), "inner")
           .withColumn("collectionName", lit(batch.collectionName))
@@ -281,7 +285,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           val res = CommonUtil.time(processBatch(filteredDF, batch));
           val reportDF = res._2
           val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId,requestId.getOrElse("")), Option(Map("header" -> "true")), None)
-          //          println(spark.sessionState.executePlan(reportDF.queryExecution.logical).optimizedPlan.stats.rowCount)
           newFileSize = fc.getHadoopFileUtil().size(files.head, spark.sparkContext.hadoopConfiguration)
           CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1, newFileSize);
         } catch {
