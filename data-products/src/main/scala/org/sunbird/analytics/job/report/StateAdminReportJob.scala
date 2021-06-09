@@ -402,7 +402,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     def locationIdListFunction(location: String): List[String] = {
         var locations = new ListBuffer[String]()
         try {
-            if (location != null) {
+            if (location != null && !location.isEmpty) {
                 val profileLocation = JSONUtils.deserialize[List[Map[String, String]]](location)
                 val stateIdList = profileLocation.filter(f => f.getOrElse("type", "").equalsIgnoreCase("state")).map(f => f.getOrElse("id", ""))
                 if (!stateIdList.isEmpty) locations += stateIdList.head
@@ -416,7 +416,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
             } else locations.toList
         }catch {
             case ex: Exception =>
-                ex.printStackTrace();
+                JobLogger.log(s"StateAdminReportJob: error in locationIdListFunction = ${ex.getMessage}", None, ERROR)
                 locations.toList
         }
     }
@@ -424,7 +424,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     val locationIdList = udf[List[String], String](locationIdListFunction)
     
     def profileTypeFunction(profileType: String) : String = {
-        if(profileType != null) {
+        if(profileType != null && !profileType.isEmpty) {
             val profileUserType = JSONUtils.deserialize[Map[String, String]](profileType)
             val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
             if (!usertypeList.isEmpty) usertypeList.head else ""
@@ -433,7 +433,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     val addUserType = udf[String, String](profileTypeFunction)
     
     def profileSubTypeFunction(profileSubType: String) : String = {
-        if(profileSubType != null) {
+        if(profileSubType != null && !profileSubType.isEmpty) {
             val profileUserSubType = JSONUtils.deserialize[Map[String, String]](profileSubType)
             val userSubTypeList = profileUserSubType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
             if (!userSubTypeList.isEmpty) userSubTypeList.head else ""
@@ -441,5 +441,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     val addUserSubType = udf[String, String](profileSubTypeFunction)
+    
 
 }

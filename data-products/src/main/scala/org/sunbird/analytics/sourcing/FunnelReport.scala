@@ -194,7 +194,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val tenantRequest = s"""{
                            |    "params": { },
                            |    "request":{
-                           |        "filters": {"isRootOrg":"true"},
+                           |        "filters": {"isTenant":"true"},
                            |        "offset": 0,
                            |        "limit": 10000,
                            |        "fields": ["id", "channel", "slug", "orgName"]
