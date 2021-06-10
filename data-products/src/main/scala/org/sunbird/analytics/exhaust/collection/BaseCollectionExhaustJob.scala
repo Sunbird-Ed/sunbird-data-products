@@ -140,7 +140,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         try {
           val processedCount = if(requestsCompleted.isEmpty) 0 else requestsCompleted.filter(f => f.channel.equals(request.requested_channel)).size
           val processedSize = if(requestsCompleted.isEmpty) 0 else requestsCompleted.filter(f => f.channel.equals(request.requested_channel)).map(f => f.fileSize).sum
-          JobLogger.log("Channel details at executeOnDemand", Some(Map("file size" -> processedSize, "completed batches" -> processedCount)), INFO)
+          JobLogger.log("Channel details at executeOnDemand", Some(Map("channel" -> request.requested_channel, "file size" -> processedSize, "completed batches" -> processedCount)), INFO)
 
           if (checkRequestProcessCriteria(processedCount, processedSize)) {
             if (validateRequest(request)) {
@@ -154,7 +154,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
             }
           }
           else {
-            markRequestAsSubmitted(request, "{}")
+            markRequestAsSubmitted(request, "[]")
             request
           }
         } catch {
@@ -197,7 +197,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig, processedRequests: ListBuffer[ProcessedRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
-    val completedBatches :ListBuffer[ProcessedRequest]= if(request.processed_batches.getOrElse("{}").equals("{}")) ListBuffer.empty[ProcessedRequest] else {
+    val completedBatches :ListBuffer[ProcessedRequest]= if(request.processed_batches.getOrElse("[]").equals("[]")) ListBuffer.empty[ProcessedRequest] else {
       JSONUtils.deserialize[ListBuffer[ProcessedRequest]](request.processed_batches.get)
     }
     markRequestAsProcessing(request)
@@ -268,7 +268,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
     var processedCount = if(processedRequests.isEmpty) 0 else processedRequests.filter(f => f.channel.equals(requestChannel.getOrElse(""))).size
     var processedSize = if(processedRequests.isEmpty) 0 else processedRequests.filter(f => f.channel.equals(requestChannel.getOrElse(""))).map(f => f.fileSize).sum
-    JobLogger.log("Channel details at processBatches", Some(Map("file size" -> processedSize, "completed batches" -> processedCount)), INFO)
+    JobLogger.log("Channel details at processBatches", Some(Map("channel" -> requestChannel, "file size" -> processedSize, "completed batches" -> processedCount)), INFO)
 
     var newFileSize: Long = 0
 
