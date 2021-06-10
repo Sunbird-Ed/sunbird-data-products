@@ -193,7 +193,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     while(pResponse2.next()) {
       pResponse2.getString("status") should be ("SUCCESS")
-      pResponse2.getString("download_urls") should be ("{reports/progress-exhaust/37564CF8F134EE7532F125651B51D17F-3/batch-004_progress_20210609.zip}")
+      pResponse2.getString("download_urls") should be (s"{reports/progress-exhaust/37564CF8F134EE7532F125651B51D17F-3/batch-004_progress_${reportDate}.zip}")
       pResponse2.getString("processed_batches") should not be (null)
     }
   }
@@ -225,7 +225,7 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
     while(pResponse2.next()) {
       pResponse2.getString("status") should be ("SUCCESS")
-      pResponse2.getString("download_urls") should be ("{reports/progress-exhaust/37564CF8F134EE7532F125651B51D17F-2/batch-001_progress_20210609.zip}")
+      pResponse2.getString("download_urls") should be (s"{reports/progress-exhaust/37564CF8F134EE7532F125651B51D17F-2/batch-001_progress_${reportDate}.zip}")
       pResponse2.getString("processed_batches") should not be (null)
     }
   }
