@@ -197,7 +197,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig, processedRequests: ListBuffer[ProcessedRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
-    val completedBatches :ListBuffer[ProcessedRequest]= if(request.processed_batches.getOrElse("").isEmpty) ListBuffer.empty[ProcessedRequest] else {
+    val completedBatches :ListBuffer[ProcessedRequest]= if(request.processed_batches.getOrElse("{}").equals("{}")) ListBuffer.empty[ProcessedRequest] else {
       JSONUtils.deserialize[ListBuffer[ProcessedRequest]](request.processed_batches.get)
     }
     markRequestAsProcessing(request)
