@@ -93,7 +93,7 @@ trait OnDemandExhaustJob {
     pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
     pstmt.setLong(6, request.execution_time.getOrElse(0L));
     pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
-    pstmt.setString(8, request.processed_batches.getOrElse("{}"))
+    pstmt.setString(8, request.processed_batches.getOrElse("[]"))
     pstmt.setString(9, request.tag);
     pstmt.setString(10, request.request_id);
 
@@ -113,7 +113,7 @@ trait OnDemandExhaustJob {
         pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
         pstmt.setLong(6, request.execution_time.getOrElse(0L));
         pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
-        pstmt.setString(8, request.processed_batches.getOrElse("{}"))
+        pstmt.setString(8, request.processed_batches.getOrElse("[]"))
         pstmt.setString(9, request.tag);
         pstmt.setString(10, request.request_id);
         pstmt.addBatch();
