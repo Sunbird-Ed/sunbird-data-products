@@ -62,7 +62,7 @@ object EmbeddedPostgresql {
          |   err_message TEXT,
          |   iteration int,
          |   encryption_key TEXT,
-         |   processed_batches json
+         |   processed_batches TEXT
          |)
       """.stripMargin
     execute(query)
