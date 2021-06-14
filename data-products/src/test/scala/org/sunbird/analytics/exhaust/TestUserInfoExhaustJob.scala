@@ -59,9 +59,9 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     jedis.hmset("user:user-005", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Isha", "userid": "user-005", "state": "MP", "district": "Jhansi", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "isha@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-006", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Revathi", "userid": "user-006", "state": "Andhra Pradesh", "district": "babarpur", "userchannel": "sunbird-dev", "rootorgid": "01250894314817126443", "email": "revathi@ilimi.in", "usersignintype": "Validated"};"""))
     jedis.hmset("user:user-007", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Sunil", "userid": "user-007", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0126391644091351040", "email": "sunil@ilimi.in", "usersignintype": "Validated"};"""))
-    jedis.hmset("user:user-008", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anoop", "userid": "user-008", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anoop@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-008", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anoop", "userid": "user-008", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anoop@ilimi.in", "usersignintype": "Validated", "cluster": "Cluster3", "block": "Block3", "usertype": "admin", "usersubtype": "deo", "schooludisecode": "2193754", "schoolname": "Vanasthali PS", "orgname":"Root Org2"};"""))
     jedis.hmset("user:user-009", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Kartheek", "userid": "user-011", "state": "Karnataka", "district": "bengaluru", "userchannel": "sunbird-dev", "rootorgid": "01285019302823526477", "email": "kartheekp@ilimi.in", "usersignintype": "Validated"};"""))
-    jedis.hmset("user:user-010", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anand", "userid": "user-012", "state": "Tamil Nadu", "district": "Chennai", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anandp@ilimi.in", "usersignintype": "Validated"};"""))
+    jedis.hmset("user:user-010", JSONUtils.deserialize[java.util.Map[String, String]]("""{"firstname": "Anand", "userid": "user-012", "state": "Tamil Nadu", "district": "Chennai", "userchannel": "sunbird-dev", "rootorgid": "0130107621805015045", "email": "anandp@ilimi.in", "usersignintype": "Validated", "cluster": "Cluster2", "block": "Block2", "usertype": "admin", "usersubtype": "deo", "schooludisecode": "21937", "schoolnamme": "Vanasthali"};"""))
 
     jedis.close()
   }
@@ -340,6 +340,81 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
       pResponse.getString("dt_file_created") should be (null)
       pResponse.getString("iteration") should be ("0")
     }
+  }
+
+  it should "generate the user info report with all the users details for a batch having consent details not present" in {
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-003\"}', 'user-002', '01309282781705830427', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","sparkUserDbRedisPort":6381,"fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UserInfo Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    UserInfoExhaustJob.execute()
+
+    val outputDir = "response-exhaust"
+    val batch1 = "batch-003"
+    val requestId = "37564CF8F134EE7532F125651B51D17F"
+    val filePath = UserInfoExhaustJob.getFilePath(batch1, requestId)
+    val jobName = UserInfoExhaustJob.jobName()
+    implicit val responseExhaustEncoder = Encoders.product[UserInfoExhaustReport]
+    val batch1Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv")
+      .as[UserInfoExhaustReport]
+      .collectAsList()
+      .asScala
+
+    //user-010 is not present in consent table hence will be excluded in the report so the size is 2
+    batch1Results.size should be (2)
+    //assertion for user-008
+    val user001 = batch1Results.filter(f => f.`User UUID`.equals("user-008"))
+    user001.foreach(f => println("userdetails: " + JSONUtils.serialize(f)))
+    user001.map {f => f.`User UUID`}.head should be ("user-008")
+    user001.map {f => f.`Collection Id`}.head should be ("do_1131975645014835201326")
+    user001.map {f => f.`Batch Id`}.head should be ("BatchId_batch-003")
+    user001.map {f => f.`Collection Name`}.head should be ("ADOPT_BOOK_NCERT2")
+    user001.map {f => f.`Batch Name`}.head should be ("Basic C++")
+    user001.map {f => f.`User Name`}.head should be ("Anoop")
+    user001.map {f => f.`State`}.head should be ("Karnataka")
+    user001.map {f => f.`District`}.head should be ("bengaluru")
+    user001.map {f => f.`Block`}.head should be ("Block3")
+    user001.map {f => f.`Cluster`}.head should be ("Cluster3")
+    user001.map {f => f.`Email ID`}.head should be ("anoop@ilimi.in")
+    user001.map {f => f.`User Type`}.head should be ("admin")
+    user001.map {f => f.`User Sub Type`}.head should be ("deo")
+    user001.map {f => f.`School Id`}.head should be ("2193754")
+    user001.map {f => f.`School Name`}.head should be ("Vanasthali PS")
+    user001.map {f => f.`Org Name`}.head should be ("Root Org2")
+    user001.map {f => f.`Consent Provided`}.head should be ("true")
+    user001.map {f => f.`Consent Provided Date`}.head should be ("14/06/2021")
+
+    //assertion for user-009
+    val user009 = batch1Results.filter(f => f.`User UUID`.equals("user-009"))
+    user009.foreach(f => println("userdetails: " + JSONUtils.serialize(f)))
+    user009.map {f => f.`User UUID`}.head should be ("user-009")
+    user009.map {f => f.`Collection Id`}.head should be ("do_1131975645014835201326")
+    user009.map {f => f.`Batch Id`}.head should be ("BatchId_batch-003")
+    user009.map {f => f.`Collection Name`}.head should be ("ADOPT_BOOK_NCERT2")
+    user009.map {f => f.`Batch Name`}.head should be ("Basic C++")
+    user009.map {f => f.`User Name`}.head should be ("Kartheek")
+    user009.map {f => f.`State`}.head should be ("Karnataka")
+    user009.map {f => f.`District`}.head should be ("bengaluru")
+    user009.map {f => f.`Email ID`}.head should be ("kartheekp@ilimi.in")
+    user009.map {f => f.`Consent Provided`}.head should be ("true")
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
+
+    while(pResponse.next()) {
+      pResponse.getString("status") should be ("SUCCESS")
+      pResponse.getString("err_message") should be ("")
+      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
+      pResponse.getString("download_urls") should be (s"{reports/userinfo-exhaust/$requestId/batch-003_userinfo_${getDate()}.zip}")
+      pResponse.getString("dt_file_created") should be (null)
+      pResponse.getString("iteration") should be ("0")
+    }
+
+    UserInfoExhaustJob.canZipExceptionBeIgnored() should be (false)
   }
 
   def getDate(): String = {
