@@ -342,7 +342,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     }
   }
 
-  it should "generate the user info report with all the users details for a batch having consent details not present" in {
+  it should "generate the user info report excluding the user whose consent details are not provided" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
     EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-003\"}', 'user-002', '01309282781705830427', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
 
