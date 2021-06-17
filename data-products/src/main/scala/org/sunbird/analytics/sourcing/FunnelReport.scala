@@ -105,7 +105,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config))
 
     val report = data
-      .filter(f=> null != f._1.status && (f._1.status.equalsIgnoreCase("Live") || f._1.status.equalsIgnoreCase("Unlisted"))).collect().toList
+      .filter(f=> null != f._1.status && (f._1.status.equalsIgnoreCase("Live") || f._1.status.equalsIgnoreCase("Closed") || f._1.status.equalsIgnoreCase("Unlisted"))).collect().toList
       .map(f => {
         val contributionData = getContributionData(f._1.program_id, configMap("modelParams").asInstanceOf[Map[String, AnyRef]])
         druidData = ProgramVisitors(f._1.program_id,f._1.startdate,f._1.enddate, "0") :: druidData
