@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import logging
+from logging.handlers import RotatingFileHandler
+import traceback
 
 import requests
 import json
@@ -11,7 +13,6 @@ from sqlparse.tokens import Keyword, DML
 
 from dataclasses import dataclass, make_dataclass, field
 
-import ciso8601
 import datetime
 from datetime import date, datetime as dtime
 
@@ -22,19 +23,23 @@ from dataclasses_json import dataclass_json
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+
 @dataclass
 class QueryDate:
     start_time: datetime
     end_time: datetime
+
 
 @dataclass
 class QueryColumns:
     dimensions: List[str]
     metric: str
 
+
 @dataclass
 class DruidQuery:
     query: str
+
 
 @dataclass_json
 @dataclass
@@ -42,11 +47,13 @@ class Dimension:
     id: str
     value: str
 
+
 @dataclass_json
 @dataclass
 class Metric:
     id: str
     value: float
+
 
 @dataclass_json
 @dataclass
@@ -67,6 +74,8 @@ class QueryResult:
 # offset_in_mins: Offset to account for delay in data
 # frequency: Frequency of execution of the job
 # cron: Cron Expression to express the frequency of the job. Takes precedence over the "frequency" field
+
+
 @dataclass
 class Job:
     job_id: str
@@ -76,9 +85,11 @@ class Job:
     offset_in_mins: int
     cron: str = ""
 
+
 @dataclass
 class Jobs:
     jobs: List[Job]
+
 
 class DruidAnomalyDetection:
     def __init__(self, config_file_location, data_dir, druid_broker_host, druid_broker_port):
@@ -99,18 +110,22 @@ class DruidAnomalyDetection:
         return QueryDate(start_time, end_time)
 
     # Function to execute Druid query and parse dimensions, metric values
-    def query_druid(self, druid_query, start_time, end_time):
-        logging.info("Query start_time: {}, end_time: {}".format(start_time, end_time))
-        json_payload = {}
-        json_payload['query'] = druid_query.format(start_time=start_time, end_time=end_time)
+    def query_druid(self, job_id, druid_query, start_time, end_time):
+        self.logger.info("JOB_ID: {} Query start_time: {}, end_time: {}".format(job_id, start_time, end_time))
+        json_payload = {'query': druid_query.format(start_time=start_time, end_time=end_time)}
         query = json_payload['query']
-        logging.debug("Exectuting query: {}".format(query))
+        self.logger.debug("Exectuting query: {}".format(query))
         columns = self.parse_sql_columns(query)
-        logging.info("columns: {}".format(columns))
+        self.logger.info("JOB_ID {}, columns: {}".format(job_id, columns))
         
         headers = {'Content-Type': 'application/json; charset=utf-8'}
-        response = requests.post(self.druid_endpoint, data=json.dumps(json_payload), headers=headers)
-        query_result = self.parseDruidResponse(response.json(), columns)
+        query_result = list()
+        try:
+            response = requests.post(self.druid_endpoint, data=json.dumps(json_payload), headers=headers)
+            query_result = self.parse_druid_response(response.json(), columns)
+        except Exception:
+            logging.error("Error occurred when executing query for job_id {}".format(job_id))
+            logging.error("StackTrace: {}".format(traceback.print_exc()))
         return query_result
 
     # Function to parse name of the dimensions and metrics from the Druid query
@@ -133,10 +148,9 @@ class DruidAnomalyDetection:
         return QueryColumns(dimensions, metric)
 
     # Function to parse query response from Druid according to the dimensions and metric in the query
-    def parseDruidResponse(self, response_json, columns):
+    def parse_druid_response(self, response_json, columns):
         dimensions = columns.dimensions
         metric = columns.metric
-
         query_result = list()
         for elem in response_json:
             dimensions_values_list = list()
@@ -148,9 +162,8 @@ class DruidAnomalyDetection:
     # Function to compute percentage difference between current interval and 
     # previous interval
     def compare_with_previous_interval(self, job):
-        logging.info("Exectuting {} job".format(job.job_id))
+        self.logger.info("Exectuting {} job".format(job.job_id))
         execution_time = dtime.now().replace(minute=0, second=0, microsecond=0)
-        # execution_time = ciso8601.parse_datetime('2020-12-17')
         current_datetime = self.compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins)
         previous_datetime = self.compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins, current_interval=False) 
 
@@ -159,10 +172,10 @@ class DruidAnomalyDetection:
 
         data_points_list = self.find_result_intersection(current_result, previous_result)
 
-        result = QueryResult.schema().dumps(data_points_list, many=True)
-        self.write_result(data_points_list)
-        logging.info("Execution of {} job completed".format(job.job_id))
-        return result
+        if data_points_list:
+            result = QueryResult.schema().dumps(data_points_list, many=True)
+            self.write_result(data_points_list)
+        self.logger.info("Execution of {} job completed".format(job.job_id))
 
     def find_result_intersection(self, current_result, previous_result):
         data_points_list = list()
@@ -177,26 +190,26 @@ class DruidAnomalyDetection:
                 else:
                     perc_diff = 100.0
                 data_points_list.append(
-                    self.createResult(res.dimensions, Metric(res.metric.id, round(perc_diff, 2))))
+                    self.create_result(res.dimensions, Metric(res.metric.id, round(perc_diff, 2))))
             else:
                 data_points_list.append(
-                    self.createResult(res.dimensions, Metric(res.metric.id, 100.0)))
+                    self.create_result(res.dimensions, Metric(res.metric.id, 100.0)))
         return data_points_list
 
     # Function to fetch data for the Druid query for the current interval
     def fetch_data_for_interval(self, job):
-        logging.info("Exectuting {} job".format(job.job_id))
+        self.logger.info("Exectuting {} job".format(job.job_id))
         data_points_list = list()
         execution_time = dtime.now().replace(minute=0, second=0, microsecond=0)
         execution_times = self.compute_dates(execution_time, job.query_granularity, offset_in_mins=job.offset_in_mins)
-        result = self.query_druid(job.query, execution_times.start_time, execution_times.end_time)
+        result = self.query_druid(job.job_id, job.query, execution_times.start_time, execution_times.end_time)
 
         for res in result:
             data_points_list.append(
-                    self.createResult(res.dimensions, Metric(res.metric.id, round(res.metric.value, 2))))
+                    self.create_result(res.dimensions, Metric(res.metric.id, round(res.metric.value, 2))))
         result = QueryResult.schema().dumps(data_points_list, many=True)
         self.write_result(data_points_list)
-        logging.info("Execution of {} job completed".format(job.job_id))
+        self.logger.info("Execution of {} job completed".format(job.job_id))
 
     def write_result(self, query_result):
         with open("{}/anomaly_data.log".format(self.data_dir), "a") as data_file:
@@ -205,11 +218,11 @@ class DruidAnomalyDetection:
 
     # Script entry point to schedule jobs from configuration
     def execute(self):
-        logging.info("Starting scheduling of jobs...")
+        self.logger.info("Starting scheduling of jobs...")
         scheduler = BlockingScheduler()
         for job in self.execution_jobs.jobs:
             if len(job.cron) != 0:
-                logging.info("cron expression: {}".format(job.cron))
+                self.logger.info("cron expression: {}".format(job.cron))
                 scheduler.add_job(self.fetch_data_for_interval, CronTrigger.from_crontab(job.cron), args=[job])
             else:
                 if job.frequency == 'day':
@@ -220,14 +233,23 @@ class DruidAnomalyDetection:
 
                 if job.frequency == 'minute':
                     scheduler.add_job(self.fetch_data_for_interval, 'interval', args=[job], minutes=1)
-        logging.info("Scheduling jobs completed...")
+        self.logger.info("Scheduling jobs completed...")
         scheduler.start()
 
-    def createResult(self, dimensions, metric):
+    def create_result(self, dimensions, metric):
         return QueryResult(dimensions=dimensions, metric=metric)
 
     def init(self):
-        logging.basicConfig(filename='{}/anomaly_detection.log'.format(self.data_dir), filemode='a', format='%(asctime)s - %(message)s', level=logging.INFO)
+        self.logger = logging.getLogger("root")
+        self.logger.setLevel(logging.INFO)
+        rotating_file_handler = logging.handlers.RotatingFileHandler(
+            filename='{}/anomaly_detection-{:%Y-%m-%d}.log'.format(self.data_dir, datetime.datetime.now()),
+            mode='a',
+            maxBytes=52428800,
+            backupCount=10
+        )
+        rotating_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+        self.logger.addHandler(rotating_file_handler)
         logging.getLogger('apscheduler').setLevel(logging.INFO)
 
         self.granularity = {

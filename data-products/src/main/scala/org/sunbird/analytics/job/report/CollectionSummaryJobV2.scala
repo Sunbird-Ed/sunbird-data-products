@@ -43,7 +43,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       JobLogger.log(s"Submitting Druid Ingestion Task", None, INFO)
       val ingestionSpecPath: String = jobConfig.modelParams.get.getOrElse("specPath", "").asInstanceOf[String]
       val druidIngestionUrl: String = jobConfig.modelParams.get.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
-      submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
+      CourseUtils.submitIngestionTask(druidIngestionUrl, ingestionSpecPath) // Starting the ingestion task
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecords" -> res._2.count())))
       res._2.unpersist()
     } finally {
@@ -143,20 +143,6 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
-  }
-
-  def submitIngestionTask(apiUrl: String, specPath: String): Unit = {
-    val source = scala.io.Source.fromFile(specPath)
-    val ingestionData = try {
-      source.mkString
-    } catch {
-      case ex: Exception =>
-        JobLogger.log(s"Exception Found While reading ingestion spec. ${ex.getMessage}", None, ERROR)
-        ex.printStackTrace()
-        null
-    } finally source.close()
-    val response = RestUtil.post[Map[String, String]](apiUrl, ingestionData, None)
-    JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
   }
 
   /**

@@ -22,7 +22,8 @@ object EmbeddedPostgresql {
     val query = s"""
                    |CREATE TABLE IF NOT EXISTS $tableName (
                    |    program_id TEXT PRIMARY KEY,
-                   |    status TEXT)""".stripMargin
+                   |    status TEXT,
+                   |    user_id TEXT)""".stripMargin
 
     execute(query)
   }
