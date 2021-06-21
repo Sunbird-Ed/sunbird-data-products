@@ -79,8 +79,7 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
   def getBestScoreRecordsDF(assessmentDF: DataFrame): DataFrame = {
     val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc("total_score"))
     assessmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
-      .withColumn("batchid", concat(lit("cb:"), col("batch_id"))) // TODO - do with col rename
-      .drop("batch_id")
+      .withColumn("batchid", concat(lit("cb:"), col("batch_id"))).drop("batch_id")
   }
 
 }
