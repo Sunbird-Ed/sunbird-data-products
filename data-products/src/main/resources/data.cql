@@ -563,6 +563,7 @@ CREATE TABLE IF NOT EXISTS test_keyspace.user_enrolment_test(
     contentstatus map<text, int>,
     courseid text,
     datetime timestamp,
+    enrolled_date timestamp,
     enrolleddate text,
     issued_certificates list<frozen<map<text, text>>>,
     lastreadcontentid text,
@@ -576,3 +577,24 @@ CREATE TABLE IF NOT EXISTS test_keyspace.user_enrolment_test(
 
 INSERT INTO test_keyspace.user_enrolment_test(batchid, userid,courseid) VALUES ('b1','u1','c1');
 
+CREATE TABLE IF NOT EXISTS test_keyspace.report_user_enrolments(
+    batchid text,
+    courseid text,
+    userid text,
+    active boolean,
+    addedby text,
+    certificates frozen<list<frozen<map<text, text>>>>,
+    certstatus int,
+    completedon timestamp,
+    completionpercentage int,
+    contentstatus frozen<map<text, int>>,
+    datetime timestamp,
+    enrolled_date timestamp,
+    enrolleddate text,
+    issued_certificates frozen<list<frozen<map<text, text>>>>,
+    lastreadcontentid text,
+    lastreadcontentstatus int,
+    progress int,
+    status int,
+    PRIMARY KEY (batchid, courseid, userid))
+    WITH COMPACTION = { 'class': 'SizeTieredCompactionStrategy', 'enabled': 'false' };
