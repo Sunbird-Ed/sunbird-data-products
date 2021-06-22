@@ -75,6 +75,7 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
 
   def fetchAssessmentData(session: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
+      .select("batch_id", "course_id", "content_id", "user_id", "total_score", "total_max_score")
   }
 
   def mergeAggMapCol(): (Map[String, Int], Int, Int, String) => Map[String, Int] = (agg: Map[String, Int], max_score: Int, score: Int, content_id: String) => {
