@@ -303,19 +303,34 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     }
   }
 
+  // returns Map of request_id and list of its duplicate requests
   def getDuplicateRequests(requests: Array[JobRequest]): Map[String, List[JobRequest]] = {
-    val finalMap: scala.collection.mutable.Map[String, List[JobRequest]] = scala.collection.mutable.Map()
+    /*
+    reqHashMap: contains hash(request_data, encryption_key, requested_by) as key and list of entire req as value
+      sample reqHashMap data
+      Map<"hash-1", List<JobRequest1, JobRequest3>, "hash-2", List<JobRequest2>>
+    */
+    val reqHashMap: scala.collection.mutable.Map[String, List[JobRequest]] = scala.collection.mutable.Map()
     requests.foreach{ req =>
       // get hash
       val key = Array(req.request_data, req.encryption_key.getOrElse(""), req.requested_by).mkString("|")
       val hash = MessageDigest.getInstance("MD5").digest(key.getBytes).map("%02X".format(_)).mkString
-      if(finalMap.get(hash).isEmpty) finalMap.put(hash, List(req))
+      if(reqHashMap.get(hash).isEmpty) reqHashMap.put(hash, List(req))
       else {
-        val newList = finalMap.get(hash).get ++ List(req)
-        finalMap.put(hash, newList)
+        val newList = reqHashMap.get(hash).get ++ List(req)
+        reqHashMap.put(hash, newList)
       }
     }
-    finalMap.toMap.filter(f => f._2.size > 1).map(f => (f._2.head.request_id -> f._2.tail))
+    /*
+    step-1: filter reqHashMap - with more than 1 entry in value list which indicates duplicates
+      sample filtered map data
+      Map<"hash-1", List<JobRequest1, JobRequest3>>
+
+    step-2: transform map to have first request_id as key and remaining req list as value
+      sample final map data
+      Map<"request_id-1", List<JobRequest3>>
+    */
+    reqHashMap.toMap.filter(f => f._2.size > 1).map(f => (f._2.head.request_id -> f._2.tail))
   }
 
   /** END - Job Execution Methods */
