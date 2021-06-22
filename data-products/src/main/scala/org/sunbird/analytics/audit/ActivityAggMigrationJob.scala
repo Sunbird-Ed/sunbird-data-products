@@ -18,7 +18,7 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
   val cassandraUrl = "org.apache.spark.sql.cassandra"
   implicit val className: String = "org.sunbird.analytics.audit.ActivityAggMigrationJob"
   val jobName = "ActivityAggMigrationJob"
-
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     JobLogger.init(jobName)
     JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
@@ -36,7 +36,7 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
       spark.close()
     }
   }
-
+  // $COVERAGE-ON$
   def migrateData(session: SparkSession): DataFrame = {
     val mergeAggCol = session.udf.register("agg_latest", updateAggCol())
     val mergeAggLastUpdatedCol = session.udf.register("agg_last_updated_latest", updateAggLastUpdatedCol())

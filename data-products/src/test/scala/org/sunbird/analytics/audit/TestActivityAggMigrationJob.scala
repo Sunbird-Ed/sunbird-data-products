@@ -38,6 +38,7 @@ class TestActivityAggMigrationJob extends BaseReportSpec with MockFactory {
     result.head.get(0).asInstanceOf[Map[String, Int]]("completedCount") should be(0)
     result.head.get(0).asInstanceOf[Map[String, Int]]("score:do_112876961957437440179") should be(10)
     result.head.get(0).asInstanceOf[Map[String, Int]]("max_score:do_112876961957437440179") should be(10)
+    ActivityAggMigrationJob.updatedTable(res, ActivityAggMigrationJob.userActivityAggDBSettings)
   }
 
 }
