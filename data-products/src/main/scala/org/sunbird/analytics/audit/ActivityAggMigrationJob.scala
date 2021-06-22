@@ -7,6 +7,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{SparkSession, _}
 import org.apache.spark.{SparkContext, sql}
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
@@ -30,8 +31,10 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
       val res = CommonUtil.time(migrateData(spark))
+      val total_records = res._2.count()
+      JobLogger.log(s"Updating the $total_records records in the cassandra table table", None, INFO)
       updatedTable(res._2, userActivityAggDBSettings)
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecordsUpdated" -> res._2)))
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecordsUpdated" -> total_records)))
     } finally {
       frameworkContext.closeContext()
       spark.close()
@@ -62,7 +65,8 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
   }
 
   def updatedTable(data: DataFrame, tableSettings: Map[String, String]): Unit = {
-    data.write.format("org.apache.spark.sql.cassandra").options(tableSettings).mode(SaveMode.Append).save()
+    data.write.format("org.apache.spark.sql.cassandra").options(tableSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
+    JobLogger.log(s"Updating the records into the db is completed", None, INFO)
   }
 
   def fetchActivityData(session: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {

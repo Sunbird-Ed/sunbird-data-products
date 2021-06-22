@@ -17,7 +17,6 @@ class TestActivityAggMigrationJob extends BaseReportSpec with MockFactory {
   var reporterMock: BaseReportsJob = mock[BaseReportsJob]
   val sunbirdCoursesKeyspace = "sunbird_courses"
 
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = getSparkSession()
@@ -31,6 +30,7 @@ class TestActivityAggMigrationJob extends BaseReportSpec with MockFactory {
     implicit val sc: SparkContext = spark.sparkContext
     val res = ActivityAggMigrationJob.migrateData(spark)
     res.count() should be(5)
+    println("ress" + res.show(false))
     val result = res.filter(col("context_id") === "cb:batch-001")
       .filter(col("activity_id") === "do_11306040245271756813015")
       .filter(col("user_id") === "user-008")
