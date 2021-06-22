@@ -18,6 +18,7 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
   val cassandraUrl = "org.apache.spark.sql.cassandra"
   implicit val className: String = "org.sunbird.analytics.audit.ActivityAggMigrationJob"
   val jobName = "ActivityAggMigrationJob"
+
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     JobLogger.init(jobName)
@@ -36,10 +37,14 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
       spark.close()
     }
   }
+
   // $COVERAGE-ON$
   def migrateData(session: SparkSession): DataFrame = {
-    val mergeAggCol = session.udf.register("agg_latest", updateAggCol())
-    val mergeAggLastUpdatedCol = session.udf.register("agg_last_updated_latest", updateAggLastUpdatedCol())
+    val updateAggColumn = udf(mergeAggMapCol())
+    val updatedAggLastUpdatedCol = udf(mergeAggLastUpdatedMapCol())
+    val flatAggList = udf(mergeAggListValues())
+    val flatAggLastUpdatedList = udf(mergeAggLastUpdatedListValues())
+
     val activityAggDF = fetchActivityData(session, fetchData)
     val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session, fetchData))
 
@@ -47,13 +52,13 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
 
-    filterDF.withColumn("agg_latest", mergeAggCol(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
-      .withColumn("agg_last_updated_latest", mergeAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
-      .drop("agg").drop("agg_last_updated")
-      .withColumnRenamed("agg_latest", "agg")
-      .withColumnRenamed("agg_last_updated_latest", "agg_last_updated")
+    filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
+      .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
+      .groupBy("activity_type", "user_id", "context_id", "activity_id")
+      .agg(collect_list("agg").as("agg"), collect_list("agg_last_updated").as("agg_last_updated"))
+      .withColumn("agg", flatAggList(col("agg")))
+      .withColumn("agg_last_updated", flatAggLastUpdatedList(col("agg_last_updated")))
       .select("activity_type", "user_id", "context_id", "activity_id", "agg", "agg_last_updated")
-
   }
 
   def updatedTable(data: DataFrame, tableSettings: Map[String, String]): Unit = {
@@ -68,12 +73,20 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
     fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
   }
 
-  def updateAggCol(): (Map[String, Int], Int, Int, String) => Map[String, Int] = (agg: Map[String, Int], max_score: Int, score: Int, content_id: String) => {
+  def mergeAggMapCol(): (Map[String, Int], Int, Int, String) => Map[String, Int] = (agg: Map[String, Int], max_score: Int, score: Int, content_id: String) => {
     agg ++ Map(s"score:$content_id" -> score) ++ Map(s"max_score:$content_id" -> max_score)
   }
 
-  def updateAggLastUpdatedCol(): (Map[String, Long], String) => Map[String, Long] = (aggLastUpdated: Map[String, Long], content_id: String) => {
+  def mergeAggLastUpdatedMapCol(): (Map[String, Long], String) => Map[String, Long] = (aggLastUpdated: Map[String, Long], content_id: String) => {
     aggLastUpdated ++ Map(s"score:$content_id" -> System.currentTimeMillis()) ++ Map(s"max_score:$content_id" -> System.currentTimeMillis())
+  }
+
+  def mergeAggListValues(): Seq[Map[String, Int]] => Map[String, Int] = (aggregation: Seq[Map[String, Int]]) => {
+    aggregation.toList.flatten.toMap
+  }
+
+  def mergeAggLastUpdatedListValues(): Seq[Map[String, Long]] => Map[String, Long] = (aggregation: Seq[Map[String, Long]]) => {
+    aggregation.toList.flatten.toMap
   }
 
   def getBestScoreRecordsDF(assessmentDF: DataFrame): DataFrame = {
