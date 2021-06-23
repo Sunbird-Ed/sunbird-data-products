@@ -26,7 +26,7 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
   var stmt: Statement = null;
 
   override def beforeAll(): Unit = {
-//    super.beforeAll()
+    super.beforeAll()
     spark = getSparkSession()
     EmbeddedPostgresql.start()
     EmbeddedPostgresql.createProgramTable()
