@@ -13,6 +13,8 @@ import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.sunbird.analytics.job.report.BaseReportsJob
 
+import java.util.Date
+
 object ActivityAggMigrationJob extends optional.Application with IJob with BaseReportsJob {
   val userActivityAggDBSettings = Map("table" -> "user_activity_agg", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "LMSCluster")
   val assessmentAggregatorDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "LMSCluster")
@@ -48,12 +50,14 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
     val flatAggList = udf(mergeAggListValues())
     val flatAggLastUpdatedList = udf(mergeAggLastUpdatedListValues())
 
-    val activityAggDF = fetchActivityData(session, fetchData)
-    val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session, fetchData))
+    val activityAggDF = fetchActivityData(session)
+    val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session))
 
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
+      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id",  "total_max_score", "total_score", "content_id")
+      .persist()
 
     filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
@@ -69,11 +73,11 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
     JobLogger.log(s"Updating the records into the db is completed", None, INFO)
   }
 
-  def fetchActivityData(session: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
+  def fetchActivityData(session: SparkSession): DataFrame = {
     fetchData(session, userActivityAggDBSettings, cassandraUrl, new StructType()).withColumnRenamed("user_id", "userid")
   }
 
-  def fetchAssessmentData(session: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
+  def fetchAssessmentData(session: SparkSession): DataFrame = {
     fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
       .select("batch_id", "course_id", "content_id", "user_id", "total_score", "total_max_score")
   }
@@ -83,7 +87,7 @@ object ActivityAggMigrationJob extends optional.Application with IJob with BaseR
   }
 
   def mergeAggLastUpdatedMapCol(): (Map[String, Long], String) => Map[String, Long] = (aggLastUpdated: Map[String, Long], content_id: String) => {
-    aggLastUpdated ++ Map(s"score:$content_id" -> System.currentTimeMillis()) ++ Map(s"max_score:$content_id" -> System.currentTimeMillis())
+    aggLastUpdated ++ Map(s"score:$content_id" -> System.currentTimeMillis()) ++ Map(s"max_score:$content_id" -> System.currentTimeMillis(), "completedCount" -> new Date(aggLastUpdated("completedCount") * 1000).getTime)
   }
 
   def mergeAggListValues(): Seq[Map[String, Int]] => Map[String, Int] = (aggregation: Seq[Map[String, Int]]) => {
