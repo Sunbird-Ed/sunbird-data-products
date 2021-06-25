@@ -390,28 +390,31 @@ object UDFUtils extends Serializable {
 
   val getLatestValue = udf[String, String, String](getLatestValueFun)
 
-  def filterSupportedContentTypesFn(agg: Map[String, Int], data: Seq[String]): Map[String, Int] = {
-    val contentIds = agg.filter(x => x._1.startsWith("score")).keys.map(y => y.split(":")(1))
-    val assessContentIdentifiers = contentIds.filter(identifier => data.contains(identifier))
+  /**
+   *  This UDF function used to filter the only selfAssess supported contents
+   */
+  def filterSupportedContentTypesFn(agg: Map[String, Int], supportedContents: Seq[String]): Map[String, Int] = {
+    val identifiers = agg.filter(x => x._1.startsWith("score")).keys.map(y => y.split(":")(1))
+    val assessContentIdentifiers = identifiers.filter(identifier => supportedContents.contains(identifier))
     agg.filter(key => assessContentIdentifiers.exists(x => key._1.contains(x)))
   }
 
-  def computePercentageFn(agg: Map[String, Int]): Map[String, Int] = {
+  /**
+   * This UDF method used to compute the score percentage of total contents, individual contents
+   */
+  def computePercentageFn(agg: Map[String, Int]): Map[String, String] = {
     if (agg.nonEmpty) {
       val contentScoreList = agg.filter(x => x._1.startsWith("score"))
       val total_score_percentage = Math.ceil((contentScoreList.foldLeft(0)(_ + _._2) * 100) / agg.filter(x => x._1.startsWith("max_score")).foldLeft(0)(_ + _._2))
-      val contentScoreInPercentage = contentScoreList.map(x => Map(s"${x._1.split(":")(1)} - Score" -> ((x._2 * 100) / agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0)))).flatten.toMap
-      contentScoreInPercentage ++ Map("total_sum_score" -> total_score_percentage.toInt)
+      val contentScoreInPercentage: Map[String, String] = contentScoreList.map(x =>
+        Map(s"${x._1.split(":")(1)} - Score" -> ((x._2 * 100) / agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0)).toString.concat("%"))).flatten.toMap
+      contentScoreInPercentage ++ Map("total_sum_score" -> total_score_percentage.toString.concat("%"))
     } else {
       Map()
     }
   }
 
-  val computePercentage= udf[Map[String, Int], Map[String, Int]](computePercentageFn)
-
+  val computePercentage= udf[Map[String, String], Map[String, Int]](computePercentageFn)
   val filterSupportedContentTypes = udf[Map[String, Int], Map[String, Int], Seq[String]](filterSupportedContentTypesFn)
-
-
-
 
 }
