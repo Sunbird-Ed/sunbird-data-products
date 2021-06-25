@@ -1,11 +1,11 @@
 package org.sunbird.analytics.exhaust.collection
 
 import java.util.concurrent.atomic.AtomicInteger
-
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.apache.spark.sql.cassandra._
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
@@ -21,7 +21,6 @@ import org.sunbird.analytics.util.DecryptUtil
 
 import scala.collection.immutable.List
 import java.util.concurrent.CompletableFuture
-
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
@@ -390,4 +389,29 @@ object UDFUtils extends Serializable {
   }
 
   val getLatestValue = udf[String, String, String](getLatestValueFun)
+
+  def filterSupportedContentTypesFn(agg: Map[String, Int], data: Seq[String]): Map[String, Int] = {
+    val contentIds = agg.filter(x => x._1.startsWith("score")).keys.map(y => y.split(":")(1))
+    val assessContentIdentifiers = contentIds.filter(identifier => data.contains(identifier))
+    agg.filter(key => assessContentIdentifiers.exists(x => key._1.contains(x)))
+  }
+
+  def computePercentageFn(agg: Map[String, Int]): Map[String, Int] = {
+    if (agg.nonEmpty) {
+      val contentScoreList = agg.filter(x => x._1.startsWith("score"))
+      val total_score_percentage = Math.ceil((contentScoreList.foldLeft(0)(_ + _._2) * 100) / agg.filter(x => x._1.startsWith("max_score")).foldLeft(0)(_ + _._2))
+      val contentScoreInPercentage = contentScoreList.map(x => Map(s"${x._1.split(":")(1)} - Score" -> ((x._2 * 100) / agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0)))).flatten.toMap
+      contentScoreInPercentage ++ Map("total_sum_score" -> total_score_percentage.toInt)
+    } else {
+      Map()
+    }
+  }
+
+  val computePercentage= udf[Map[String, Int], Map[String, Int]](computePercentageFn)
+
+  val filterSupportedContentTypes = udf[Map[String, Int], Map[String, Int], Seq[String]](filterSupportedContentTypesFn)
+
+
+
+
 }
