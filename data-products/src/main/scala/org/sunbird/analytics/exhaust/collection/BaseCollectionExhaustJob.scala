@@ -410,7 +410,7 @@ object UDFUtils extends Serializable {
         Map(s"${x._1.split(":")(1)} - Score" -> ((x._2 * 100) / agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0)).toString.concat("%"))).flatten.toMap
       contentScoreInPercentage ++ Map("total_sum_score" -> total_score_percentage.toString.concat("%"))
     } else {
-      Map()
+      Map("total_sum_score" -> "")
     }
   }
 

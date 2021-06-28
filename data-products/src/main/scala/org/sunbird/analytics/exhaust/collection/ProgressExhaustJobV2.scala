@@ -1,12 +1,11 @@
 package org.sunbird.analytics.exhaust.collection
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 
 object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExhaustJob {
 
