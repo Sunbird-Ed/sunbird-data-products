@@ -126,33 +126,4 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
       AssessmentData(courseId, assessmentIds)
     } else prevData
   }
-
-  def parseCourseHierarchy(data: List[Map[String, AnyRef]], levelCount: Int, prevData: CourseData, depthLevel: Int): CourseData = {
-    if (levelCount < depthLevel) {
-      val list = data.map(childNodes => {
-        val mimeType = childNodes.getOrElse("mimeType", "").asInstanceOf[String]
-        val visibility = childNodes.getOrElse("visibility", "").asInstanceOf[String]
-        // TODO: need to change to primaryCategory after 3.3.0
-        val contentType = childNodes.getOrElse("contentType", "").asInstanceOf[String]
-        if ((StringUtils.equalsIgnoreCase(mimeType, "application/vnd.ekstep.content-collection") && StringUtils.equalsIgnoreCase(visibility, "Default") && StringUtils.equalsIgnoreCase(contentType, "Course"))) {
-          val identifier = childNodes.getOrElse("identifier", "").asInstanceOf[String]
-          val leafNodesCount = childNodes.getOrElse("leafNodesCount", 0).asInstanceOf[Int]
-          val courseData = if (levelCount == 0) {
-            CourseData(prevData.courseid, leafNodesCount.toString, List())
-          } else {
-            val prevL1List = prevData.level1Data
-            CourseData(prevData.courseid, prevData.leafNodesCount, (prevL1List ::: List(Level1Data(identifier, leafNodesCount.toString))))
-          }
-          val children = childNodes.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
-          if (null != children && children.nonEmpty) {
-            parseCourseHierarchy(children, levelCount + 1, courseData, 2)
-          } else courseData
-        } else prevData
-      })
-      val courseId = list.head.courseid
-      val leafNodeCount = list.head.leafNodesCount
-      val level1Data = list.map(x => x.level1Data).flatten.toList
-      CourseData(courseId, leafNodeCount, level1Data)
-    } else prevData
-  }
 }
