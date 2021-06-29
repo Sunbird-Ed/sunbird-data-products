@@ -377,7 +377,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val userDF = getUserCacheDF(getUserCacheColumns(), false)
     val cols = getEnrolmentColumns();
     val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
-      .where(lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
+      .where(lower(col("active")).equalTo("true") && (col("enrolleddate").isNotNull || col("enrolled_date").isNotNull))
+      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
       .select(cols.head, cols.tail: _*).repartition(col("userid"))
 
     val joinedDF = df.join(userDF, Seq("userid"), "inner")
