@@ -1,7 +1,6 @@
 package org.sunbird.analytics.job.report
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, lit, when, _}
 import org.apache.spark.sql.{DataFrame, _}
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
@@ -12,34 +11,14 @@ import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.JobContext
-import org.ekstep.analytics.framework.StorageConfig
-import org.ekstep.analytics.framework.OutputDispatcher
 import org.ekstep.analytics.framework.dispatcher.ScriptDispatcher
 import org.sunbird.analytics.util.DecryptUtil
 import org.ekstep.analytics.framework.util.JSONUtils
 
 import scala.collection.mutable.ListBuffer
 
-case class ValidatedUserDistrictSummary(index: Int, districtName: String, blocks: Long, schools: Long, registered: Long)
-case class UserStatus(id: Long, status: String)
-object UnclaimedStatus extends UserStatus(0, "UNCLAIMED")
-object ClaimedStatus extends UserStatus(1, "CLAIMED")
-object RejectedStatus extends UserStatus(2, "REJECTED")
-object FailedStatus extends UserStatus(3, "FAILED")
-object MultiMatchStatus extends UserStatus(4, "MULTIMATCH")
-object OrgExtIdMismatch extends UserStatus(5, "ORGEXTIDMISMATCH")
-object Eligible extends UserStatus(6, "ELIGIBLE")
-
-case class ShadowUserData(channel: String, userextid: String, addedby: String, claimedon: java.sql.Timestamp, claimstatus: Int,
-                          createdon: java.sql.Timestamp, email: String, name: String, orgextid: String, processid: String,
-                          phone: String, updatedon: java.sql.Timestamp, userid: String, userids: List[String], userstatus: Int)
-
 case class UserSelfDeclared(userid: String, orgid: String, persona: String, errortype: String,
                             status: String, userinfo: Map[String, String])
-
-// Shadow user summary in the json will have this POJO
-case class UserSummary(accounts_validated: Long, accounts_rejected: Long, accounts_unclaimed: Long, accounts_failed: Long)
-case class UserProfileLocationType(userid: String, usertype: String, usersubtype: String, locationids: List[String])
 
 object StateAdminReportJob extends optional.Application with IJob with StateAdminReportHelper {
 
@@ -65,9 +44,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     private def execute(config: JobConfig)(implicit sparkSession: SparkSession, fc: FrameworkContext) = {
-
-        generateReport();
-        JobLogger.end("StateAdminReportJob completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
     
         val resultDf = generateExternalIdReport();
         JobLogger.end("ExternalIdReportJob completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
@@ -197,207 +173,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         resultDf.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
         resultDf
     }
-    
-    def generateStateRootSubOrgDF(subOrgDF: DataFrame, claimedShadowDataSummaryDF: DataFrame, claimedShadowUserDF: DataFrame) = {
-        val rootSubOrg = subOrgDF.where(col("isrootorg") && col("status").equalTo(1))
-        val stateUsersDf = rootSubOrg.join(claimedShadowUserDF, rootSubOrg.col("id") === (claimedShadowUserDF.col("rootorgid")),"inner")
-            .withColumnRenamed("orgname","School name")
-            .withColumn("District id", lit("")).withColumn("District name", lit( "")).withColumn("Block id", lit("")).withColumn("Block name", lit(""))
-            .select(col("School name"), col("District id"), col("District name"), col("Block id"), col("Block name"), col("slug"),
-                col("externalid"),col("userextid"), col("name"), col("userid"), col("usersuborganisationid")).where(col("usersuborganisationid").isNull)
-        stateUsersDf
-    }
-    
-    def generateReport()(implicit sparkSession: SparkSession, fc: FrameworkContext)   = {
-
-        import sparkSession.implicits._
-
-        val shadowDataEncoder = Encoders.product[ShadowUserData].schema
-        val shadowUserDF = loadData(sparkSession, Map("table" -> "shadow_user", "keyspace" -> sunbirdKeyspace), Some(shadowDataEncoder)).as[ShadowUserData]
-        val claimedShadowUserDF = shadowUserDF.where(col("claimstatus")=== ClaimedStatus.id)
-        val organisationDF = loadOrganisationSlugDF()
-        val channelSlugDF = getChannelSlugDF(organisationDF)
-        val shadowUserStatusDF = appendShadowUserStatus(shadowUserDF);
-        val shadowDataSummary = generateSummaryData(shadowUserStatusDF)
-        
-        saveUserSummaryReport(shadowDataSummary, channelSlugDF, storageConfig)
-        saveUserDetailsReport(shadowUserStatusDF, channelSlugDF, storageConfig)
-    
-        generateTenantUserReport(organisationDF.toDF());
-    }
-    
-    //This is validated user summary/detail section in the admin-manage page
-    def generateTenantUserReport(organisationDF: DataFrame) (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
-    
-        val custodianOrgId = getCustodianOrgId();
-        //loading active teanant user-details from user and usr_external_identity and "user_organisation
-        var tenantUserDF = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
-            where(col("rootorgid").isNotNull and !col("rootorgid").contains(custodianOrgId) and col("isdeleted").contains(false))
-        val userExternalIdentityDF = loadData(sparkSession, Map("table" -> "usr_external_identity", "keyspace" -> sunbirdKeyspace), None)
-        val tenantUserOrgDF = loadData(sparkSession, Map("table" -> "user_organisation", "keyspace" -> sunbirdKeyspace), None).
-            where(!col("organisationid").contains(custodianOrgId))
-        //teantUserSubOrgDf will contain user records which belong to sub-org(duplicate tenant org-related details is removed)
-        val teantUserSubOrgDf = tenantUserOrgDF.join(tenantUserDF, tenantUserOrgDF.col("organisationid") === tenantUserDF.col("rootorgid"), "left_anti")
-        tenantUserDF = tenantUserDF.join(teantUserSubOrgDf, tenantUserDF.col("userid") === teantUserSubOrgDf.col("userid"), "left_outer").select(tenantUserDF.col("*"), tenantUserOrgDF.col("organisationid").as("usersuborganisationid"))
-        tenantUserDF = tenantUserDF.join(userExternalIdentityDF, tenantUserDF.col("id") === userExternalIdentityDF.col("userid"), "left_outer").
-            select(tenantUserDF.col("*"), userExternalIdentityDF.col("originalexternalid").as("userextid"), concat_ws(" ", col("firstname"), col("lastname")).as("name")).drop("firstname", "lastname")
-        val stateUserDataSummaryDF = tenantUserDF.groupBy("channel").agg(count("rootorgid").as("totalregistered")).na.fill(0)
-        
-        // We can directly write to the slug folder
-        val subOrgDF: DataFrame = generateSubOrgData(organisationDF)
-        val blockDataWithSlug:DataFrame = generateBlockLevelData(subOrgDF)
-        val userDistrictSummaryDF = tenantUserDF.join(blockDataWithSlug, blockDataWithSlug.col("School id") === (tenantUserDF.col("usersuborganisationid")),"inner")
-        val validatedUsersWithDst = userDistrictSummaryDF.groupBy(col("slug"), col("Channels")).agg(countDistinct("District name").as("districts"),
-            countDistinct("Block id").as("blocks"), countDistinct(tenantUserDF.col("usersuborganisationid")).as("schools"), count("userid").as("subOrgRegistered"))
-        
-        val validatedUserDataSummaryDF = stateUserDataSummaryDF.join(validatedUsersWithDst, stateUserDataSummaryDF.col("channel") === validatedUsersWithDst.col("Channels"))
-        val validatedGeoSummaryDF = validatedUserDataSummaryDF.withColumn("registered",
-            when(col("totalregistered").isNull, 0).otherwise(col("totalregistered"))).withColumn("rootOrgRegistered", col("registered")-col("subOrgRegistered")).drop("totalregistered", "channel", "Channels")
-        
-        saveUserValidatedSummaryReport(validatedGeoSummaryDF, storageConfig)
-        val stateOrgDf = generateStateRootSubOrgDF(subOrgDF, stateUserDataSummaryDF, tenantUserDF.toDF());
-        saveValidatedUserDetailsReport(userDistrictSummaryDF, storageConfig, "validated-user-detail")
-        saveValidatedUserDetailsReport(stateOrgDf, storageConfig, "validated-user-detail-state")
-        
-        val districtUserResult = userDistrictSummaryDF.groupBy(col("slug"), col("District name").as("districtName")).
-            agg(countDistinct("Block id").as("blocks"),countDistinct(col("School id")).as("schools"), count("id").as("registered"))
-        saveUserDistrictSummary(districtUserResult, storageConfig)
-    
-        districtUserResult
-    }
-    
-    def getCustodianOrgId() (implicit sparkSession: SparkSession): String = {
-        val systemSettingDF = loadData(sparkSession, Map("table" -> "system_settings", "keyspace" -> sunbirdKeyspace)).where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId")
-        systemSettingDF.select(col("value")).persist().select("value").first().getString(0)
-    }
-    
-    def saveValidatedUserDetailsReport(userDistrictSummaryDF: DataFrame, storageConfig: StorageConfig, reportId: String) : Unit = {
-      val window = Window.partitionBy("slug").orderBy(asc("District name"))
-      val userDistrictDetailDF = userDistrictSummaryDF.withColumn("Sl", row_number().over(window)).select( col("Sl"), col("District name"), col("District id").as("District ext. ID"),
-        col("Block name"), col("Block id").as("Block ext. ID"), col("School name"), col("externalid").as("School ext. ID"), col("name").as("Teacher name"),
-        col("userextid").as("Teacher ext. ID"), col("userid").as("Teacher Diksha ID"), col("slug"))
-      userDistrictDetailDF.saveToBlobStore(storageConfig, "csv", reportId, Option(Map("header" -> "true")), Option(Seq("slug")))
-        JobLogger.log(s"StateAdminReportJob: ${reportId} report records count = ${userDistrictDetailDF.count()}", None, INFO)
-    }
-
-    def saveUserDistrictSummary(resultDF: DataFrame, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext) = {
-      val window = Window.partitionBy("slug").orderBy(asc("districtName"))
-      val districtSummaryDF = resultDF.withColumn("index", row_number().over(window))
-      dataFrameToJsonFile(districtSummaryDF, "validated-user-summary-district", storageConfig)
-        JobLogger.log(s"StateAdminReportJob: validated-user-summary-district report records count = ${districtSummaryDF.count()}", None, INFO)
-    }
-
-    private def getChannelSlugDF(organisationDF: DataFrame)(implicit sparkSession: SparkSession): DataFrame = {
-      organisationDF.select(col("channel"), col("slug")).where(col("isrootorg") && col("status").===(1))
-    }
-    
-    def appendShadowUserStatus(shadowUserDF: Dataset[ShadowUserData])(implicit spark: SparkSession): DataFrame = {
-        import spark.implicits._
-        shadowUserDF.withColumn(
-            "claim_status",
-            when($"claimstatus" === UnclaimedStatus.id, lit(UnclaimedStatus.status))
-                .when($"claimstatus" === ClaimedStatus.id, lit(ClaimedStatus.status))
-                .when($"claimstatus" === FailedStatus.id, lit(FailedStatus.status))
-                .when($"claimstatus" === RejectedStatus.id, lit(RejectedStatus.status))
-                .when($"claimstatus" === MultiMatchStatus.id, lit(MultiMatchStatus.status))
-                .when($"claimstatus" === OrgExtIdMismatch.id, lit(OrgExtIdMismatch.status))
-                .when($"claimstatus" === Eligible.id, lit(Eligible.status))
-                .otherwise(lit("")))
-    }
-
-    def generateSummaryData(shadowUserDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-        shadowUserDF.groupBy("channel")
-          .pivot("claim_status").agg(count("claim_status")).na.fill(0)
-    }
-
-    /**
-      * Saves the raw data as a .csv.
-      * Appends /detail to the URL to prevent overwrites.
-      * Check function definition for the exact column ordering.
-      * @param reportDF
-      * @param url
-      */
-    def saveUserDetailsReport(reportDF: DataFrame, channelSlugDF: DataFrame, storageConfig: StorageConfig) (implicit spark: SparkSession): Unit = {
-        import spark.implicits._
-        // List of fields available
-        //channel,userextid,addedby,claimedon,claimstatus,createdon,email,name,orgextid,phone,processid,updatedon,userid,userids,userstatus
-        val userDetailReport = reportDF.withColumn("shadow_user_status",
-            when($"claimstatus" === UnclaimedStatus.id, lit(UnclaimedStatus.status))
-            .when($"claimstatus" === ClaimedStatus.id, lit(ClaimedStatus.status))
-            .when($"claimstatus" === FailedStatus.id, lit(FailedStatus.status))
-            .when($"claimstatus" === RejectedStatus.id, lit(RejectedStatus.status))
-            .when($"claimstatus" === MultiMatchStatus.id, lit(MultiMatchStatus.status))
-            .when($"claimstatus" === OrgExtIdMismatch.id, lit(FailedStatus.status))
-            .when($"claimstatus" === Eligible.id, lit(Eligible.status)))
-        userDetailReport.join(channelSlugDF, reportDF.col("channel") === channelSlugDF.col("channel"), "left_outer").select(
-              col("slug"),
-              col("shadow_user_status"),
-              col("userextid").as("User external id"),
-              col("userstatus").as("User account status"),
-              col("userid").as("User id"),
-              concat_ws(",", col("userids")).as("Matching User ids"),
-              col("claimedon").as("Claimed on"),
-              col("orgextid").as("School external id"),
-              col("claim_status").as("Claimed status"),
-              col("createdon").as("Created on"),
-              col("updatedon").as("Last updated on")).filter(col(colName ="shadow_user_status").
-            isin(lit(UnclaimedStatus.status),lit(ClaimedStatus.status),lit(Eligible.status),lit(RejectedStatus.status),lit(FailedStatus.status),lit(MultiMatchStatus.status))).filter(col(colName = "slug").isNotNull)
-          .saveToBlobStore(storageConfig, "csv", "user-detail", Option(Map("header" -> "true")), Option(Seq("shadow_user_status","slug")))
-          
-        JobLogger.log(s"StateAdminReportJob: user-details report records count = ${userDetailReport.count()}", None, INFO)
-    }
-
-    def saveUserValidatedSummaryReport(reportDF: DataFrame, storageConfig: StorageConfig): Unit = {
-      reportDF.saveToBlobStore(storageConfig, "json", "validated-user-summary", None, Option(Seq("slug")))
-      JobLogger.log(s"StateAdminReportJob: validated-user-summary report records count = ${reportDF.count()}", None, INFO)
-    }
-
-    def saveUserSummaryReport(reportDF: DataFrame, channelSlugDF: DataFrame, storageConfig: StorageConfig): Unit = {
-        val dfColumns = reportDF.columns.toSet
-
-        // Get claim status not in the current dataframe to add them.
-        val columns: Seq[String] = Seq(
-            UnclaimedStatus.status,
-            ClaimedStatus.status,
-            RejectedStatus.status,
-            FailedStatus.status,
-            MultiMatchStatus.status,
-            OrgExtIdMismatch.status).filterNot(dfColumns)
-        val correctedReportDF = columns.foldLeft(reportDF)((acc, col) => {
-            acc.withColumn(col, lit(0))
-        })
-        JobLogger.log(s"columns to add in this report $columns")
-        val totalSummaryDF = correctedReportDF.join(channelSlugDF, correctedReportDF.col("channel") === channelSlugDF.col("channel"), "left_outer").select(
-                col("slug"),
-                when(col(UnclaimedStatus.status).isNull, 0).otherwise(col(UnclaimedStatus.status)).as("accounts_unclaimed"),
-                when(col(ClaimedStatus.status).isNull, 0).otherwise(col(ClaimedStatus.status)).as("accounts_validated"),
-                when(col(RejectedStatus.status).isNull, 0).otherwise(col(RejectedStatus.status)).as("accounts_rejected"),
-                when(col(Eligible.status).isNull, 0).otherwise(col(Eligible.status)).as("accounts_eligible"),
-                when(col(MultiMatchStatus.status).isNull, 0).otherwise(col(MultiMatchStatus.status)).as("accounts_duplicate"),
-                when(col(FailedStatus.status).isNull, 0).otherwise(col(FailedStatus.status)).as(FailedStatus.status),
-                when(col(OrgExtIdMismatch.status).isNull, 0).otherwise(col(OrgExtIdMismatch.status)).as(OrgExtIdMismatch.status))
-        totalSummaryDF.withColumn(
-                "accounts_failed", col(FailedStatus.status) + col(OrgExtIdMismatch.status))
-            .withColumn("total", col("accounts_failed") + col("accounts_unclaimed") + col("accounts_validated") + col("accounts_rejected")
-            + col("accounts_eligible") + col("accounts_duplicate"))
-            .filter(col(colName = "slug").isNotNull)
-            .saveToBlobStore(storageConfig, "json", "user-summary", None, Option(Seq("slug")))
-        JobLogger.log(s"StateAdminReportJob: user-summary report records count = ${correctedReportDF.count()}", None, INFO)
-    }
-
-  def dataFrameToJsonFile(dataFrame: DataFrame, reportId: String, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext): Unit = {
-
-    implicit val sc = spark.sparkContext;
-
-    dataFrame.select("slug", "index", "districtName", "blocks", "schools", "registered")
-      .collect()
-      .groupBy(f => f.getString(0)).map(f => {
-        val summary = f._2.map(f => ValidatedUserDistrictSummary(f.getInt(1), f.getString(2), f.getLong(3), f.getLong(4), f.getLong(5)))
-        val arrDistrictSummary = sc.parallelize(Array(JSONUtils.serialize(summary)), 1)
-        OutputDispatcher.dispatch(StorageConfig(storageConfig.store, storageConfig.container, storageConfig.fileName + reportId + "/" + f._1 + ".json", storageConfig.accountKey, storageConfig.secretKey), arrDistrictSummary);
-      })
-
-  }
     
     def locationIdListFunction(location: String): List[String] = {
         var locations = new ListBuffer[String]()
