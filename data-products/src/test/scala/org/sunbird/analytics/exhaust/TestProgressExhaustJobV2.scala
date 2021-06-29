@@ -2,15 +2,16 @@ package org.sunbird.analytics.exhaust
 
 import org.apache.spark.sql.{Encoders, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.exhaust.collection.ProgressExhaustJobV2
+import org.sunbird.analytics.exhaust.collection.{AssessmentData, ProgressExhaustJobV2}
 import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
 import redis.embedded.RedisServer
 
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import scala.collection.JavaConverters._
 
 class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with BaseReportsJob {
@@ -81,184 +82,94 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
 
-    println("batch1Results" + JSONUtils.serialize(batch1Results))
 
-//    batch1Results.size should be(4)
-//    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
-//    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
-//    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
-//    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
-//    batch1Results.map { res => res.`User UUID` }.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
-//    batch1Results.map { res => res.`State` }.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
-//    batch1Results.map { res => res.`District` }.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
-//    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf List("15/11/2019")
-//    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf List(null)
-//    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf List("100")
-//    batch1Results.map(f => f.`Cluster Name`).toList should contain atLeastOneElementOf List("CLUSTER1")
-//    batch1Results.map(f => f.`User Type`).toList should contain atLeastOneElementOf List("administrator")
-//    batch1Results.map(f => f.`User Sub Type`).toList should contain atLeastOneElementOf List("deo")
-//
-//    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
-//    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
-//
-//    while (pResponse.next()) {
-//      pResponse.getString("status") should be("SUCCESS")
-//      pResponse.getString("err_message") should be("")
-//      pResponse.getString("dt_job_submitted") should be("2020-10-19 05:58:18.666")
-//      pResponse.getString("download_urls") should be(s"""{reports/progress-exhaust/$requestId/batch-001_progress_${reportDate}.zip}""")
-//      pResponse.getString("dt_file_created") should be(null)
-//      pResponse.getString("iteration") should be("0")
-//    }
-//
-//    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
-//
-//    //Test coverage for filterAssessmentsFromHierarchy method
-//    val assessmentData = ProgressExhaustJob.filterAssessmentsFromHierarchy(List(), List(), AssessmentData("do_1130928636168192001667", List()))
-//    assessmentData.courseid should be("do_1130928636168192001667")
-//    assert(assessmentData.assessmentIds.isEmpty)
+    println("result" + spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv").toDF().show(false))
+
+    println("batch1Results" + JSONUtils.serialize(batch1Results))
+    //batch1Results[{"State":"Karnataka","District":"bengaluru","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-001","Org Name":"Root Org2","School Id":"3183211","School Name":"DPS, MATHURA","Block Name":"BLOCK1","Declared Board":"IGOT-Health","Enrolment Date":"16/11/2019","Total Score":"100.0%","Cluster Name":"CLUSTER1","User Type":"administrator","User Sub Type":"deo"},{"State":"Karnataka","District":"bengaluru","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-003","Enrolment Date":"15/11/2019","Cluster Name":"anagha","User Type":"administrator","User Sub Type":"deo"},{"State":"Andhra Pradesh","District":"bengaluru","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-002","Enrolment Date":"15/11/2019","Total Score":"100.0%"},{"State":"Delhi","District":"babarpur","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-004","Enrolment Date":"15/11/2019"}]
+    batch1Results.size should be(4)
+    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
+    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
+    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
+    batch1Results.map { res => res.`User UUID` }.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
+    batch1Results.map { res => res.`State` }.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
+    batch1Results.map { res => res.`District` }.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
+    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf List("15/11/2019")
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf List(null)
+    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf List("100")
+    batch1Results.map(f => f.`Cluster Name`).toList should contain atLeastOneElementOf List("CLUSTER1")
+    batch1Results.map(f => f.`User Type`).toList should contain atLeastOneElementOf List("administrator")
+    batch1Results.map(f => f.`User Sub Type`).toList should contain atLeastOneElementOf List("deo")
+    //
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime)
+
+    while (pResponse.next()) {
+      pResponse.getString("status") should be("SUCCESS")
+      pResponse.getString("err_message") should be("")
+      pResponse.getString("dt_job_submitted") should be("2020-10-19 05:58:18.666")
+      pResponse.getString("download_urls") should be(s"""{reports/progress-exhaust/$requestId/batch-001_progress_${reportDate}.zip}""")
+      pResponse.getString("dt_file_created") should be(null)
+      pResponse.getString("iteration") should be("0")
+    }
+
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
+
+    //Test coverage for filterAssessmentsFromHierarchy method
+    val assessmentData = ProgressExhaustJobV2.filterAssessmentsFromHierarchy(List(), List(), AssessmentData("do_1130928636168192001667", List()))
+    assessmentData.courseid should be("do_1130928636168192001667")
+    assert(assessmentData.assessmentIds.isEmpty)
 
   }
+  it should "validate the report path" in {
+    val batch1 = "batch-001"
+    val requestId = "37564CF8F134EE7532F125651B51D17F"
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    val onDemandModeFilepath = ProgressExhaustJobV2.getFilePath(batch1, requestId)
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+    onDemandModeFilepath should be(s"progress-exhaust/$requestId/batch-001_progress_$reportDate")
 
-
-  //  it should "provide hierarchy data on module level" in {
-  //    implicit val sqlContext: SQLContext = spark.sqlContext
-  //    import sqlContext.implicits._
-  //
-  //    implicit val fc = new FrameworkContext()
-  //    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
-  //    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-  //    implicit val config = jobConfig
-  //
-  //    var collectionBatch = CollectionBatch("batch-001","do_1130928636168192001667","Basic Java","0130107621805015045","channel-01","channel-01","Test_TextBook_name_5197942513",Some("Yes"))
-  //    var hierarchyData = List(ContentHierarchy("do_1130928636168192001667","""{"identifier":"do_1130928636168192001667","mimeType":"application/vnd.ekstep.content-collection","visibility":"Default","contentType":"Course","children":[{"parent":"do_112876961957437440179","identifier":"do_1130928636168192001667","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","children":[],"status":"Draft"}]}""")).toDF()
-  //
-  //    var hierarchyModuleData = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
-  //    hierarchyModuleData.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
-  //    hierarchyModuleData.map(f => f.getString(1)) should contain allElementsOf List("do_1130928636168192001667")
-  //    hierarchyModuleData.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
-  //    hierarchyModuleData.map(f => f.getInt(3)) should contain allElementsOf List(100)
-  //    hierarchyModuleData.map(f => f.getString(4)) should contain allElementsOf List("do_1130928636168192001667")
-  //    hierarchyModuleData.map(f => f.getInt(5)) should contain allElementsOf List(100)
-  //
-  //    // No mimetype, visibility etc available in hierarchy
-  //    hierarchyData = List(ContentHierarchy("do_1130928636168192001667","""{"children":[{"parent":"do_112876961957437440179","identifier":"do_1130928636168192001667","lastStatusChangedOn":"2019-09-19T18:15:56.490+0000","code":"2cb4d698-dc19-4f0c-9990-96f49daff753","visibility":"Default","description":"Test_TextBookUnit_desc_8305852636","index":1,"mimeType":"application/vnd.ekstep.content-collection","createdOn":"2019-09-19T18:15:56.489+0000","versionKey":"1568916956489","depth":1,"name":"content_1","lastUpdatedOn":"2019-09-19T18:15:56.490+0000","contentType":"Course","status":"Draft"}]}""")).toDF()
-  //    val hierarchyModuleData1 = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
-  //
-  //    hierarchyModuleData1.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
-  //    hierarchyModuleData1.map(f => f.getString(1)) should contain allElementsOf List("do_1130928636168192001667")
-  //    hierarchyModuleData1.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
-  //    hierarchyModuleData1.map(f => f.getInt(3)) should contain allElementsOf List(100)
-  //    hierarchyModuleData1.map(f => f.getString(4)) should contain allElementsOf List(null)
-  //
-  //    //levelCount is less than depthLevel
-  //    var data =  List(Map("children" -> List(Map("lastStatusChangedOn" -> "2019-09-19T18:15:56.490+0000","parent" -> "do_112876961957437440179","children" -> List(),"name" -> "content_1","createdOn" -> "2019-09-19T18:15:56.489+0000"," lastUpdatedOn" -> "2019-09-19T18:15:56.490+0000", "identifier" -> "do_1130928636168192001667","description" -> "Test_TextBookUnit_desc_8305852636","versionKey" -> "1568916956489","mimeType" -> "application/vnd.ekstep.content-collection","code" -> "2cb4d698-dc19-4f0c-9990-96f49daff753"," contentType" -> "Course"," status" -> "Draft"," depth" -> "1"," visibility" -> "Default"," index" -> "1))"," identifier" -> "do_1130928636168192001667"," mimeType" -> "application/vnd.ekstep.content-collection"," contentType" -> "Course"," visibility" -> "Default"))))
-  //    var prevData = CourseData("do_1130928636168192001667","0",List())
-  //    var parseHierarchyData = ProgressExhaustJob.logTime(ProgressExhaustJob.parseCourseHierarchy(data, 3, prevData, 2), "Execution of ParseCourseHierarchy method")
-  //    assert(parseHierarchyData.equals(prevData))
-  //
-  //    //unit testcase for identifier and children not available
-  //    collectionBatch = CollectionBatch("batch-001","do_1130928636168192001667","Basic Java","0130107621805015045","channel-01","channel-01","Test_TextBook_name_5197942513",Some("Yes"))
-  //    hierarchyData = List(ContentHierarchy("do_1130928636168192001667","""{"mimeType":"application/vnd.ekstep.content-collection","visibility":"Default","contentType":"Course"}""")).toDF()
-  //
-  //    hierarchyModuleData = ProgressExhaustJob.getCollectionAggWithModuleData(collectionBatch, hierarchyData).collectAsList().asScala
-  //    hierarchyModuleData.map(f => f.getString(0)) should contain theSameElementsAs  List("user-001", "user-002", "user-003", "user-004")
-  //    hierarchyModuleData.map(f => f.getString(1)) should contain allElementsOf List("do_1130928636168192001667")
-  //    hierarchyModuleData.map(f => f.getString(2)) should contain allElementsOf List("batch-001")
-  //    hierarchyModuleData.map(f => f.getInt(3)) should contain allElementsOf List(100)
-  //    hierarchyModuleData.map(f => f.getString(4)) should contain allElementsOf List(null)
-  //  }
-  //
-  //  it should "validate the report path" in {
-  //    val batch1 = "batch-001"
-  //    val requestId = "37564CF8F134EE7532F125651B51D17F"
-  //    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
-  //    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-  //    implicit val config = jobConfig
-  //    val onDemandModeFilepath = ProgressExhaustJob.getFilePath(batch1, requestId)
-  //    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
-  //    onDemandModeFilepath should be(s"progress-exhaust/$requestId/batch-001_progress_$reportDate")
-  //
-  //    val standAloneModeFilePath = ProgressExhaustJob.getFilePath(batch1, "")
-  //    standAloneModeFilePath should be(s"progress-exhaust/batch-001_progress_$reportDate")
-  //  }
+    val standAloneModeFilePath = ProgressExhaustJobV2.getFilePath(batch1, "")
+    standAloneModeFilePath should be(s"progress-exhaust/batch-001_progress_$reportDate")
+  }
 
   def getDate(pattern: String): SimpleDateFormat = {
     new SimpleDateFormat(pattern)
   }
 
 
-  //  it should "Generate a report for StandAlone Mode" in {
-  //    implicit val fc = new FrameworkContext()
-  //    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"standalone","batchFilters":["TPD"],"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel"],"limit":10}},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
-  //    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-  //    implicit val config = jobConfig
-  //    ProgressExhaustJob.execute()
-  //    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
-  //    val batch1 = "batch-001"
-  //    val filePath = ProgressExhaustJob.getFilePath(batch1, "")
-  //    implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
-  //    val batch1Results = spark.read.format("csv").option("header", "true")
-  //      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
-  //    println("batch1Results" + batch1Results)
-  //
-  //
-  //    batch1Results.size should be (4)
-  //    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
-  //    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
-  //    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
-  //    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
-  //    batch1Results.map {res => res.`User UUID`}.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
-  //    batch1Results.map {res => res.`State`}.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
-  //    batch1Results.map {res => res.`District`}.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
-  //    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf  List("15/11/2019")
-  //    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf  List(null)
-  //    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf  List("100")
-  //    batch1Results.map(f => f.`Cluster Name`).toList should contain atLeastOneElementOf List("CLUSTER1")
-  //    batch1Results.map(f => f.`User Type`).toList should contain atLeastOneElementOf List("administrator")
-  //    batch1Results.map(f => f.`User Sub Type`).toList should contain atLeastOneElementOf List("deo")
-  //  }
-  //
-  //  /*
-  //   * Testcase for getting the latest value from migrated date fields
-  //   * enrolleddate: (Old Field)
-  //   *   2019-11-13 05:41:50:382+0000
-  //   *   null
-  //   *   2019-11-15 05:41:50:382+0000
-  //   * enrolled_date: (New Field)
-  //   *   2019-11-16 05:41:50
-  //   *   2019-11-15 05:41:50
-  //   *   null
-  //   * expected result enrolleddate:
-  //   *   16/11/2019
-  //   *   15/11/2019
-  //   *   15/11/2019
-  //   */
-  //  it should "generate the report with the latest value from date columns" in {
-  //
-  //    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
-  //    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1130928636168192001667_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
-  //
-  //    implicit val fc = new FrameworkContext()
-  //    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
-  //    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-  //    implicit val config = jobConfig
-  //
-  //    ProgressExhaustJob.execute()
-  //
-  //    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
-  //    val outputDir = "progress-exhaust"
-  //    val batch1 = "batch-001"
-  //    val requestId = "37564CF8F134EE7532F125651B51D17F"
-  //    val filePath = ProgressExhaustJob.getFilePath(batch1, requestId)
-  //    val jobName = ProgressExhaustJob.jobName()
-  //
-  //    implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
-  //    val batch1Results = spark.read.format("csv").option("header", "true")
-  //      .load(s"$outputLocation/$filePath.csv").select("User UUID", "Enrolment Date")
-  //
-  //    batch1Results.count should be (4)
-  //    batch1Results.filter(col("User UUID") === "user-001").collect().map(_ (1)).toList(0) should be("16/11/2019")
-  //    batch1Results.filter(col("User UUID") === "user-002").collect().map(_ (1)).toList(0) should be("15/11/2019")
-  //    batch1Results.filter(col("User UUID") === "user-003").collect().map(_ (1)).toList(0) should be("15/11/2019")
-  //  }
+  it should "Generate a report for StandAlone Mode" in {
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJobV2","modelParams":{"store":"local","mode":"standalone","batchFilters":["TPD"],"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel"],"limit":10}},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust Job V2"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    ProgressExhaustJobV2.execute()
+    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
+    val batch1 = "batch-001"
+    val filePath = ProgressExhaustJobV2.getFilePath(batch1, "")
+    implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
+    val batch1Results = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
+    println("batch1Results" + batch1Results)
+
+
+    batch1Results.size should be(4)
+    batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+    batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
+    batch1Results.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
+    batch1Results.map(f => f.`Batch Name`).toList should contain atLeastOneElementOf List("Basic Java")
+    batch1Results.map { res => res.`User UUID` }.toList should contain theSameElementsAs List("user-001", "user-002", "user-003", "user-004")
+    batch1Results.map { res => res.`State` }.toList should contain theSameElementsAs List("Karnataka", "Andhra Pradesh", "Karnataka", "Delhi")
+    batch1Results.map { res => res.`District` }.toList should contain theSameElementsAs List("bengaluru", "bengaluru", "bengaluru", "babarpur")
+    batch1Results.map(f => f.`Enrolment Date`).toList should contain allElementsOf List("15/11/2019")
+    batch1Results.map(f => f.`Completion Date`).toList should contain allElementsOf List(null)
+    batch1Results.map(f => f.`Progress`).toList should contain allElementsOf List("100")
+    batch1Results.map(f => f.`Cluster Name`).toList should contain atLeastOneElementOf List("CLUSTER1")
+    batch1Results.map(f => f.`User Type`).toList should contain atLeastOneElementOf List("administrator")
+    batch1Results.map(f => f.`User Sub Type`).toList should contain atLeastOneElementOf List("deo")
+  }
 }

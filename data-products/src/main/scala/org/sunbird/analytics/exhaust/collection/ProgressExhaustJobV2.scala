@@ -48,30 +48,32 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
     val leafNodesCount = getLeafNodeCount(hierarchyData);
     val enrolmentWithCompletions = userEnrolmentDF.withColumn("completionPercentage", UDFUtils.completionPercentage(col("contentstatus"), lit(leafNodesCount)));
     val enrolledUsersToBatch = updateCertificateStatus(enrolmentWithCompletions).select(filterColumns.head, filterColumns.tail: _*)
+    // Get selfAssess contents for generate score percentage
     val supportedContentIds: List[AssessmentData] = getContents(hierarchyData, AppConf.getConfig("assessment.metrics.supported.contenttype"))
-    val activityAggData = getActivityAggData(collectionBatch)
-      // filter the selfAssess Contents
-      .withColumn("filteredContents", UDFUtils.filterSupportedContentTypes(col("agg"), typedLit(supportedContentIds.headOption.get.assessmentIds)))
-      // Compute the percentage
-      .withColumn("scorePercentage", UDFUtils.computePercentage(col("filteredContents")))
-      .drop("agg", "filteredContents")
+    val activityAggData: DataFrame = if (supportedContentIds.nonEmpty) {
+      getActivityAggData(collectionBatch)
+        // filter the selfAssess Contents from the "agg" column
+        .withColumn("filteredContents", UDFUtils.filterSupportedContentTypes(col("agg"), typedLit(supportedContentIds.headOption.getOrElse(AssessmentData("", List())).assessmentIds)))
+        // Compute the percentage
+        .withColumn("scorePercentage", UDFUtils.computePercentage(col("filteredContents")))
+        .drop("agg", "filteredContents")
+    } else null
     val progressDF = getProgressDF(enrolledUsersToBatch, activityAggData)
     organizeDF(progressDF, columnMapping, columnsOrder)
   }
 
 
   def getProgressDF(userEnrolmentDF: DataFrame, aggregateDF: DataFrame): DataFrame = {
-    val keys = aggregateDF.select(explode(map_keys(col("scorePercentage")))).distinct()
-      .collect().map(f => f.get(0))
-    val updatedAggregateKeys = keys.map(f => col("scorePercentage").getItem(f).as(f.toString))
-    val updatedAggDF = aggregateDF.select(col("*") +: updatedAggregateKeys: _*)
-
     val updatedEnrolmentDF = userEnrolmentDF.withColumn("completionPercentage", when(col("completedon").isNotNull, 100).otherwise(col("completionPercentage")))
       .withColumn("completedon", when(col("completedon").isNotNull, date_format(col("completedon"), "dd/MM/yyyy")).otherwise(""))
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
-    updatedEnrolmentDF.join(updatedAggDF, updatedEnrolmentDF.col("userid") === updatedAggDF.col("user_id") && updatedEnrolmentDF.col("courseid") === updatedAggDF.col("activity_id"),
-      "left_outer").drop("user_id", "activity_id", "context_id", "scorePercentage")
-
+    if (null != aggregateDF) {
+      val keys = aggregateDF.select(explode(map_keys(col("scorePercentage")))).distinct().collect().map(f => f.get(0))
+      val updatedAggregateKeys = keys.map(f => col("scorePercentage").getItem(f).as(f.toString))
+      val updatedAggDF = aggregateDF.select(col("*") +: updatedAggregateKeys: _*)
+      updatedEnrolmentDF.join(updatedAggDF, updatedEnrolmentDF.col("userid") === updatedAggDF.col("user_id") && updatedEnrolmentDF.col("courseid") === updatedAggDF.col("activity_id"),
+        "left_outer").drop("user_id", "activity_id", "context_id", "scorePercentage")
+    } else updatedEnrolmentDF
   }
 
   def updateCertificateStatus(userEnrolmentDF: DataFrame): DataFrame = {
