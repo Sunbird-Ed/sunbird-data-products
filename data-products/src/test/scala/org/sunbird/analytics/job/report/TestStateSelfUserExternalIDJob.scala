@@ -11,11 +11,9 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
 
   implicit var spark: SparkSession = _
   var map: Map[String, String] = _
-  var shadowUserDF: DataFrame = _
   var orgDF: DataFrame = _
   var reporterMock: BaseReportsJob = mock[BaseReportsJob]
   val sunbirdKeyspace = "sunbird"
-  val shadowUserEncoder = Encoders.product[ShadowUserData].schema
 
   override def beforeAll(): Unit = {
     super.beforeAll()

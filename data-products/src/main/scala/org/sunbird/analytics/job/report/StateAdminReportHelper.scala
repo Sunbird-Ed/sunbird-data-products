@@ -72,7 +72,6 @@ trait StateAdminReportHelper extends BaseReportsJob {
       col("rootorgid").as("rootorgid"),
       col("channel").as("channel"),
       col("status").as("status"),
-      col("locationid").as("locationid"),
       col("orgname").as("orgname"),
       col("locationids").as("locationids"),
       col("externalid").as("externalid"),
