@@ -403,11 +403,17 @@ object UDFUtils extends Serializable {
    * This UDF method used to compute the score percentage of total contents, individual contents
    */
   def computePercentageFn(agg: Map[String, Int]): Map[String, String] = {
-    if (agg.nonEmpty) {
-      val contentScoreList = agg.filter(x => x._1.startsWith("score"))
-      val total_score_percentage = Math.ceil((contentScoreList.foldLeft(0)(_ + _._2) * 100) / agg.filter(x => x._1.startsWith("max_score")).foldLeft(0)(_ + _._2))
-      val contentScoreInPercentage: Map[String, String] = contentScoreList.map(x =>
-        Map(s"${x._1.split(":")(1)} - Score" -> ((x._2 * 100) / agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0)).toString.concat("%"))).flatten.toMap
+    val contentScoreList = agg.filter(x => x._1.startsWith("score"))
+    val total_score = contentScoreList.foldLeft(0)(_ + _._2) * 100
+    val total_max_score = agg.filter(x => x._1.startsWith("max_score")).foldLeft(0)(_ + _._2)
+    if (contentScoreList.nonEmpty && total_max_score > 0) {
+      val total_score_percentage = Math.ceil(total_score / total_max_score)
+      val contentScoreInPercentage: Map[String, String] = contentScoreList.map(x => {
+        val contentScore = x._2 * 100
+        val contentMaxScore = agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0)
+        val contentScoreInPercentage = if (contentMaxScore > 0) (contentScore / contentMaxScore).toString.concat("%") else ""
+        Map(s"${x._1.split(":")(1)} - Score" -> contentScoreInPercentage)
+      }).flatten.toMap
       contentScoreInPercentage ++ Map("total_sum_score" -> total_score_percentage.toString.concat("%"))
     } else {
       Map("total_sum_score" -> "")
