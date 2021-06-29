@@ -401,6 +401,24 @@ object UDFUtils extends Serializable {
 
   /**
    * This UDF method used to compute the score percentage of total contents, individual contents
+   *
+   * Example  Input: agg = Map(
+   * 'completedCount' -> 26,
+   * "max_score:do_3131799116748881921729" -> 5,
+   * "max_score:do_3131799201424179201659" -> 1,
+   * "max_score:do_3131799335459307521660" -> 10,
+   * "score:do_3131799116748881921729" -> 3,
+   * "score:do_3131799201424179201659" -> 1,
+   * "score:do_3131799335459307521660" ->  1)
+   *
+   * result = Map(
+   * "total_sum_score" -> (3+1+1)/(5+1+10),
+   * "do_3131799116748881921729 - Score" -> ((3*100)/5)%,
+   * "do_3131799201424179201659 - Score" -> ((1*100)/1)%,
+   * "do_3131799335459307521660 - Score" -> ((1*100)/10)%
+   * )
+   * // As per previous report format
+   *
    */
   def computePercentageFn(agg: Map[String, Int]): Map[String, String] = {
     val contentScoreList = agg.filter(x => x._1.startsWith("score"))
@@ -420,7 +438,7 @@ object UDFUtils extends Serializable {
     }
   }
 
-  val computePercentage= udf[Map[String, String], Map[String, Int]](computePercentageFn)
+  val computePercentage = udf[Map[String, String], Map[String, Int]](computePercentageFn)
   val filterSupportedContentTypes = udf[Map[String, Int], Map[String, Int], Seq[String]](filterSupportedContentTypesFn)
 
 }
