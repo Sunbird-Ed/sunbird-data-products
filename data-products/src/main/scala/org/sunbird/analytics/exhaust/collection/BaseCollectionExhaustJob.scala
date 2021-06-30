@@ -223,7 +223,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         * Output: List["batch-001", "batch-002"]
         */
       val distinctBatch = batchFilter.get.distinct
-      if (batchFilter.size != distinctBatch.size) println("Duplicate Batches are filtered:: TotalDistinctBatches: " + distinctBatch.size)
+      if (batchFilter.size != distinctBatch.size) JobLogger.log("Duplicate Batches are filtered:: TotalDistinctBatches: " + distinctBatch.size)
       collectionBatches.filter(col("batchid").isin(distinctBatch: _*))
     }
   }
