@@ -1,5 +1,6 @@
 package org.sunbird.analytics.exhaust
 
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{Encoders, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
@@ -18,6 +19,7 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
 
   val jobRequestTable = "job_request"
   implicit var spark: SparkSession = _
+
   var redisServer: RedisServer = _
 
   override def beforeAll(): Unit = {
@@ -68,7 +70,6 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJobV2","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust V2"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val config = jobConfig
-
     ProgressExhaustJobV2.execute()
 
     val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
@@ -79,15 +80,20 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     val jobName = ProgressExhaustJobV2.jobName()
 
     implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
-    val batch1Results = spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
+    val batchResult = spark.read.format("csv").option("header", "true")
+      .load(s"$outputLocation/$filePath.csv")
 
+    val filteredDF = batchResult.toDF().filter(col("Collection Id") === "do_1130928636168192001667"
+      && col("Batch Id") === "BatchId_batch-001" && col("User UUID") === "user-001")
+    import org.apache.spark.sql.SparkSession
+    val spark1 = SparkSession.builder.getOrCreate
+    import spark1.implicits._
 
-    println("result" + spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$filePath.csv").toDF().show(false))
+    filteredDF.select("progress").rdd.map(r => r(0)).collect.toList.head should be("100")
+    filteredDF.select("Total Score").rdd.map(r => r(0)).collect.toList.head should be("100.0%")
+    filteredDF.select("do_1128870328040161281204 - Score").rdd.map(r => r(0)).collect.toList.head should be("100%")
 
-    println("batch1Results" + JSONUtils.serialize(batch1Results))
-    //batch1Results[{"State":"Karnataka","District":"bengaluru","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-001","Org Name":"Root Org2","School Id":"3183211","School Name":"DPS, MATHURA","Block Name":"BLOCK1","Declared Board":"IGOT-Health","Enrolment Date":"16/11/2019","Total Score":"100.0%","Cluster Name":"CLUSTER1","User Type":"administrator","User Sub Type":"deo"},{"State":"Karnataka","District":"bengaluru","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-003","Enrolment Date":"15/11/2019","Cluster Name":"anagha","User Type":"administrator","User Sub Type":"deo"},{"State":"Andhra Pradesh","District":"bengaluru","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-002","Enrolment Date":"15/11/2019","Total Score":"100.0%"},{"State":"Delhi","District":"babarpur","Progress":"100","Collection Id":"do_1130928636168192001667","Collection Name":"24 aug course","Batch Id":"BatchId_batch-001","Batch Name":"Basic Java","User UUID":"user-004","Enrolment Date":"15/11/2019"}]
+    val batch1Results = batchResult.as[ProgressExhaustReport].collectAsList().asScala
     batch1Results.size should be(4)
     batch1Results.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
     batch1Results.map(f => f.`Collection Name`).toList should contain atLeastOneElementOf List("24 aug course")
@@ -154,7 +160,6 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     implicit val responseExhaustEncoder = Encoders.product[ProgressExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$filePath.csv").as[ProgressExhaustReport].collectAsList().asScala
-    println("batch1Results" + batch1Results)
 
 
     batch1Results.size should be(4)
