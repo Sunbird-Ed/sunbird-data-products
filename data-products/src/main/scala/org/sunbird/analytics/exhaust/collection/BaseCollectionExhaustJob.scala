@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoders, SparkSession, Row}
 import org.apache.spark.sql.cassandra._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
@@ -183,7 +183,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val encoder = Encoders.product[CollectionBatch];
     val collectionBatches = getCollectionBatchDF(false);
     if (batchId.isDefined || batchFilter.isDefined) {
-      val batches = if (batchId.isDefined) collectionBatches.filter(col("batchid") === batchId.get) else collectionBatches.filter(col("batchid").isin(batchFilter.get: _*))
+      val batches = validateBatches(collectionBatches, batchId, batchFilter)
       val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
       val collectionDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "userConsent"))));
       val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
@@ -200,6 +200,31 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       finalDF.as[CollectionBatch](encoder).collect().toList
     } else {
       List();
+    }
+  }
+
+  /**
+    *
+    * @param collectionBatches,  batchId, batchFilter
+    * If batchFilter is defined
+    *    Step 1: Filter the duplictae batches from batchFilter list
+    * Common Step
+    * Step 2: Validate if the batchid is correct by checking in coursebatch table
+    *
+    * @return Dataset[Row] of valid batchid
+    */
+  def validateBatches(collectionBatches: DataFrame, batchId: Option[String], batchFilter: Option[List[String]]): Dataset[Row]  = {
+    if (batchId.isDefined) {
+      collectionBatches.filter(col("batchid") === batchId.get)
+    } else {
+      /**
+        * Filter out the duplicate batches from batchFilter
+        * eg: Input: List["batch-001", "batch-002", "batch-001"]
+        * Output: List["batch-001", "batch-002"]
+        */
+      val distinctBatch = batchFilter.get.distinct
+      if (batchFilter.size != distinctBatch.size) println("Duplicate Batches are filtered:: TotalDistinctBatches: " + distinctBatch.size)
+      collectionBatches.filter(col("batchid").isin(distinctBatch: _*))
     }
   }
 
