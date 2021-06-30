@@ -105,7 +105,7 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val userDf = vUserData.join(vUserOrgData, vUserData.col("osid") === vUserOrgData.col("userId"), "left")
       .withColumn("user_type", when(col("roles").contains("admin"), "Organization")
         .when(col("roles").isNull, "Individual").otherwise("Other"))
-      .select("user_type","osid")
+      .select("user_type","osid","user_id")
 
     val contentDf = getContents()
     userDf.join(contentDf, userDf.col("user_id") === contentDf.col("created_by"),
