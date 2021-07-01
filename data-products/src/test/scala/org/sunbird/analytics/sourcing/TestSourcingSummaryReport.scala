@@ -49,7 +49,8 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
     val userQuery =
       s"""
          |CREATE TABLE IF NOT EXISTS $tableName (
-         |    osid TEXT)""".stripMargin
+         |    osid TEXT,
+         |    $userId TEXT)""".stripMargin
 
     val userOrgQuery =
       s"""
@@ -65,7 +66,7 @@ class TestSourcingSummaryReport extends SparkSpec with Matchers with MockFactory
     val tableName: String = "\"V_User\""
     val orgtableName: String = "\"V_User_Org\""
     val userId = "\"userId\""
-    val userQuery = s"""INSERT INTO $tableName(osid) VALUES('0124698765480987654')""".stripMargin
+    val userQuery = s"""INSERT INTO $tableName(osid,$userId) VALUES('0124698765480987654','0124698765480987654')""".stripMargin
     val orgQuery = s"""INSERT INTO $orgtableName($userId, roles) VALUES('0124698765480987654','["admin"]')""".stripMargin
     EmbeddedPostgresql.execute(userQuery)
     EmbeddedPostgresql.execute(orgQuery)
