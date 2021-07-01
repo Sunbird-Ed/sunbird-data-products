@@ -151,21 +151,31 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     private def saveUserSelfDeclaredExternalInfo(userExternalDecryptData: DataFrame, userDenormLocationDF: DataFrame): DataFrame ={
-        val resultDf = userExternalDecryptData.join(userDenormLocationDF, userExternalDecryptData.col("userid") === userDenormLocationDF.col("userid"), "left_outer").
+        var userDenormLocationDFWithCluster : DataFrame = null;
+        if(!userDenormLocationDF.columns.contains("cluster")) {
+            if(!userDenormLocationDF.columns.contains("block")) {
+                userDenormLocationDFWithCluster = userDenormLocationDF.withColumn("cluster", lit("").cast("string")).withColumn("block", lit("").cast("string"))
+            } else {
+                userDenormLocationDFWithCluster = userDenormLocationDF.withColumn("cluster", lit("").cast("string"))
+            }
+        } else {
+            userDenormLocationDFWithCluster = userDenormLocationDF
+        }
+        val resultDf = userExternalDecryptData.join(userDenormLocationDFWithCluster, userExternalDecryptData.col("userid") === userDenormLocationDFWithCluster.col("userid"), "left_outer").
             
             select(col("Name"),
                 userExternalDecryptData.col("userid").as("Diksha UUID"),
-                when(userDenormLocationDF.col("state").isNotNull, userDenormLocationDF.col("state")).otherwise(lit("")).as("State"),
-                when(userDenormLocationDF.col("district").isNotNull, userDenormLocationDF.col("district")).otherwise(lit("")).as("District"),
-                when(userDenormLocationDF.col("block").isNotNull, userDenormLocationDF.col("block")).otherwise(lit("")).as("Block"),
-                when(userDenormLocationDF.col("cluster").isNotNull, userDenormLocationDF.col("cluster")).otherwise(lit("")).as("Cluster"),
+                when(userDenormLocationDFWithCluster.col("state").isNotNull, userDenormLocationDFWithCluster.col("state")).otherwise(lit("")).as("State"),
+                when(userDenormLocationDFWithCluster.col("district").isNotNull, userDenormLocationDFWithCluster.col("district")).otherwise(lit("")).as("District"),
+                when(userDenormLocationDFWithCluster.col("block").isNotNull, userDenormLocationDFWithCluster.col("block")).otherwise(lit("")).as("Block"),
+                when(userDenormLocationDFWithCluster.col("cluster").isNaN, userDenormLocationDFWithCluster.col("cluster")).otherwise(lit("")).as("Cluster"),
                 col("declared-school-name"). as("School Name"),
                 col("declared-school-udise-code").as("School UDISE ID"),
                 col("declared-ext-id").as("State provided ext. ID"),
-                userDenormLocationDF.col("decrypted-email").as("Profile Email"),
-                userDenormLocationDF.col("decrypted-phone").as("Profile Phone number"),
-                userExternalDecryptData.col("decrypted-phone").as("Org Phone"),
-                userExternalDecryptData.col("decrypted-email").as("Org Email ID"),
+                userDenormLocationDFWithCluster.col("decrypted-email").as("Profile Email"),
+                userDenormLocationDFWithCluster.col("decrypted-phone").as("Profile Phone number"),
+                userDenormLocationDFWithCluster.col("decrypted-phone").as("Org Phone"),
+                userDenormLocationDFWithCluster.col("decrypted-email").as("Org Email ID"),
                 col("usertype").as("User Type"),
                 col("usersubtype").as("User-Sub Type"),
                 col("userroororg").as("Root Org of user"),
