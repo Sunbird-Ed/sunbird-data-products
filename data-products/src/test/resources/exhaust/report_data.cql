@@ -1,6 +1,7 @@
 INSERT INTO sunbird_courses.course_batch (courseid, batchid, createdby, createddate, enddate, end_date, enrollmentenddate, name, startdate, start_date, status) VALUES ('do_1130928636168192001667', 'batch-001', 'manju', '2020-10-10', '2020-01-10', '2020-01-10', '2020-01-01', 'Basic Java', '2020-01-20', '2020-01-20', 1 );
 INSERT INTO sunbird_courses.course_batch (courseid, batchid, createdby, createddate, enddate, end_date, enrollmentenddate, name, startdate, start_date, status) VALUES ('do_1130293726460805121168', 'batch-002', 'manju', '2020-11-11', '2020-02-10', '2020-02-10', '2020-02-10', 'Basic C++', '2020-02-20', '2020-02-20', 1 );
 INSERT INTO sunbird_courses.course_batch (courseid, batchid, createdby, createddate, enddate, end_date, enrollmentenddate, name, startdate, start_date, status) VALUES ('do_1131975645014835201326', 'batch-003', 'manju', '2020-10-02', '2020-10-01', '2020-10-01', '2020-10-01', 'Basic C++', '2020-10-20', '2020-10-20', 1 );
+INSERT INTO sunbird_courses.course_batch (courseid, batchid, createdby, createddate, enddate, end_date, enrollmentenddate, name, startdate, start_date, status) VALUES ('do_112835334818643968148', 'batch-004', 'manju', '2020-11-11', '2020-02-10', '2020-02-10', '2020-02-10', 'Basic C++', '2020-02-20', '2020-10-20', 1 );
 
 INSERT INTO sunbird_courses.user_activity_agg (activity_type, activity_id, user_id, context_id, agg, agg_last_updated) VALUES('Course', 'do_1130928636168192001667', 'user-001', 'cb:batch-001', {'completedCount': 1}, {'completedCount': '2020-08-17'});
 INSERT INTO sunbird_courses.user_activity_agg (activity_type, activity_id, user_id, context_id, agg, agg_last_updated) VALUES('Course', 'do_1130928636168192001667', 'user-002', 'cb:batch-001', {'completedCount': 0}, {'completedCount': '2020-09-17'});
@@ -51,5 +52,6 @@ INSERT INTO sunbird.user_consent (id,user_id,consumer_id,consumer_type, status, 
 INSERT INTO sunbird.user_consent (id,user_id,consumer_id,consumer_type, status, object_id) VALUES ('user-001', 'user-007', 'consumer_001', 'ORGANISATION', 'active', 'object_01');
 INSERT INTO sunbird.user_consent (id,user_id,consumer_id,consumer_type, status, object_id, last_updated_on) VALUES ('user-001', 'user-008', '01309282781705830427', 'ORGANISATION', 'active', 'do_1131975645014835201326', '2021-06-14T18:15:56.490+0000');
 INSERT INTO sunbird.user_consent (id,user_id,consumer_id,consumer_type, status, object_id) VALUES ('user-001', 'user-009', '01309282781705830427', 'ORGANISATION', 'active', 'do_1131975645014835201326');
+INSERT INTO sunbird.user_consent (id,user_id,consumer_id,consumer_type, status, object_id) VALUES ('user-001', 'user-014', 'consumer_001', 'ORGANISATION', 'active', 'object_01');
 
 INSERT INTO sunbird.system_settings (id, field, value) VALUES ('custodianOrgId', 'custodianOrgId', '0130107621805015045');
