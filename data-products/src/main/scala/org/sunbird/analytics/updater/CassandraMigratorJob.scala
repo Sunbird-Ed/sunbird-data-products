@@ -35,7 +35,8 @@ object CassandraMigratorJob extends optional.Application with IJob {
     val spark = sqlContext.sparkSession
     val cassandraFormat = "org.apache.spark.sql.cassandra";
     val keyspaceName =modelParams.getOrElse("keyspace","")
-    val tableName = modelParams.getOrElse("table","")
+    val cDataTableName = modelParams.getOrElse("cassandraDataTable","")
+    val cMigrateTableName = modelParams.getOrElse("cassandraMigrateTable", "")
     val result = CommonUtil.time({
     val data = {
       spark.setCassandraConf("DataCluster", CassandraConnectorConf.
@@ -45,7 +46,7 @@ object CassandraMigratorJob extends optional.Application with IJob {
         ConnectionHostParam.option(modelParams.getOrElse("cassandraMigrateHost","localhost"))  ++ CassandraConnectorConf.
         ConnectionPortParam.option(modelParams.getOrElse("cassandraMigratePort","9042")))
 
-      spark.read.format(cassandraFormat).options(Map("table" -> tableName,
+      spark.read.format(cassandraFormat).options(Map("table" -> cDataTableName,
         "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load()
     }
        val repartitionColumns = if (!modelParams.getOrElse("repartitionColumns", "").toString.isEmpty)
@@ -65,9 +66,9 @@ object CassandraMigratorJob extends optional.Application with IJob {
           modelParams.getOrElse("cassandraMigrateHost", "localhost").toString)
           .set("spark.cassandra.connection.port", modelParams.getOrElse("cassandraMigratePort", "9042").toString))
           .withSessionDo { session =>
-            session.execute(s"""TRUNCATE TABLE $keyspaceName.$tableName""")
+            session.execute(s"""TRUNCATE TABLE $keyspaceName.$cMigrateTableName""")
           }
-        dataDf.write.format(cassandraFormat).options(Map("table" -> tableName,
+        dataDf.write.format(cassandraFormat).options(Map("table" -> cMigrateTableName,
           "keyspace" -> keyspaceName, "cluster" -> "MigrateCluster")).option("spark.cassandra.output.ignoreNulls", true)
           .mode("append")
           .save()
