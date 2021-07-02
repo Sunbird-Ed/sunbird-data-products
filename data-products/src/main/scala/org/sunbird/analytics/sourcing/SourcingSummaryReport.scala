@@ -52,11 +52,9 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
 
   def process(projectDf: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
     val userDf = getUserDetails()
-    val resultDf = userDf.join(projectDf, userDf.col("osid") === projectDf.col("contributor_id"), "outer")
-      .withColumnRenamed("osid", "user_id")
+    val resultDf = userDf.join(projectDf, userDf.col("user_id") === projectDf.col("contributor_id"), "outer")
       .withColumn("reportName", lit("SourcingSummaryReport"))
       .withColumn("timestamp", lit(System.currentTimeMillis()))
-    resultDf.show()
     JobLogger.log(s"resultDf count - ${resultDf.count()}", None, Level.INFO)
 
     val modelParams = config.modelParams.get
@@ -99,17 +97,18 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val dbUrl = AppConf.getConfig("postgres.url") + openSaberDb
 
     val vUserData = loadData(dbUrl, AppConf.getConfig("postgres.usertable"))
-      .select("osid")
+      .select("osid","userId")
+      .withColumnRenamed("userId","user_id")
     val vUserOrgData = loadData(dbUrl, AppConf.getConfig("postgres.org.table"))
       .select("userId", "roles")
 
     val userDf = vUserData.join(vUserOrgData, vUserData.col("osid") === vUserOrgData.col("userId"), "left")
       .withColumn("user_type", when(col("roles").contains("admin"), "Organization")
         .when(col("roles").isNull, "Individual").otherwise("Other"))
-      .select("user_type","osid")
+      .select("user_type","osid","user_id")
 
     val contentDf = getContents()
-    userDf.join(contentDf, userDf.col("osid") === contentDf.col("created_by"),
+    userDf.join(contentDf, userDf.col("user_id") === contentDf.col("created_by"),
       "outer").withColumn("user_type", when(col("user_type").isNull, "Individual")
       .otherwise(col("user_type")))
   }
