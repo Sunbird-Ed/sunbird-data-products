@@ -2,37 +2,29 @@ package org.sunbird.analytics.exhaust
 
 import java.io.File
 import java.nio.file.Paths
+import java.sql.{Connection, DriverManager, PreparedStatement, Timestamp}
 import java.util.Properties
-
-import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.SparkSession
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.StorageConfig
-import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.CommonUtil
-import org.apache.spark.sql.functions._
-import org.apache.commons.lang.StringUtils
-import org.ekstep.analytics.framework.Level.INFO
+import java.util.concurrent.CompletableFuture
+import java.util.function.Supplier
 
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.EncryptionMethod
-import org.apache.spark.sql.SaveMode
-import java.sql.Connection
-import java.sql.DriverManager
-import java.sql.PreparedStatement
-import java.sql.Timestamp
-import org.ekstep.analytics.framework.util.HadoopFileUtil
-import java.util.concurrent.CompletableFuture
+import org.apache.commons.lang.StringUtils
 import org.apache.hadoop.conf.Configuration
-import java.util.function.Supplier
-import org.ekstep.analytics.framework.util.JobLogger
+import org.apache.spark.sql.{Encoders, SparkSession}
+import org.apache.spark.sql.functions._
+import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
+import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.util.{CommonUtil, JobLogger}
 
 case class JobRequest(tag: String, request_id: String, job_id: String, var status: String, request_data: String, requested_by: String, requested_channel: String,
                       dt_job_submitted: Long, var download_urls: Option[List[String]], var dt_file_created: Option[Long], var dt_job_completed: Option[Long],
-                      var execution_time: Option[Long], var err_message: Option[String], var iteration: Option[Int], encryption_key: Option[String]) {
-  def this() = this("", "", "", "", "", "", "", 0, None, None, None, None, None, None, None)
+                      var execution_time: Option[Long], var err_message: Option[String], var iteration: Option[Int], encryption_key: Option[String], var processed_batches : Option[String] = None) {
+    def this() = this("", "", "", "", "", "", "", 0, None, None, None, None, None, None, None, None)
 }
+case class RequestStatus(channel: String, batchLimit: Long, fileLimit: Long)
 
 trait OnDemandExhaustJob {
   
@@ -81,7 +73,8 @@ trait OnDemandExhaustJob {
   }
 
   def updateRequest(request: JobRequest): Boolean = {
-    val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
+    val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, " +
+      s"execution_time=?, err_message=?, processed_batches=?::json WHERE tag=? and request_id=?";
     val pstmt: PreparedStatement = dbc.prepareStatement(updateQry);
     pstmt.setInt(1, request.iteration.getOrElse(0));
     pstmt.setString(2, request.status);
@@ -91,14 +84,16 @@ trait OnDemandExhaustJob {
     pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
     pstmt.setLong(6, request.execution_time.getOrElse(0L));
     pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
-    pstmt.setString(8, request.tag);
-    pstmt.setString(9, request.request_id);
+    pstmt.setString(8, request.processed_batches.getOrElse("[]"))
+    pstmt.setString(9, request.tag);
+    pstmt.setString(10, request.request_id);
+
     pstmt.execute()
   }
 
   private def updateRequests(requests: Array[JobRequest]) = {
     if (requests != null && requests.length > 0) {
-      val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
+      val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=?, processed_batches=?::json WHERE tag=? and request_id=?";
       val pstmt: PreparedStatement = dbc.prepareStatement(updateQry);
       for (request <- requests) {
         pstmt.setInt(1, request.iteration.getOrElse(0));
@@ -109,8 +104,9 @@ trait OnDemandExhaustJob {
         pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
         pstmt.setLong(6, request.execution_time.getOrElse(0L));
         pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
-        pstmt.setString(8, request.tag);
-        pstmt.setString(9, request.request_id);
+        pstmt.setString(8, request.processed_batches.getOrElse("[]"))
+        pstmt.setString(9, request.tag);
+        pstmt.setString(10, request.request_id);
         pstmt.addBatch();
       }
       val updateCounts = pstmt.executeBatch();
@@ -215,11 +211,18 @@ trait OnDemandExhaustJob {
     resultFile;
   }
 
-  def markRequestAsFailed(request: JobRequest, failedMsg: String): JobRequest = {
+  def markRequestAsFailed(request: JobRequest, failedMsg: String, completed_Batches: Option[String] = None): JobRequest = {
     request.status = "FAILED";
     request.dt_job_completed = Option(System.currentTimeMillis());
     request.iteration = Option(request.iteration.getOrElse(0) + 1);
     request.err_message = Option(failedMsg);
+    if (completed_Batches.nonEmpty) request.processed_batches = completed_Batches;
+    request
+  }
+
+  def markRequestAsSubmitted(request: JobRequest, completed_Batches: String): JobRequest = {
+    request.status = "SUBMITTED";
+    request.processed_batches = Option(completed_Batches);
     request
   }
 }
