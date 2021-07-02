@@ -45,14 +45,14 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val nominationData = loadData(url, AppConf.getConfig("postgres.nomination.table"))
     val projectDf = programData.join(nominationData, Seq("program_id"), "outer")
       .select("program_id", "status", "rootorg_id", "user_id")
+      .withColumnRenamed("user_id","contributor_id")
 
     process(projectDf)
   }
 
   def process(projectDf: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
     val userDf = getUserDetails()
-    val resultDf = userDf.join(projectDf, userDf.col("userId") === projectDf.col("user_id"), "outer")
-      .withColumnRenamed("user_id", "contributorId")
+    val resultDf = userDf.join(projectDf, userDf.col("user_id") === projectDf.col("contributor_id"), "outer")
       .withColumn("reportName", lit("SourcingSummaryReport"))
       .withColumn("timestamp", lit(System.currentTimeMillis()))
     JobLogger.log(s"resultDf count - ${resultDf.count()}", None, Level.INFO)
@@ -97,19 +97,20 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val dbUrl = AppConf.getConfig("postgres.url") + openSaberDb
 
     val vUserData = loadData(dbUrl, AppConf.getConfig("postgres.usertable"))
-      .select("userId")
+      .select("osid","userId")
+      .withColumnRenamed("userId","user_id")
     val vUserOrgData = loadData(dbUrl, AppConf.getConfig("postgres.org.table"))
       .select("userId", "roles")
 
-    val userDf = vUserData.join(vUserOrgData, Seq("userId"), "left")
-      .withColumn("userType", when(col("roles").contains("admin"), "Organization")
+    val userDf = vUserData.join(vUserOrgData, vUserData.col("osid") === vUserOrgData.col("userId"), "left")
+      .withColumn("user_type", when(col("roles").contains("admin"), "Organization")
         .when(col("roles").isNull, "Individual").otherwise("Other"))
-      .select("userId", "userType")
+      .select("user_type","osid","user_id")
 
     val contentDf = getContents()
-    userDf.join(contentDf, userDf.col("userId") === contentDf.col("createdBy"),
-      "outer").withColumn("userType", when(col("userType").isNull, "Individual")
-      .otherwise(col("userType")))
+    userDf.join(contentDf, userDf.col("user_id") === contentDf.col("created_by"),
+      "outer").withColumn("user_type", when(col("user_type").isNull, "Individual")
+      .otherwise(col("user_type")))
   }
 
   def getContents()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
@@ -121,6 +122,8 @@ object SourcingSummaryReport extends optional.Application with IJob with BaseRep
     val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
     druidResponse.map(f => JSONUtils.deserialize[SourcingContents](f)).toDF()
       .withColumnRenamed("count", "totalContributedContent")
+      .withColumnRenamed("primaryCategory","primary_category")
+      .withColumnRenamed("createdBy","created_by")
   }
 
 }
