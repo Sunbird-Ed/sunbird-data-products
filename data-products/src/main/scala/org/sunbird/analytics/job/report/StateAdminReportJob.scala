@@ -168,7 +168,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 when(userDenormLocationDFWithCluster.col("state").isNotNull, userDenormLocationDFWithCluster.col("state")).otherwise(lit("")).as("State"),
                 when(userDenormLocationDFWithCluster.col("district").isNotNull, userDenormLocationDFWithCluster.col("district")).otherwise(lit("")).as("District"),
                 when(userDenormLocationDFWithCluster.col("block").isNotNull, userDenormLocationDFWithCluster.col("block")).otherwise(lit("")).as("Block"),
-                when(userDenormLocationDFWithCluster.col("cluster").isNaN, userDenormLocationDFWithCluster.col("cluster")).otherwise(lit("")).as("Cluster"),
+                when(userDenormLocationDFWithCluster.col("cluster").isNotNull, userDenormLocationDFWithCluster.col("cluster")).otherwise(lit("")).as("Cluster"),
                 col("declared-school-name"). as("School Name"),
                 col("declared-school-udise-code").as("School UDISE ID"),
                 col("declared-ext-id").as("State provided ext. ID"),
