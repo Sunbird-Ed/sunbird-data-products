@@ -2,22 +2,31 @@ package org.sunbird.analytics.exhaust
 
 import java.io.File
 import java.nio.file.Paths
-import java.sql.{Connection, DriverManager, PreparedStatement, Timestamp}
 import java.util.Properties
-import java.util.concurrent.CompletableFuture
-import java.util.function.Supplier
+
+import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.SparkSession
+import org.ekstep.analytics.framework.FrameworkContext
+import org.ekstep.analytics.framework.StorageConfig
+import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.util.CommonUtil
+import org.apache.spark.sql.functions._
+import org.apache.commons.lang.StringUtils
+import org.ekstep.analytics.framework.Level.INFO
 
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.EncryptionMethod
-import org.apache.commons.lang.StringUtils
+import org.apache.spark.sql.SaveMode
+import java.sql.Connection
+import java.sql.DriverManager
+import java.sql.PreparedStatement
+import java.sql.Timestamp
+import org.ekstep.analytics.framework.util.HadoopFileUtil
+import java.util.concurrent.CompletableFuture
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.sql.{Encoders, SparkSession}
-import org.apache.spark.sql.functions._
-import org.ekstep.analytics.framework.Level.INFO
-import org.ekstep.analytics.framework.{FrameworkContext, StorageConfig}
-import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.{CommonUtil, JobLogger}
+import java.util.function.Supplier
+import org.ekstep.analytics.framework.util.JobLogger
 
 case class JobRequest(tag: String, request_id: String, job_id: String, var status: String, request_data: String, requested_by: String, requested_channel: String,
                       dt_job_submitted: Long, var download_urls: Option[List[String]], var dt_file_created: Option[Long], var dt_job_completed: Option[Long],
