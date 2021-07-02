@@ -99,7 +99,6 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumnRenamed("batch_id", "batchid")
       .withColumnRenamed("course_id", "courseid")
     val assessmentDF = userEnrolmentDF.join(df, Seq("userid","courseid","batchid"), "inner").persist()
-    Console.println(assessmentDF.explain())
     persistedDF.append(assessmentDF)
     assessmentDF
   }
