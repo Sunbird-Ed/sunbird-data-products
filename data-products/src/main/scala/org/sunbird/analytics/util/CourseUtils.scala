@@ -159,7 +159,6 @@ object CourseUtils {
         JobLogger.log(s"Total content Identifiers Response Size ${response.result.content.size}", None, INFO)
         response.result.content
       } else {
-        JobLogger.log(s"Empty Response", None, INFO)
         List[CourseBatchInfo]()
       }
     }
