@@ -97,10 +97,10 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "inner")
     val processedBatches = computeValues(processBatches)
-    val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
+    val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]]
     val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int], Some(config.modelParams.get.getOrElse("contentStatus", Array("Live")).asInstanceOf[Array[String]]), Some(config.modelParams.get.getOrElse("contentStatus", Array()).asInstanceOf[Array[String]])).toDF(contentFields: _*)
+      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", List("Live")).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", List()).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
       JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionname", col("name"))
