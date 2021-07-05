@@ -158,9 +158,7 @@ object CourseUtils {
       if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
         JobLogger.log(s"Total content Identifiers Response Size ${response.result.content.size}", None, INFO)
         response.result.content
-      } else {
-        List[CourseBatchInfo]()
-      }
+      } else List[CourseBatchInfo]()
     }
   }
 }
