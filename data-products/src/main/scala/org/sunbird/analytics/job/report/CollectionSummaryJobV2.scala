@@ -100,7 +100,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]]
     val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", List("Live")).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", List()).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
+      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 1000).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", List("Live", "Unlisted", "Retired")).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", List("identifier","name","organisation","channel","status","keywords","createdFor","medium","subject")).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
       JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionname", col("name"))
