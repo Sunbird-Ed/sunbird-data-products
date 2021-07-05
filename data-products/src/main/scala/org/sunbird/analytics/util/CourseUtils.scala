@@ -39,6 +39,8 @@ trait CourseReport {
 object CourseUtils {
 
   implicit val className: String = "org.sunbird.analytics.util.CourseUtils"
+  val defaultContentStatus: Array[String] = Array("Live", "Unlisted", "Retired")
+  val defaultContentFields: Array[String] = Array("identifier","name","organisation","channel","status","keywords","createdFor","medium","subject")
 
   def getCourse(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext, sqlContext: SQLContext): DataFrame = {
     import sqlContext.implicits._
@@ -139,7 +141,8 @@ object CourseUtils {
       val subCourseIds = courseIds.grouped(maxSize).toList
       val responses = Future.traverse(subCourseIds)(ids => {
         JobLogger.log(s"Batch Size Invoke ${ids.size}", None, INFO)
-        fetchContents(JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> status.getOrElse(Array("Live"))), "fields" -> fields.getOrElse(Array())))))
+        val query = JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> status.getOrElse(defaultContentStatus)), "fields" -> fields.getOrElse(defaultContentFields))))
+        fetchContents(query)
       })
       Await.result(responses, 60.seconds).flatten
     } else {
@@ -153,8 +156,12 @@ object CourseUtils {
       val apiUrl = Constants.COMPOSITE_SEARCH_URL
       val response = RestUtil.post[CourseResponse](apiUrl, query)
       if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+        JobLogger.log(s"Total content Identifiers Response Size ${response.result.content.size}", None, INFO)
         response.result.content
-      } else List[CourseBatchInfo]()
+      } else {
+        JobLogger.log(s"Empty Response", None, INFO)
+        List[CourseBatchInfo]()
+      }
     }
   }
 }

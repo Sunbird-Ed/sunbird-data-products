@@ -39,7 +39,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     init()
     try {
       val res = CommonUtil.time(prepareReport(spark, fetchData))
-      saveToBlob(res._2, jobConfig) // Saving report to blob stroage
+      saveToBlob(res._2, jobConfig) // Saving report to blob storage
       JobLogger.log(s"Submitting Druid Ingestion Task", None, INFO)
       val ingestionSpecPath: String = jobConfig.modelParams.get.getOrElse("specPath", "").asInstanceOf[String]
       val druidIngestionUrl: String = jobConfig.modelParams.get.getOrElse("druidIngestionUrl", "http://localhost:8081/druid/indexer/v1/task").asInstanceOf[String]
@@ -100,8 +100,9 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]]
     val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 1000).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", List("Live", "Unlisted", "Retired")).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", List("identifier","name","organisation","channel","status","keywords","createdFor","medium","subject")).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
-      JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
+      JobLogger.log(s"Total distinct Course Id's ${courseIds.size}", None, INFO)
+      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 100).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", CourseUtils.defaultContentStatus.toList).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", CourseUtils.defaultContentFields.toList).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
+      JobLogger.log(s"Total fetched records from content search ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionname", col("name"))
         .withColumnRenamed("status", "contentstatus")
