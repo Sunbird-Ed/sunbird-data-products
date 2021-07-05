@@ -129,12 +129,17 @@ object CourseUtils {
     }
   }
 
-  def getCourseInfo(courseIds: List[String], request: Option[Map[String, AnyRef]], maxSize: Int): List[CourseBatchInfo] = {
+  def getCourseInfo(courseIds: List[String],
+                    request: Option[Map[String, AnyRef]],
+                    maxSize: Int,
+                    status: Option[Array[String]],
+                    fields: Option[Array[String]]
+                   ): List[CourseBatchInfo] = {
     if (courseIds.nonEmpty) {
       val subCourseIds = courseIds.grouped(maxSize).toList
       val responses = Future.traverse(subCourseIds)(ids => {
         JobLogger.log(s"Batch Size Invoke ${ids.size}", None, INFO)
-        fetchContents(JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> Array("Live")), "fields" -> Array("channel", "identifier", "name", "organisation")))))
+        fetchContents(JSONUtils.serialize(Map("request" -> Map("filters" -> Map("identifier" -> ids, "status" -> status.getOrElse(Array("Live"))), "fields" -> fields.getOrElse(Array())))))
       })
       Await.result(responses, 60.seconds).flatten
     } else {
