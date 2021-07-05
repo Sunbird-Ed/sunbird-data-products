@@ -84,7 +84,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
         when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0
           || col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Y").otherwise("N"))
       .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
-      .select(col("batchid"), col("userid"), col("courseid"), col("enrolleddate"), col("completedon"), col("status"), col("isCertified"))
+      .select(col("batchid"), col("userid"), col("courseid"), col("enrolleddate"), col("completedon"), col("isCertified"))
       .persist()
   }
 
@@ -96,22 +96,23 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "inner")
-    val processedBatches = computeValues(processBatches)
+
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]]
     val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
-      val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
+      val courseIds = processBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
       JobLogger.log(s"Total distinct Course Id's ${courseIds.size}", None, INFO)
       val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 100).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", CourseUtils.defaultContentStatus.toList).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", CourseUtils.defaultContentFields.toList).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
       JobLogger.log(s"Total fetched records from content search ${courseInfo.count()}", None, INFO)
-      processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
+      processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionname", col("name"))
         .withColumnRenamed("status", "contentstatus")
         .withColumnRenamed("organisation", "contentorg")
         .withColumnRenamed("createdFor", "createdfor")
     } else {
-      processedBatches
+      processBatches
     }
-    reportDF.select(filterColumns.head, filterColumns.tail: _*).persist()
+    val processedBatches = computeValues(reportDF)
+    processedBatches.select(filterColumns.head, filterColumns.tail: _*).persist()
   }
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
@@ -121,7 +122,6 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       count(when(col("isCertified") === "Y", 1)).as("certificateissuedcount"),
       count(col("userid")).as("enrolleduserscount")
     )
-
     partitionDF.join(transformedDF.drop("isCertified", "status", "state", "district").dropDuplicates("courseid", "batchid"), Seq("courseid", "batchid"), "inner")
       .withColumn("batchid", concat(lit("batch-"), col("batchid")))
       .withColumn("timestamp", lit(System.currentTimeMillis()))
