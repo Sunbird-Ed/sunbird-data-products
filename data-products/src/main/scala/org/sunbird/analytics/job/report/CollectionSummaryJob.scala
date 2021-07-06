@@ -120,7 +120,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val reportDF = if (searchFilter.isEmpty) {
       val courseIds = processedBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 500).asInstanceOf[Int], None, None).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
+      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("batchSize", 500).asInstanceOf[Int], None, None).toDF("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords")
       JobLogger.log(s"Total courseInfo records ${courseInfo.count()}", None, INFO)
       processedBatches.join(courseInfo, processedBatches.col("courseid") === courseInfo.col("identifier"), "inner")
         .withColumn("collectionName", col("name"))
