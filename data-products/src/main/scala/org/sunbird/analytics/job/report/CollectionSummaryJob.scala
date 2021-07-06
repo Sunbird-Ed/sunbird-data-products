@@ -162,7 +162,7 @@ object CollectionSummaryJob extends optional.Application with IJob with BaseRepo
       basePath = modelParams.getOrElse("baseScriptPath", "/mount/data/analytics/tmp/").asInstanceOf[String],
       merge = MergeFiles(List(
           Map("deltaPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, "summary-report-latest")}.csv"),
-          Map("deltaPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv")), List()
+          Map("deltaPath" -> s"${getReportName(keyword, reportPath s"summary-report-$getDate")}.csv", "reportPath" -> s"${getReportName(keyword, reportPath, s"summary-report-$getDate")}.csv")), List()
       ),
       container = container,
       postContainer = Some(container)
