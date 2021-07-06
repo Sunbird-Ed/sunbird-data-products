@@ -88,6 +88,19 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
       .persist()
   }
 
+  def getContentMetaData(processBatches: DataFrame, spark: SparkSession)(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
+    import spark.implicits._
+    val courseIds = processBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
+    JobLogger.log(s"Total distinct Course Id's ${courseIds.size}", None, INFO)
+    val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 100).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", CourseUtils.defaultContentStatus.toList).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", CourseUtils.defaultContentFields.toList).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
+    JobLogger.log(s"Total fetched records from content search ${courseInfo.count()}", None, INFO)
+    processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "inner")
+      .withColumn("collectionname", col("name"))
+      .withColumnRenamed("status", "contentstatus")
+      .withColumnRenamed("organisation", "contentorg")
+      .withColumnRenamed("createdFor", "createdfor")
+  }
+
   def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
@@ -96,21 +109,8 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "inner")
-
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]]
-    val reportDF = if (null == searchFilter || searchFilter.isEmpty) {
-      val courseIds = processBatches.select(col("courseid")).distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-      JobLogger.log(s"Total distinct Course Id's ${courseIds.size}", None, INFO)
-      val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 100).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", CourseUtils.defaultContentStatus.toList).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", CourseUtils.defaultContentFields.toList).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
-      JobLogger.log(s"Total fetched records from content search ${courseInfo.count()}", None, INFO)
-      processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "inner")
-        .withColumn("collectionname", col("name"))
-        .withColumnRenamed("status", "contentstatus")
-        .withColumnRenamed("organisation", "contentorg")
-        .withColumnRenamed("createdFor", "createdfor")
-    } else {
-      processBatches
-    }
+    val reportDF = if (null == searchFilter || searchFilter.isEmpty) getContentMetaData(processBatches, spark) else processBatches
     val processedBatches = computeValues(reportDF)
     processedBatches.select(filterColumns.head, filterColumns.tail: _*).persist()
   }
