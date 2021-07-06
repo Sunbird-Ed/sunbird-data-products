@@ -92,7 +92,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     import spark.implicits._
     val courseIds = processBatches.select(col("courseid")).distinct().map(f => f.getString(0)).collect.toList
     JobLogger.log(s"Total distinct Course Id's ${courseIds.size}", None, INFO)
-    val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("maxlimit", 50).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", CourseUtils.defaultContentStatus.toList).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", CourseUtils.defaultContentFields.toList).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
+    val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("batchSize", 50).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", CourseUtils.defaultContentStatus.toList).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", CourseUtils.defaultContentFields.toList).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
     JobLogger.log(s"Total fetched records from content search ${courseInfo.count()}", None, INFO)
     processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "inner")
       .withColumn("collectionname", col("name"))
