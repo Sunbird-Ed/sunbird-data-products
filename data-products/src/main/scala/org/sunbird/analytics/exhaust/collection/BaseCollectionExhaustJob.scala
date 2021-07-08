@@ -191,13 +191,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def checkRequestProcessCriteria(processedCount: Long, processedSize: Long): Boolean = {
-    if (processedCount < AppConf.getConfig("exhaust.batches.limit").toLong && processedSize < AppConf.getConfig("exhaust.file.size.limit").toLong)
+    if (processedCount < AppConf.getConfig("exhaust.batches.limit.per.channel").toLong && processedSize < AppConf.getConfig("exhaust.file.size.limit.per.channel").toLong)
       true
     else false
   }
 
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig, processedRequests: ListBuffer[ProcessedRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
-    val batchLimit: Int = AppConf.getConfig("data_exhaust.batch.limit").toInt
+    val batchLimit: Int = AppConf.getConfig("data_exhaust.batch.limit.per.request").toInt
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
     val batches = if (collectionConfig.batchId.isDefined) List(collectionConfig.batchId.get) else collectionConfig.batchFilter.getOrElse(List[String]())
     if (batches.length <= batchLimit) {
