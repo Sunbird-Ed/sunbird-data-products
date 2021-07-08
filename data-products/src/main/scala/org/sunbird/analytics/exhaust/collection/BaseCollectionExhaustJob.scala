@@ -26,7 +26,7 @@ import java.util.concurrent.CompletableFuture
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
-
+import org.ekstep.analytics.framework.Level.ERROR
 import scala.collection.mutable.{Buffer, ListBuffer}
 
 
@@ -69,10 +69,21 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       // generate metric event and push it to kafka topic
       val metrics = List(Map("id" -> "total-requests", "value" -> res._2.totalRequests), Map("id" -> "success-requests", "value" -> res._2.successRequests), Map("id" -> "failed-requests", "value" -> res._2.failedRequests), Map("id" -> "time-taken-secs", "value" -> Double.box(res._1 / 1000).asInstanceOf[AnyRef]))
       val metricEvent = getMetricJson(jobName, Option(new DateTime().toString(CommonUtil.dateFormat)), "SUCCESS", metrics)
+      // $COVERAGE-OFF$
       if (AppConf.getConfig("push.metrics.kafka").toBoolean)
         KafkaDispatcher.dispatch(Array(metricEvent), Map("topic" -> AppConf.getConfig("metric.kafka.topic"), "brokerList" -> AppConf.getConfig("metric.kafka.broker")))
-
+      // $COVERAGE-ON$
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRequests" -> res._2.totalRequests, "successRequests" -> res._2.successRequests, "failedRequests" -> res._2.failedRequests)));
+    }  catch {
+      case ex: Exception =>
+        JobLogger.log(ex.getMessage, None, ERROR);
+        JobLogger.end(jobName + " execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
+        // generate metric event and push it to kafka topic in case of failure
+        val metricEvent = getMetricJson(jobName, Option(new DateTime().toString(CommonUtil.dateFormat)), "FAILED", List())
+        // $COVERAGE-OFF$
+        if (AppConf.getConfig("push.metrics.kafka").toBoolean)
+          KafkaDispatcher.dispatch(Array(metricEvent), Map("topic" -> AppConf.getConfig("metric.kafka.topic"), "brokerList" -> AppConf.getConfig("metric.kafka.broker")))
+        // $COVERAGE-ON$
     } finally {
       frameworkContext.closeContext();
       spark.close()
