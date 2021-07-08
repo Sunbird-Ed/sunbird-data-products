@@ -27,6 +27,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   var redisServer: RedisServer = _
   var jedis: Jedis = _
   val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
+  val batchLimit: Int = AppConf.getConfig("data_exhaust.batch.limit").toInt
 
   override def beforeAll(): Unit = {
     spark = getSparkSession();
@@ -156,7 +157,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val postgresQuery = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
     while (postgresQuery.next()) {
       postgresQuery.getString("status") should be ("FAILED")
-      postgresQuery.getString("err_message") should be ("Invalid request")
+      postgresQuery.getString("err_message") should be ("Request should have either of batchId, batchFilter, searchFilter or encrption key")
       postgresQuery.getString("download_urls") should be ("{}")
     }
   }
@@ -181,7 +182,46 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
 
   }
 
-  it should "fail as batchId is present in onDemand mode" in {
+  it should "insert status as FAILED as batchLimit exceeded" in {
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{\"batchFilter\": [\"batch-001\", \"batch-002\",  \"batch-003\",  \"batch-002\", \"batch-006\"]}', 'user-002', 'channel-01', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test123');")
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","sparkUserDbRedisPort":6381,"fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UserInfo Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    UserInfoExhaustJob.execute()
+
+    val postgresQuery = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
+    while (postgresQuery.next()) {
+      postgresQuery.getString("status") should be ("FAILED")
+      postgresQuery.getString("err_message") should be (s"Number of batches in request exceeded. It should be within $batchLimit")
+      postgresQuery.getString("download_urls") should be ("{}")
+    }
+
+  }
+
+  it should "insert status as FAILED as request_data is empty" in {
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{}', 'user-002', 'channel-01', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test123');")
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","sparkUserDbRedisPort":6381,"fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UserInfo Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    UserInfoExhaustJob.execute()
+
+    val postgresQuery = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
+    while (postgresQuery.next()) {
+      postgresQuery.getString("status") should be ("FAILED")
+      postgresQuery.getString("err_message") should be ("Request should have either of batchId, batchFilter, searchFilter or encrption key")
+      postgresQuery.getString("download_urls") should be ("{}")
+    }
+  }
+
+  it should "fail as batchId is not present in onDemand mode" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
     EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1131350140968632321230_batch-002:channel-01', '37564CF8F134EE7532F125651B51D17F', 'userinfo-exhaust', 'SUBMITTED', '{}', 'user-002', 'channel-01', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
 
@@ -194,7 +234,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val postgresQuery = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='userinfo-exhaust'")
     while (postgresQuery.next()) {
       postgresQuery.getString("status") should be ("FAILED")
-      postgresQuery.getString("err_message") should be ("Invalid request")
+      postgresQuery.getString("err_message") should be ("Request should have either of batchId, batchFilter, searchFilter or encrption key")
       postgresQuery.getString("download_urls") should be ("{}")
       postgresQuery.getString("iteration") should be ("1")
     }

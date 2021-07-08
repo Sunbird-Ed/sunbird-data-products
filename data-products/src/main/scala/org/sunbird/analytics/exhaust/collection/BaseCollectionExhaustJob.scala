@@ -149,8 +149,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
               JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
               res
             } else {
-              JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-              markRequestAsFailed(request, "Invalid request")
+              JobLogger.log("Request should have either of batchId, batchFilter, searchFilter or encrption key", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+              markRequestAsFailed(request, "Request should have either of batchId, batchFilter, searchFilter or encrption key")
             }
           }
           else {
@@ -197,34 +197,40 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def processRequest(request: JobRequest, custodianOrgId: String, userCachedDF: DataFrame, storageConfig: StorageConfig, processedRequests: ListBuffer[ProcessedRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): JobRequest = {
-    val completedBatches :ListBuffer[ProcessedRequest]= if(request.processed_batches.getOrElse("[]").equals("[]")) ListBuffer.empty[ProcessedRequest] else {
-      JSONUtils.deserialize[ListBuffer[ProcessedRequest]](request.processed_batches.get)
-    }
-    markRequestAsProcessing(request)
-    val completedBatchIds = completedBatches.map(f=> f.batchId)
-
+    val batchLimit: Int = AppConf.getConfig("data_exhaust.batch.limit").toInt
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data);
-    val collectionBatches = getCollectionBatches(collectionConfig.batchId, collectionConfig.batchFilter, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
-      .filter(p=> !completedBatchIds.contains(p.batchId))
-    val result = CommonUtil.time(processBatches(userCachedDF, collectionBatches, storageConfig, Some(request.request_id), Some(request.requested_channel), processedRequests.toList))
+    val batches = if (collectionConfig.batchId.isDefined) List(collectionConfig.batchId.get) else collectionConfig.batchFilter.getOrElse(List[String]())
+    if (batches.length <= batchLimit) {
+      val completedBatches :ListBuffer[ProcessedRequest]= if(request.processed_batches.getOrElse("[]").equals("[]")) ListBuffer.empty[ProcessedRequest] else {
+        JSONUtils.deserialize[ListBuffer[ProcessedRequest]](request.processed_batches.get)
+      }
+      markRequestAsProcessing(request)
+      val completedBatchIds = completedBatches.map(f=> f.batchId)
 
-    val response = result._2;
-    val failedBatches = response.filter(p => p.status.equals("FAILED"))
-    val processingBatches= response.filter(p => p.status.equals("PROCESSING"))
-    response.filter(p=> p.status.equals("SUCCESS")).foreach(f => completedBatches += ProcessedRequest(request.requested_channel, f.batchId,f.file, f.fileSize))
-    if (response.size == 0) {
-      markRequestAsFailed(request, "No data found")
-    } else if (failedBatches.size > 0) {
-      markRequestAsFailed(request, failedBatches.map(f => f.statusMsg).mkString(","), Option(JSONUtils.serialize(completedBatches)))
-    } else if(processingBatches.size > 0 ){
-      markRequestAsSubmitted(request, JSONUtils.serialize(completedBatches))
+      val collectionBatches = getCollectionBatches(collectionConfig.batchId, collectionConfig.batchFilter, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
+        .filter(p=> !completedBatchIds.contains(p.batchId))
+      val result = CommonUtil.time(processBatches(userCachedDF, collectionBatches, storageConfig, Some(request.request_id), Some(request.requested_channel), processedRequests.toList))
+
+      val response = result._2;
+      val failedBatches = response.filter(p => p.status.equals("FAILED"))
+      val processingBatches= response.filter(p => p.status.equals("PROCESSING"))
+      response.filter(p=> p.status.equals("SUCCESS")).foreach(f => completedBatches += ProcessedRequest(request.requested_channel, f.batchId,f.file, f.fileSize))
+      if (response.size == 0) {
+        markRequestAsFailed(request, "No data found")
+      } else if (failedBatches.size > 0) {
+        markRequestAsFailed(request, failedBatches.map(f => f.statusMsg).mkString(","), Option(JSONUtils.serialize(completedBatches)))
+      } else if(processingBatches.size > 0 ){
+        markRequestAsSubmitted(request, JSONUtils.serialize(completedBatches))
+      } else {
+        request.status = "SUCCESS";
+        request.download_urls = Option(completedBatches.map(f => f.filePath).toList);
+        request.execution_time = Option(result._1);
+        request.dt_job_completed = Option(System.currentTimeMillis)
+        request.processed_batches = Option(JSONUtils.serialize(completedBatches))
+        request
+      }
     } else {
-      request.status = "SUCCESS";
-      request.download_urls = Option(completedBatches.map(f => f.filePath).toList);
-      request.execution_time = Option(result._1);
-      request.dt_job_completed = Option(System.currentTimeMillis)
-      request.processed_batches = Option(JSONUtils.serialize(completedBatches))
-      request
+      markRequestAsFailed(request, s"Number of batches in request exceeded. It should be within $batchLimit")
     }
   }
 
