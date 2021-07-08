@@ -2,7 +2,6 @@ package org.sunbird.analytics.exhaust.collection
 
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
-
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, SparkSession, Row}
@@ -22,7 +21,6 @@ import org.sunbird.analytics.util.DecryptUtil
 
 import scala.collection.immutable.List
 import java.util.concurrent.CompletableFuture
-
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
@@ -56,7 +54,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
-    
+
     JobLogger.init(jobName)
     JobLogger.start(s"$jobName started executing - ver3", Option(Map("config" -> config, "model" -> jobName)))
 
@@ -118,7 +116,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         executeOnDemand(custodianOrgId, userCachedDF);
     }
   }
-  
+
   def executeStandAlone(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchId = modelParams.get("batchId").asInstanceOf[Option[String]];
@@ -307,36 +305,44 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     JobLogger.log("Channel details at processBatches", Some(Map("channel" -> requestChannel, "file size" -> processedSize, "completed batches" -> processedCount)), INFO)
 
     var newFileSize: Long = 0
-    for (batch <- filterCollectionBatches(collectionBatches)) yield {
-      if (checkRequestProcessCriteria(processedCount, processedSize)) {
-        val userEnrolmentBatchDF = getUserEnrolmentDF(batch.collectionId, batch.batchId, false)
-          .join(userCachedDF, Seq("userid"), "inner")
-          .withColumn("collectionName", lit(batch.collectionName))
-          .withColumn("batchName", lit(batch.batchName));
-        val filteredDF = filterUsers(batch, userEnrolmentBatchDF).persist();
-        val res = CommonUtil.time(filteredDF.count);
-        JobLogger.log("Time to fetch batch enrolment", Some(Map("timeTaken" -> res._1, "count" -> res._2)), INFO)
-        try {
-          val res = CommonUtil.time(processBatch(filteredDF, batch));
-          val reportDF = res._2
-          val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId,requestId.getOrElse("")), Option(Map("header" -> "true")), None)
-          newFileSize = fc.getHadoopFileUtil().size(files.head, spark.sparkContext.hadoopConfiguration)
-          CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1, newFileSize);
-        } catch {
-          case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage, 0, 0);
-        } finally {
-          processedCount= processedCount + 1
-          processedSize=processedSize + newFileSize
-          unpersistDFs();
-          filteredDF.unpersist(true);
+    val batches = filterCollectionBatches(collectionBatches)
+    val parallelProcessLimit = AppConf.getConfig("exhaust.parallel.batch.load.limit").toInt
+    val parallelBatches = batches.sliding(parallelProcessLimit,parallelProcessLimit).toList
+    for(parallelBatch <- parallelBatches) yield {
+      val userEnrolmentDf = getUserEnrolmentDF(parallelBatch.map(f => f.batchId), true)
+      val batchResponseList= for (batch <- parallelBatch) yield {
+        if (checkRequestProcessCriteria(processedCount, processedSize)) {
+          val userEnrolmentBatchDF = userEnrolmentDf.where(col("batchid") === batch.batchId && col("courseid") === batch.collectionId)
+            .join(userCachedDF, Seq("userid"), "inner")
+            .withColumn("collectionName", lit(batch.collectionName))
+            .withColumn("batchName", lit(batch.batchName))
+            .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt,col("userid"),col("courseid"),col("batchid"))
+          val filteredDF = filterUsers(batch, userEnrolmentBatchDF).persist()
+          val res = CommonUtil.time(filteredDF.count);
+          JobLogger.log("Time to fetch batch enrolment", Some(Map("timeTaken" -> res._1, "count" -> res._2)), INFO)
+          try {
+            val res = CommonUtil.time(processBatch(filteredDF, batch));
+            val reportDF = res._2
+            val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(batch.batchId, requestId.getOrElse("")), Option(Map("header" -> "true")), None)
+            newFileSize = fc.getHadoopFileUtil().size(files.head, spark.sparkContext.hadoopConfiguration)
+            CollectionBatchResponse(batch.batchId, files.head, "SUCCESS", "", res._1, newFileSize);
+          } catch {
+            case ex: Exception => ex.printStackTrace(); CollectionBatchResponse(batch.batchId, "", "FAILED", ex.getMessage, 0, 0);
+          } finally {
+            processedCount = processedCount + 1
+            processedSize = processedSize + newFileSize
+            unpersistDFs();
+            filteredDF.unpersist(true)
+          }
+        }
+        else {
+          CollectionBatchResponse("", "", "PROCESSING", "", 0, 0);
         }
       }
-      else
-      {
-        CollectionBatchResponse("", "", "PROCESSING", "", 0, 0);
-      }
+      userEnrolmentDf.unpersist(true);
+      batchResponseList
     }
-  }
+  }.flatMap(f=>f)
 
   // returns Map of request_id and list of its duplicate requests
   def getDuplicateRequests(requests: Array[JobRequest]): Map[String, List[JobRequest]] = {
@@ -360,7 +366,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     step-1: filter reqHashMap - with more than 1 entry in value list which indicates duplicates
       sample filtered map data
       Map<"hash-1", List<JobRequest1, JobRequest3>>
-
     step-2: transform map to have first request_id as key and remaining req list as value
       sample final map data
       Map<"request_id-1", List<JobRequest3>>
@@ -407,11 +412,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       .where(col("id") === "custodianOrgId" && col("field") === "custodianOrgId").select(col("value")).select("value").first().getString(0)
   }
 
-  def getUserEnrolmentDF(collectionId: String, batchId: String, persist: Boolean)(implicit spark: SparkSession): DataFrame = {
-
+  def getUserEnrolmentDF(batchIds: List[String], persist: Boolean)(implicit spark: SparkSession): DataFrame = {
     val cols = getEnrolmentColumns();
-    val df = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
-      .where(col("batchid") === batchId && col("courseid") === collectionId  && lower(col("active")).equalTo("true") && (col("enrolleddate").isNotNull || col("enrolled_date").isNotNull))
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+    val userDf = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
+    val batchDf = spark.sparkContext.parallelize(batchIds).toDF("batchid")
+    val df =batchDf.join(userDf,Seq("batchid")).where(lower(col("active")).equalTo("true")
+       && (col("enrolleddate").isNotNull || col("enrolled_date").isNotNull))
       .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
       .select(cols.head, cols.tail: _*);
 
@@ -436,7 +444,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def getUserCacheDF(cols: Seq[String], persist: Boolean)(implicit spark: SparkSession): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    val df = loadData(userCacheDBSettings, redisFormat, schema).withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).select(cols.head, cols.tail: _*);
+    val df = loadData(userCacheDBSettings, redisFormat, schema).withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).select(cols.head, cols.tail: _*)
+      .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt,col("userid"))
     if (persist) df.persist() else df
   }
 
@@ -524,9 +533,9 @@ object UDFUtils extends Serializable {
   val completionPercentage = udf[Int, Map[String, Int], Int](completionPercentageFunction)
 
   def getLatestValueFun(newValue: String, staleValue: String): String = {
-      Option(newValue)
-        .map(xValue => if (xValue.nonEmpty) xValue else staleValue)
-        .getOrElse(staleValue)
+    Option(newValue)
+      .map(xValue => if (xValue.nonEmpty) xValue else staleValue)
+      .getOrElse(staleValue)
   }
 
   val getLatestValue = udf[String, String, String](getLatestValueFun)
