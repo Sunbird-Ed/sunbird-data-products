@@ -27,7 +27,7 @@ class TestUserInfoExhaustJob extends BaseReportSpec with MockFactory with BaseRe
   var redisServer: RedisServer = _
   var jedis: Jedis = _
   val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
-  val batchLimit: Int = AppConf.getConfig("data_exhaust.batch.limit").toInt
+  val batchLimit: Int = AppConf.getConfig("data_exhaust.batch.limit.per.request").toInt
 
   override def beforeAll(): Unit = {
     spark = getSparkSession();
