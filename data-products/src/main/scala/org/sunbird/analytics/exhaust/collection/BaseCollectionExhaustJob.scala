@@ -26,7 +26,7 @@ import java.util.concurrent.CompletableFuture
 import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
-
+import org.ekstep.analytics.framework.Level.ERROR
 import scala.collection.mutable.{Buffer, ListBuffer}
 
 
