@@ -1,31 +1,29 @@
 package org.sunbird.analytics.exhaust.collection
 
-import java.security.MessageDigest
-import java.util.concurrent.atomic.AtomicInteger
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, Encoders, SparkSession, Row}
 import org.apache.spark.sql.cassandra._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
-import org.ekstep.analytics.framework.Level.INFO
+import org.apache.spark.sql._
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
-import org.ekstep.analytics.util.Constants
-import org.joda.time.{DateTime, DateTimeZone}
-import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
-import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob, RequestStatus}
-import org.sunbird.analytics.util.DecryptUtil
-
-import scala.collection.immutable.List
-import java.util.concurrent.CompletableFuture
-import org.ekstep.analytics.framework.StorageConfig
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
-import org.ekstep.analytics.framework.Level.ERROR
-import scala.collection.mutable.{Buffer, ListBuffer}
+import org.ekstep.analytics.framework.util.DatasetUtil.extensions
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, StorageConfig}
+import org.ekstep.analytics.util.Constants
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
+import org.joda.time.{DateTime, DateTimeZone}
+import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
+import org.sunbird.analytics.util.DecryptUtil
+
+import java.security.MessageDigest
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.immutable.List
+import scala.collection.mutable.ListBuffer
 
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
