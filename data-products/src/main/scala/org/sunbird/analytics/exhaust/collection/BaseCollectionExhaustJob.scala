@@ -276,13 +276,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     * If batchFilter is defined
     *    Step 1: Filter the duplictae batches from batchFilter list
     * Common Step
-    * Step 2: Validate if the batchid is correct by checking in coursebatch table
+    * Step 2: Validate if the batchid is correct by checking in coursebatch table and is not expired (status=2) batch
     *
     * @return Dataset[Row] of valid batchid
     */
   def validateBatches(collectionBatches: DataFrame, batchId: Option[String], batchFilter: Option[List[String]]): Dataset[Row]  = {
     if (batchId.isDefined) {
-      collectionBatches.filter(col("batchid") === batchId.get)
+      collectionBatches.filter(col("batchid") === batchId.get && col("status").notEqual(2))
     } else {
       /**
         * Filter out the duplicate batches from batchFilter
@@ -291,7 +291,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         */
       val distinctBatch = batchFilter.get.distinct
       if (batchFilter.size != distinctBatch.size) JobLogger.log("Duplicate Batches are filtered:: TotalDistinctBatches: " + distinctBatch.size)
-      collectionBatches.filter(col("batchid").isin(distinctBatch: _*))
+      collectionBatches.filter(col("batchid").isin(distinctBatch: _*) && col("status").notEqual(2))
     }
   }
 
@@ -425,7 +425,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val df = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
       .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
-      .select("courseid", "batchid", "enddate", "startdate", "name")
+      .select("courseid", "batchid", "enddate", "startdate", "name", "status")
     if (persist) df.persist() else df
   }
 
