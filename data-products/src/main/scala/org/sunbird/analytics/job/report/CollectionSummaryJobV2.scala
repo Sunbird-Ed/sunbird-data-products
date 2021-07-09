@@ -108,11 +108,11 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state", "district", "orgname")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
-      .join(userCachedDF, Seq("userid"), "inner")
+      .join(userCachedDF, Seq("userid"), "inner").persist()
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]]
     val reportDF: DataFrame = if (null == searchFilter || searchFilter.isEmpty) getContentMetaData(processBatches, spark) else processBatches
     val processedBatches = computeValues(reportDF)
-    processedBatches.select(filterColumns.head, filterColumns.tail: _*).persist()
+    processedBatches.select(filterColumns.head, filterColumns.tail: _*)
   }
 
   def computeValues(transformedDF: DataFrame): DataFrame = {
