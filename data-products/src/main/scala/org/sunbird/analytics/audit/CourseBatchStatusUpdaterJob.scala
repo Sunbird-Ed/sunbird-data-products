@@ -61,6 +61,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): CourseBatchStatusMetrics = {
     val currentDate = getDateFormat().format(new Date)
+    JobLogger.log("Current Date Is $currentDate", None, INFO)
     val computedDF = collectionBatchDF.withColumn("updated_status",
       when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").gt(unix_timestamp(col("enddate"), "yyyy-MM-dd")), 2).otherwise(
         when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").geq(unix_timestamp(col("startdate"), "yyyy-MM-dd")), 1).otherwise(col("status"))
