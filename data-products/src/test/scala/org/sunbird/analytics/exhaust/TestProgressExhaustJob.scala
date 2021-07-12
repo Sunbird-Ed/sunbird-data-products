@@ -480,4 +480,26 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     }
 
   }
+
+  it should "insert status as FAILED since batchid is expired" in {
+
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1130928636168192001667_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-005\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    ProgressExhaustJob.execute()
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+
+    while(pResponse.next()) {
+      pResponse.getString("status") should be ("FAILED")
+      pResponse.getString("err_message") should be ("No data found")
+      pResponse.getString("download_urls") should be (s"""{}""")
+    }
+  }
 }
