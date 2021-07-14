@@ -34,13 +34,13 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     val truncateData: Boolean = modelParams.getOrElse("truncateData", "false").asInstanceOf[Boolean]
     try {
       val res = CommonUtil.time(archiveData(spark, fetchData, jobConfig))
-      val total_archived_files = res._2.length
       if (truncateData) deleteRecords(spark, assessmentAggDBSettings.getOrElse("keyspace", "sunbird_courses"), assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")) else JobLogger.log(s"Skipping the ${assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")} truncate process", None, INFO)
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "total_archived_files" -> total_archived_files)))
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "total_archived_files" -> res._2.length)))
     } finally {
       frameworkContext.closeContext()
       spark.close()
     }
+
 
   }
 
