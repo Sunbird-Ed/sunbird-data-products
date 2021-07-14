@@ -33,7 +33,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     val modelParams = jobConfig.modelParams.get
     val truncateData: Boolean = modelParams.getOrElse("truncateData", "false").asInstanceOf[Boolean]
     try {
-      val res = CommonUtil.time(archiveData(spark, fetchData, "", jobConfig))
+      val res = CommonUtil.time(archiveData(spark, fetchData, jobConfig))
       if (truncateData) deleteRecords(spark, assessmentAggDBSettings.getOrElse("keyspace", "sunbird_courses"), assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")) else JobLogger.log(s"Skipping the ${assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")} truncate process", None, INFO)
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "total_archived_files" -> res._2.length)))
     } finally {
@@ -45,7 +45,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   }
 
   // $COVERAGE-ON$
-  def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, url: String, jobConfig: JobConfig): Array[Map[String, Any]] = {
+  def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, jobConfig: JobConfig): Array[Map[String, Any]] = {
     val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData)
       .withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))

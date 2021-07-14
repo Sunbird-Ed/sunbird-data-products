@@ -34,7 +34,7 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
   override def afterAll(): Unit = {
     super.afterAll()
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
-    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, objectKey + "collection-summary-reports-v2/")
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, objectKey + "assessment-archival")
   }
 
   val convertMethod = udf((value: mutable.WrappedArray[String]) => {
@@ -48,7 +48,7 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"truncateData":false,"store":"local","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val reportData = AssessmentArchivalJob.archiveData(spark, reporterMock.fetchData, "/Users/manjunathdavanam/Documents/Projects.nosync/Sunbird/partition-data", jobConfig)
+    val reportData = AssessmentArchivalJob.archiveData(spark, reporterMock.fetchData, jobConfig)
 
     val batch_1 = reportData.filter(x => x.getOrElse("batch_id", "").asInstanceOf[String] === "1010")
     batch_1.foreach(res => res("year") === "2019")
