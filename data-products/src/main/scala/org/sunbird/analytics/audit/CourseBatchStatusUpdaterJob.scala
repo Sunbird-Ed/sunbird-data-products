@@ -2,7 +2,7 @@ package org.sunbird.analytics.audit
 
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, lit, when}
+import org.apache.spark.sql.functions.{col, lit, unix_timestamp, when}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import org.ekstep.analytics.framework.Level.INFO
@@ -62,8 +62,8 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): CourseBatchStatusMetrics = {
     val currentDate = getDateFormat().format(new Date)
     val computedDF = collectionBatchDF.withColumn("updated_status",
-      when(lit(currentDate).gt(col("enddate")), 2).otherwise(
-        when(lit(currentDate).geq(col("startdate")), 1).otherwise(col("status"))
+      when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").gt(unix_timestamp(col("enddate"), "yyyy-MM-dd")), 2).otherwise(
+        when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").geq(unix_timestamp(col("startdate"), "yyyy-MM-dd")), 1).otherwise(col("status"))
       ))
     val finalDF = computedDF.filter(col("updated_status") =!= col("status"))
       .drop("status").withColumnRenamed("updated_status", "status")
