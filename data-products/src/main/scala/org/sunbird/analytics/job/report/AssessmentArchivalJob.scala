@@ -1,6 +1,8 @@
 package org.sunbird.analytics.job.report
 
+import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions.{col, to_timestamp, weekofyear, year}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -21,6 +23,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
   case class BatchPartition(batch_id: String, year: Int, week_of_year: Int)
 
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
 
     implicit val className: String = "org.sunbird.analytics.job.report.AssessmentArchivalJob"
@@ -32,6 +35,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     val modelParams = jobConfig.modelParams.get
     val truncateData: Boolean = modelParams.getOrElse("truncateData", "false").asInstanceOf[Boolean]
+    init()
     try {
       val res = CommonUtil.time(archiveData(spark, fetchData, jobConfig))
       val total_archived_files = res._2.length
@@ -43,6 +47,10 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     }
 
 
+  }
+
+  def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) {
+    spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
   }
 
   // $COVERAGE-ON$
