@@ -1,9 +1,9 @@
 package org.sunbird.analytics.job.report
 
 import com.datastax.spark.connector.cql.CassandraConnectorConf
-import org.apache.spark.{SparkContext, sql}
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
-import org.apache.spark.sql.functions.{col, explode_outer, to_timestamp, weekofyear, year}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.Level.INFO
@@ -11,13 +11,12 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
-import org.sunbird.analytics.exhaust.collection.UDFUtils
 
 import java.util.concurrent.atomic.AtomicInteger
 
 object AssessmentArchivalJob extends optional.Application with IJob with BaseReportsJob {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
-  private val assessmentAggDBSettings: Map[String, String] = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
+  private val assessmentAggDBSettings: Map[String, String] = Map("table" -> "assessment_aggregator_temp2", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   implicit val className: String = "org.sunbird.analytics.job.report.AssessmentArchivalJob"
   private val partitionCols = List("batch_id", "year", "week_of_year")
 
@@ -32,6 +31,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
+
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     val modelParams = jobConfig.modelParams.get
     val truncateData: Boolean = modelParams.getOrElse("truncateData", "false").asInstanceOf[Boolean]
@@ -55,32 +55,18 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, jobConfig: JobConfig): Array[Map[String, Any]] = {
-    val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData)
-    print("assessmentData" + assessmentData.show(false))
-     print("assessmentData.printSchema()" + assessmentData.printSchema())
-    val updatedData = assessmentData.withColumn("updated_on", to_timestamp(col("updated_on")))
+    val assessmentData: DataFrame = getAssessmentData(sparkSession)
+      .withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
-      .withColumn("question", UDFUtils.parseResult(col("question")))
-//      .withColumn("questiondata",explode_outer(col("question")))
-//      .withColumn("questionresponse", UDFUtils.toJSON(col("questiondata.resvalues")))
-//      .withColumn("questionoption", UDFUtils.toJSON(col("questiondata.params")))
-      //.withColumn("question", UDFUtils.toJSON(col("question")))
-    //    assessmentData.coalesce(1)
-    //      .write
-    //      .partitionBy(partitionCols:_*)
-    //      .mode("overwrite")
-    //      .format("com.databricks.spark.csv")
-    //      .option("header", "true")
-    //      .save(AppConf.getConfig("save_path"))
-    print("updatedData" + updatedData.show(false))
-    val archivedBatchList = updatedData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
+      .withColumn("question", to_json(col("question")))
+    val archivedBatchList = assessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
     val archivedBatchCount = new AtomicInteger(archivedBatchList.length)
     JobLogger.log(s"Total Batches to Archive By Year & Week $archivedBatchCount", None, INFO)
     val batchesToArchive: Array[BatchPartition] = archivedBatchList.map(f =>
       BatchPartition(f.get(0).asInstanceOf[String], f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))
     for (batch <- batchesToArchive) yield {
-      val filteredDF = updatedData
+      val filteredDF = assessmentData
         .filter(col("batch_id") === batch.batch_id && col("year") === batch.year && col("week_of_year") === batch.week_of_year)
       upload(filteredDF.drop("year", "week_of_year"), batch, jobConfig)
       val metrics = Map("batch_id" -> batch.batch_id, "year" -> batch.year, "week_of_year" -> batch.week_of_year, "pending_batches" -> archivedBatchCount.getAndDecrement(), "total_records" -> filteredDF.count())
