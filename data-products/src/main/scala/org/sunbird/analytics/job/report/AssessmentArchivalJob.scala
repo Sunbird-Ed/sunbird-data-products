@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object AssessmentArchivalJob extends optional.Application with IJob with BaseReportsJob {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
-  private val assessmentAggDBSettings: Map[String, String] = Map("table" -> "assessment_aggregator_temp2", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
+  private val assessmentAggDBSettings: Map[String, String] = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   implicit val className: String = "org.sunbird.analytics.job.report.AssessmentArchivalJob"
   private val partitionCols = List("batch_id", "year", "week_of_year")
 
