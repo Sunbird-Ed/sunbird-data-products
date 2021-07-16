@@ -55,7 +55,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, jobConfig: JobConfig): Array[Map[String, Any]] = {
-    val assessmentData: DataFrame = getAssessmentData(sparkSession)
+    val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData)
       .withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
