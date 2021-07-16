@@ -1,5 +1,5 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.sunbirded</groupId>
@@ -62,9 +62,9 @@
 			<version>2.5.0</version>
 		</dependency>
 		<dependency>
-			<groupId>net.lingala.zip4j</groupId>
-			<artifactId>zip4j</artifactId>
-			<version>2.6.2</version>
+		  <groupId>net.lingala.zip4j</groupId>
+		  <artifactId>zip4j</artifactId>
+		  <version>2.6.2</version>
 		</dependency>
 		<dependency>
 			<groupId>org.slf4j</groupId>
@@ -192,11 +192,11 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
-		<!--		<dependency>
-                    <groupId>com.pygmalios</groupId>
-                    <artifactId>reactiveinflux-spark_2.11</artifactId>
-                    <version>1.4.0.10.0.4.1</version>
-                </dependency>-->
+<!--		<dependency>
+			<groupId>com.pygmalios</groupId>
+			<artifactId>reactiveinflux-spark_2.11</artifactId>
+			<version>1.4.0.10.0.4.1</version>
+		</dependency>-->
 		<dependency>
 			<groupId>com.typesafe.netty</groupId>
 			<artifactId>netty-http-pipelining</artifactId>
@@ -246,17 +246,17 @@
 			<version>0.1.0</version>
 		</dependency>
 		<dependency>
-			<groupId>com.github.java-json-tools</groupId>
-			<artifactId>json-schema-validator</artifactId>
-			<version>2.2.8</version>
-			<scope>test</scope>
-		</dependency>
+            <groupId>com.github.java-json-tools</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>2.2.8</version>
+            <scope>test</scope>
+        </dependency>
 		<dependency>
 			<groupId>org.sunbird</groupId>
 			<artifactId>video-streaming</artifactId>
-			<version>1.0</version>
-		</dependency>
-		<dependency>
+            <version>1.0</version>
+        </dependency>
+        <dependency>
 			<groupId>org.sunbird</groupId>
 			<artifactId>cloud-store-sdk</artifactId>
 			<version>1.2.6</version>
@@ -265,10 +265,10 @@
 					<groupId>com.microsoft.azure</groupId>
 					<artifactId>azure-storage</artifactId>
 				</exclusion>
-				<exclusion>
-					<groupId>com.fasterxml.jackson.core</groupId>
-					<artifactId>jackson-core</artifactId>
-				</exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
 				<exclusion>
 					<groupId>org.apache.httpcomponents</groupId>
 					<artifactId>httpclient</artifactId>
@@ -290,10 +290,10 @@
 			<systemPath>${project.basedir}/lib/scruid_2.11-2.4.0.jar</systemPath>
 		</dependency>
 		<dependency>
-			<groupId>pl.allegro.tech</groupId>
-			<artifactId>embedded-elasticsearch</artifactId>
-			<version>2.10.0</version>
-			<scope>test</scope>
+		    <groupId>pl.allegro.tech</groupId>
+		    <artifactId>embedded-elasticsearch</artifactId>
+		    <version>2.10.0</version>
+		    <scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>io.zonky.test</groupId>
@@ -404,12 +404,12 @@
 				<configuration>
 					<transformers>
 						<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-							<resource>META-INF/services/org.jclouds.apis.ApiMetadata</resource>
-						</transformer>
-						<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-							<resource>META-INF/services/org.jclouds.providers.ProviderMetadata</resource>
-						</transformer>
-					</transformers>
+	              			<resource>META-INF/services/org.jclouds.apis.ApiMetadata</resource>
+	            			</transformer>
+	            			<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+	              			<resource>META-INF/services/org.jclouds.providers.ProviderMetadata</resource>
+	            			</transformer>
+	            		</transformers>
 					<filters>
 						<filter>
 							<artifact>*:*</artifact>
