@@ -1,7 +1,6 @@
 package org.sunbird.analytics.exhaust.collection
 
 import com.datastax.spark.connector.cql.CassandraConnectorConf
-import com.google.gson.Gson
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.cassandra._
 import org.apache.spark.sql.functions._
@@ -489,7 +488,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 }
 
 object UDFUtils extends Serializable {
-  val gson = new Gson()
   def toDecryptFun(str: String): String = {
     DecryptUtil.decryptData(str)
   }
@@ -511,16 +509,7 @@ object UDFUtils extends Serializable {
     sanitizedStr;
   }
 
-  def toParseFun(array: AnyRef): String = {
-    import scala.collection.JavaConverters._
-    val str = gson.toJson(array)
-    val sanitizedStr = str.replace("\\n", "").replace("\\", "").replace("\"", "'");
-    sanitizedStr;
-  }
-
   val toJSON = udf[String, AnyRef](toJSONFun)
-
-  val parseResult = udf[String, AnyRef](toParseFun)
 
   def extractFromArrayStringFun(board: String): String = {
     try {
