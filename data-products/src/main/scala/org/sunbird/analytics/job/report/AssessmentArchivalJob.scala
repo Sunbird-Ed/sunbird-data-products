@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object AssessmentArchivalJob extends optional.Application with IJob with BaseReportsJob {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
-  private val assessmentAggDBSettings: Map[String, String] = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
+  private val assessmentAggDBSettings: Map[String, String] = Map("table" -> AppConf.getConfig("sunbird.courses.assessment.table"), "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   implicit val className: String = "org.sunbird.analytics.job.report.AssessmentArchivalJob"
   private val partitionCols = List("batch_id", "year", "week_of_year")
 
@@ -55,7 +55,9 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, jobConfig: JobConfig): Array[Map[String, Any]] = {
-    val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData)
+    val modelParams = jobConfig.modelParams.get
+    val batches: List[String] = modelParams.getOrElse("batches", List()).asInstanceOf[List[String]]
+    val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData, batches)
       .withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
@@ -76,23 +78,15 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     }
   }
 
-  def getAssessmentData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
-    fetchData(spark, assessmentAggDBSettings, cassandraUrl, new StructType())
+  def getAssessmentData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchIds: List[String]): DataFrame = {
+    val assessmentDF = fetchData(spark, assessmentAggDBSettings, cassandraUrl, new StructType())
+    if (batchIds.nonEmpty) assessmentDF.filter(col("batch_id").isin(batchIds)) else assessmentDF
   }
 
   def deleteRecords(sparkSession: SparkSession, keyspace: String, table: String): Unit = {
-    //sparkSession.sql(s"TRUNCATE TABLE $keyspace.$table")
+   // sparkSession.sql(s"TRUNCATE TABLE $keyspace.$table")
     JobLogger.log(s"The Job Cleared The Table Data SuccessFully, Please Execute The Compaction", None, INFO)
   }
-
-  //  def syncToCloud(archivedData: DataFrame, batch: BatchPartition, conf: JobConfig): CompletableFuture[Map[String, Any]] = {
-  //    CompletableFuture.supplyAsync(new Supplier[Map[String, Any]]() {
-  //      override def get(): Map[String, Any] = {
-  //        val res = CommonUtil.time(upload(archivedData, s"${batch.batch_id}-${batch.year}-${batch.week_of_year}", conf))
-  //        Map("batch_id" -> batch.batch_id, "year" -> batch.year, "week_of_year" -> batch.week_of_year, "time_taken" -> res._1, "total_records" -> archivedData.count())
-  //      }
-  //    })
-  //  }
 
   def upload(archivedData: DataFrame,
              batch: BatchPartition,
