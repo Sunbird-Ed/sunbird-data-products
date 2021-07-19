@@ -14,14 +14,22 @@ import scala.collection.immutable.List
 object UCIPrivateExhaust extends optional.Application with Serializable {
 
   val connProperties: Properties = CommonUtil.getPostgresConnectionProps()
-  val db: String = AppConf.getConfig("uci.conversation.postgres.db")
-  val url: String = AppConf.getConfig("uci.conversation.postgres.url") + s"$db"
+
+  val conversationDB: String = AppConf.getConfig("uci.conversation.postgres.db")
+  val conversationURL: String = AppConf.getConfig("uci.conversation.postgres.url") + s"$conversationDB"
   val conversationTable: String = AppConf.getConfig("uci.postgres.table.conversation")
+
+  val fusionAuthDB: String = AppConf.getConfig("uci.fushionauth.postgres.db")
+  val fusionAuthURL: String = AppConf.getConfig("uci.fushionauth.postgres.url") + s"$fusionAuthDB"
   val userTable: String = AppConf.getConfig("uci.postgres.table.user")
+  val identityTable: String = AppConf.getConfig("uci.postgres.table.identities")
   val userRegistrationTable: String = AppConf.getConfig("uci.postgres.table.user_registration")
-  val isConsentToShare = true
-  val dbc: Connection = DriverManager.getConnection(url, connProperties.getProperty("user"), connProperties.getProperty("password"));
-  dbc.setAutoCommit(true)
+  val isConsentToShare = true // Default set to True
+
+  val conversationDBC: Connection = DriverManager.getConnection(conversationURL, connProperties.getProperty("user"), connProperties.getProperty("password"));
+  conversationDBC.setAutoCommit(true)
+  val fashionAuthDBC: Connection = DriverManager.getConnection(fusionAuthURL, connProperties.getProperty("user"), connProperties.getProperty("password"));
+  fashionAuthDBC.setAutoCommit(true)
 
 
   private val columnsOrder = List("Conversation ID", "Conversation Name", "Device ID")
@@ -47,7 +55,7 @@ object UCIPrivateExhaust extends optional.Application with Serializable {
    * Fetch conversation for a specific conversation ID and Tenant
    */
   def loadConversationData(conversationId: String, tenant: String)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    spark.read.jdbc(url, conversationTable, connProperties).select("id", "name", "owners")
+    spark.read.jdbc(conversationURL, conversationTable, connProperties).select("id", "name", "owners")
       .filter(col("id") === conversationId)
       .filter(array_contains(col("owners"), tenant)) // Filtering only tenant specific report
   }
@@ -57,7 +65,7 @@ object UCIPrivateExhaust extends optional.Application with Serializable {
    * Fetch the user Registration table data for a specific conversation ID
    */
   def loadUserRegistrationTable(conversationId: String)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    spark.read.jdbc(url, userRegistrationTable, connProperties).select("id", "applications_id")
+    spark.read.jdbc(fusionAuthURL, userRegistrationTable, connProperties).select("id", "applications_id")
       .filter(col("applications_id") === conversationId)
       .withColumnRenamed("id", "device_id")
   }
@@ -67,7 +75,7 @@ object UCIPrivateExhaust extends optional.Application with Serializable {
    */
   def loadUserTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val consentValue = spark.udf.register("consent", getConsentValueFn)
-    spark.read.jdbc(url, userTable, connProperties).select("id", "data")
+    spark.read.jdbc(fusionAuthURL, userTable, connProperties).select("id", "data")
       .withColumnRenamed("id", "device_id")
       .withColumn("consent", consentValue(col("data")))
   }
@@ -77,7 +85,7 @@ object UCIPrivateExhaust extends optional.Application with Serializable {
    * to get the mobile num by decrypting the username column based on consent
    */
   def loadIdentitiesTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    spark.read.jdbc(url, userTable, connProperties).select("users_id", "username")
+    spark.read.jdbc(fusionAuthURL,identityTable , connProperties).select("users_id", "username")
       .withColumnRenamed("users_id", "device_id")
   }
 
@@ -96,6 +104,7 @@ object UCIPrivateExhaust extends optional.Application with Serializable {
 
   def decryptFn: String => String = (encryptedValue: String) => {
     AESWrapper.decrypt(encryptedValue, Some(AppConf.getConfig("uci_encryption_secret")))
+    //"kghjghj"
   }
 
 }

@@ -159,7 +159,7 @@ object EmbeddedPostgresql {
          |   last_login_instant BIGINT,
          |   last_update_instant BIGINT,
          |   timezone character,
-         |   username character,
+         |   username character(100),
          |   username_status smallint,
          |   users_id uuid,
          |   verified boolean

@@ -21,6 +21,7 @@ class TestUCIPrivateExhaust extends BaseReportSpec with MockFactory with BaseRep
     EmbeddedPostgresql.createConversationTable()
     EmbeddedPostgresql.createUserTable()
     EmbeddedPostgresql.createUserRegistrationTable()
+    EmbeddedPostgresql.createIdentitiesTable()
   }
 
   override def afterAll(): Unit = {
@@ -51,14 +52,14 @@ class TestUCIPrivateExhaust extends BaseReportSpec with MockFactory with BaseRep
     EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('871368b7-a0ed-45e2-92f5-4219fb6789f7', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":true}}');")
 
 
-    EmbeddedPostgresql.execute("INSERT INTO identities (id, user_id, name) VALUES ('4c5abf1b-50d9-4b23-ac9c-1a1489812065', '4c5abf1b-50d9-4b23-ac9c-1a1489812065','X#o89nlfhskl#87923');")
-    EmbeddedPostgresql.execute("INSERT INTO identities (id, user_id, name) VALUES ('4711abba-d06f-49fb-8c63-c80d0d3df790', '4711abba-d06f-49fb-8c63-c80d0d3df790','R97ydichfifoshffkkff');")
-    EmbeddedPostgresql.execute("INSERT INTO identities (id, user_id, name) VALUES ('dda0e8a2-0777-4edd-bb36-d1d8970bafa2', 'dda0e8a2-0777-4edd-bb36-d1d8970bafa2', 'R97ydichfifoshffkkff');")
-    EmbeddedPostgresql.execute("INSERT INTO identities (id, user_id, name) VALUES ('871368b7-a0ed-45e2-92f5-4219fb6789f7', '871368b7-a0ed-45e2-92f5-4219fb6789f7','R97ydichfifoshffkkff');")
+    EmbeddedPostgresql.execute("INSERT INTO identities (id, users_id, username) VALUES ('4c5abf1b-50d9-4b23-ac9c-1a1489812065', '4c5abf1b-50d9-4b23-ac9c-1a1489812065','X#o89nlfhskl#87923');")
+    EmbeddedPostgresql.execute("INSERT INTO identities (id, users_id, username) VALUES ('4711abba-d06f-49fb-8c63-c80d0d3df790', '4711abba-d06f-49fb-8c63-c80d0d3df790','R97ydichfifoshffkkff');")
+    EmbeddedPostgresql.execute("INSERT INTO identities (id, users_id, username) VALUES ('dda0e8a2-0777-4edd-bb36-d1d8970bafa2', 'dda0e8a2-0777-4edd-bb36-d1d8970bafa2', 'R97ydichfifoshffkkff');")
+    EmbeddedPostgresql.execute("INSERT INTO identities (id, users_id, username) VALUES ('871368b7-a0ed-45e2-92f5-4219fb6789f7', '871368b7-a0ed-45e2-92f5-4219fb6789f7','R97ydichfifoshffkkff');")
 
 
     implicit val fc = new FrameworkContext()
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.uci.UCIPrivateExhaust","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust"}"""
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.uci.UCIPrivateExhaust","modelParams":{"store":"local","mode":"OnDemand","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Private Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val config = jobConfig
     val proccessedRequest = UCIPrivateExhaust.processRequest("fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5", "channel-005")
