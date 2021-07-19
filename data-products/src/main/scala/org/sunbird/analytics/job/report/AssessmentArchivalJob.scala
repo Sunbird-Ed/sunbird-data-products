@@ -56,11 +56,11 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, jobConfig: JobConfig): Array[Map[String, Any]] = {
     val batches: List[String] = AppConf.getConfig("assessment.batches").split(",").toList
-    val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData, batches)
-      .withColumn("updated_on", to_timestamp(col("updated_on")))
+    val assessmentDF: DataFrame = getAssessmentData(sparkSession, fetchData, batches).persist()
+    val assessmentData = assessmentDF.withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
-      .withColumn("question", to_json(col("question")))
+      .withColumn("question", to_json(col("question"))).persist()
     val archivedBatchList = assessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
     val archivedBatchCount = new AtomicInteger(archivedBatchList.length)
     JobLogger.log(s"Total Batches to Archive By Year & Week $archivedBatchCount", None, INFO)
