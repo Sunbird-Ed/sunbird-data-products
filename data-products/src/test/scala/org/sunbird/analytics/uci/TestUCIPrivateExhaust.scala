@@ -62,7 +62,7 @@ class TestUCIPrivateExhaust extends BaseReportSpec with MockFactory with BaseRep
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.uci.UCIPrivateExhaust","modelParams":{"store":"local","mode":"OnDemand","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Private Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val config = jobConfig
-    val proccessedRequest = UCIPrivateExhaust.processRequest("fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5", "channel-005")
+    val proccessedRequest = UCIPrivateExhaust.processRequest("fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5", "channel-002")
     proccessedRequest.show(false)
 
   }

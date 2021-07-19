@@ -103,8 +103,7 @@ object UCIPrivateExhaust extends optional.Application with Serializable {
   }
 
   def decryptFn: String => String = (encryptedValue: String) => {
-    AESWrapper.decrypt(encryptedValue, Some(AppConf.getConfig("uci_encryption_secret")))
-    //"kghjghj"
+   AESWrapper.decrypt(encryptedValue, Some(AppConf.getConfig("uci_encryption_secret")))
   }
 
 }
