@@ -7,15 +7,21 @@ import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.sunbird.analytics.util.AESWrapper
 
+import java.util.Properties
 import scala.collection.immutable.List
 
 object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob {
 
+  override val connProperties: Properties = getUCIPostgresConnectionProps(
+    AppConf.getConfig("uci.fushionauth.postgres.user"),
+    AppConf.getConfig("uci.fushionauth.postgres.pass")
+  )
   val fusionAuthDB: String = AppConf.getConfig("uci.fushionauth.postgres.db")
   val fusionAuthURL: String = AppConf.getConfig("uci.fushionauth.postgres.url") + s"$fusionAuthDB"
   val userTable: String = AppConf.getConfig("uci.postgres.table.user")
   val identityTable: String = AppConf.getConfig("uci.postgres.table.identities")
   val userRegistrationTable: String = AppConf.getConfig("uci.postgres.table.user_registration")
+
   val isConsentToShare = true // Default set to True
 
   private val columnsOrder = List("Conversation ID", "Conversation Name", "Device ID")
@@ -28,7 +34,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
 
   override def getReportPath(): String = "uci-private-exhaust/"
 
-  override def getReportKey(): String = "private"
+  override def getReportKey(): String = "userinfo"
 
   override def getClassName(): String = "org.sunbird.analytics.exhaust.collection.UCIPrivateExhaustJob"
 

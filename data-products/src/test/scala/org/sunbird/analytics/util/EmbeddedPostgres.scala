@@ -69,6 +69,106 @@ object EmbeddedPostgresql {
     execute(query)
   }
 
+
+  def createConversationTable(): Unit = {
+    val tableName: String = "bot"
+    val query =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |   id UUID PRIMARY KEY,
+         |   name TEXT,
+         |   startingMessage TEXT,
+         |   users TEXT[],
+         |   logicIDs TEXT[],
+         |   owners TEXT[],
+         |   created_at TIMESTAMP,
+         |   updated_at TIMESTAMP,
+         |   status TEXT,
+         |   description TEXT,
+         |   startDate DATE,
+         |   endDate DATE,
+         |   purpose TEXT
+         |)
+      """.stripMargin
+    execute(query)
+  }
+
+  def createUserTable(): Unit = {
+    val tableName: String = "users"
+    val query =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |   id UUID PRIMARY KEY,
+         |   active BOOLEAN,
+         |   birth_date character(10),
+         |   clean_speak_id UUID,
+         |   data TEXT,
+         |   expiry BIGINT,
+         |   first_name character,
+         |   full_name character,
+         |   image_url TEXT,
+         |   insert_instant bigint,
+         |   last_name character,
+         |   last_update_instant bigint,
+         |   middle_name character,
+         |   mobile_phone character,
+         |   parent_email character,
+         |   tenants_id uuid,
+         |   timezone character
+         |)
+      """.stripMargin
+    execute(query)
+  }
+
+
+
+  def createUserRegistrationTable(): Unit = {
+    val tableName: String = "user_registrations"
+    val query =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |   id UUID PRIMARY KEY,
+         |   applications_id UUID,
+         |   authentication_token character(255),
+         |   clean_speak_id UUID,
+         |   data TEXT,
+         |   insert_instant BIGINT,
+         |   last_login_instant BIGINT,
+         |   last_update_instant BIGINT,
+         |   timezone character,
+         |   username character,
+         |   username_status smallint,
+         |   users_id uuid,
+         |   verified boolean
+         |)
+      """.stripMargin
+    execute(query)
+  }
+
+  def createIdentitiesTable(): Unit = {
+    val tableName: String = "identities"
+    val query =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |   id UUID PRIMARY KEY,
+         |   applications_id UUID,
+         |   authentication_token character(255),
+         |   clean_speak_id UUID,
+         |   data TEXT,
+         |   insert_instant BIGINT,
+         |   last_login_instant BIGINT,
+         |   last_update_instant BIGINT,
+         |   timezone character,
+         |   username character(100),
+         |   username_status smallint,
+         |   users_id uuid,
+         |   verified boolean
+         |)
+      """.stripMargin
+    execute(query)
+  }
+
+
   def execute(sqlString: String): Boolean = {
     stmt.execute(sqlString)
   }
