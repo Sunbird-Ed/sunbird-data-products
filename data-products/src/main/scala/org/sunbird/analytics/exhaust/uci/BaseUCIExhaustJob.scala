@@ -143,7 +143,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     try {
       val res = CommonUtil.time(process(conversationId, df, conversationDF));
       val reportDF = res._2
-      val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId), Option(Map("header" -> "true")), None)
+      val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId, request.request_id), Option(Map("header" -> "true")), None)
       if (reportDF.count() == 0) {
         markRequestAsFailed(request, "No data found")
       } else {
@@ -205,8 +205,9 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     spark.read.jdbc(url, table, props)
   }
 
-  def getFilePath(conversationId: String)(implicit config: JobConfig): String = {
-    getReportPath() + conversationId + "_" + getReportKey() + "_" + getDate()
+  def getFilePath(conversationId: String, requestId: String)(implicit config: JobConfig): String = {
+    val requestIdPath = if (requestId.nonEmpty) requestId.concat("/") else ""
+    getReportPath() + requestIdPath + conversationId + "_" + getReportKey() + "_" + getDate()
   }
 
   def getDate(): String = {
