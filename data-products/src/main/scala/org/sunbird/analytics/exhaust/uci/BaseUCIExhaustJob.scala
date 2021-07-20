@@ -73,6 +73,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchNumber = modelParams.get("batchNumber")
     val requests = getRequests(jobId(), batchNumber)
+
     val storageConfig = getStorageConfig(config, AppConf.getConfig("uci.exhaust.store.prefix"))
 
     val totalRequests = new AtomicInteger(requests.length)
@@ -171,7 +172,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     /**
       * Fetch conversation for a specific conversation ID and Tenant
       */
-    spark.read.jdbc(conversationURL, conversationTable, connProperties).select("id", "name", "owners", "startDate", "endDate")
+    fetchData(conversationURL, connProperties, conversationTable).select("id", "name", "owners", "startDate", "endDate")
       .filter(col("id") === conversationId)
       .filter(array_contains(col("owners"), tenant)) // Filtering only tenant specific report
 
@@ -187,8 +188,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
 
   override def openSparkSession(config: JobConfig): SparkSession = {
-
-    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     JobContext.parallelization = CommonUtil.getParallelization(config)
     val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model))
     setReportsStorageConfiguration(config)(sparkSession)
