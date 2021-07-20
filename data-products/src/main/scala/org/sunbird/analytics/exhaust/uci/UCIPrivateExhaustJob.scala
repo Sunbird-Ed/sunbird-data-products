@@ -12,7 +12,7 @@ import scala.collection.immutable.List
 
 object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob {
 
-  val connectionProps: Properties = getUCIPostgresConnectionProps(
+  val fushionAuthconnectionProps: Properties = getUCIPostgresConnectionProps(
     AppConf.getConfig("uci.fushionauth.postgres.user"),
     AppConf.getConfig("uci.fushionauth.postgres.pass")
   )
@@ -59,7 +59,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
    * Fetch the user Registration table data for a specific conversation ID
    */
   def loadUserRegistrationTable(conversationId: String)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    fetchData(fusionAuthURL, connectionProps, userRegistrationTable).select("id", "applications_id")
+    fetchData(fusionAuthURL, fushionAuthconnectionProps, userRegistrationTable).select("id", "applications_id")
       .filter(col("applications_id") === conversationId)
       .withColumnRenamed("id", "device_id")
   }
@@ -69,7 +69,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
    */
   def loadUserTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val consentValue = spark.udf.register("consent", getConsentValueFn)
-    fetchData(fusionAuthURL, connectionProps, userTable).select("id", "data")
+    fetchData(fusionAuthURL, fushionAuthconnectionProps, userTable).select("id", "data")
       .withColumnRenamed("id", "device_id")
       .withColumn("consent", consentValue(col("data")))
   }
@@ -79,7 +79,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
    * to get the mobile num by decrypting the username column based on consent
    */
   def loadIdentitiesTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    fetchData(fusionAuthURL, connectionProps, identityTable).select("users_id", "username")
+    fetchData(fusionAuthURL, fushionAuthconnectionProps, identityTable).select("users_id", "username")
       .withColumnRenamed("users_id", "device_id")
   }
 
