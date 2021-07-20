@@ -8,7 +8,7 @@ import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.conf.AppConf
 
-object UCIResponseExhaustJob extends optional.Application with BaseUciExhaustJob {
+object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob {
 
   override def getClassName = "org.sunbird.analytics.exhaust.collection.ResponseExhaustJob"
   override def jobName() = "UCIResponseExhaustJob";
@@ -16,7 +16,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUciExhaustJob
   override def getReportPath() = "uci-response-exhaust/";
   override def getReportKey() = "response";
 
-  override def process(conversationId: String, channelId: String, telemetryDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+  override def process(conversationId: String, telemetryDF: DataFrame, conversationDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     telemetryDF
   }
 

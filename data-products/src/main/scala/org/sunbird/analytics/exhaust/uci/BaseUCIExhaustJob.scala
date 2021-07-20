@@ -1,6 +1,9 @@
 package org.sunbird.analytics.exhaust.uci
 
+import java.sql.{Connection, DriverManager}
+import java.util.{Date, Properties}
 import java.util.concurrent.CompletableFuture
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions._
@@ -17,12 +20,14 @@ import org.ekstep.analytics.util.Constants
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
 import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.LongAccumulator
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
+
 import scala.collection.immutable.List
 
-trait BaseUciExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
+trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -107,21 +112,35 @@ trait BaseUciExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data);
     val conversationId = requestData.get("conversationId").getOrElse("").asInstanceOf[String]
     // query conversation API to get start & end dates
-    val conversationData = getConversationData(conversationId)
-    // prepare config with start & end dates
-    val queryConf = config.search.queries.get.apply(0)
-    val query = Query(queryConf.bucket, queryConf.prefix, Option(conversationData.startDate), Option(conversationData.endDate))
-    val fetcherQuery = Fetcher(config.search.`type`, None, Option(Array(query)))
-    // Fetch telemetry data
-    // To-Do: add filters
-    val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
-    // convert rdd to DF
-    val dataCount = sc.longAccumulator("UCITelemetryCount")
-    val df = getTelemetryDF(rdd, dataCount)
+    val conversationDF = getConversationData(conversationId, request.requested_channel)
+
+    val df = if (!config.search.`type`.equals("none")) {
+      val startDate = conversationDF.head().getAs[DateTime]("startDate").toString("yyyy-MM-dd")
+      val endDate = conversationDF.head().getAs[DateTime]("endDate").toString("yyyy-MM-dd")
+      // prepare config with start & end dates
+      val queryConf = config.search.queries.get.apply(0)
+      val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate))
+      val fetcherQuery = Fetcher(config.search.`type`, None, Option(Array(query)))
+      // Fetch telemetry data
+      val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
+      // apply eid & pdata id filter using config
+      val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort);
+      // apply tenant and conversation id filter
+      val filteredData = data.filter{f => f.context.channel.equals(request.requested_channel)}
+        .filter{f =>
+          val conversationIds = f.context.cdata.getOrElse(List()).filter(f => f.`type`.equals("Conversation"))
+            .map{f => f.id}
+          if (conversationIds.contains(conversationId)) true else false
+        }
+      // convert rdd to DF
+      val dataCount = sc.longAccumulator("UCITelemetryCount")
+      getTelemetryDF(filteredData, dataCount)
+    }
+    else spark.emptyDataFrame
 
     // call process method from respective exhaust job
     try {
-      val res = CommonUtil.time(process(conversationId, request.requested_channel, df));
+      val res = CommonUtil.time(process(conversationId, df, conversationDF));
       val reportDF = res._2
       val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId), Option(Map("header" -> "true")), None)
       if (reportDF.count() == 0) {
@@ -139,12 +158,33 @@ trait BaseUciExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     }
   }
 
-  def getConversationData(conversationId: String)(implicit sc: SparkContext): ConversationData = {
-    val url = "v1/bot/get"
-    val response = RestUtil.get[Map[String, AnyRef]](url + s"/$conversationId")
-    val conversationData = response.get("data").getOrElse(Map()).asInstanceOf[Map[String, AnyRef]]
-    ConversationData(conversationId, conversationData.get("name").getOrElse("").asInstanceOf[String], conversationData.get("startDate").getOrElse("").asInstanceOf[String], conversationData.get("endDate").getOrElse("").asInstanceOf[String])
+  def getConversationData(conversationId: String, tenant: String)(implicit spark: SparkSession): DataFrame = {
+
+    val conversationDB: String = AppConf.getConfig("uci.conversation.postgres.db")
+    val conversationURL: String = AppConf.getConfig("uci.conversation.postgres.url") + s"$conversationDB"
+    val conversationTable: String = AppConf.getConfig("uci.postgres.table.conversation")
+
+    val user = AppConf.getConfig("uci.conversation.postgres.user")
+    val pass = AppConf.getConfig("uci.conversation.postgres.pass")
+    val connProperties: Properties = getUCIPostgresConnectionProps(user, pass)
+
+    /**
+      * Fetch conversation for a specific conversation ID and Tenant
+      */
+    spark.read.jdbc(conversationURL, conversationTable, connProperties).select("id", "name", "owners", "startDate", "endDate")
+      .filter(col("id") === conversationId)
+      .filter(array_contains(col("owners"), tenant)) // Filtering only tenant specific report
+
   }
+
+  def getUCIPostgresConnectionProps(user: String, pass: String): Properties = {
+    val connProperties = new Properties()
+    connProperties.setProperty("driver", "org.postgresql.Driver")
+    connProperties.setProperty("user", user)
+    connProperties.setProperty("password", pass)
+    connProperties
+  }
+
 
   override def openSparkSession(config: JobConfig): SparkSession = {
 
@@ -176,7 +216,7 @@ trait BaseUciExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
   def jobName(): String;
   def getReportPath(): String;
   def getReportKey(): String;
-  def process(conversationId: String, channelId: String, telemetryDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
+  def process(conversationId: String, telemetryDF: DataFrame, conversationDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
 
   case class ConversationData(id: String, name: String, startDate: String, endDate: String)
   case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
