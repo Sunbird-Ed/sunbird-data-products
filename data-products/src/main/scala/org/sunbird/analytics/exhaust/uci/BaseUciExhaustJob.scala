@@ -1,7 +1,6 @@
 package org.sunbird.analytics.exhaust.uci
 
 import java.util.concurrent.CompletableFuture
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions._
@@ -23,7 +22,7 @@ import org.apache.spark.util.LongAccumulator
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import scala.collection.immutable.List
 
-trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
+trait BaseUciExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -77,14 +76,14 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val result = for (request <- requests) yield {
       val updRequest: JobRequest = {
         try {
-            if (validateRequest(request)) {
-              val res = processRequest(request, storageConfig)
-              JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-              res
-            } else {
-              JobLogger.log("Request should have conversationId", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
-              markRequestAsFailed(request, "Request should have conversationId")
-            }
+          if (validateRequest(request)) {
+            val res = processRequest(request, storageConfig)
+            JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            res
+          } else {
+            JobLogger.log("Request should have conversationId", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            markRequestAsFailed(request, "Request should have conversationId")
+          }
         } catch {
           case ex: Exception =>
             ex.printStackTrace()
@@ -122,7 +121,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
     // call process method from respective exhaust job
     try {
-      val res = CommonUtil.time(process(conversationId, df));
+      val res = CommonUtil.time(process(conversationId, request.requested_channel, df));
       val reportDF = res._2
       val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId), Option(Map("header" -> "true")), None)
       if (reportDF.count() == 0) {
@@ -136,7 +135,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
       }
     } catch {
       case ex: Exception => ex.printStackTrace();
-      markRequestAsFailed(request, s"Request processing failed with ${ex.getMessage}")
+        markRequestAsFailed(request, s"Request processing failed with ${ex.getMessage}")
     }
   }
 
@@ -156,8 +155,8 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     sparkSession;
   }
 
-  def getTelemetryDF(data: RDD[V3Event], dataCount: LongAccumulator)(implicit sc:SparkContext, sqlContext: SQLContext): DataFrame = {
-    sqlContext.read.json(data.map(f => {
+  def getTelemetryDF(data: RDD[V3Event], dataCount: LongAccumulator)(implicit spark: SparkSession): DataFrame = {
+    spark.sqlContext.read.json(data.map(f => {
       dataCount.add(1)
       JSONUtils.serialize(f)
     }))
@@ -177,7 +176,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
   def jobName(): String;
   def getReportPath(): String;
   def getReportKey(): String;
-  def process(conversationId: String, telemetryDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
+  def process(conversationId: String, channelId: String, telemetryDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
 
   case class ConversationData(id: String, name: String, startDate: String, endDate: String)
   case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
