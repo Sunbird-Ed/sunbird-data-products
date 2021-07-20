@@ -16,8 +16,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
     AppConf.getConfig("uci.fushionauth.postgres.user"),
     AppConf.getConfig("uci.fushionauth.postgres.pass")
   )
-  val fusionAuthDB: String = AppConf.getConfig("uci.fushionauth.postgres.db")
-  val fusionAuthURL: String = AppConf.getConfig("uci.fushionauth.postgres.url") + s"$fusionAuthDB"
+  val fusionAuthURL: String = AppConf.getConfig("uci.fushionauth.postgres.url") + s"${AppConf.getConfig("uci.fushionauth.postgres.db")}"
   val userTable: String = AppConf.getConfig("uci.postgres.table.user")
   val identityTable: String = AppConf.getConfig("uci.postgres.table.identities")
   val userRegistrationTable: String = AppConf.getConfig("uci.postgres.table.user_registration")
@@ -28,7 +27,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
   private val columnMapping = Map("applications_id" -> "Conversation ID", "name" -> "Conversation Name", "device_id" -> "Device ID")
 
   /** START - Overridable Methods */
-  override def jobId(): String = "uci-response-exhaust"
+  override def jobId(): String = "uci-private-exhaust"
 
   override def jobName(): String = "UCIPrivateExhaust"
 
