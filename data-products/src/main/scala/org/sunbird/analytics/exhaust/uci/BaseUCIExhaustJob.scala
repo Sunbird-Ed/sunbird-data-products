@@ -73,7 +73,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchNumber = modelParams.get("batchNumber")
     val requests = getRequests(jobId(), batchNumber)
-
     val storageConfig = getStorageConfig(config, AppConf.getConfig("uci.exhaust.store.prefix"))
 
     val totalRequests = new AtomicInteger(requests.length)
@@ -105,13 +104,13 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
   def validateRequest(request: JobRequest): Boolean = {
     val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data);
-    if (requestData.get("conversationId").isEmpty) false else true
+    if (!requestData.contains("conversationId")) false else true
   }
 
   def processRequest(request: JobRequest, storageConfig: StorageConfig)(implicit spark: SparkSession, sc: SparkContext, fc: FrameworkContext, config: JobConfig): JobRequest = {
 
-    val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data);
-    val conversationId = requestData.get("conversationId").getOrElse("").asInstanceOf[String]
+    val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
+    val conversationId = requestData.getOrElse("conversationId", "").asInstanceOf[String]
     // query conversation API to get start & end dates
     val conversationDF = getConversationData(conversationId, request.requested_channel)
 

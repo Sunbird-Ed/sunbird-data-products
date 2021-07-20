@@ -41,7 +41,7 @@ class TestUCIPrivateExhaustJob extends BaseReportSpec with MockFactory with Base
   "UCI Private Exhaust Report" should "generate the report with all the correct data" in {
     initializePostgresData()
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
-    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5:channel-002', '37564CF8F134EE7532F125651B51D17F', 'uci-private-exhaust', 'SUBMITTED', '{\"datasetConfig\":{\"conversationId\":\"fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5\"}}', 'user-002', 'channel-002', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5:channel-002', '37564CF8F134EE7532F125651B51D17F', 'uci-private-exhaust', 'SUBMITTED', '{\"conversationId\":\"fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5\"}', 'user-002', 'channel-002', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
 
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.UCIPrivateExhaustJob","modelParams":{"store":"local","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Private Exhaust"}"""
@@ -56,8 +56,6 @@ class TestUCIPrivateExhaustJob extends BaseReportSpec with MockFactory with Base
     val jobName = UCIPrivateExhaustJob.jobName()
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$filePath.csv")
-    print("total recors" + batch1Results.count())
-
 
     //UCIPrivateExhaustJob.process("fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5", null, )
 

@@ -2,8 +2,9 @@ package org.sunbird.analytics.exhaust.uci
 
 import org.apache.spark.sql.functions.{col, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.sunbird.analytics.util.AESWrapper
 
@@ -38,9 +39,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
   override def getClassName(): String = "org.sunbird.analytics.exhaust.collection.UCIPrivateExhaustJob"
 
   override def process(conversationId: String, telemetryDF: DataFrame, conversationDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    print("conversationId" + conversationId)
     val userRegistrationDF = loadUserRegistrationTable(conversationId)
-    print("userRegistrationDF" + userRegistrationDF.show(false))
     val userDF = loadUserTable()
     val identitiesDF = loadIdentitiesTable()
     val decrypt = spark.udf.register("decrypt", decryptFn)
