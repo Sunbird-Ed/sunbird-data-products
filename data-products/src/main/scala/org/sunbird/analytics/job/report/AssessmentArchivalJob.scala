@@ -56,33 +56,24 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, jobConfig: JobConfig): Array[Map[String, Any]] = {
     val batches: List[String] = AppConf.getConfig("assessment.batches").split(",").toList
-     val assessmentDF : DataFrame = getAssessmentData(sparkSession, fetchData, batches).persist()
-     val assessmentData =  assessmentDF.withColumn("updated_on", to_timestamp(col("updated_on")))
+    val assessmentDF: DataFrame = getAssessmentData(sparkSession, fetchData, batches)
+    val assessmentData = assessmentDF.withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
       .withColumn("question", to_json(col("question")))
-//      .coalesce(1)
-//      .write
-//      .partitionBy(partitionCols: _*)
-//      .mode("overwrite")
-//      .format("com.databricks.spark.csv")
-//      .option("header", "true")
-//      .save(AppConf.getConfig("assessment.archival.path"))
-//    Array(Map("batch_id" -> ""))
-
-        val archivedBatchList = assessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
-        val archivedBatchCount = new AtomicInteger(archivedBatchList.length)
-        JobLogger.log(s"Total Batches to Archive By Year & Week $archivedBatchCount", None, INFO)
-        val batchesToArchive: Array[BatchPartition] = archivedBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))
-        for (batch <- batchesToArchive) yield {
-          val filteredDF = assessmentData
-            .filter(col("batch_id") === batch.batch_id && col("year") === batch.year && col("week_of_year") === batch.week_of_year)
-          upload(filteredDF.drop("year", "week_of_year"), batch, jobConfig)
-          val metrics = Map("batch_id" -> batch.batch_id, "year" -> batch.year, "week_of_year" -> batch.week_of_year, "pending_batches" -> archivedBatchCount.getAndDecrement(), "total_records" -> filteredDF.count())
-          JobLogger.log(s"Data is archived and Remaining batches to archive is  ", Some(metrics), INFO)
-          assessmentData.unpersist()
-          metrics
-        }
+    val archivedBatchList = assessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
+    val archivedBatchCount = new AtomicInteger(archivedBatchList.length)
+    JobLogger.log(s"Total Batches to Archive By Year & Week $archivedBatchCount", None, INFO)
+    val batchesToArchive: Array[BatchPartition] = archivedBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))
+    for (batch <- batchesToArchive) yield {
+      val filteredDF = assessmentData
+        .filter(col("batch_id") === batch.batch_id && col("year") === batch.year && col("week_of_year") === batch.week_of_year)
+      upload(filteredDF.drop("year", "week_of_year"), batch, jobConfig)
+      val metrics = Map("batch_id" -> batch.batch_id, "year" -> batch.year, "week_of_year" -> batch.week_of_year, "pending_batches" -> archivedBatchCount.getAndDecrement(), "total_records" -> filteredDF.count())
+      JobLogger.log(s"Data is archived and Remaining batches to archive is  ", Some(metrics), INFO)
+      assessmentData.unpersist()
+      metrics
+    }
   }
 
   def getAssessmentData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchIds: List[String]): DataFrame = {
@@ -90,14 +81,10 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     val assessmentDF = fetchData(spark, assessmentAggDBSettings, cassandraUrl, new StructType())
     if (batchIds.nonEmpty) {
       val batchListDF = batchIds.asInstanceOf[List[String]].toDF("batch_id")
-      assessmentDF.join(batchListDF, Seq("batch_id"), "inner")
+      assessmentDF.join(batchListDF, Seq("batch_id"), "inner").persist()
     } else {
       assessmentDF
     }
-
-    //    val batchListDF = batchIds.asInstanceOf[List[String]].toDF("batch_id")
-    //    assessmentDF.join(batchListDF, Seq("batch_id"), "left")
-    //if (batchIds.nonEmpty) assessmentDF.filter(col("batch_id").isin(batchIds: _*)) else assessmentDF
   }
 
   def deleteRecords(sparkSession: SparkSession, keyspace: String, table: String): Unit = {
