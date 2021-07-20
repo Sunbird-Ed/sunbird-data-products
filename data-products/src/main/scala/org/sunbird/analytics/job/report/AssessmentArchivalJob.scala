@@ -88,12 +88,8 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   def getAssessmentData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchIds: List[String]): DataFrame = {
     import spark.implicits._
     val assessmentDF = fetchData(spark, assessmentAggDBSettings, cassandraUrl, new StructType())
-    if (batchIds.nonEmpty) {
-      val batchListDF = batchIds.asInstanceOf[List[String]].toDF("batch_id")
-      assessmentDF.join(batchListDF, Seq("batch_id"), "inner")
-    } else {
-      assessmentDF
-    }
+    val batchListDF = batchIds.asInstanceOf[List[String]].toDF("batch_id")
+    assessmentDF.join(batchListDF, Seq("batch_id"), "left")
     //if (batchIds.nonEmpty) assessmentDF.filter(col("batch_id").isin(batchIds: _*)) else assessmentDF
   }
 
