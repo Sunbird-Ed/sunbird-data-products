@@ -58,7 +58,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
    * Fetch the user Registration table data for a specific conversation ID
    */
   def loadUserRegistrationTable(conversationId: String)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    spark.read.jdbc(fusionAuthURL, userRegistrationTable, connProperties).select("id", "applications_id")
+    fetchData(fusionAuthURL, connProperties, userRegistrationTable).select("id", "applications_id")
       .filter(col("applications_id") === conversationId)
       .withColumnRenamed("id", "device_id")
   }
@@ -68,7 +68,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
    */
   def loadUserTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val consentValue = spark.udf.register("consent", getConsentValueFn)
-    spark.read.jdbc(fusionAuthURL, userTable, connProperties).select("id", "data")
+    fetchData(fusionAuthURL, connProperties, userTable).select("id", "data")
       .withColumnRenamed("id", "device_id")
       .withColumn("consent", consentValue(col("data")))
   }
@@ -78,7 +78,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
    * to get the mobile num by decrypting the username column based on consent
    */
   def loadIdentitiesTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    spark.read.jdbc(fusionAuthURL, identityTable, connProperties).select("users_id", "username")
+    fetchData(fusionAuthURL, connProperties, identityTable).select("users_id", "username")
       .withColumnRenamed("users_id", "device_id")
   }
 

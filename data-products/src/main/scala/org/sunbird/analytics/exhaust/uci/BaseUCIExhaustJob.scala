@@ -202,6 +202,10 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     }))
   }
 
+  def fetchData(url: String, props: Properties, table: String)(implicit spark: SparkSession): DataFrame = {
+    spark.read.jdbc(url, table, props)
+  }
+
   def getFilePath(conversationId: String)(implicit config: JobConfig): String = {
     getReportPath() + conversationId + "_" + getReportKey() + "_" + getDate()
   }
