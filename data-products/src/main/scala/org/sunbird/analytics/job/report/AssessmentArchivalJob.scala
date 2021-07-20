@@ -56,7 +56,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, jobConfig: JobConfig): Array[Map[String, Any]] = {
     val batches: List[String] = AppConf.getConfig("assessment.batches").split(",").toList
-    val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData, batches).cache()
+    val assessmentData: DataFrame = getAssessmentData(sparkSession, fetchData, batches)
       .withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
@@ -77,7 +77,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   }
 
   def getAssessmentData(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame, batchIds: List[String]): DataFrame = {
-    val assessmentDF = fetchData(spark, assessmentAggDBSettings, cassandraUrl, new StructType())
+    val assessmentDF = fetchData(spark, assessmentAggDBSettings, cassandraUrl, new StructType()).persist()
     if (batchIds.nonEmpty) assessmentDF.filter(col("batch_id").isin(batchIds: _*)) else assessmentDF
   }
 
