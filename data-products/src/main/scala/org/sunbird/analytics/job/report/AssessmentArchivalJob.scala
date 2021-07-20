@@ -60,7 +60,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       .withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
-      .withColumn("question", to_json(col("question"))).persist()
+      .withColumn("question", to_json(col("question")))
     val archivedBatchList = assessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
     val archivedBatchCount = new AtomicInteger(archivedBatchList.length)
     JobLogger.log(s"Total Batches to Archive By Year & Week $archivedBatchCount", None, INFO)
