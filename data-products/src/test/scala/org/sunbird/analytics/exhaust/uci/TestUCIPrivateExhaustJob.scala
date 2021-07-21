@@ -105,10 +105,10 @@ class TestUCIPrivateExhaustJob extends BaseReportSpec with MockFactory with Base
   def loadUsersData(): Unit = {
     val tableName = "users"
     EmbeddedPostgresql.execute(s"TRUNCATE $tableName")
-    EmbeddedPostgresql.execute(s"INSERT INTO $tableName (id, data) VALUES ('4c5abf1b-50d9-4b23-ac9c-1a1489812065', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\"}}');")
-    EmbeddedPostgresql.execute(s"INSERT INTO $tableName (id, data) VALUES ('4711abba-d06f-49fb-8c63-c80d0d3df790', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":true}}');")
-    EmbeddedPostgresql.execute(s"INSERT INTO $tableName (id, data) VALUES ('dda0e8a2-0777-4edd-bb36-d1d8970bafa2', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":false}}');")
-    EmbeddedPostgresql.execute(s"INSERT INTO $tableName (id, data) VALUES ('871368b7-a0ed-45e2-92f5-4219fb6789f7', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":true}}');")
+    EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('4c5abf1b-50d9-4b23-ac9c-1a1489812065', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\"}}');")
+    EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('4711abba-d06f-49fb-8c63-c80d0d3df790', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":true}}');")
+    EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('dda0e8a2-0777-4edd-bb36-d1d8970bafa2', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":false}}');")
+    EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('871368b7-a0ed-45e2-92f5-4219fb6789f7', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":true}}');")
   }
 
   def loadIdentityData(): Unit = {
