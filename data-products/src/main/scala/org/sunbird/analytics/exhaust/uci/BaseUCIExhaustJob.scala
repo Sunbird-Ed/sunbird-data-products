@@ -83,7 +83,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
         try {
           if (validateRequest(request)) {
             val res = processRequest(request, storageConfig)
-            println("res.url" + res.download_urls)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
           } else {
@@ -114,23 +113,20 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val conversationId = requestData.getOrElse("conversationId", "").asInstanceOf[String]
     // query conversation API to get start & end dates
     val conversationDF = getConversationData(conversationId, request.requested_channel)
-    conversationDF.show(false)
 
     val df = if (!config.search.`type`.equals("none") && conversationDF.count() > 0) {
+      fc.inputEventsCount = sc.longAccumulator("InputEventsCount");
       val startDate = conversationDF.head().getAs[Date]("startDate").toString
       val endDate = conversationDF.head().getAs[Date]("endDate").toString
       // prepare config with start & end dates
       val queryConf = config.search.queries.get.apply(0)
-      println("queryConf: " + queryConf)
       val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
       val fetcherQuery = Fetcher(config.search.`type`, None, Option(Array(query)))
-      println("query: " + JSONUtils.serialize(fetcherQuery))
       // Fetch telemetry data
       val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
-      println("rdd: " + rdd.count())
       // apply eid & pdata id filter using config
       val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort);
-      println("data: " + data.count())
+
       // apply tenant and conversation id filter
       val filteredData = data.filter{f => f.context.channel.equals(request.requested_channel)}
         .filter{f =>
@@ -138,7 +134,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
             .map{f => f.id}
           if (conversationIds.contains(conversationId)) true else false
         }
-      println("filteredData: " + filteredData.count())
       // convert rdd to DF
       val dataCount = sc.longAccumulator("UCITelemetryCount")
       getTelemetryDF(filteredData, dataCount)
@@ -175,8 +170,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val user = AppConf.getConfig("uci.conversation.postgres.user")
     val pass = AppConf.getConfig("uci.conversation.postgres.pass")
     val connProperties: Properties = getUCIPostgresConnectionProps(user, pass)
-
-    println("conversation id: " + conversationId)
     /**
       * Fetch conversation for a specific conversation ID and Tenant
       */
