@@ -114,18 +114,23 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val conversationId = requestData.get("conversationId").getOrElse("").asInstanceOf[String]
     // query conversation API to get start & end dates
     val conversationDF = getConversationData(conversationId, request.requested_channel)
+    conversationDF.show(false)
 
-    val df = if (!config.search.`type`.equals("none")) {
-      val startDate = conversationDF.head().getAs[DateTime]("startDate").toString("yyyy-MM-dd")
-      val endDate = conversationDF.head().getAs[DateTime]("endDate").toString("yyyy-MM-dd")
+    val df = if (!config.search.`type`.equals("none") && conversationDF.count() > 0) {
+      val startDate = conversationDF.head().getAs[Date]("startDate").toString
+      val endDate = conversationDF.head().getAs[Date]("endDate").toString
       // prepare config with start & end dates
       val queryConf = config.search.queries.get.apply(0)
-      val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate))
+      println("queryConf: " + queryConf)
+      val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
       val fetcherQuery = Fetcher(config.search.`type`, None, Option(Array(query)))
+      println("query: " + JSONUtils.serialize(fetcherQuery))
       // Fetch telemetry data
       val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
+      println("rdd: " + rdd.count())
       // apply eid & pdata id filter using config
       val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort);
+      println("data: " + data.count())
       // apply tenant and conversation id filter
       val filteredData = data.filter{f => f.context.channel.equals(request.requested_channel)}
         .filter{f =>
@@ -133,6 +138,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
             .map{f => f.id}
           if (conversationIds.contains(conversationId)) true else false
         }
+      println("filteredData: " + filteredData.count())
       // convert rdd to DF
       val dataCount = sc.longAccumulator("UCITelemetryCount")
       getTelemetryDF(filteredData, dataCount)
@@ -140,22 +146,23 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     else spark.emptyDataFrame
 
     // call process method from respective exhaust job
-    try {
-      val res = CommonUtil.time(process(conversationId, df, conversationDF));
-      val reportDF = res._2
-      val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId), Option(Map("header" -> "true")), None)
-      if (reportDF.count() == 0) {
-        markRequestAsFailed(request, "No data found")
-      } else {
+    if (df.count() == 0) {
+      markRequestAsFailed(request, "No data found")
+    }
+    else {
+      try {
+        val res = CommonUtil.time(process(conversationId, df, conversationDF));
+        val reportDF = res._2
+        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId), Option(Map("header" -> "true")), None)
         request.status = "SUCCESS";
         request.download_urls = Option(List(files.head));
         request.execution_time = Option(res._1);
         request.dt_job_completed = Option(System.currentTimeMillis)
         request
+      } catch {
+        case ex: Exception => ex.printStackTrace();
+          markRequestAsFailed(request, s"Request processing failed with ${ex.getMessage}")
       }
-    } catch {
-      case ex: Exception => ex.printStackTrace();
-        markRequestAsFailed(request, s"Request processing failed with ${ex.getMessage}")
     }
   }
 
@@ -169,6 +176,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val pass = AppConf.getConfig("uci.conversation.postgres.pass")
     val connProperties: Properties = getUCIPostgresConnectionProps(user, pass)
 
+    println("conversation id: " + conversationId)
     /**
       * Fetch conversation for a specific conversation ID and Tenant
       */
