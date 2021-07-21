@@ -13,7 +13,7 @@ import scala.collection.immutable.List
 
 object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob {
 
-  override def getClassName = "org.sunbird.analytics.exhaust.collection.ResponseExhaustJob"
+  override def getClassName = "org.sunbird.analytics.exhaust.uci.UCIResponseExhaustJob"
   override def jobName() = "UCIResponseExhaustJob";
   override def jobId() = "uci-response-exhaust";
   override def getReportPath() = "uci-response-exhaust/";
