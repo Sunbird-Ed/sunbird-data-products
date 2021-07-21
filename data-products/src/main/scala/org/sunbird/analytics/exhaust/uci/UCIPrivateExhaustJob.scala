@@ -88,8 +88,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
   }
 
   def decryptFn: String => String = (encryptedValue: String) => {
-    ""
-    //AESWrapper.decrypt(encryptedValue, Some(AppConf.getConfig("uci_encryption_secret")))
+    AESWrapper.decrypt(encryptedValue.trim, Some(AppConf.getConfig("uci.encryption.secret")))
   }
 
 }
