@@ -73,7 +73,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchNumber = modelParams.get("batchNumber")
     val requests = getRequests(jobId(), batchNumber)
-
     val storageConfig = getStorageConfig(config, AppConf.getConfig("uci.exhaust.store.prefix"))
 
     val totalRequests = new AtomicInteger(requests.length)
@@ -84,6 +83,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
         try {
           if (validateRequest(request)) {
             val res = processRequest(request, storageConfig)
+            println("res.url" + res.download_urls)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
           } else {
@@ -105,13 +105,13 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
   def validateRequest(request: JobRequest): Boolean = {
     val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data);
-    if (requestData.get("conversationId").isEmpty) false else true
+    if (!requestData.contains("conversationId")) false else true
   }
 
   def processRequest(request: JobRequest, storageConfig: StorageConfig)(implicit spark: SparkSession, sc: SparkContext, fc: FrameworkContext, config: JobConfig): JobRequest = {
 
-    val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data);
-    val conversationId = requestData.get("conversationId").getOrElse("").asInstanceOf[String]
+    val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
+    val conversationId = requestData.getOrElse("conversationId", "").asInstanceOf[String]
     // query conversation API to get start & end dates
     val conversationDF = getConversationData(conversationId, request.requested_channel)
     conversationDF.show(false)
@@ -153,7 +153,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
       try {
         val res = CommonUtil.time(process(conversationId, df, conversationDF));
         val reportDF = res._2
-        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId), Option(Map("header" -> "true")), None)
+        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId, request.request_id), Option(Map("header" -> "true")), None)
         request.status = "SUCCESS";
         request.download_urls = Option(List(files.head));
         request.execution_time = Option(res._1);
@@ -213,8 +213,9 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     spark.read.jdbc(url, table, props)
   }
 
-  def getFilePath(conversationId: String)(implicit config: JobConfig): String = {
-    getReportPath() + conversationId + "_" + getReportKey() + "_" + getDate()
+  def getFilePath(conversationId: String, requestId: String)(implicit config: JobConfig): String = {
+    val requestIdPath = if (requestId.nonEmpty) requestId.concat("/") else ""
+   getReportPath() + requestIdPath + conversationId + "_" + getReportKey() + "_" + getDate()
   }
 
   def getDate(): String = {
