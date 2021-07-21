@@ -49,21 +49,23 @@ class TestUCIPrivateExhaustJob extends BaseReportSpec with MockFactory with Base
     implicit val config = jobConfig
     UCIPrivateExhaustJob.execute()
 
-    val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
+    val outputLocation = AppConf.getConfig("uci.exhaust.store.prefix")
     val requestId = "37564CF8F134EE7532F125651B51D17F"
     val conversationId = "fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5"
     val filePath = UCIPrivateExhaustJob.getFilePath(conversationId, requestId)
-    val jobName = UCIPrivateExhaustJob.jobName()
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$filePath.csv")
-
+    batch1Results.count() should be(1)
+    batch1Results.select("Conversation ID").rdd.map(r => r(0)).collect.toList.head should be("fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5")
+    batch1Results.select("Conversation Name").rdd.map(r => r(0)).collect.toList.head should be("Diksha Bot")
+    //batch1Results.select("do_1128870328040161281204 - Score").rdd.map(r => r(0)).collect.toList.head should be("100%")
     //UCIPrivateExhaustJob.process("fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5", null, )
 
 
   }
 
   def loadUserRegistrationData(): Unit = {
-    EmbeddedPostgresql.execute("INSERT INTO user_registrations (id, applications_id) VALUES ('4c5abf1b-50d9-4b23-ac9c-1a1489812065', '4c5abf1b-50d9-4b23-ac9c-1a1489812065');")
+    EmbeddedPostgresql.execute("INSERT INTO user_registrations (id, applications_id) VALUES ('4c5abf1b-50d9-4b23-ac9c-1a1489812065', 'fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5');")
     EmbeddedPostgresql.execute("INSERT INTO user_registrations (id, applications_id) VALUES ('4711abba-d06f-49fb-8c63-c80d0d3df790', '56b31f3d-cc0f-49a1-b559-f7709200aa85');")
     EmbeddedPostgresql.execute("INSERT INTO user_registrations (id, applications_id) VALUES ('dda0e8a2-0777-4edd-bb36-d1d8970bafa2', '5db54579-04bb-4fb7-a9ee-0f9994cfaada');")
     EmbeddedPostgresql.execute("INSERT INTO user_registrations (id, applications_id) VALUES ('34ed1146-4eb3-4d3f-8993-b83f62a9aef5', '20b0cdec-a9a6-4bd4-8b36-150d45499946');")

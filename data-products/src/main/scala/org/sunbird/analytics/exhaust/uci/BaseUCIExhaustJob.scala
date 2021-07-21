@@ -83,6 +83,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
         try {
           if (validateRequest(request)) {
             val res = processRequest(request, storageConfig)
+            println("res.url" + res.download_urls)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
           } else {
@@ -143,6 +144,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
       val res = CommonUtil.time(process(conversationId, df, conversationDF));
       val reportDF = res._2
       val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId, request.request_id), Option(Map("header" -> "true")), None)
+      println("file path" + files)
       if (reportDF.count() == 0) {
         markRequestAsFailed(request, "No data found")
       } else {
@@ -206,7 +208,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
   def getFilePath(conversationId: String, requestId: String)(implicit config: JobConfig): String = {
     val requestIdPath = if (requestId.nonEmpty) requestId.concat("/") else ""
-    getReportPath() + requestIdPath + conversationId + "_" + getReportKey() + "_" + getDate()
+   getReportPath() + requestIdPath + conversationId + "_" + getReportKey() + "_" + getDate()
   }
 
   def getDate(): String = {
