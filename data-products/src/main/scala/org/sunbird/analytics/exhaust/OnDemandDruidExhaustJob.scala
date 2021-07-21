@@ -31,13 +31,8 @@ case class ReportConfig(id: String, queryType: String, dateRange: QueryDateRange
                         storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
                         storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
 case class ReportConfigImmutable(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String], output: List[OutputConfig],
-<<<<<<< HEAD
                                  mergeConfig: Option[ReportMergeConfig] = None, storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
                                  storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
-=======
-                        mergeConfig: Option[ReportMergeConfig] = None, storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
-                        storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
 case class OnDemandDruidResponse(file: List[String], status: String, statusMsg: String, execTime: Long)
 case class FinalMetrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
 
@@ -62,11 +57,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
   }
 
   def validateEncryptionRequest(request: JobRequest): Boolean = {
-<<<<<<< HEAD
     if (request.encryption_key.nonEmpty) true else false;
-=======
-      if (request.encryption_key.nonEmpty) true else false;
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
   }
 
   def validateRequest(request: JobRequest): Boolean = {
@@ -111,26 +102,15 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     val metrics = reportConfigs.metrics.map { f =>
 
       val queryInterval = if (interval.staticInterval.isEmpty && interval.interval.nonEmpty) {
-<<<<<<< HEAD
         val dateRange = interval.interval.get
         getDateRange(dateRange, interval.intervalSlider,f.druidQuery.dataSource)
-=======
-      val dateRange = interval.interval.get
-          getDateRange(dateRange, interval.intervalSlider)
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
       } else
         reportInterval
 
       val queryConfig = if (granularity.nonEmpty)
-<<<<<<< HEAD
         JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval, "granularity" -> granularity.get)
       else
         JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval)
-=======
-          JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval, "granularity" -> granularity.get)
-        else
-          JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval)
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
       val data = DruidDataFetcher.getDruidData(JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(queryConfig)))
       data.map { x =>
         val dataMap = JSONUtils.deserialize[Map[String, AnyRef]](x)
@@ -158,15 +138,9 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     reportConfig.output.foreach { f =>
       var df = getReportDF(RestUtil,JSONUtils.deserialize[OutputConfig](JSONUtils.serialize(f)),data,dataCount).na.fill(0).drop("__time")
       (df.columns).map(f1 =>{
-<<<<<<< HEAD
         df = df.withColumn(f1,when((col(f1)==="unknown")||(col(f1)==="<NULL>"),"Null").otherwise(col(f1)))
       })
       if (dataCount.value > 0) {
-=======
-        df = df.withColumn(f1,when((col(f1)==="unknown")||(col(f1)==="<NULL>"),"No Data Found").otherwise(col(f1)))
-      })
-     if (dataCount.value > 0) {
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
         val metricFields = f.metrics
         val fieldsList = (dimFields ++ metricFields).distinct
         val dimsLabels = labelsLookup.filter(x => f.dims.contains(x._1)).values.toList
@@ -292,10 +266,5 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     CompletableFuture.allOf(result: _*) // Wait for all the async tasks to complete
     val completedResult = result.map(f => f.join()); // Get the completed job requests
     FinalMetrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")));
-<<<<<<< HEAD
   }
 }
-=======
-    }
-}
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
