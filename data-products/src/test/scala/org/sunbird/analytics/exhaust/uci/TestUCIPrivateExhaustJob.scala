@@ -84,6 +84,23 @@ class TestUCIPrivateExhaustJob extends BaseReportSpec with MockFactory with Base
     conversationResult.select("Device ID").rdd.map(r => r(0)).collect.toList.head should be("dda0e8a2-0777-4edd-bb36-d1d8970bafa2")
   }
 
+  it should "update request as FAILED if conversation data is not available" in {
+    initializePostgresData()
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute(s"TRUNCATE bot")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('56b31f3d-cc0f-49a1-b559-f7709200aa85:channel-01', '57564CF8F134EE7532F125651B51D17F', 'uci-response-exhaust', 'SUBMITTED', '{\"conversationId\": \"56b31f3d-cc0f-49a1-b559-f7709200aa85\"}', 'user-002', 'channel-001', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    UCIPrivateExhaustJob.execute()
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='uci-private-exhaust'")
+    while(pResponse.next()) {
+      pResponse.getString("err_message") should be ("No data found for conversation in DB")
+      pResponse.getString("status") should be ("FAILED")
+    }
+  }
+
   def loadUserRegistrationData(): Unit = {
     val tableName = "user_registrations"
     EmbeddedPostgresql.execute(s"TRUNCATE $tableName")
