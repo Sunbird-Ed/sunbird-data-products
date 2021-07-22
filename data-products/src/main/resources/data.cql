@@ -192,19 +192,18 @@ CREATE TABLE IF NOT EXISTS sunbird.organisation (
     externalid text,
     hashtagid text,
     isrootorg boolean,
+    istenant boolean,
     isssoenabled boolean,
     keys map<text, frozen<list<text>>>,
     locationids list<text>,
     orgname text,
-    orgtype text,
-    orgtypeid text,
-    parentorgid text,
     provider text,
     rootorgid text,
     slug text,
     status int,
     updatedby text,
-    updateddate text
+    updateddate text,
+    orglocation text
 ) WITH bloom_filter_fp_chance = 0.01
     AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
     AND comment = ''
