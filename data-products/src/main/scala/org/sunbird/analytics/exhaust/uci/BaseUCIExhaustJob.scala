@@ -133,11 +133,12 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
         val fetcherQuery = Fetcher(config.search.`type`, None, Option(Array(query)))
         // Fetch telemetry data
         val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
-        // apply eid & pdata id filter using config
+        // apply eid filter using config
         val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort);
-
-        // apply tenant and conversation id filter
-        val filteredData = data.filter{f => f.context.channel.equals(request.requested_channel)}
+        // apply pdata.id, tenant and conversation id filter
+        val pdataId = config.modelParams.getOrElse(Map()).get("botPdataId").getOrElse("")
+        val filteredData = data
+          .filter{f => (f.context.pdata.getOrElse(V3PData("", None, None)).id.equals(pdataId) && f.context.channel.equals(request.requested_channel))}
           .filter{f =>
             val conversationIds = f.context.cdata.getOrElse(List()).filter(f => f.`type`.equals("Conversation"))
               .map{f => f.id}
