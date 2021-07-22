@@ -152,19 +152,24 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
       try {
         val res = CommonUtil.time(process(conversationId, telemetryDF, conversationDF));
         val reportDF = res._2
-        val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId, request.request_id), Option(Map("header" -> "true")), None)
-        request.status = "SUCCESS";
-        request.download_urls = Option(List(files.head));
-        request.execution_time = Option(res._1);
-        request.dt_job_completed = Option(System.currentTimeMillis)
-        request
+        if (reportDF.count() > 0) {
+          val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId, request.request_id), Option(Map("header" -> "true")), None)
+          request.status = "SUCCESS";
+          request.download_urls = Option(List(files.head));
+          request.execution_time = Option(res._1);
+          request.dt_job_completed = Option(System.currentTimeMillis)
+          request
+        }
+        else {
+          markRequestAsFailed(request, "No data found")
+        }
       } catch {
         case ex: Exception => ex.printStackTrace();
           markRequestAsFailed(request, s"Request processing failed with ${ex.getMessage}")
       }
     }
     else {
-      markRequestAsFailed(request, "No data found")
+      markRequestAsFailed(request, "No data found for conversation in DB")
     }
   }
 

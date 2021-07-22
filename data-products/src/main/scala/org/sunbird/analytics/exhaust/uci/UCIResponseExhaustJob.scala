@@ -3,10 +3,8 @@ package org.sunbird.analytics.exhaust.uci
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.JobConfig
-import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.sunbird.analytics.exhaust.collection.UDFUtils
 
@@ -31,26 +29,29 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
 
   override def process(conversationId: String, telemetryDF: DataFrame, conversationDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
-    val conversationName = conversationDF.head().getAs[String]("name")
-    val userDF = loadUserTable()
-    val finalDF = telemetryDF
-      .select(telemetryDF.col("edata"), telemetryDF.col("context"))
-      .withColumn("conversation_id", lit(conversationId))
-      .withColumn("conversation_name", lit(conversationName))
-      .withColumn("device_id",col("context.did"))
-      .withColumn("question_id" , col("edata.item.id"))
-      .withColumn("question_type", col("edata.item.type"))
-      .withColumn("question_title", col("edata.item.title"))
-      .withColumn("question_description", col("edata.item.desc"))
-      .withColumn("question_duration", round(col("edata.duration")))
-      .withColumn("question_score", col("edata.score"))
-      .withColumn("question_maxscore", col("edata.item.maxscore"))
-      .withColumn("question_response", UDFUtils.toJSON(col("edata.resvalues")))
-      .withColumn("question_option", UDFUtils.toJSON(col("edata.item.params")))
-      .join(userDF, Seq("device_id"), "inner")
-      .withColumn("question_response", when(col("consent") === true, col("question_response")).otherwise(lit("")))
-      .drop("context", "edata", "data", "consent")
-    organizeDF(finalDF, columnMapping, columnsOrder)
+    if (telemetryDF.count() > 0) {
+      val conversationName = conversationDF.head().getAs[String]("name")
+      val userDF = loadUserTable()
+      val finalDF = telemetryDF
+        .select(telemetryDF.col("edata"), telemetryDF.col("context"))
+        .withColumn("conversation_id", lit(conversationId))
+        .withColumn("conversation_name", lit(conversationName))
+        .withColumn("device_id",col("context.did"))
+        .withColumn("question_id" , col("edata.item.id"))
+        .withColumn("question_type", col("edata.item.type"))
+        .withColumn("question_title", col("edata.item.title"))
+        .withColumn("question_description", col("edata.item.desc"))
+        .withColumn("question_duration", round(col("edata.duration")))
+        .withColumn("question_score", col("edata.score"))
+        .withColumn("question_maxscore", col("edata.item.maxscore"))
+        .withColumn("question_response", UDFUtils.toJSON(col("edata.resvalues")))
+        .withColumn("question_option", UDFUtils.toJSON(col("edata.item.params")))
+        .join(userDF, Seq("device_id"), "inner")
+        .withColumn("question_response", when(col("consent") === true, col("question_response")).otherwise(lit("")))
+        .drop("context", "edata", "data", "consent")
+      organizeDF(finalDF, columnMapping, columnsOrder)
+    }
+    else spark.emptyDataFrame
   }
 
   def getConsentValueFn: String => Boolean = (device_data: String) => {
