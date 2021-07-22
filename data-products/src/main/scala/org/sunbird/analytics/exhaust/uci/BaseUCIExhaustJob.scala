@@ -237,21 +237,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
 
-//  def getConsentValueFn: String => Boolean = (device_data: String) => {
-//    val device = JSONUtils.deserialize[Map[String, AnyRef]](device_data)
-//    device.getOrElse("device", Map()).asInstanceOf[Map[String, AnyRef]].getOrElse("consent", isConsentToShare).asInstanceOf[Boolean]
-//  }
-//
-//  /**
-//   * Fetch the user table data to get the consent information
-//   */
-//  def loadUserTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-//    val consentValue = spark.udf.register("consent", getConsentValueFn)
-//    fetchData(fusionAuthURL, fushionAuthconnectionProps, userTable).select("id", "data")
-//      .withColumnRenamed("id", "device_id")
-//      .withColumn("consent", consentValue(col("data")))
-//  }
-
   /** START - Overridable Methods */
   def jobId(): String;
   def jobName(): String;
