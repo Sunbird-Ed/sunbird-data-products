@@ -13,16 +13,8 @@ import scala.collection.immutable.List
 
 object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob {
 
-  val fushionAuthconnectionProps: Properties = getUCIPostgresConnectionProps(
-    AppConf.getConfig("uci.fushionauth.postgres.user"),
-    AppConf.getConfig("uci.fushionauth.postgres.pass")
-  )
-  val fusionAuthURL: String = AppConf.getConfig("uci.fushionauth.postgres.url") + s"${AppConf.getConfig("uci.fushionauth.postgres.db")}"
-  val userTable: String = AppConf.getConfig("uci.postgres.table.user")
   val identityTable: String = AppConf.getConfig("uci.postgres.table.identities")
   val userRegistrationTable: String = AppConf.getConfig("uci.postgres.table.user_registration")
-
-  val isConsentToShare = true // Default set to True
 
   private val columnsOrder = List("Conversation ID", "Conversation Name", "Device ID")
   private val columnMapping = Map("applications_id" -> "Conversation ID", "name" -> "Conversation Name", "device_id" -> "Device ID")
@@ -64,16 +56,6 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
   }
 
   /**
-   * Fetch the user table data to get the consent information
-   */
-  def loadUserTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
-    val consentValue = spark.udf.register("consent", getConsentValueFn)
-    fetchData(fusionAuthURL, fushionAuthconnectionProps, userTable).select("id", "data")
-      .withColumnRenamed("id", "device_id")
-      .withColumn("consent", consentValue(col("data")))
-  }
-
-  /**
    * Fetch the user identities table data
    * to get the mobile num by decrypting the username column based on consent
    */
@@ -82,13 +64,22 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
       .withColumnRenamed("users_id", "device_id")
   }
 
+  def decryptFn: String => String = (encryptedValue: String) => {
+    AESWrapper.decrypt(encryptedValue.trim, Some(AppConf.getConfig("uci.encryption.secret")))
+  }
+
   def getConsentValueFn: String => Boolean = (device_data: String) => {
     val device = JSONUtils.deserialize[Map[String, AnyRef]](device_data)
     device.getOrElse("device", Map()).asInstanceOf[Map[String, AnyRef]].getOrElse("consent", isConsentToShare).asInstanceOf[Boolean]
   }
 
-  def decryptFn: String => String = (encryptedValue: String) => {
-    AESWrapper.decrypt(encryptedValue.trim, Some(AppConf.getConfig("uci.encryption.secret")))
+  /**
+   * Fetch the user table data to get the consent information
+   */
+  def loadUserTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+    val consentValue = spark.udf.register("consent", getConsentValueFn)
+    fetchData(fusionAuthURL, fushionAuthconnectionProps, userTable).select("id", "data")
+      .withColumnRenamed("id", "device_id")
+      .withColumn("consent", consentValue(col("data")))
   }
-
 }

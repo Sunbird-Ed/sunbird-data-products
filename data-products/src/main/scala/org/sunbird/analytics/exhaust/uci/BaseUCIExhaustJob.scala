@@ -29,6 +29,14 @@ import scala.collection.immutable.List
 
 trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
 
+  val fushionAuthconnectionProps: Properties = getUCIPostgresConnectionProps(
+    AppConf.getConfig("uci.fushionauth.postgres.user"),
+    AppConf.getConfig("uci.fushionauth.postgres.pass")
+  )
+  val fusionAuthURL: String = AppConf.getConfig("uci.fushionauth.postgres.url") + s"${AppConf.getConfig("uci.fushionauth.postgres.db")}"
+  val userTable: String = AppConf.getConfig("uci.postgres.table.user")
+  val isConsentToShare = true // Default set to True
+
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
@@ -114,39 +122,35 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     // query conversation API to get start & end dates
     val conversationDF = getConversationData(conversationId, request.requested_channel)
 
-    val df = if (!config.search.`type`.equals("none") && conversationDF.count() > 0) {
-      fc.inputEventsCount = sc.longAccumulator("InputEventsCount");
-      val startDate = conversationDF.head().getAs[Date]("startDate").toString
-      val endDate = conversationDF.head().getAs[Date]("endDate").toString
-      // prepare config with start & end dates
-      val queryConf = config.search.queries.get.apply(0)
-      val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
-      val fetcherQuery = Fetcher(config.search.`type`, None, Option(Array(query)))
-      // Fetch telemetry data
-      val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
-      // apply eid & pdata id filter using config
-      val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort);
+    if (conversationDF.count() > 0) {
+      val telemetryDF = if (!config.search.`type`.equals("none")) {
+        fc.inputEventsCount = sc.longAccumulator("InputEventsCount");
+        val startDate = conversationDF.head().getAs[Date]("startDate").toString
+        val endDate = conversationDF.head().getAs[Date]("endDate").toString
+        // prepare config with start & end dates
+        val queryConf = config.search.queries.get.apply(0)
+        val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
+        val fetcherQuery = Fetcher(config.search.`type`, None, Option(Array(query)))
+        // Fetch telemetry data
+        val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
+        // apply eid & pdata id filter using config
+        val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort);
 
-      // apply tenant and conversation id filter
-      val filteredData = data.filter{f => f.context.channel.equals(request.requested_channel)}
-        .filter{f =>
-          val conversationIds = f.context.cdata.getOrElse(List()).filter(f => f.`type`.equals("Conversation"))
-            .map{f => f.id}
-          if (conversationIds.contains(conversationId)) true else false
-        }
-      // convert rdd to DF
-      val dataCount = sc.longAccumulator("UCITelemetryCount")
-      getTelemetryDF(filteredData, dataCount)
-    }
-    else spark.emptyDataFrame
+        // apply tenant and conversation id filter
+        val filteredData = data.filter{f => f.context.channel.equals(request.requested_channel)}
+          .filter{f =>
+            val conversationIds = f.context.cdata.getOrElse(List()).filter(f => f.`type`.equals("Conversation"))
+              .map{f => f.id}
+            if (conversationIds.contains(conversationId)) true else false
+          }
+        // convert rdd to DF
+        val dataCount = sc.longAccumulator("UCITelemetryCount")
+        getTelemetryDF(filteredData, dataCount)
+      }
+      else spark.emptyDataFrame
 
-    // call process method from respective exhaust job
-    if (df.count() == 0) {
-      markRequestAsFailed(request, "No data found")
-    }
-    else {
       try {
-        val res = CommonUtil.time(process(conversationId, df, conversationDF));
+        val res = CommonUtil.time(process(conversationId, telemetryDF, conversationDF));
         val reportDF = res._2
         val files = reportDF.saveToBlobStore(storageConfig, "csv", getFilePath(conversationId, request.request_id), Option(Map("header" -> "true")), None)
         request.status = "SUCCESS";
@@ -158,6 +162,9 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
         case ex: Exception => ex.printStackTrace();
           markRequestAsFailed(request, s"Request processing failed with ${ex.getMessage}")
       }
+    }
+    else {
+      markRequestAsFailed(request, "No data found")
     }
   }
 
@@ -223,6 +230,21 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
     reportDF.toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
+
+//  def getConsentValueFn: String => Boolean = (device_data: String) => {
+//    val device = JSONUtils.deserialize[Map[String, AnyRef]](device_data)
+//    device.getOrElse("device", Map()).asInstanceOf[Map[String, AnyRef]].getOrElse("consent", isConsentToShare).asInstanceOf[Boolean]
+//  }
+//
+//  /**
+//   * Fetch the user table data to get the consent information
+//   */
+//  def loadUserTable()(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+//    val consentValue = spark.udf.register("consent", getConsentValueFn)
+//    fetchData(fusionAuthURL, fushionAuthconnectionProps, userTable).select("id", "data")
+//      .withColumnRenamed("id", "device_id")
+//      .withColumn("consent", consentValue(col("data")))
+//  }
 
   /** START - Overridable Methods */
   def jobId(): String;
