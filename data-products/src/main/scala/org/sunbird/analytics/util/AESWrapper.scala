@@ -24,12 +24,12 @@ object AESWrapper {
       val key = generateKey(secret.getOrElse(AppConf.getConfig("uci_encryption_secret")))
       val cipher = Cipher.getInstance(ALGO)
       cipher.init(Cipher.DECRYPT_MODE, key)
-      return new String(cipher.doFinal(Base64.getDecoder.decode(strToDecrypt)))
+      new String(cipher.doFinal(Base64.getDecoder.decode(strToDecrypt)))
     } catch {
       case e: Exception =>
         System.out.println("Error while decrypting: " + e.toString)
+        null
     }
-    null
   }
 
   @throws[Exception]
