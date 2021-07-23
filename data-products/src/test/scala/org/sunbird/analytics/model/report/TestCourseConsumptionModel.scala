@@ -22,7 +22,6 @@ import org.sunbird.analytics.util.CourseDetails
 import org.sunbird.analytics.util.CourseReport
 import org.sunbird.analytics.util.SparkSpec
 
-@DoNotDiscover
 class TestCourseConsumptionModel extends SparkSpec(null) with MockFactory{
 
   implicit val mockCourseReport: CourseReport = mock[CourseReport]
