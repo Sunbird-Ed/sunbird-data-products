@@ -14,9 +14,8 @@ import org.ekstep.analytics.model.Metrics
 import org.ekstep.analytics.model.OutputConfig
 import org.ekstep.analytics.model.QueryDateRange
 import org.ekstep.analytics.model.ReportConfig
-import org.scalatest.DoNotDiscover
 import org.sunbird.analytics.util.SparkSpec
-@DoNotDiscover
+
 class TestCourseConsumptionJob extends SparkSpec(null){
 
   "CourseConsumptionJob" should "execute and won't throw any errors/exception" in {

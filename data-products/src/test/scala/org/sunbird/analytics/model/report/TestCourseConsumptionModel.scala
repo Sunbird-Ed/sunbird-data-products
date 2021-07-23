@@ -12,7 +12,6 @@ import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils}
 import org.ekstep.analytics.model.ReportConfig
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.DoNotDiscover
 import org.sunbird.cloud.storage.BaseStorageService
 
 import scala.concurrent.Future
