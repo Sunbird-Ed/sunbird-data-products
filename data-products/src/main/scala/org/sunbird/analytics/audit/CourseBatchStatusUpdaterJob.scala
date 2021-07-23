@@ -12,9 +12,11 @@ import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.sunbird.analytics.job.report.BaseReportsJob
 import org.apache.spark.sql.cassandra._
 import org.sunbird.analytics.exhaust.collection.UDFUtils
-
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, TimeZone}
+
+import org.apache.spark
+
 import scala.collection.immutable.List
 
 case class CourseBatchStatusMetrics(unStarted: Long, inProgress: Long, completed: Long)
@@ -59,11 +61,12 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     res
   }
 
-  def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): CourseBatchStatusMetrics = {
+  def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext, spark: SparkSession): CourseBatchStatusMetrics = {
     val currentDate = getDateFormat().format(new Date)
+    val convertDate = spark.udf.register("convertDate", convertDateFn)
     val computedDF = collectionBatchDF.withColumn("updated_status",
-      when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").gt(unix_timestamp(col("enddate"), "yyyy-MM-dd")), 2).otherwise(
-        when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").geq(unix_timestamp(col("startdate"), "yyyy-MM-dd")), 1).otherwise(col("status"))
+      when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").gt(unix_timestamp(convertDate(col("enddate")), "yyyy-MM-dd")), 2).otherwise(
+        when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").geq(unix_timestamp(convertDate(col("startdate")), "yyyy-MM-dd")), 1).otherwise(col("status"))
       ))
     val finalDF = computedDF.filter(col("updated_status") =!= col("status"))
       .drop("status").withColumnRenamed("updated_status", "status")
@@ -90,12 +93,12 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   def getCourseMetaData(row: Row, dateFormat: SimpleDateFormat): Map[String, AnyRef] = {
     Map[String, AnyRef](
       "batchId" -> row.getAs[String]("batchid"),
-      "startDate" -> formatDate(row.getAs[String]("startdate")),
+      "startDate" -> convertDateFn(row.getAs[String]("startdate")),
       "enrollmentType" -> row.getAs[String]("enrollmenttype"),
       "createdFor" -> row.getAs[List[String]]("createdfor"),
       "status" -> row.getAs[AnyRef]("updated_status"),
-      "enrollmentEndDate" -> formatDate(getEnrolmentEndDate(row.getAs[String]("enrollmentenddate"), row.getAs[String]("enddate"), dateFormat)),
-      "endDate" -> formatDate(row.getAs[String]("enddate")),
+      "enrollmentEndDate" -> convertDateFn(getEnrolmentEndDate(row.getAs[String]("enrollmentenddate"), row.getAs[String]("enddate"), dateFormat)),
+      "endDate" -> convertDateFn(row.getAs[String]("enddate")),
       "name" -> row.getAs[String]("name")
     )
   }
@@ -160,10 +163,11 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     dateFormatter
   }
 
-  def formatDate(date: String): String = {
+  def convertDateFn : String => String = (date: String) => {
     Option(date).map(x => {
-      val dateFormatter = getDateFormat()
-      dateFormatter.format(dateFormatter.parse(x))
+      val utcDateFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      utcDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"))
+      getDateFormat().format(utcDateFormatter.parse(x))
     }).orNull
   }
 
