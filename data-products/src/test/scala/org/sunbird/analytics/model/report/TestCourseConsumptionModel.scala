@@ -1,7 +1,6 @@
 package org.sunbird.analytics.model.report
 
 import java.time.{ZoneOffset, ZonedDateTime}
-
 import cats.syntax.either._
 import ing.wbaa.druid._
 import ing.wbaa.druid.client.DruidClient
@@ -11,7 +10,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils}
-import org.ekstep.analytics.model.{ReportConfig}
+import org.ekstep.analytics.model.ReportConfig
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.cloud.storage.BaseStorageService
 
