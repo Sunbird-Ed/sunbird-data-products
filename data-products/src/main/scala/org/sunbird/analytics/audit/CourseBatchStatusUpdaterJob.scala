@@ -12,11 +12,9 @@ import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.sunbird.analytics.job.report.BaseReportsJob
 import org.apache.spark.sql.cassandra._
 import org.sunbird.analytics.exhaust.collection.UDFUtils
+
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, TimeZone}
-
-import org.apache.spark
-
 import scala.collection.immutable.List
 
 case class CourseBatchStatusMetrics(unStarted: Long, inProgress: Long, completed: Long)
@@ -61,7 +59,7 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     res
   }
 
-  def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext, spark: SparkSession): CourseBatchStatusMetrics = {
+  def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): CourseBatchStatusMetrics = {
     val currentDate = getDateFormat().format(new Date)
     val computedDF = collectionBatchDF.withColumn("updated_status",
       when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").gt(unix_timestamp(col("enddate"), "yyyy-MM-dd")), 2).otherwise(
@@ -82,11 +80,10 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   }
 
   def getCollectionBatchDF(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
-    val convertDate = spark.udf.register("convertDate", convertDateFn)
     fetchData(spark, collectionBatchDBSettings, cassandraFormat, new StructType())
-      .withColumn("startdate", UDFUtils.getLatestValue(convertDate(col("start_date")), col("startdate")))
-      .withColumn("enddate", UDFUtils.getLatestValue(convertDate(col("end_date")), col("enddate")))
-      .withColumn("enrollmentenddate", UDFUtils.getLatestValue(convertDate(col("enrollment_enddate")), col("enrollmentenddate")))
+      .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
+      .withColumn("enrollmentenddate", UDFUtils.getLatestValue(col("enrollment_enddate"), col("enrollmentenddate")))
       .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
   }
 
@@ -162,18 +159,11 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
     dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
     dateFormatter
   }
-  
-  def formatDate(date: String) = {
-    Option(date).map(x => {
-      getDateFormat().format(getDateFormat().parse(x))
-    }).orNull
-  }
 
-  def convertDateFn : String => String = (date: String) => {
+  def formatDate(date: String): String = {
     Option(date).map(x => {
-      val utcDateFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-      utcDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"))
-      getDateFormat().format(utcDateFormatter.parse(x))
+      val dateFormatter = getDateFormat()
+      dateFormatter.format(dateFormatter.parse(x))
     }).orNull
   }
 
