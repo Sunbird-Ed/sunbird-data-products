@@ -3,14 +3,12 @@ package org.sunbird.analytics.model.report
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.model.ReportConfig
 import org.ekstep.analytics.util.Constants
-import org.sunbird.analytics.util.CourseUtils.loadData
 import org.sunbird.analytics.util.{CourseUtils, TextBookUtils, UnirestUtil}
-import org.sunbird.cloud.storage.conf.AppConf
 
 //Tenant Information from cassandra
 case class TenantsResponse(result: TenantResults)
@@ -63,7 +61,7 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
   def getContentData(tenantId: String, slugName: String, config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): Unit = {
     val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
-    implicit val sqlContext = new SQLContext(sc)
+    implicit val sparkSession: SparkSession = SparkSession.builder().config(sc.getConf).getOrCreate()
     val metrics = CommonUtil.time({
       val unitrestUtil = UnirestUtil
       val contentResponse = TextBookUtils.getContentDataList(tenantId)
@@ -99,9 +97,8 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
     JobLogger.log("TextbookProgressModel: For tenant: " + slugName, Option(Map("timeTaken" -> metrics._1)), Level.INFO)
   }
 
-  def getAggregatedReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
-    implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+  def getAggregatedReport(data: RDD[TBContentResult], slug: String)(implicit sparkSession: SparkSession): DataFrame = {
+    import sparkSession.implicits._
 
     data.groupBy(f => (f.board, f.medium, f.gradeLevel, f.subject, f.resourceType))
       .map { f =>
@@ -129,9 +126,9 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       .na.fill("Missing Metadata")
   }
 
-  def getLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
-    implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+  def getLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sparkSession: SparkSession): DataFrame = {
+    import sparkSession.implicits._
+
     data
       .filter(f => (f.status == "Live"))
       .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.subject), f.identifier, getFieldList(f.resourceType), dataFormat(f.createdOn), Option(f.pkgVersion), f.creator, None, None, None,Option(dataFormat(f.lastPublishedOn)), slug, "Live_Report") }
@@ -139,9 +136,8 @@ object TextbookProgressModel extends IBatchModelTemplate[Empty, TenantInformatio
       .na.fill("Missing Metadata")
   }
 
-  def getNonLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sc: SparkContext): DataFrame = {
-    implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+  def getNonLiveStatusReport(data: RDD[TBContentResult], slug: String)(implicit sparkSession: SparkSession): DataFrame = {
+    import sparkSession.implicits._
 
     val reviewData = data.filter(f => (f.status == "Review"))
       .map { f => TBReport(f.board, getFieldList(f.medium), getFieldList(f.gradeLevel), getFieldList(f.subject), f.identifier, getFieldList(f.resourceType), dataFormat(f.createdOn), None, f.creator, None, Option(f.status), Option(dataFormat(f.lastSubmittedOn)),None, slug, "Non_Live_Status") }

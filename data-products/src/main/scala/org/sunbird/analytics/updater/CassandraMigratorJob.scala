@@ -3,7 +3,7 @@ package org.sunbird.analytics.updater
 import com.datastax.spark.connector.cql.{CassandraConnector, CassandraConnectorConf}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.sql.functions.col
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
@@ -11,7 +11,7 @@ import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, JobCon
 
 import scala.collection.Map
 
-object CassandraMigratorJob extends optional.Application with IJob {
+object CassandraMigratorJob extends IJob {
 
   implicit val className = "org.ekstep.analytics.updater.CassandraMigratorJob"
   implicit val fc = new FrameworkContext();
@@ -21,7 +21,7 @@ object CassandraMigratorJob extends optional.Application with IJob {
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val sparkContext = if (sc.isEmpty) CommonUtil.getSparkContext(JobContext.parallelization, jobConfig.appName.getOrElse(jobConfig.model)) else sc.get
-    val jobName = jobConfig.appName.getOrElse(name)
+    val jobName = jobConfig.appName.getOrElse(name())
     JobLogger.init(jobName)
     JobLogger.start(jobName + " Started executing", Option(Map("config" -> config, "model" -> name)))
     val totalEvents = migrateData(jobConfig)
@@ -30,32 +30,33 @@ object CassandraMigratorJob extends optional.Application with IJob {
   }
 
   def migrateData(jobConfig: JobConfig)(implicit sc: SparkContext): Unit = {
-    val sqlContext = new SQLContext(sc)
-    val modelParams =jobConfig.modelParams.get.asInstanceOf[Map[String,String]]
-    val spark = sqlContext.sparkSession
-    val cassandraFormat = "org.apache.spark.sql.cassandra";
-    val keyspaceName =modelParams.getOrElse("keyspace","")
+    // val sqlContext = new SQLContext(sc)
+    val modelParams = jobConfig.modelParams.get.asInstanceOf[Map[String,String]]
+    // val spark = sqlContext.sparkSession
+    val spark = SparkSession.builder.config(sc.getConf).getOrCreate().sparkSession
+    val cassandraFormat = "org.apache.spark.sql.cassandra"
+    val keyspaceName = modelParams.getOrElse("keyspace","")
     val cDataTableName = modelParams.getOrElse("cassandraDataTable","")
     val cMigrateTableName = modelParams.getOrElse("cassandraMigrateTable", "")
     val result = CommonUtil.time({
-    val data = {
-      spark.setCassandraConf("DataCluster", CassandraConnectorConf.
-        ConnectionHostParam.option(modelParams.getOrElse("cassandraDataHost","localhost")) ++ CassandraConnectorConf.
-        ConnectionPortParam.option(modelParams.getOrElse("cassandraDataPort","9042")))
-      spark.setCassandraConf("MigrateCluster", CassandraConnectorConf.
-        ConnectionHostParam.option(modelParams.getOrElse("cassandraMigrateHost","localhost"))  ++ CassandraConnectorConf.
-        ConnectionPortParam.option(modelParams.getOrElse("cassandraMigratePort","9042")))
+      val data = {
+        spark.setCassandraConf("DataCluster", CassandraConnectorConf.
+          ConnectionHostParam.option(modelParams.getOrElse("cassandraDataHost", "localhost")) ++ CassandraConnectorConf.
+          ConnectionPortParam.option(modelParams.getOrElse("cassandraDataPort", "9042")))
+        spark.setCassandraConf("MigrateCluster", CassandraConnectorConf.
+          ConnectionHostParam.option(modelParams.getOrElse("cassandraMigrateHost", "localhost")) ++ CassandraConnectorConf.
+          ConnectionPortParam.option(modelParams.getOrElse("cassandraMigratePort", "9042")))
 
-      spark.read.format(cassandraFormat).options(Map("table" -> cDataTableName,
-        "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load()
-    }
-       val repartitionColumns = if (!modelParams.getOrElse("repartitionColumns", "").toString.isEmpty)
+        spark.read.format(cassandraFormat).options(Map("table" -> cDataTableName,
+          "keyspace" -> keyspaceName, "cluster" -> "DataCluster")).load()
+      }
+      val repartitionColumns = if (modelParams.getOrElse("repartitionColumns", "").toString.nonEmpty)
         modelParams.getOrElse("repartitionColumns", "").split(",").toSeq else Seq.empty[String]
-      val repartitionDF = if (repartitionColumns.size > 0) {
+      val repartitionDF = if (repartitionColumns.nonEmpty) {
         data.repartition(repartitionColumns.map(f => col(f)): _*)
       }
       else data
-      (repartitionDF.count(),repartitionDF)
+      (repartitionDF.count(), repartitionDF)
     })
     JobLogger.log("Time to fetch data cassandra data", Some(Map("timeTaken" -> result._1, "count" -> result._2._1)), INFO)
     val dataDf = result._2._2

@@ -2,10 +2,9 @@ package org.sunbird.analytics.model.report
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
-
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Encoders, SQLContext}
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
 import org.ekstep.analytics.model.ReportConfig
@@ -24,7 +23,7 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
   override def name: String = "CourseEnrollmentModel"
 
   override def algorithm(events: RDD[BaseCourseMetricsOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[CourseEnrollmentOutput] = {
-    implicit val sqlContext = new SQLContext(sc)
+    implicit val sparkSession: SparkSession = SparkSession.builder.config(sc.getConf).getOrCreate()
     val finalRDD = getCourseEnrollmentOutput(events)
     val date = (new SimpleDateFormat("dd-MM-yyyy")).format(Calendar.getInstance().getTime)
     finalRDD.map(f => CourseEnrollmentOutput(date,f._1.courseName,f._1.batchName,f._1.status,
@@ -32,13 +31,13 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
   }
 
   override def postProcess(data: RDD[CourseEnrollmentOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[CourseEnrollmentOutput] = {
-    implicit val sqlContext = new SQLContext(sc)
+    implicit val sparkSession: SparkSession = SparkSession.builder.config(sc.getConf).getOrCreate()
     if (data.count() > 0) {
       val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
-      import sqlContext.implicits._
-      reportConfig.output.map { f =>
+      import sparkSession.implicits._
+      reportConfig.output.foreach { f =>
           val df = data.toDF().na.fill(0L)
           CourseUtils.postDataToBlob(df, f,config)
       }
@@ -48,7 +47,7 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
     data
   }
 
-  def getCourseEnrollmentOutput(events: RDD[BaseCourseMetricsOutput])(implicit sc: SparkContext, fc: FrameworkContext, sqlContext: SQLContext): RDD[(BaseCourseMetricsOutput, Option[ESResponse])] =  {
+  def getCourseEnrollmentOutput(events: RDD[BaseCourseMetricsOutput])(implicit fc: FrameworkContext, sparkSession: SparkSession): RDD[(BaseCourseMetricsOutput, Option[ESResponse])] =  {
     val batchId = events.collect().map(f => f.batchId)
     val courseId = events.collect().map(f => f.courseId)
 
@@ -63,7 +62,7 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
     finalRDD.map(f => f._2)
   }
 
-  def getCourseBatchCounts(courseIds: String, batchIds: String)(implicit sc: SparkContext, sqlContext: SQLContext) : DataFrame = {
+  def getCourseBatchCounts(courseIds: String, batchIds: String)(implicit sparkSession: SparkSession) : DataFrame = {
     val request = s"""{
                      |  "query": {
                      |    "bool": {
@@ -78,7 +77,7 @@ object CourseEnrollmentModel extends BaseCourseMetrics[Empty, BaseCourseMetricsO
                      |  }
                      |}""".stripMargin
 
-    sqlContext.sparkSession.read.format("org.elasticsearch.spark.sql")
+    sparkSession.read.format("org.elasticsearch.spark.sql")
       .option("query", request)
       .option("pushdown", "true")
       .option("es.nodes", AppConf.getConfig("es.host"))

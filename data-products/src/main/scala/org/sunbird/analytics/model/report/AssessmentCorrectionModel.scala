@@ -4,7 +4,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{col, lower, _}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -17,7 +17,7 @@ import scala.collection.mutable
 case class DruidOutput(identifier: String, channel: String)
 case class SelfAssessData(identifier: String, contentType: String)
 case class AssessEvent (contentid: String, attemptId: String, courseid: String, userid: String, assessEvent: String)
-@scala.beans.BeanInfo
+// @scala.beans.BeanInfo
 case class AssessOutputEvent(assessmentTs: Long, batchId: String, courseId: String, userId: String, attemptId: String, contentId: String, events: mutable.Buffer[V3Event]) extends Output with AlgoOutput with scala.Product with scala.Serializable
 
 object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,AssessOutputEvent,AssessOutputEvent] with Serializable with BaseReportsJob {
@@ -65,7 +65,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
   }
 
   def algorithProcess(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
-    implicit val sqlContext = new SQLContext(sc)
+    implicit val spark: SparkSession = SparkSession.builder().config(sc.getConf).getOrCreate()
     val assessEventDF = getAssessEventData(events, config)
     val druidData = loadDruidData(config)
 
@@ -79,16 +79,16 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
     }
   }
 
-  def loadDruidData(config: Map[String, AnyRef])(implicit sc: SparkContext, sqlContext: SQLContext, fc: FrameworkContext): DataFrame = {
-    import sqlContext.implicits._
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.get("druidConfig").get))
-    val druidResponse = DruidDataFetcher.getDruidData(druidConfig)
+  def loadDruidData(config: Map[String, AnyRef])(implicit sparkSession: SparkSession, fc: FrameworkContext): DataFrame = {
+    import sparkSession.implicits._
+    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config("druidConfig")))
+    val druidResponse = DruidDataFetcher.getDruidData(druidConfig)(sparkSession.sparkContext, fc)
     val dataDF = druidResponse.map(f => JSONUtils.deserialize[DruidOutput](f)).toDF.select("identifier")
     dataDF
   }
 
-  def getAssessEventData(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sqlContext: SQLContext, sc: SparkContext): DataFrame = {
-    import sqlContext.implicits._
+  def getAssessEventData(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sparkSession: SparkSession): DataFrame = {
+    import sparkSession.implicits._
     val assessEvent = events.map { f =>
       val userId = if (f.actor.`type`.equals("User")) f.actor.id else "" // UserID
     val cData = f.context.cdata.getOrElse(List())
@@ -119,8 +119,7 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
       )
   }
 
-  def getUserEnrollData(batchIds: List[String])(implicit sqlContext: SQLContext): DataFrame = {
-    implicit val spark = sqlContext.sparkSession
+  def getUserEnrollData(batchIds: List[String])(implicit sparkSession: SparkSession): DataFrame = {
     if(batchIds.size == 0) {
       JobLogger.log("No batchid provided", None, Level.INFO)
       loadData(userEnrolmentDBSettings,cassandraFormat, new StructType())

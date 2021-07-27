@@ -23,10 +23,10 @@ class SparkSpec(val file: String = "src/test/resources/sample_telemetry.log") ex
     implicit var sc: SparkContext = null;
 
     override def beforeAll() {
-    	    super.beforeAll();
-        JobLogger.init("org.ekstep.analytics.test-cases");
-        sc = getSparkContext();
-        events = loadFile[Event](file);
+        super.beforeAll()
+        JobLogger.init("org.ekstep.analytics.test-cases")
+        sc = getSparkContext()
+        events = loadFile[Event](file)
     }
 
     override def afterAll() {

@@ -8,7 +8,7 @@ import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.conf.AppConf
-import org.apache.spark.sql.{ DataFrame, Encoders, SparkSession }
+import org.apache.spark.sql.{ DataFrame, SparkSession }
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.ekstep.analytics.framework.util.CommonUtil
@@ -23,7 +23,7 @@ import org.ekstep.analytics.framework.OutputDispatcher
 import org.ekstep.analytics.framework.Dispatcher
 import org.sunbird.analytics.exhaust.collection.UDFUtils
 
-object CollectionReconciliationJob extends optional.Application with IJob with BaseReportsJob {
+object CollectionReconciliationJob extends IJob with BaseReportsJob {
 
   // $COVERAGE-OFF$ Disabling scoverage because the job will be deprecated
   implicit val className: String = "org.sunbird.analytics.audit.CollectionReconciliationJob"

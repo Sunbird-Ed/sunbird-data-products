@@ -17,7 +17,7 @@ case class ContentReport(programId: String, board: String, medium: String, grade
                          identifier: String, chapterId: String, contentName: String, contentId: String, contentType: String,
                          mimeType: String, contentStatus: String, creator: String, createdBy: String)
 
-object ContentDetailsReport extends optional.Application with IJob with BaseReportsJob {
+object ContentDetailsReport extends IJob with BaseReportsJob {
   implicit val className = "org.sunbird.analytics.sourcing.ContentDetailsReport"
   val jobName: String = "Content Details Job"
 

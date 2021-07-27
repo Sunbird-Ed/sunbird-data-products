@@ -15,7 +15,7 @@ import org.sunbird.cloud.storage.conf.AppConf
 
 case class SourcingContents(primaryCategory: String, createdBy: String, count: Int)
 
-object SourcingSummaryReport extends optional.Application with IJob with BaseReportsJob {
+object SourcingSummaryReport extends IJob with BaseReportsJob {
 
   implicit val className = "org.sunbird.analytics.sourcing.SourcingSummaryReport"
   val jobName: String = "SourcingSummaryReport"

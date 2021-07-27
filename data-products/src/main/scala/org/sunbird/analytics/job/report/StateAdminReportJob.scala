@@ -20,7 +20,7 @@ import scala.collection.mutable.ListBuffer
 case class UserSelfDeclared(userid: String, orgid: String, persona: String, errortype: String,
                             status: String, userinfo: Map[String, String])
 
-object StateAdminReportJob extends optional.Application with IJob with StateAdminReportHelper {
+object StateAdminReportJob extends IJob with StateAdminReportHelper {
 
     implicit val className: String = "org.ekstep.analytics.job.StateAdminReportJob"
     
@@ -54,9 +54,10 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
   // $COVERAGE-ON$ Enabling scoverage for other methods
    def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
         import sparkSession.implicits._
-        val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
+        // val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
         //loading user_declarations table details based on declared values and location details and appending org-external-id if present
-        val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+        // val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+        val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace))
         val userSelfDeclaredUserInfoDataDF = userSelfDeclaredDataDF.select(col("*"), col("userinfo").getItem("declared-email").as("declared-email"), col("userinfo").getItem("declared-phone").as("declared-phone"),
             col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
         val locationDF = locationData()
@@ -183,7 +184,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         resultDf.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
         resultDf
     }
-    
+
     def locationIdListFunction(location: String): List[String] = {
         var locations = new ListBuffer[String]()
         try {

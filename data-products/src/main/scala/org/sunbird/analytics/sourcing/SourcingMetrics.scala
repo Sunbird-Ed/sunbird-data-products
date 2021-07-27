@@ -24,7 +24,7 @@ case class TextbookHierarchy(channel: String, board: String, identifier: String,
 case class FinalReport(identifier: String,l1identifier: String,board: String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String, totalChapters: String, slug:String)
 case class TextbookResponse(l1identifier:String,board: String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String)
 
-object SourcingMetrics extends optional.Application with IJob with BaseReportsJob {
+object SourcingMetrics extends IJob with BaseReportsJob {
 
   implicit val className = "org.sunbird.analytics.job.SourcingMetrics"
   val jobName: String = "Sourcing Metrics Job"

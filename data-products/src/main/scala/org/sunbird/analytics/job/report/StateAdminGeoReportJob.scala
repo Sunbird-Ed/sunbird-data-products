@@ -15,7 +15,7 @@ import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 case class DistrictSummary(index:Int, districtName: String, blocks: Long, schools: Long)
 case class RootOrgData(rootorgjoinid: String, rootorgchannel: String, rootorgslug: String)
 
-object StateAdminGeoReportJob extends optional.Application with IJob with StateAdminReportHelper {
+object StateAdminGeoReportJob extends IJob with StateAdminReportHelper {
 
   implicit val className: String = "org.ekstep.analytics.job.StateAdminGeoReportJob"
 

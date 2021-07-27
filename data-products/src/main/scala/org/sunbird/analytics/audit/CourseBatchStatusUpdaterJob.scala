@@ -19,7 +19,7 @@ import scala.collection.immutable.List
 
 case class CourseBatchStatusMetrics(unStarted: Long, inProgress: Long, completed: Long)
 
-object CourseBatchStatusUpdaterJob extends optional.Application with IJob with BaseReportsJob {
+object CourseBatchStatusUpdaterJob extends IJob with BaseReportsJob {
   implicit val className: String = "org.sunbird.analytics.audit.CourseBatchStatusUpdaterJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
