@@ -126,7 +126,7 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
       .returning(courseBatchDF.withColumn("cert_templates", lit(null).cast(MapType(StringType, MapType(StringType, StringType)))))
     val resultDf = CourseBatchStatusUpdaterJob.getCollectionBatchDF(reporterMock.fetchData)
     val resultDateValue =  resultDf.select("startdate").collect().map(_ (0)).toList
-    resultDateValue(0) should be("2021-04-28")
+    resultDateValue(0) should be("2021-04-28 00:00:00.000000+0000")
     resultDateValue(1) should be("2020-05-26")
     resultDateValue(2) should be("2020-05-29")
     resultDateValue(3) should be("2020-05-25")
