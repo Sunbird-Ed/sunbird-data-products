@@ -25,19 +25,18 @@ import java.util.function.Supplier
 
 
 case class RequestBody(`type`: String,`params`: Map[String,AnyRef])
-case class DruidQuery(queryType: String, dataSource: String, intervals: String, granularity: Option[String], aggregations: Option[List[Aggregation]], dimensions: Option[List[DruidDimension]], filters: Option[List[mutable.Map[String,AnyRef]]], having: Option[DruidHavingFilter], postAggregation: Option[List[PostAggregation]], columns: Option[List[String]], sqlDimensions: Option[List[DruidSQLDimension]], threshold: Option[Long], metric: Option[String], descending: Option[String], intervalSlider: Int)
+case class DruidQuery(queryType: String, dataSource: String, intervals: String, granularity: Option[String], aggregations: Option[List[Aggregation]],
+                      dimensions: Option[List[DruidDimension]], filters: Option[List[mutable.Map[String,AnyRef]]], having: Option[DruidHavingFilter],
+                      postAggregation: Option[List[PostAggregation]], columns: Option[List[String]], sqlDimensions: Option[List[DruidSQLDimension]],
+                      threshold: Option[Long], metric: Option[String], descending: Option[String], intervalSlider: Int)
 case class Metrics(metric : String, label : String, druidQuery : DruidQuery)
-case class ReportConfig(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String], output: List[mutable.Map[String,AnyRef]],
-                        storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
+case class ReportConfig(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String],
+                        output: List[mutable.Map[String,AnyRef]], storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
                         storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
-case class ReportConfigImmutable(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String], output: List[OutputConfig],
-<<<<<<< HEAD
-                                 mergeConfig: Option[ReportMergeConfig] = None, storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
+case class ReportConfigImmutable(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String],
+                                 output: List[OutputConfig],mergeConfig: Option[ReportMergeConfig] = None,
+                                 storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
                                  storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
-=======
-                        mergeConfig: Option[ReportMergeConfig] = None, storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
-                        storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
 case class OnDemandDruidResponse(file: List[String], status: String, statusMsg: String, execTime: Long)
 case class FinalMetrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
 
@@ -62,11 +61,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
   }
 
   def validateEncryptionRequest(request: JobRequest): Boolean = {
-<<<<<<< HEAD
     if (request.encryption_key.nonEmpty) true else false;
-=======
-      if (request.encryption_key.nonEmpty) true else false;
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
   }
 
   def validateRequest(request: JobRequest): Boolean = {
@@ -111,26 +106,17 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     val metrics = reportConfigs.metrics.map { f =>
 
       val queryInterval = if (interval.staticInterval.isEmpty && interval.interval.nonEmpty) {
-<<<<<<< HEAD
         val dateRange = interval.interval.get
         getDateRange(dateRange, interval.intervalSlider,f.druidQuery.dataSource)
-=======
-      val dateRange = interval.interval.get
-          getDateRange(dateRange, interval.intervalSlider)
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
       } else
         reportInterval
 
       val queryConfig = if (granularity.nonEmpty)
-<<<<<<< HEAD
-        JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval, "granularity" -> granularity.get)
+        JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider,
+          "intervals" -> queryInterval, "granularity" -> granularity.get)
       else
-        JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval)
-=======
-          JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval, "granularity" -> granularity.get)
-        else
-          JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval)
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
+        JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider,
+          "intervals" -> queryInterval)
       val data = DruidDataFetcher.getDruidData(JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(queryConfig)))
       data.map { x =>
         val dataMap = JSONUtils.deserialize[Map[String, AnyRef]](x)
@@ -158,22 +144,17 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     reportConfig.output.foreach { f =>
       var df = getReportDF(RestUtil,JSONUtils.deserialize[OutputConfig](JSONUtils.serialize(f)),data,dataCount).na.fill(0).drop("__time")
       (df.columns).map(f1 =>{
-<<<<<<< HEAD
         df = df.withColumn(f1,when((col(f1)==="unknown")||(col(f1)==="<NULL>"),"Null").otherwise(col(f1)))
       })
       if (dataCount.value > 0) {
-=======
-        df = df.withColumn(f1,when((col(f1)==="unknown")||(col(f1)==="<NULL>"),"No Data Found").otherwise(col(f1)))
-      })
-     if (dataCount.value > 0) {
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
         val metricFields = f.metrics
         val fieldsList = (dimFields ++ metricFields).distinct
         val dimsLabels = labelsLookup.filter(x => f.dims.contains(x._1)).values.toList
         val filteredDf = df.select(fieldsList.head, fieldsList.tail: _*)
         val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*).na.fill("unknown")
         val reportFinalId = reportConfig.id + "/" + f.label.get
-        val fileSavedToBlob = saveReport(renamedDf, JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get)) ++ Map("dims" -> dimsLabels,"reportId" -> reportFinalId, "fileParameters" -> f.fileParameters, "format" -> f.`type`))
+        val fileSavedToBlob = saveReport(renamedDf, JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get)) ++
+          Map("dims" -> dimsLabels,"reportId" -> reportFinalId, "fileParameters" -> f.fileParameters, "format" -> f.`type`))
         fileSavedToBlob.foreach(y=> filesMutable += y)
         JobLogger.log(reportConfig.id + "Total Records :"+ dataCount.value , None, Level.INFO)
       }
@@ -196,7 +177,8 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
 
   def saveReport(data: DataFrame, config: Map[String, AnyRef])(implicit sc: SparkContext,fc:FrameworkContext): List[String] = {
     val container =  getStringProperty(config, "container", "test-container")
-    val storageConfig = StorageConfig(getStringProperty(config, "store", "local"),container, getStringProperty(config, "key", "/tmp/druid-reports"), config.get("accountKey").asInstanceOf[Option[String]]);
+    val storageConfig = StorageConfig(getStringProperty(config, "store", "local"),container, getStringProperty(config, "key",
+      "/tmp/druid-reports"), config.get("accountKey").asInstanceOf[Option[String]]);
     val format = config.get("format").get.asInstanceOf[String]
     val reportId = config.get("reportId").get.asInstanceOf[String]
     val quoteColumns =config.get("quoteColumns").getOrElse(List()).asInstanceOf[List[String]]
@@ -250,8 +232,8 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
         request.execution_time = Option(result._1);
         request.dt_job_completed = Option(System.currentTimeMillis)
       }
-      request
     }
+    request
   }
   def saveRequestAsync(request: JobRequest,jobId:String)(implicit conf: Configuration, fc: FrameworkContext): CompletableFuture[JobRequest] = {
 
@@ -275,7 +257,8 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
         try {
           if (validateRequest(request)) {
             val res = processRequest(request, reportConfig, storageConfig)
-            JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
+            JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time,
+              "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
           } else {
             JobLogger.log("Invalid Request", Some(Map("requestId" -> request.request_id, "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
@@ -291,11 +274,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
     CompletableFuture.allOf(result: _*) // Wait for all the async tasks to complete
     val completedResult = result.map(f => f.join()); // Get the completed job requests
-    FinalMetrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")));
-<<<<<<< HEAD
+    FinalMetrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")),
+      successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")));
   }
 }
-=======
-    }
-}
->>>>>>> 32278583bfe0551350c40f8daad63b1ffe944db8
