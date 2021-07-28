@@ -33,9 +33,14 @@ case class Metrics(metric : String, label : String, druidQuery : DruidQuery)
 case class ReportConfig(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String],
                         output: List[mutable.Map[String,AnyRef]], storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
                         storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
+<<<<<<< HEAD
 case class ReportConfigImmutable(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String],
                                  output: List[OutputConfig],mergeConfig: Option[ReportMergeConfig] = None,
                                  storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
+=======
+case class ReportConfigImmutable(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String], output: List[OutputConfig],
+                                 mergeConfig: Option[ReportMergeConfig] = None, storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
+>>>>>>> 8adf5f30457c73da9a863bd2f8412c260e576e94
                                  storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
 case class OnDemandDruidResponse(file: List[String], status: String, statusMsg: String, execTime: Long)
 case class FinalMetrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
@@ -112,11 +117,17 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
         reportInterval
 
       val queryConfig = if (granularity.nonEmpty)
+<<<<<<< HEAD
         JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider,
           "intervals" -> queryInterval, "granularity" -> granularity.get)
       else
         JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider,
           "intervals" -> queryInterval)
+=======
+        JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval, "granularity" -> granularity.get)
+      else
+        JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(f.druidQuery)) ++ Map("intervalSlider" -> interval.intervalSlider, "intervals" -> queryInterval)
+>>>>>>> 8adf5f30457c73da9a863bd2f8412c260e576e94
       val data = DruidDataFetcher.getDruidData(JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(queryConfig)))
       data.map { x =>
         val dataMap = JSONUtils.deserialize[Map[String, AnyRef]](x)
@@ -274,7 +285,11 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
     CompletableFuture.allOf(result: _*) // Wait for all the async tasks to complete
     val completedResult = result.map(f => f.join()); // Get the completed job requests
+<<<<<<< HEAD
     FinalMetrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")),
       successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")));
+=======
+    FinalMetrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")));
+>>>>>>> 8adf5f30457c73da9a863bd2f8412c260e576e94
   }
 }
