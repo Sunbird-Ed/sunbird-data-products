@@ -5,7 +5,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{col, lit, unix_timestamp, when}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
-import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
@@ -26,27 +26,34 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
-    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     val jobName: String = "CourseBatchStatusUpdaterJob"
-    JobLogger.init(jobName)
-    JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
-    implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
-    implicit val spark: SparkSession = openSparkSession(jobConfig)
-    implicit val sc: SparkContext = spark.sparkContext
-    spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
-      val res = CommonUtil.time(execute(fetchData))
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map(
-        "time-taken" -> res._1,
-        "un-started" -> res._2.unStarted,
-        "in-progress" -> res._2.inProgress,
-        "completed" -> res._2.completed
-      )))
-    } finally {
-      frameworkContext.closeContext()
-      spark.close()
+      implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
+      val jobName: String = "CourseBatchStatusUpdaterJob"
+      JobLogger.init(jobName)
+      JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
+      implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
+      implicit val spark: SparkSession = openSparkSession(jobConfig)
+      implicit val sc: SparkContext = spark.sparkContext
+      spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
+      try {
+        val res = CommonUtil.time(execute(fetchData))
+        JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map(
+          "time-taken" -> res._1,
+          "un-started" -> res._2.unStarted,
+          "in-progress" -> res._2.inProgress,
+          "completed" -> res._2.completed
+        )))
+      } finally {
+        frameworkContext.closeContext()
+        spark.close()
+      }
+    } catch {
+      case ex: Exception => {
+        JobLogger.log(ex.getMessage, None, ERROR);
+        JobLogger.end(jobName + " execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
+      }
     }
-
   }
 
   // $COVERAGE-ON$ Disabling scoverage for main and execute method
