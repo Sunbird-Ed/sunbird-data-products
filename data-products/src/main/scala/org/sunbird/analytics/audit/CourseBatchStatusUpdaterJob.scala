@@ -27,32 +27,29 @@ object CourseBatchStatusUpdaterJob extends optional.Application with IJob with B
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     val jobName: String = "CourseBatchStatusUpdaterJob"
+    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
+    JobLogger.init(jobName)
+    JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
+    implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
+    implicit val spark: SparkSession = openSparkSession(jobConfig)
+    implicit val sc: SparkContext = spark.sparkContext
     try {
-      implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
-      val jobName: String = "CourseBatchStatusUpdaterJob"
-      JobLogger.init(jobName)
-      JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
-      implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
-      implicit val spark: SparkSession = openSparkSession(jobConfig)
-      implicit val sc: SparkContext = spark.sparkContext
       spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
-      try {
-        val res = CommonUtil.time(execute(fetchData))
-        JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map(
-          "time-taken" -> res._1,
-          "un-started" -> res._2.unStarted,
-          "in-progress" -> res._2.inProgress,
-          "completed" -> res._2.completed
-        )))
-      } finally {
-        frameworkContext.closeContext()
-        spark.close()
-      }
+      val res = CommonUtil.time(execute(fetchData))
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map(
+        "time-taken" -> res._1,
+        "un-started" -> res._2.unStarted,
+        "in-progress" -> res._2.inProgress,
+        "completed" -> res._2.completed
+      )))
     } catch {
-      case ex: Exception => {
+      case ex: Exception =>
         JobLogger.log(ex.getMessage, None, ERROR);
-        JobLogger.end(jobName + " execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
-      }
+        JobLogger.end(s"$jobName execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
+    }
+    finally {
+      frameworkContext.closeContext()
+      spark.close()
     }
   }
 
