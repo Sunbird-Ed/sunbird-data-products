@@ -89,7 +89,7 @@ class ContentConsumption:
                     (content_plays['Number of plays on App'] + content_plays['Number of plays on Portal']) * 60), 2)
         content_plays.drop(['Total time spent on App', 'Total time spent on Portal'], axis=1, inplace=True)
         overall = content_model.join(content_plays).reset_index()
-        overall = overall[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
+        overall = overall[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'index',
                            'name', 'mimeType', 'createdOn', 'creator', 'lastPublishedOn',
                            'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
                            'Number of plays on App', 'Number of plays on Portal',
@@ -184,7 +184,7 @@ class ContentConsumption:
                     (content_plays['Number of plays on App'] + content_plays['Number of plays on Portal']) * 60), 2)
         content_plays.drop(['Total time spent on App', 'Total time spent on Portal'], axis=1, inplace=True)
         weekly = content_model.join(content_plays).reset_index()
-        weekly = weekly[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
+        weekly = weekly[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'index',
                          'name', 'mimeType', 'createdOn', 'creator', 'lastPublishedOn',
                          'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
                          'Number of plays on App', 'Number of plays on Portal',
