@@ -2,18 +2,16 @@ package org.sunbird.analytics.exhaust
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Encoders, SQLContext, SparkSession}
-import org.apache.spark.sql.functions.{col, lit, when}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+import org.apache.spark.sql.functions.{col,when}
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, MergeUtil, RestUtil}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, JobContext, StorageConfig, _}
-import org.ekstep.analytics.model.{OutputConfig, QueryDateRange, ReportConfig, ReportMergeConfig}
+import org.ekstep.analytics.model.{OutputConfig, ReportConfig}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.{List, Map}
-import scala.collection.mutable
-import scala.collection.mutable._
 import org.ekstep.analytics.framework.exception.DruidConfigException
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
