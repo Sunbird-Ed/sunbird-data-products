@@ -8,7 +8,7 @@ import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, MergeUtil, RestUtil}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, JobContext, StorageConfig, _}
-import org.ekstep.analytics.model.{OutputConfig, QueryDateRange, ReportMergeConfig}
+import org.ekstep.analytics.model.{OutputConfig, QueryDateRange, ReportConfig, ReportMergeConfig}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.{List, Map}
@@ -19,26 +19,16 @@ import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.model.DruidQueryProcessingModel.{getDateRange, getReportDF}
 import org.apache.hadoop.conf.Configuration
+import org.sunbird.analytics.exhaust.collection.Metrics
 
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.concurrent.CompletableFuture
 import java.util.function.Supplier
 
 
 case class RequestBody(`type`: String,`params`: Map[String,AnyRef])
-case class DruidQuery(queryType: String, dataSource: String, intervals: String, granularity: Option[String], aggregations: Option[List[Aggregation]],
-                      dimensions: Option[List[DruidDimension]], filters: Option[List[mutable.Map[String,AnyRef]]], having: Option[DruidHavingFilter],
-                      postAggregation: Option[List[PostAggregation]], columns: Option[List[String]], sqlDimensions: Option[List[DruidSQLDimension]],
-                      threshold: Option[Long], metric: Option[String], descending: Option[String], intervalSlider: Int)
-case class Metrics(metric : String, label : String, druidQuery : DruidQuery)
-case class ReportConfig(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String],
-                        output: List[mutable.Map[String,AnyRef]], storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
-                        storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
-case class ReportConfigImmutable(id: String, queryType: String, dateRange: QueryDateRange, metrics: List[Metrics], labels: LinkedHashMap[String, String],
-                                 output: List[OutputConfig],mergeConfig: Option[ReportMergeConfig] = None,
-                                 storageKey: Option[String] = Option(AppConf.getConfig("storage.key.config")),
-                                 storageSecret: Option[String] = Option(AppConf.getConfig("storage.secret.config")))
 case class OnDemandDruidResponse(file: List[String], status: String, statusMsg: String, execTime: Long)
-case class FinalMetrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
 
 object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob with Serializable with OnDemandExhaustJob{
   override def getClassName() : String = "org.sunbird.analytics.exhaust.OnDemandDruidExhaustJob"
@@ -68,15 +58,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     if (request.request_data != null) true else false
   }
 
-  def getRequests(jobId :String)(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
-    val jobStatus = List("SUBMITTED", "FAILED")
-    val encoder = Encoders.product[JobRequest]
-    val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
-      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*));
-    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
-    requests
-  }
-
   def markRequestAsProcessing(request: JobRequest):Boolean = {
     request.status = "PROCESSING";
     updateStatus(request);
@@ -86,15 +67,12 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     config.getOrElse(key, defaultValue).asInstanceOf[String]
   }
   def druidAlgorithm(reportConfig: ReportConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc:SparkContext, config: JobConfig): RDD[DruidOutput]  ={
-    val strConfig = JSONUtils.serialize(reportConfig)
-    val reportConfigs = JSONUtils.deserialize[ReportConfig](strConfig)
-
-    val queryDims = reportConfigs.metrics.map { f =>
+    val queryDims = reportConfig.metrics.map { f =>
       f.druidQuery.dimensions.getOrElse(List()).map(f => f.aliasName.getOrElse(f.fieldName))
     }.distinct
     if (queryDims.length > 1) throw new DruidConfigException("Query dimensions are not matching")
 
-    val interval = reportConfigs.dateRange
+    val interval = reportConfig.dateRange
     val granularity = interval.granularity
     val reportInterval = if (interval.staticInterval.nonEmpty) {
       interval.staticInterval.get
@@ -103,7 +81,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     } else {
       throw new DruidConfigException("Both staticInterval and interval cannot be missing. Either of them should be specified")
     }
-    val metrics = reportConfigs.metrics.map { f =>
+    val metrics = reportConfig.metrics.map { f =>
 
       val queryInterval = if (interval.staticInterval.isEmpty && interval.interval.nonEmpty) {
         val dateRange = interval.interval.get
@@ -131,7 +109,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
   }
 
-  def druidPostProcess(data: RDD[DruidOutput],reportConfig: ReportConfigImmutable, storageConfig:StorageConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc:SparkContext, config: JobConfig): OnDemandDruidResponse = {
+  def druidPostProcess(data: RDD[DruidOutput],request_id: String,reportConfig: ReportConfig, storageConfig:StorageConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc:SparkContext, config: JobConfig): OnDemandDruidResponse = {
     val labelsLookup = reportConfig.labels
     implicit val sqlContext = new SQLContext(sc)
     val dimFields = reportConfig.metrics.flatMap { m =>
@@ -141,6 +119,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
     val dataCount = sc.longAccumulator("DruidReportCount")
     val filesMutable = scala.collection.mutable.MutableList[String]()
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
     reportConfig.output.foreach { f =>
       var df = getReportDF(RestUtil,JSONUtils.deserialize[OutputConfig](JSONUtils.serialize(f)),data,dataCount).na.fill(0).drop("__time")
       (df.columns).map(f1 =>{
@@ -152,7 +131,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
         val dimsLabels = labelsLookup.filter(x => f.dims.contains(x._1)).values.toList
         val filteredDf = df.select(fieldsList.head, fieldsList.tail: _*)
         val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*).na.fill("unknown")
-        val reportFinalId = reportConfig.id + "/" + f.label.get
+        val reportFinalId = reportConfig.id + "/" + request_id + "_" + reportDate
         val fileSavedToBlob = saveReport(renamedDf, JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get)) ++
           Map("dims" -> dimsLabels,"reportId" -> reportFinalId, "fileParameters" -> f.fileParameters, "format" -> f.`type`))
         fileSavedToBlob.foreach(y=> filesMutable += y)
@@ -194,25 +173,25 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     deltaFiles
   }
 
-  def processRequest(request: JobRequest, reportConfig:ReportConfig, storageConfig:StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, sqlContext:SQLContext, sc:SparkContext,config: JobConfig,conf: Configuration): JobRequest ={
+  def getDate(pattern: String): SimpleDateFormat = {
+    new SimpleDateFormat(pattern)
+  }
+
+  def processRequest(request: JobRequest, reportConfig:ReportConfig, storageConfig:StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, sqlContext:SQLContext, sc:SparkContext,config: JobConfig,conf: Configuration): JobRequest = {
     markRequestAsProcessing(request)
     val requestBody = JSONUtils.deserialize[RequestBody](request.request_data)
     val requestParamsBody = requestBody.`params`
-    reportConfig.metrics.map(metric => {
-      metric.druidQuery.filters.get.map(filt=>{
-        (requestBody.`params`.keys).map(ke=> {
-          if(filt.get("value").contains("$"+ke)) {
-            val dynamicFilterValue = requestParamsBody.get(ke).get.toString
-            filt.update("value", dynamicFilterValue)
-          }
-        })
-      })
+    val reportConfigStr = JSONUtils.serialize(reportConfig)
+
+    var finalConfig = reportConfigStr
+    (requestParamsBody.keys).map(ke => {
+      if(finalConfig.contains(ke))
+      finalConfig = finalConfig.replace("$" + ke, requestParamsBody.get(ke).get.toString)
     })
-    reportConfig.output.foreach({ot => {
-      ot.update("label",((System.currentTimeMillis())+"_"+request.request_id).toString)
-    } })
-    val druidData : RDD[DruidOutput] = druidAlgorithm(reportConfig)
-    val result = CommonUtil.time(druidPostProcess(druidData,JSONUtils.deserialize[ReportConfigImmutable](JSONUtils.serialize(reportConfig)),storageConfig))
+
+    val finalReportConfig = JSONUtils.deserialize[ReportConfig](finalConfig)
+    val druidData : RDD[DruidOutput] = druidAlgorithm(finalReportConfig)
+    val result = CommonUtil.time(druidPostProcess(druidData,request.request_id,JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(finalReportConfig)),storageConfig))
     val response = result._2;
     val failedOnDemandDruidRes = response.status.equals("FAILED")
     if (failedOnDemandDruidRes) {
@@ -235,7 +214,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
     request
   }
-  def saveRequestAsync(request: JobRequest,jobId:String)(implicit conf: Configuration, fc: FrameworkContext): CompletableFuture[JobRequest] = {
+  def updateRequestAsync(request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): CompletableFuture[JobRequest] = {
 
     CompletableFuture.supplyAsync(new Supplier[JobRequest]() {
       override def get(): JobRequest = {
@@ -245,10 +224,11 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
       }
     })
   }
-  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sqlContext:SQLContext, sc:SparkContext, conf: Configuration): FinalMetrics = {
+
+  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sqlContext:SQLContext, sc:SparkContext, conf: Configuration): Metrics = {
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(config.modelParams.get("reportConfig")))
     val jobId : String = reportConfig.id
-    val requests = getRequests(jobId)
+    val requests = getRequests(jobId,None)
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId, "totalRequests" -> requests.length)), INFO)
@@ -270,11 +250,11 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
             markRequestAsFailed(request, "Invalid request")
         }
       }
-      saveRequestAsync(updRequest,jobId)(spark.sparkContext.hadoopConfiguration, fc)
+      updateRequestAsync(updRequest)(spark.sparkContext.hadoopConfiguration, fc)
     }
     CompletableFuture.allOf(result: _*) // Wait for all the async tasks to complete
     val completedResult = result.map(f => f.join()); // Get the completed job requests
-    FinalMetrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")),
+    Metrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")),
       successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")));
   }
 }
