@@ -64,7 +64,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -146,7 +146,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -203,7 +203,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -259,7 +259,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -316,7 +316,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
 
     val json: String ="""
@@ -393,7 +393,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -484,7 +484,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -560,7 +560,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -649,7 +649,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -673,7 +673,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
         DruidFilter("equals","state_slug",Option("apekx"),None))),None, None,
       Option(List("__time","createdBy","role_title","user_stateName","user_districtName","user_blockName","user_schoolName","user_schoolUDISE_code",
         "organisation_name","programName","programExternalId","solutionName","solutionExternalId","observationSubmissionId","questionExternalId","questionName",
-        "questionResponseLabel","minScore","evidences","remarks","state_slug")), None, None,None,None,0)
+        "questionResponseLabel","minScore","evidences","remarks","state_slug")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
                         |{"questionName":"Tick the following which are available:","user_districtName":"ANANTAPUR","evidences":"<NULL>",
