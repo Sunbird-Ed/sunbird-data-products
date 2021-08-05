@@ -20,6 +20,8 @@ import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.model.DruidQueryProcessingModel.{getDateRange, getReportDF}
 import org.apache.hadoop.conf.Configuration
 
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.concurrent.CompletableFuture
 import java.util.function.Supplier
 
@@ -68,15 +70,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     if (request.request_data != null) true else false
   }
 
-  def getRequests(jobId :String)(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
-    val jobStatus = List("SUBMITTED", "FAILED")
-    val encoder = Encoders.product[JobRequest]
-    val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
-      .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*));
-    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
-    requests
-  }
-
   def markRequestAsProcessing(request: JobRequest):Boolean = {
     request.status = "PROCESSING";
     updateStatus(request);
@@ -86,15 +79,12 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     config.getOrElse(key, defaultValue).asInstanceOf[String]
   }
   def druidAlgorithm(reportConfig: ReportConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc:SparkContext, config: JobConfig): RDD[DruidOutput]  ={
-    val strConfig = JSONUtils.serialize(reportConfig)
-    val reportConfigs = JSONUtils.deserialize[ReportConfig](strConfig)
-
-    val queryDims = reportConfigs.metrics.map { f =>
+    val queryDims = reportConfig.metrics.map { f =>
       f.druidQuery.dimensions.getOrElse(List()).map(f => f.aliasName.getOrElse(f.fieldName))
     }.distinct
     if (queryDims.length > 1) throw new DruidConfigException("Query dimensions are not matching")
 
-    val interval = reportConfigs.dateRange
+    val interval = reportConfig.dateRange
     val granularity = interval.granularity
     val reportInterval = if (interval.staticInterval.nonEmpty) {
       interval.staticInterval.get
@@ -103,7 +93,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     } else {
       throw new DruidConfigException("Both staticInterval and interval cannot be missing. Either of them should be specified")
     }
-    val metrics = reportConfigs.metrics.map { f =>
+    val metrics = reportConfig.metrics.map { f =>
 
       val queryInterval = if (interval.staticInterval.isEmpty && interval.interval.nonEmpty) {
         val dateRange = interval.interval.get
@@ -194,6 +184,10 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     deltaFiles
   }
 
+  def getDate(pattern: String): SimpleDateFormat = {
+    new SimpleDateFormat(pattern)
+  }
+
   def processRequest(request: JobRequest, reportConfig:ReportConfig, storageConfig:StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, sqlContext:SQLContext, sc:SparkContext,config: JobConfig,conf: Configuration): JobRequest ={
     markRequestAsProcessing(request)
     val requestBody = JSONUtils.deserialize[RequestBody](request.request_data)
@@ -208,9 +202,11 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
         })
       })
     })
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
     reportConfig.output.foreach({ot => {
-      ot.update("label",((System.currentTimeMillis())+"_"+request.request_id).toString)
+      ot.update("label",(request.request_id + "_" + reportDate).toString)
     } })
+
     val druidData : RDD[DruidOutput] = druidAlgorithm(reportConfig)
     val result = CommonUtil.time(druidPostProcess(druidData,JSONUtils.deserialize[ReportConfigImmutable](JSONUtils.serialize(reportConfig)),storageConfig))
     val response = result._2;
@@ -235,7 +231,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
     request
   }
-  def saveRequestAsync(request: JobRequest,jobId:String)(implicit conf: Configuration, fc: FrameworkContext): CompletableFuture[JobRequest] = {
+  def updateRequestAsync(request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): CompletableFuture[JobRequest] = {
 
     CompletableFuture.supplyAsync(new Supplier[JobRequest]() {
       override def get(): JobRequest = {
@@ -245,10 +241,11 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
       }
     })
   }
+
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sqlContext:SQLContext, sc:SparkContext, conf: Configuration): FinalMetrics = {
     val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(config.modelParams.get("reportConfig")))
     val jobId : String = reportConfig.id
-    val requests = getRequests(jobId)
+    val requests = getRequests(jobId,None)
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId, "totalRequests" -> requests.length)), INFO)
@@ -270,7 +267,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
             markRequestAsFailed(request, "Invalid request")
         }
       }
-      saveRequestAsync(updRequest,jobId)(spark.sparkContext.hadoopConfiguration, fc)
+      updateRequestAsync(updRequest)(spark.sparkContext.hadoopConfiguration, fc)
     }
     CompletableFuture.allOf(result: _*) // Wait for all the async tasks to complete
     val completedResult = result.map(f => f.join()); // Get the completed job requests
