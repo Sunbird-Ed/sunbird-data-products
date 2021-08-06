@@ -64,7 +64,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
   def getStringProperty(config: Map[String, AnyRef], key: String, defaultValue: String) : String = {
     config.getOrElse(key, defaultValue).asInstanceOf[String]
   }
-  def druidAlgorithm(reportConfig: ReportConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc:SparkContext, config: JobConfig): RDD[DruidOutput]  ={
+  def druidAlgorithm(reportConfig: ReportConfig)(implicit spark: SparkSession, fc: FrameworkContext, sc:SparkContext, config: JobConfig): RDD[DruidOutput]  ={
     val queryDims = reportConfig.metrics.map { f =>
       f.druidQuery.dimensions.getOrElse(List()).map(f => f.aliasName.getOrElse(f.fieldName))
     }.distinct
@@ -109,7 +109,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
 
   def druidPostProcess(data: RDD[DruidOutput],request_id: String,reportConfig: ReportConfig, storageConfig:StorageConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc:SparkContext, config: JobConfig): OnDemandDruidResponse = {
     val labelsLookup = reportConfig.labels
-    implicit val sqlContext = new SQLContext(sc)
     val dimFields = reportConfig.metrics.flatMap { m =>
       if (m.druidQuery.dimensions.nonEmpty) m.druidQuery.dimensions.get.map(f => f.aliasName.getOrElse(f.fieldName))
       else if(m.druidQuery.sqlDimensions.nonEmpty) m.druidQuery.sqlDimensions.get.map(f => f.fieldName)
@@ -193,7 +192,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     if (failedOnDemandDruidRes) {
       markRequestAsFailed(request, response.statusMsg)
     } else {
-      if(validateEncryptionRequest(request) == true){
+      if(validateEncryptionRequest(request)){
         val storageConfig = getStorageConfig(config, response.file.head)
         request.download_urls = Option(response.file);
         request.execution_time = Option(result._1);
