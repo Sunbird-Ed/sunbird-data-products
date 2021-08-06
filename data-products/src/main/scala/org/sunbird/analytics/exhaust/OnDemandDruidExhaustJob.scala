@@ -116,8 +116,8 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
       else List()
     }
     val dataCount = sc.longAccumulator("DruidReportCount")
-    val filesMutable = scala.collection.mutable.MutableList[String]()
     val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
+    var fileSavedToBlob = List.empty[String]
     reportConfig.output.foreach { f =>
       var df = getReportDF(RestUtil,JSONUtils.deserialize[OutputConfig](JSONUtils.serialize(f)),data,dataCount).na.fill(0).drop("__time")
       (df.columns).map(f1 =>{
@@ -130,9 +130,8 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
         val filteredDf = df.select(fieldsList.head, fieldsList.tail: _*)
         val renamedDf = filteredDf.select(filteredDf.columns.map(c => filteredDf.col(c).as(labelsLookup.getOrElse(c, c))): _*).na.fill("unknown")
         val reportFinalId = reportConfig.id + "/" + request_id + "_" + reportDate
-        val fileSavedToBlob = saveReport(renamedDf, JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get)) ++
+        fileSavedToBlob = saveReport(renamedDf, JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get)) ++
           Map("dims" -> dimsLabels,"reportId" -> reportFinalId, "fileParameters" -> f.fileParameters, "format" -> f.`type`))
-        fileSavedToBlob.foreach(y=> filesMutable += y)
         JobLogger.log(reportConfig.id + "Total Records :"+ dataCount.value , None, Level.INFO)
       }
       else {
@@ -140,9 +139,8 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
       }
     }
     try {
-      if(filesMutable.length > 0) {
-        val files = List.empty ++ filesMutable
-        OnDemandDruidResponse(files, "SUCCESS", "", System.currentTimeMillis())
+      if(fileSavedToBlob.length > 0) {
+        OnDemandDruidResponse(fileSavedToBlob, "SUCCESS", "", System.currentTimeMillis())
       } else {
         OnDemandDruidResponse(List(), "FAILED", "No data found from druid", System.currentTimeMillis())
       }
