@@ -41,12 +41,15 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       val total_archived_files = res._2.length
       if (truncateData) deleteRecords(spark, assessmentAggDBSettings.getOrElse("keyspace", "sunbird_courses"), assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")) else JobLogger.log(s"Skipping the ${assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")} truncate process", None, INFO)
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "total_archived_files" -> total_archived_files)))
+    } catch {
+      case ex: Exception => {
+        ex.printStackTrace()
+        JobLogger.end(s"$jobName completed execution with the error ${ex.getMessage}", "FAILED", None)
+      }
     } finally {
       frameworkContext.closeContext()
       spark.close()
     }
-
-
   }
 
   def init()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
