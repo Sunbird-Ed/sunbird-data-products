@@ -1,12 +1,12 @@
 package org.sunbird.analytics.exhaust.collection
 
-import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{col, udf, explode_outer, round}
+import org.apache.spark.sql.functions.{col, explode_outer, round}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
+import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
+import org.sunbird.analytics.exhaust.util.ExhaustUtil
 
 object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExhaustJob {
 
@@ -15,7 +15,6 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
   override def jobId() = "response-exhaust";
   override def getReportPath() = "response-exhaust/";
   override def getReportKey() = "response";
-  private val partitionCols = List("batch_id", "year", "week_of_year")
 
   private val persistedDF:scala.collection.mutable.ListBuffer[DataFrame] = scala.collection.mutable.ListBuffer[DataFrame]();
 
@@ -58,12 +57,18 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
 
     val batchid = userEnrolmentDataDF.select("batchid").distinct().collect().head.getString(0)
 
-    val assessBlobData = getAssessmentBlobDF(batchid, config)
-
     val assessAggregateData = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
 
-    val joinedDF = assessAggregateData.join(assessBlobData, Seq("batch_id", "course_id", "user_id"), "left_outer")
-        .select(assessAggregateData.col("*"))
+    val joinedDF = try {
+      val assessBlobData = getAssessmentBlobDF(batchid, config)
+
+      val joinDF = assessAggregateData.join(assessBlobData, Seq("batch_id", "course_id", "user_id"), "left")
+          .select(assessAggregateData.col("*"))
+      joinDF
+    } catch {
+      case e => JobLogger.log("Blob does not contain any file for batchid: " + batchid)
+        assessAggregateData
+    }
 
     joinedDF.join(userEnrolmentDataDF, joinedDF.col("user_id") === userEnrolmentDataDF.col("userid") && joinedDF.col("course_id") === userEnrolmentDataDF.col("courseid"), "inner")
       .select(userEnrolmentDataDF.col("*"), joinedDF.col("question"), col("content_id"), col("attempt_id"), col("last_attempted_on"))
@@ -80,31 +85,17 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
       .drop("question", "questiondata", "question_data")
   }
 
-  def getAssessmentBlobDF(batchid: String, config: JobConfig)(implicit spark: SparkSession): DataFrame = {
+  def getAssessmentBlobDF(batchid: String, config: JobConfig)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val azureFetcherConfig = config.modelParams.get("assessmentFetcherConfig").asInstanceOf[Map[String, AnyRef]]
 
-    val store = azureFetcherConfig("store")
+    val store = azureFetcherConfig("store").asInstanceOf[String]
     val format:String = azureFetcherConfig.getOrElse("format", "csv").asInstanceOf[String]
-    val url = store match {
-      case "local" =>
-        val filePath = azureFetcherConfig("filePath").asInstanceOf[String]
-        filePath + s"${batchid}-*.${format}"
-      case "s3" | "azure" =>
-        val bucket = azureFetcherConfig("container").asInstanceOf[String]
-        val key = AppConf.getConfig("azure_storage_key")
-        val filePath = azureFetcherConfig.getOrElse("filePath", "data-archival/").asInstanceOf[String]
-        val file = s"${filePath}${batchid}-*.${format}"
-        s"wasb://$bucket@$key.blob.core.windows.net/$file."
-    }
-    JobLogger.log(s"Fetching data from ${store} for batchid: " + batchid)
+    val filePath = azureFetcherConfig.getOrElse("filePath", "data-archival/").asInstanceOf[String]
+    val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
 
-    val assessAggData = spark.read.format("csv")
-      .option("header","true")
-      .load(url)
+    val assessAggData = ExhaustUtil.getAssessmentBlobData(store, filePath, container, Option(batchid), Option(format))
 
-    assessAggData.withColumn("question", extractFromArrayStringFun(col("question")))
+    assessAggData.distinct()
+      .withColumn("question", UDFUtils.convertStringToList(col("question")))
   }
-
-  def extractFromArrayStringFun: UserDefinedFunction =
-    udf { str: String => JSONUtils.deserialize[List[Question]](str) }
 }

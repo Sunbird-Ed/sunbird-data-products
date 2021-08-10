@@ -88,7 +88,7 @@ class TestResponseExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     user1Result.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
     user1Result.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
     user1Result.map(f => f.`User UUID`).toList should contain atLeastOneElementOf List("user-001")
-    user1Result.map(f => f.`Attempt Id`).toList should contain atLeastOneElementOf List("attempat-001")
+    user1Result.map(f => f.`Attempt Id`).toList should contain atLeastOneElementOf List("attempt-001")
     user1Result.map(f => f.`QuestionSet Id`).toList should contain atLeastOneElementOf List("do_1128870328040161281204", "do_112876961957437440179")
     user1Result.map(f => f.`QuestionSet Title`).toList should contain atLeastOneElementOf List("SelfAssess for course", "Assessment score report using summary plugin")
     user1Result.map(f => f.`Question Id`).toList should contain theSameElementsAs List("do_213019475454476288155", "do_213019970118279168165", "do_213019972814823424168", "do_2130256513760624641171")
@@ -111,6 +111,18 @@ class TestResponseExhaustJobV2 extends BaseReportSpec with MockFactory with Base
       pResponse.getString("iteration") should be ("0")
     }
 
+  }
+
+  it should "generate report even if blob does not has any data for the batchid" in {
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:01250894314817126443', '37564CF8F134EE7532F125651B51D17F', 'response-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
+
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ResponseExhaustJobV2","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"assessmentFetcherConfig":{"store":"local","filePath":"src/test/resources/exhaust/data-archival/blob-data/","format":"csv"},"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"0","sparkUserDbRedisPort":6341,"sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"ResponseExhaustJob Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+
+    ResponseExhaustJobV2.execute()
   }
 
   def getDate(): String = {

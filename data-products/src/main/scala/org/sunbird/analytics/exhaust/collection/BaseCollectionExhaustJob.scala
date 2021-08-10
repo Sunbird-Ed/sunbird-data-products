@@ -18,10 +18,13 @@ import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
 import org.sunbird.analytics.util.DecryptUtil
-
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
+
+import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.sunbird.analytics.exhaust.collection.ResponseExhaustJobV2.Question
+
 import scala.collection.immutable.List
 import scala.collection.mutable.ListBuffer
 
@@ -543,4 +546,7 @@ object UDFUtils extends Serializable {
   }
 
   val getLatestValue = udf[String, String, String](getLatestValueFun)
+
+  def convertStringToList: UserDefinedFunction =
+    udf { str: String => JSONUtils.deserialize[List[Question]](str) }
 }
