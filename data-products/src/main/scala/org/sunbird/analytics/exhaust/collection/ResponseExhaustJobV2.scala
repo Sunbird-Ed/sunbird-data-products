@@ -90,7 +90,7 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
 
     val store = azureFetcherConfig("store").asInstanceOf[String]
     val format:String = azureFetcherConfig.getOrElse("format", "csv").asInstanceOf[String]
-    val filePath = azureFetcherConfig.getOrElse("filePath", "data-archival/").asInstanceOf[String]
+    val filePath = azureFetcherConfig.getOrElse("filePath", "archival-data/").asInstanceOf[String]
     val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
 
     val assessAggData = ExhaustUtil.getAssessmentBlobData(store, filePath, container, Option(batchid), Option(format))
