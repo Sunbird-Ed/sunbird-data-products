@@ -15,10 +15,12 @@ object ExhaustUtil {
     val url = store match {
       case "local" =>
         filePath + s"${batchid}-*.${format}"
+      // $COVERAGE-OFF$ for azure testing
       case "s3" | "azure" =>
         val key = AppConf.getConfig("azure_storage_key")
         val file = s"${filePath}${batchid}-*.${format}"
         s"wasb://$bucket@$key.blob.core.windows.net/$file."
+      // $COVERAGE-ON$
     }
 
     JobLogger.log(s"Fetching data from ${store} for batchid: " + batchid)(new String())
