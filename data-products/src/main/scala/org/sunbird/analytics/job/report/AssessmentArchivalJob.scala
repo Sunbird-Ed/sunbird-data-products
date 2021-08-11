@@ -1,6 +1,7 @@
 package org.sunbird.analytics.job.report
 
 import com.datastax.spark.connector.cql.CassandraConnectorConf
+import com.datastax.spark.connector.{SomeColumns, toRDDFunctions}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions._
@@ -30,9 +31,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
-
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
-    val modelParams = jobConfig.modelParams.get
     init()
     try {
       val res = CommonUtil.time(archiveData(spark, jobConfig))
@@ -82,14 +81,16 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
         assessmentData.unpersist()
         metrics
       }
-      if (deleteArchivedBatch) removeRecords(sparkSession, batches._1) else JobLogger.log(s"Skipping the batch deletions ${batches._1}", None, INFO)
+      if (deleteArchivedBatch) removeRecords(batches._1, assessmentDF) else JobLogger.log(s"Skipping the batch deletions ${batches._1}", None, INFO)
       JobLogger.log(s"The data archival is successful", Some(Map("batch_id" -> batches._1, "pending_batches" -> batchesToArchiveCount.getAndDecrement())), INFO)
       res
     }).toArray
   }
 
-  def removeRecords(sparkSession: SparkSession, batchId: String): Unit = {
-    sparkSession.sql(s"DELETE FROM ${AppConf.getConfig("sunbird.courses.keyspace")}.${AppConf.getConfig("sunbird.courses.assessment.table")} WHERE batch_id = $batchId")
+  def removeRecords(batchId: String, assessmentDF: DataFrame): Unit = {
+    val batchData = assessmentDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
+      .where(col("batch_id") === batchId).rdd
+    batchData.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"))
     JobLogger.log(s"Deleting the records for the batch $batchId from the DB", None, INFO)
   }
 

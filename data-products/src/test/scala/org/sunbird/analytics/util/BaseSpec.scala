@@ -26,6 +26,7 @@ class BaseSpec extends FlatSpec with Matchers with BeforeAndAfterAll {
     conf.set("spark.redis.host", "localhost")
     conf.set("spark.redis.port", "6341")
     conf.set("spark.redis.db", "0")
+    conf.set("spark.cassandra.output.concurrent.writes", "12")
     conf;
   }
 
