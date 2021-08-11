@@ -24,7 +24,6 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
-
     implicit val className: String = "org.sunbird.analytics.job.report.AssessmentArchivalJob"
     val jobName = "AssessmentArchivalJob"
     JobLogger.init(jobName)
@@ -39,7 +38,6 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     try {
       val res = CommonUtil.time(archiveData(spark, jobConfig))
       val total_archived_files = res._2.length
-      if (truncateData) deleteRecords(spark, assessmentAggDBSettings.getOrElse("keyspace", "sunbird_courses"), assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")) else JobLogger.log(s"Skipping the ${assessmentAggDBSettings.getOrElse("table", "assessment_aggregator")} truncate process", None, INFO)
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "total_archived_files" -> total_archived_files)))
     } catch {
       case ex: Exception => {
@@ -58,7 +56,10 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, jobConfig: JobConfig): Array[Map[String, Any]] = {
+    val modelParams = jobConfig.modelParams.get
+    val deleteArchivedBatch: Boolean = modelParams.getOrElse("deleteArchivedBatch", false).asInstanceOf[Boolean]
     val batches: List[String] = AppConf.getConfig("assessment.batches").split(",").toList.filter(x => x.nonEmpty)
+
     val assessmentDF: DataFrame = getAssessmentData(sparkSession, batches)
     val assessmentData = assessmentDF.withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
@@ -73,7 +74,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
     batchesToArchive.flatMap(batches => {
       val processingBatch = new AtomicInteger(batches._2.length)
-      JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "archival_count" -> batches._2.length)), INFO)
+      JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> batches._2.length)), INFO)
       val res = for (batch <- batches._2) yield {
         val filteredDF = assessmentData.filter(col("batch_id") === batch.batch_id && col("year") === batch.year && col("week_of_year") === batch.week_of_year)
         upload(filteredDF.drop("year", "week_of_year"), batch, jobConfig)
@@ -82,13 +83,14 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
         assessmentData.unpersist()
         metrics
       }
-      removeRecords(batches._1)
+      if(deleteArchivedBatch) removeRecords(sparkSession, batches._1) else JobLogger.log(s"Skipping the batch deletions ${batches._1}", None, INFO)
       JobLogger.log(s"The data archival is successful", Some(Map("batch_id" -> batches._1, "pending_batches" -> batchesToArchiveCount.getAndDecrement())), INFO)
       res
     }).toArray
   }
 
-  def removeRecords(batchId: String): Unit = {
+  def removeRecords(sparkSession: SparkSession, batchId: String): Unit = {
+    sparkSession.sql(s"DELETE FROM ${AppConf.getConfig("sunbird.courses.keyspace")}.${AppConf.getConfig("sunbird.courses.assessment.table")} WHERE batch_id = $batchId")
     JobLogger.log(s"Deleting the records for the batch $batchId from the DB", None, INFO)
   }
 
@@ -101,11 +103,6 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     } else {
       assessmentDF
     }
-  }
-
-  def deleteRecords(sparkSession: SparkSession, keyspace: String, table: String): Unit = {
-    // sparkSession.sql(s"TRUNCATE TABLE $keyspace.$table")
-    JobLogger.log(s"The Job Cleared The Table Data SuccessFully, Please Execute The Compaction", None, INFO)
   }
 
   def upload(archivedData: DataFrame,
