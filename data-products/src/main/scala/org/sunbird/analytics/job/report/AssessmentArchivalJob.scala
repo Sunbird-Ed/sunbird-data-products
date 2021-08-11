@@ -33,7 +33,6 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     val modelParams = jobConfig.modelParams.get
-    val truncateData: Boolean = modelParams.getOrElse("truncateData", "false").asInstanceOf[Boolean]
     init()
     try {
       val res = CommonUtil.time(archiveData(spark, jobConfig))
@@ -83,7 +82,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
         assessmentData.unpersist()
         metrics
       }
-      if(deleteArchivedBatch) removeRecords(sparkSession, batches._1) else JobLogger.log(s"Skipping the batch deletions ${batches._1}", None, INFO)
+      if (deleteArchivedBatch) removeRecords(sparkSession, batches._1) else JobLogger.log(s"Skipping the batch deletions ${batches._1}", None, INFO)
       JobLogger.log(s"The data archival is successful", Some(Map("batch_id" -> batches._1, "pending_batches" -> batchesToArchiveCount.getAndDecrement())), INFO)
       res
     }).toArray
