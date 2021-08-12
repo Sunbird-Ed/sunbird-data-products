@@ -2,7 +2,7 @@ package org.sunbird.analytics.exhaust.collection
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
@@ -54,7 +54,7 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
       getActivityAggData(collectionBatch)
         // filter the selfAssess Contents from the "agg" column
         .withColumn("filteredContents", UDFUtils.filterSupportedContentTypes(col("agg"), typedLit(supportedContentIds.headOption.getOrElse(AssessmentData("", List())).assessmentIds)))
-        // Compute the percentage
+        // Compute the percentage for filteredContents Map
         .withColumn("scorePercentage", UDFUtils.computePercentage(col("filteredContents")))
         .drop("agg", "filteredContents")
     } else null
@@ -68,9 +68,12 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
       .withColumn("completedon", when(col("completedon").isNotNull, date_format(col("completedon"), "dd/MM/yyyy")).otherwise(""))
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
     if (null != aggregateDF) {
-      val keys = aggregateDF.select(explode(map_keys(col("scorePercentage")))).distinct().collect().map(f => f.get(0))
-      val updatedAggregateKeys = keys.map(f => col("scorePercentage").getItem(f).as(f.toString))
-      val updatedAggDF = aggregateDF.select(col("*") +: updatedAggregateKeys: _*)
+      // Keys - All the keys of scorePercentage column ex: Keys["total_sum_score","do_1128870328040161281204 - Score"]
+      val keys: Array[String] = aggregateDF.select(explode(map_keys(col("scorePercentage")))).distinct().collect().map(f => f.get(0).asInstanceOf[String])
+      // Converting the map object to dataframe columns format ex = [do_1128870328040161281204 - Score -> 100%, total_sum_score -> 100.0%] to df column and value
+      val updatedAggregateKeys: Array[Column] = keys.map(f => aggregateDF.col("scorePercentage").getItem(f).as(f))
+      // Merge the aggregate columns and score metrics columns
+      val updatedAggDF:DataFrame = aggregateDF.select(col("*") +: updatedAggregateKeys: _*)
       updatedEnrolmentDF.join(updatedAggDF, updatedEnrolmentDF.col("userid") === updatedAggDF.col("user_id") && updatedEnrolmentDF.col("courseid") === updatedAggDF.col("activity_id"),
         "left_outer").drop("user_id", "activity_id", "context_id", "scorePercentage")
     } else updatedEnrolmentDF
