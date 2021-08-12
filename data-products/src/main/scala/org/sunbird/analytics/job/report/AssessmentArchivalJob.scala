@@ -20,6 +20,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   private val assessmentAggDBSettings: Map[String, String] = Map("table" -> AppConf.getConfig("sunbird.courses.assessment.table"), "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   implicit val className: String = "org.sunbird.analytics.job.report.AssessmentArchivalJob"
   private val partitionCols = List("batch_id", "year", "week_of_year")
+  private val columnWithOrder = List("course_id", "batch_id","user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
 
   case class BatchPartition(batch_id: String, year: Int, week_of_year: Int)
 
@@ -59,6 +60,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     val batches: List[String] = AppConf.getConfig("assessment.batches").split(",").toList.filter(x => x.nonEmpty)
 
     val assessmentDF: DataFrame = getAssessmentData(sparkSession, batches)
+
     val assessmentData = assessmentDF.withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
@@ -69,29 +71,27 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     JobLogger.log(s"Total Batches to Archive By Year & Week $batchesToArchiveCount", None, INFO)
 
     val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int])).groupBy(_.batch_id)
-
     batchesToArchive.flatMap(batches => {
       val processingBatch = new AtomicInteger(batches._2.length)
       JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> batches._2.length)), INFO)
       val res = for (batch <- batches._2) yield {
-        val filteredDF = assessmentData.filter(col("batch_id") === batch.batch_id && col("year") === batch.year && col("week_of_year") === batch.week_of_year)
-        upload(filteredDF.drop("year", "week_of_year"), batch, jobConfig)
+        val filteredDF = assessmentData.filter(col("batch_id") === batch.batch_id && col("year") === batch.year && col("week_of_year") === batch.week_of_year).select(columnWithOrder.head, columnWithOrder.tail: _*)
+        upload(filteredDF, batch, jobConfig)
         val metrics = Map("batch_id" -> batch.batch_id, "year" -> batch.year, "week_of_year" -> batch.week_of_year, "pending_part_files" -> processingBatch.getAndDecrement(), "total_records" -> filteredDF.count())
         JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), INFO)
         assessmentData.unpersist()
         metrics
       }
       if (deleteArchivedBatch) removeRecords(batches._1, assessmentDF) else JobLogger.log(s"Skipping the batch deletions ${batches._1}", None, INFO)
-      JobLogger.log(s"The data archival is successful", Some(Map("batch_id" -> batches._1, "pending_batches" -> batchesToArchiveCount.getAndDecrement())), INFO)
+      JobLogger.log(s"${batches._1} is successfully archived", Some(Map("batch_id" -> batches._1, "pending_batches" -> batchesToArchiveCount.getAndDecrement())), INFO)
       res
     }).toArray
   }
 
   def removeRecords(batchId: String, assessmentDF: DataFrame): Unit = {
-    val batchData = assessmentDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
-      .where(col("batch_id") === batchId).rdd
+    val batchData = assessmentDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").filter(col("batch_id") === batchId).rdd
     batchData.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"))
-    JobLogger.log(s"Deleting the records for the batch $batchId from the DB", None, INFO)
+    JobLogger.log(s"Deleted ${batchData.count} records for the batch $batchId from the DB", None, INFO)
   }
 
   def getAssessmentData(spark: SparkSession, batchIds: List[String]): DataFrame = {
