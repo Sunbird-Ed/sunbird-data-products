@@ -112,13 +112,13 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     val reportPath: String = modelParams.getOrElse("reportPath", "archival-data/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
-    val fileName = s"${batch.batch_id}-${batch.year}-${batch.week_of_year}"
+    val fileName = s"${batch.batch_id}/${batch.year}-${batch.week_of_year}"
     val storageConfig = getStorageConfig(
       container,
       objectKey,
       jobConfig)
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
-    archivedData.saveToBlobStore(storageConfig, "csv", s"$reportPath$fileName-${System.currentTimeMillis()}", Option(Map("header" -> "true")), None)
+    archivedData.saveToBlobStore(storageConfig = storageConfig, format = "csv", reportId = s"$reportPath$fileName-${System.currentTimeMillis()}", options = Option(Map("header" -> "true", "codec" -> "org.apache.hadoop.io.compress.GzipCodec")), partitioningColumns = None, fileExt = Some("csv.gz"))
   }
 
 }
