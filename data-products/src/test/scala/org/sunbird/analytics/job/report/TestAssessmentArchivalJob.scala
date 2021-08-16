@@ -1,6 +1,7 @@
 package org.sunbird.analytics.job.report
 
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
@@ -11,7 +12,7 @@ import org.sunbird.analytics.util.EmbeddedCassandra
 
 class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
 
-  var spark: SparkSession = _
+  implicit var spark: SparkSession = _
 
   var assessmentAggDF: DataFrame = _
   var reporterMock: BaseReportsJob = mock[BaseReportsJob]
@@ -32,7 +33,7 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
 
   it should "Should able to archive the batch data" in {
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"truncateData":false,"store":"local","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"deleteArchivedBatch":false,"store":"local","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val reportData = AssessmentArchivalJob.archiveData(spark, jobConfig)
 
@@ -45,7 +46,15 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
     batch_2.foreach(res => res("year") === "2021")
     batch_2.foreach(res => res("total_records") === "1")
     batch_2.foreach(res => res("week_of_year") === "32")
-
   }
+
+  it should "Should able to fetch the archived records from the azure and delete the records" in {
+    implicit val mockFc: FrameworkContext = mock[FrameworkContext]
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"archivalFetcherConfig":{"store":"local","format":"csv.gz","filePath":"src/test/resources/assessment-archival/archival-data/","container":""},"deleteArchivedBatch":true,"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
+    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    val reportData = AssessmentArchivalJob.removeRecords()
+  }
+
+
 
 }

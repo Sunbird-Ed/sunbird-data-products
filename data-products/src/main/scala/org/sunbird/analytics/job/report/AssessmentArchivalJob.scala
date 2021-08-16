@@ -8,10 +8,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Period.WEEK
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.sunbird.analytics.exhaust.util.ExhaustUtil
 
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -20,7 +22,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   private val assessmentAggDBSettings: Map[String, String] = Map("table" -> AppConf.getConfig("sunbird.courses.assessment.table"), "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
   implicit val className: String = "org.sunbird.analytics.job.report.AssessmentArchivalJob"
   private val partitionCols = List("batch_id", "year", "week_of_year")
-  private val columnWithOrder = List("course_id", "batch_id","user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
+  private val columnWithOrder = List("course_id", "batch_id", "user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
 
   case class BatchPartition(batch_id: String, year: Int, week_of_year: Int)
 
@@ -33,9 +35,11 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
+    val modelParams = jobConfig.modelParams.get
+    val deleteArchivedBatch: Boolean = modelParams.getOrElse("deleteArchivedBatch", false).asInstanceOf[Boolean]
     init()
     try {
-      val res = CommonUtil.time(archiveData(spark, jobConfig))
+      val res = if (deleteArchivedBatch) CommonUtil.time(removeRecords) else CommonUtil.time(archiveData(spark, jobConfig))
       val total_archived_files = res._2.length
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "total_archived_files" -> total_archived_files)))
     } catch {
@@ -55,8 +59,6 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
 
   // $COVERAGE-ON$
   def archiveData(sparkSession: SparkSession, jobConfig: JobConfig): Array[Map[String, Any]] = {
-    val modelParams = jobConfig.modelParams.get
-    val deleteArchivedBatch: Boolean = modelParams.getOrElse("deleteArchivedBatch", false).asInstanceOf[Boolean]
     val batches: List[String] = AppConf.getConfig("assessment.batches").split(",").toList.filter(x => x.nonEmpty)
 
     val assessmentDF: DataFrame = getAssessmentData(sparkSession, batches)
@@ -82,16 +84,31 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
         assessmentData.unpersist()
         metrics
       }
-      if (deleteArchivedBatch) removeRecords(batches._1, assessmentDF) else JobLogger.log(s"Skipping the batch deletions ${batches._1}", None, INFO)
       JobLogger.log(s"${batches._1} is successfully archived", Some(Map("batch_id" -> batches._1, "pending_batches" -> batchesToArchiveCount.getAndDecrement())), INFO)
       res
     }).toArray
   }
 
-  def removeRecords(batchId: String, assessmentDF: DataFrame): Unit = {
-    val batchData = assessmentDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").filter(col("batch_id") === batchId).rdd
-    batchData.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"))
-    JobLogger.log(s"Deleted ${batchData.count} records for the batch $batchId from the DB", None, INFO)
+  def removeRecords()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Array[Map[String, Any]] = {
+    val assessmentDF = fetchRecords()
+    println("assessmentDF" + assessmentDF.show(false))
+    val batchData = assessmentDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").rdd
+    //batchData.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"))
+    JobLogger.log(s"Deleted ${batchData.count} records for the batch from the DB", None, INFO)
+    Array()
+  }
+
+  def fetchRecords()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+    val azureFetcherConfig = config.modelParams.get("archivalFetcherConfig").asInstanceOf[Map[String, AnyRef]]
+    val store = azureFetcherConfig("store").asInstanceOf[String]
+    val format: String = azureFetcherConfig.getOrElse("format", "csv.gz").asInstanceOf[String]
+    val filePath = azureFetcherConfig.getOrElse("filePath", "archival-data/").asInstanceOf[String]
+    val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
+    import org.joda.time.{DateTime, DateTimeZone, Days, LocalDate, Weeks, Years}
+    val s = CommonUtil.getPeriod(System.currentTimeMillis, WEEK)
+    println("week num" + s)
+    val blobFields = Map("year" -> "2022", "weekNum" -> "32")
+    ExhaustUtil.getArchivedData(store, filePath, container, blobFields, Some(format))
   }
 
   def getAssessmentData(spark: SparkSession, batchIds: List[String]): DataFrame = {
