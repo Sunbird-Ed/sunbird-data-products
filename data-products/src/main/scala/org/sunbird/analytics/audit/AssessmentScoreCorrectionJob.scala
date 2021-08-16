@@ -26,7 +26,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
 
-
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     val jobName: String = "AssessmentScoreCorrectionJob"
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
@@ -49,7 +49,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       spark.close()
     }
   }
-
+  // $COVERAGE-ON$
   def processBatches()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[Map[String, Any]] = {
     val batchIds: List[String] = AppConf.getConfig("assessment.score.correction.batches").split(",").toList.filter(x => x.nonEmpty)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
@@ -60,7 +60,6 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     }
   }
 
-  // $COVERAGE-ON$ Disabling scoverage for main and execute method
   def correctRecords(batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
