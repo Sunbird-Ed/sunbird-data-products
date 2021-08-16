@@ -66,12 +66,12 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
 
     // Register the UDF Methods
-    val create_max_score_map = spark.udf.register("createMaxScoreMap", createMaxScoreMap)
+    val create_max_score_map = spark.udf.register("createMaxScoreMap", createMaxScoreMap) // List[Map[
     val compute_max_score = spark.udf.register("computeMaxScore", computeMaxScore)
 
     // Get the Assessment Data for the specific Batch
     val assessmentData: DataFrame = getAssessmentAggData(batchId).select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "question")
-    assessmentData.show(false)
+
     // Take the content Id which is associated to the batch being invoked for the correction
     val contentId: String = assessmentData.select("content_id").collect().map(_ (0)).toList.head.asInstanceOf[String]
 
@@ -88,18 +88,15 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       .withColumn("question_map", create_max_score_map(col("question_max_score"), col("question_ts")))
       .drop("questionData", "question")
 
-    filteredAssessmentData.show(false)
-
     // Apply sort logic and compute the max_score from the question data column from the UDF method
     val result = filteredAssessmentData
       .groupBy("batch_id", "course_id", "user_id", "attempt_id", "content_id")
       .agg(collect_list("question_map").as("question_map"))
       .withColumn("total_max_score", compute_max_score(col("question_map"), lit(totalQuestions)))
       .drop("question_map")
+
     val total_records = result.count()
     JobLogger.log("Computed the max_score for all the records", Option(Map("batch_id" -> batchId, "total_records" -> total_records)), INFO)
-
-    result.show(false)
 
     if (isDryRunMode) {
       result.repartition(1).write.format("com.databricks.spark.csv").save(outputPath)
@@ -108,7 +105,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       result.write.format("org.apache.spark.sql.cassandra").options(assessmentAggDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
       JobLogger.log("Updated the table", Option(Map("batch_id" -> batchId, "total_records" -> total_records)), INFO)
     }
-    Map("batch_id" -> batchId, "total_records" -> total_records)
+    Map("batch_id" -> batchId, "total_records" -> total_records, "content_meta_total_question" -> totalQuestions)
   }
 
   def createMaxScoreMap = (max_score: Int, assess_ts: String) => {

@@ -31,9 +31,12 @@ class TestAssessmentScoreCorrectionJob extends BaseReportSpec with MockFactory {
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentScoreCorrectionJob","modelParams":{"isDryRunMode":false,"csvPath":"","store":"local","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Score Correction"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val reportData = AssessmentScoreCorrectionJob.processBatches()
-    //val values =  AssessmentScoreCorrectionJob.getTotalQuestions("do_313026415363981312122", "https://diksha.gov.in/api/content/v1/read/")
-
-    //println("total_score" + Await.result[Int](values, 60.seconds))
+    println("reportData" + reportData)
+    reportData.foreach(data => {
+      data("batch_id").asInstanceOf[String] should be("batch-001")
+      data("total_records").asInstanceOf[Long] should be(2)
+      data("content_meta_total_question").asInstanceOf[Int] should be(5)
+    })
 
   }
 
