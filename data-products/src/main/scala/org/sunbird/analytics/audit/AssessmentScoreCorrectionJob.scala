@@ -3,7 +3,7 @@ package org.sunbird.analytics.audit
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.cassandra._
-import org.apache.spark.sql.functions.{col, collect_list, explode_outer, lit}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
@@ -26,7 +26,6 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
 
-  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     val jobName: String = "AssessmentScoreCorrectionJob"
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
@@ -49,6 +48,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       spark.close()
     }
   }
+
   // $COVERAGE-ON$
   def processBatches()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[Map[String, Any]] = {
     val batchIds: List[String] = AppConf.getConfig("assessment.score.correction.batches").split(",").toList.filter(x => x.nonEmpty)
@@ -65,8 +65,8 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
 
     // Register the UDF Methods
-    val create_max_score_map = spark.udf.register("createMaxScoreMap", createMaxScoreMap) // List[Map[
-    val compute_max_score = spark.udf.register("computeMaxScore", computeMaxScore)
+    val create_score_map = spark.udf.register("createMaxScoreMap", createScoreMetricsMap) 
+    val compute_score_metrics = spark.udf.register("computeMaxScore", computeScoreMetrics)
 
     // Get the Assessment Data for the specific Batch
     val assessmentData: DataFrame = getAssessmentAggData(batchId).select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "question")
@@ -77,22 +77,26 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val contentMetaURL: String = modelParams.getOrElse("contentReadAPI", "https://diksha.gov.in/api/content/v1/read/").asInstanceOf[String]
     // Get the TotalQuestion Value from the Content Meta API
     val totalQuestions: Int = Await.result[Int](getTotalQuestions(contentId, contentMetaURL), 60.seconds)
-    JobLogger.log("Fetched the total questions value for the processing batch", Option(Map("batch_id" -> batchId, "total_questions" -> totalQuestions)), INFO)
+    JobLogger.log("Fetched the total questions value for the processing batch", Option(Map("batch_id" -> batchId, "content_id" -> contentId, "total_questions" -> totalQuestions)), INFO)
 
     // Filter the Assessment Where max_score != totalQuestions Value
     val filteredAssessmentData: DataFrame = assessmentData.filter(col("total_max_score") =!= totalQuestions)
       .withColumn("questionData", explode_outer(col("question")))
       .withColumn("question_ts", col("questionData.assess_ts"))
       .withColumn("question_max_score", col("questionData.max_score"))
-      .withColumn("question_map", create_max_score_map(col("question_max_score"), col("question_ts")))
+      .withColumn("question_score", col("questionData.score"))
+      .withColumn("question_score_metrics_map", create_score_map(col("question_max_score"), col("question_score"), col("question_ts")))
       .drop("questionData", "question")
 
     // Apply sort logic and compute the max_score from the question data column from the UDF method
     val result = filteredAssessmentData
       .groupBy("batch_id", "course_id", "user_id", "attempt_id", "content_id")
-      .agg(collect_list("question_map").as("question_map"))
-      .withColumn("total_max_score", compute_max_score(col("question_map"), lit(totalQuestions)))
-      .drop("question_map")
+      .agg(collect_list("question_score_metrics_map").as("question_score_metrics_map"))
+      .withColumn("computed_score_metrics", compute_score_metrics(col("question_score_metrics_map"), lit(totalQuestions)))
+      .select(col("batch_id"), col("course_id"), col("user_id"), col("attempt_id"), col("content_id"),
+        col("computed_score_metrics").getItem("total_score").as("total_score"),
+        col("computed_score_metrics").getItem("total_max_score").as("total_max_score")
+      ).withColumn("grand_total", concat_ws("/", col("total_score"), col("total_max_score")))
 
     val total_records = result.count()
     JobLogger.log("Computed the max_score for all the records", Option(Map("batch_id" -> batchId, "total_records" -> total_records)), INFO)
@@ -107,19 +111,20 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     Map("batch_id" -> batchId, "total_records" -> total_records, "content_meta_total_question" -> totalQuestions)
   }
 
-  def createMaxScoreMap = (max_score: Int, assess_ts: String) => {
-    Map("max_score" -> max_score.toString, "assess_ts" -> assess_ts)
+  def createScoreMetricsMap = (max_score: Int, score: Int, assess_ts: String) => {
+    Map("max_score" -> max_score.toString, "score" -> score.toString, "assess_ts" -> assess_ts)
   }
 
-
-  def computeMaxScore = (listObj: Seq[Map[String, String]], contentMetaMaxScore: Int) => {
+  def computeScoreMetrics = (listObj: Seq[Map[String, String]], contentMetaMaxScore: Int) => {
     var totalMaxScore = 0
+    var totalScore = 0
     // Sorting the max_score by assess_ts and taking only contentMetaMaxScore Records and aggregate the max_score value
     val sortedQuestions = listObj.sortBy(_ ("assess_ts"))(Ordering[String].reverse).take(contentMetaMaxScore)
     sortedQuestions.foreach(event => {
       totalMaxScore = totalMaxScore + event("max_score").toInt
+      totalScore = totalScore + event("score").toInt
     })
-    totalMaxScore
+    Map("total_score" -> totalScore, "total_max_score" -> totalMaxScore)
   }
 
   // Fetch the assessment data for a specific batch identifier
