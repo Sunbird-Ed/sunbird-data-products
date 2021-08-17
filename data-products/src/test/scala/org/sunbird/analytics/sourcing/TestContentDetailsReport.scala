@@ -55,7 +55,8 @@ class TestContentDetailsReport extends SparkSpec with Matchers with MockFactory 
         |    "gradeLevel": "Class 8",
         |    "date": "2020-03-25",
         |    "medium": "English",
-        |    "subject": "Mathematics"
+        |    "subject": "Mathematics",
+        |    "primaryCategory": "digital textbook"
         |  }
       """.stripMargin
 

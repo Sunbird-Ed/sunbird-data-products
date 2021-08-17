@@ -1,7 +1,6 @@
 package org.sunbird.analytics.sourcing
 
 import java.time.{ZoneOffset, ZonedDateTime}
-
 import cats.syntax.either._
 import ing.wbaa.druid.client.DruidClient
 import ing.wbaa.druid._
@@ -51,7 +50,8 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
         |    "gradeLevel": "Class 8",
         |    "date": "2020-03-25",
         |    "medium": "English",
-        |    "subject": "Mathematics"
+        |    "subject": "Mathematics",
+        |    "primaryCategory": "Digital Textbook"
         |  }
       """.stripMargin
 
