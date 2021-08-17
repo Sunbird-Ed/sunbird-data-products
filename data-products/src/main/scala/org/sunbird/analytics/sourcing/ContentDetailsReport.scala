@@ -11,10 +11,10 @@ import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.sourcing.FunnelReport.{connProperties, programTable, url}
 import org.sunbird.analytics.sourcing.SourcingMetrics.{getStorageConfig, getTenantInfo, saveReportToBlob}
 
-case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String)
+case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String, primaryCategory: String)
 case class ContentDetails(identifier: String, collectionId: String, name: String, primaryCategory: String, unitIdentifiers: String, createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String)
 case class ContentReport(programId: String, board: String, medium: String, gradeLevel: String, subject: String, name: String,
-                         identifier: String, chapterId: String, contentName: String, contentId: String, contentType: String,
+                         identifier: String, collectionCategory: String, chapterId: String, contentName: String, contentId: String, contentType: String,
                          mimeType: String, contentStatus: String, creator: String, createdBy: String)
 
 object ContentDetailsReport extends optional.Application with IJob with BaseReportsJob {
@@ -73,10 +73,11 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val textbookQuery = getDruidQuery(JSONUtils.serialize(config.modelParams.get.getOrElse("textbookQuery","")), tenantId)
     val response = DruidDataFetcher.getDruidData(textbookQuery,true)
     val textbooks = response.map(f=> JSONUtils.deserialize[TextbookDetails](f)).toDF()
+      .withColumnRenamed("primaryCategory","collectionCategory")
     JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
 
     val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("contentId","contentName","primaryCategory","identifier",
-      "name","board","medium","gradeLevel","subject","programId","createdBy",
+      "name","board","medium","gradeLevel","subject","programId","createdBy", "collectionCategory",
       "creator","mimeType","unitIdentifiers", "status","prevStatus")
       .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
 
@@ -109,12 +110,11 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     implicit val sc = spark.sparkContext
     import spark.implicits._
     val contentDf = reportDf.rdd.map(f => {
-      val contentStatus = if(f.getAs[Seq[String]](16).contains(f.getString(0))) "Approved" else if(f.getAs[Seq[String]](17).contains(f.getString(0))) "Rejected" else if(null !=f.getString(14) && f.getString(14).equalsIgnoreCase("Draft") && null != f.getString(15) && f.getString(15).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
-      ContentReport(f.getString(9), f.getString(5), f.getString(6), f.getString(7), f.getString(8),
-        f.getString(4),f.getString(3),f.getString(13),f.getString(1),f.getString(0),f.getString(2),f.getString(12),
-      contentStatus,f.getString(11),f.getString(10))
+      val contentStatus = if(f.getAs[Seq[String]](17).contains(f.getString(0))) "Approved" else if(f.getAs[Seq[String]](18).contains(f.getString(0))) "Rejected" else if(null !=f.getString(15) && f.getString(15).equalsIgnoreCase("Draft") && null != f.getString(16) && f.getString(16).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
+      ContentReport(f.getString(9),f.getString(5),f.getString(6),f.getString(7),f.getString(8),
+        f.getString(4),f.getString(3),f.getString(11),f.getString(14),f.getString(1),f.getString(0),f.getString(2),
+        f.getString(13),contentStatus,f.getString(12),f.getString(10))
     }).toDF().withColumn("slug",lit(slug))
-
     val programData = spark.read.jdbc(url, programTable, connProperties)
       .select(col("program_id"), col("name").as("programName"))
       .persist(StorageLevel.MEMORY_ONLY)
