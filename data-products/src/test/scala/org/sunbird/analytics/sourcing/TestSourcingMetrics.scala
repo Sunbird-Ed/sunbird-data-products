@@ -69,7 +69,7 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
 
     val chapterReport = sqlContext.sparkSession.read
       .option("header","true")
-      .csv("sourcing/Unknown/ChapterLevel.csv")
+      .csv("sourcing/Unknown/FolderLevel.csv")
     chapterReport.first().getString(0) should be("AP") //Assertion for board
     chapterReport.first().getString(1) should be("English") //Assertion for medium
     chapterReport.first().getString(2) should be("Class 8") //Assertion for grade
@@ -79,7 +79,7 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
 
     val textbookReport = sqlContext.sparkSession.read
       .option("header","true")
-      .csv("sourcing/Unknown/TextbookLevel.csv")
+      .csv("sourcing/Unknown/CollectionLevel.csv")
     textbookReport.first().getString(0) should be("AP") //Assertion for board
     textbookReport.first().getString(1) should be("English") //Assertion for medium
     textbookReport.first().getString(2) should be("Class 8") //Assertion for grade
