@@ -25,7 +25,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   implicit val className: String = "org.sunbird.analytics.audit.AssessmentScoreCorrectionJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-
+  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
     val jobName: String = "AssessmentScoreCorrectionJob"
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
@@ -49,7 +49,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     }
   }
 
-  // $COVERAGE-ON$
+  // $COVERAGE-ON$ Enabling scoverage
   def processBatches()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[Map[String, Any]] = {
     val batchIds: List[String] = AppConf.getConfig("assessment.score.correction.batches").split(",").toList.filter(x => x.nonEmpty)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
@@ -65,7 +65,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
 
     // Register the UDF Methods
-    val create_score_map = spark.udf.register("createMaxScoreMap", createScoreMetricsMap) 
+    val create_score_map = spark.udf.register("createMaxScoreMap", createScoreMetricsMap)
     val compute_score_metrics = spark.udf.register("computeMaxScore", computeScoreMetrics)
 
     // Get the Assessment Data for the specific Batch
@@ -100,7 +100,6 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
     val total_records = result.count()
     JobLogger.log("Computed the max_score for all the records", Option(Map("batch_id" -> batchId, "total_records" -> total_records)), INFO)
-
     if (isDryRunMode) {
       result.repartition(1).write.format("com.databricks.spark.csv").save(outputPath)
       JobLogger.log("Generated a CSV file", Option(Map("batch_id" -> batchId, "total_records" -> total_records)), INFO)
