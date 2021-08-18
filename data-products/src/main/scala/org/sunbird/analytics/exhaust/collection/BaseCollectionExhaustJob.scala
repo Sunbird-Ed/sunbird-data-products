@@ -261,16 +261,18 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val collectionBatches = getCollectionBatchDF(false);
     if (batchId.isDefined || batchFilter.isDefined) {
       val batches = validateBatches(collectionBatches, batchId, batchFilter)
-      val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
-      val collectionDF = validCollection(collectionIds)
-      if (collectionDF.count() == 0) { ("The request is made for retired collection", List()) }
-      else {
-        val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
-        val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
-          .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
-          .select(col("batchid").as("batchId"), col("courseid").as("collectionId"), col("name").as("batchName"), col("custodianOrgId"), col("requestedOrgId"), col("channel").as("collectionOrgId"), col("collectionName"), col("userConsent"));
-        ("Successfully fetched the records", finalDF.as[CollectionBatch](encoder).collect().toList)
-      }
+      if (batches.count() > 0) {
+        val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
+        val collectionDF = validCollection(collectionIds)
+        if (collectionDF.count() == 0) { ("The request is made for retired collection", List()) }
+        else {
+          val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
+          val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
+            .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
+            .select(col("batchid").as("batchId"), col("courseid").as("collectionId"), col("name").as("batchName"), col("custodianOrgId"), col("requestedOrgId"), col("channel").as("collectionOrgId"), col("collectionName"), col("userConsent"));
+          ("Successfully fetched the records", finalDF.as[CollectionBatch](encoder).collect().toList)
+        }
+      } else ("No data found", List())
     } else if (searchFilter.isDefined) {
       val collectionDF = searchContent(searchFilter.get)
       val joinedDF = collectionBatches.join(collectionDF, collectionBatches("courseid") === collectionDF("identifier"), "inner");
