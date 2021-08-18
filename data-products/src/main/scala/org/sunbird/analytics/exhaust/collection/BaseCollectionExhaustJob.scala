@@ -35,7 +35,7 @@ case class CollectionBatch(batchId: String, collectionId: String, batchName: Str
 case class CollectionBatchResponse(batchId: String, file: String, status: String, statusMsg: String, execTime: Long, fileSize: Long)
 case class CollectionDetails(result: Result)
 case class Result(content: List[CollectionInfo])
-case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String])
+case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String], status: String)
 case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int])
 case class ProcessedRequest(channel: String, batchId: String, filePath: String, fileSize: Long)
 
@@ -122,7 +122,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val searchFilter = modelParams.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]];
     val collectionBatches = getCollectionBatches(batchId, batchFilter, searchFilter, custodianOrgId, "System");
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
-    val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches, storageConfig, None, None, List.empty);
+    val result: List[CollectionBatchResponse] = processBatches(userCachedDF, collectionBatches._2, storageConfig, None, None, List.empty);
     result.foreach(f => JobLogger.log("Batch Status", Some(Map("status" -> f.status, "batchId" -> f.batchId, "executionTime" -> f.execTime, "message" -> f.statusMsg, "location" -> f.file)), INFO));
     Metrics(totalRequests = Some(result.length), failedRequests = Some(result.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(result.count(x => x.status.toUpperCase() == "SUCCESS")))
   }
@@ -213,28 +213,31 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       }
       markRequestAsProcessing(request)
       val completedBatchIds = completedBatches.map(f=> f.batchId)
-
       val collectionBatches = getCollectionBatches(collectionConfig.batchId, collectionConfig.batchFilter, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
-        .filter(p=> !completedBatchIds.contains(p.batchId))
-      val result = CommonUtil.time(processBatches(userCachedDF, collectionBatches, storageConfig, Some(request.request_id), Some(request.requested_channel), processedRequests.toList))
-
-      val response = result._2;
-      val failedBatches = response.filter(p => p.status.equals("FAILED"))
-      val processingBatches= response.filter(p => p.status.equals("PROCESSING"))
-      response.filter(p=> p.status.equals("SUCCESS")).foreach(f => completedBatches += ProcessedRequest(request.requested_channel, f.batchId,f.file, f.fileSize))
-      if (response.size == 0) {
-        markRequestAsFailed(request, "No data found")
-      } else if (failedBatches.size > 0) {
-        markRequestAsFailed(request, failedBatches.map(f => f.statusMsg).mkString(","), Option(JSONUtils.serialize(completedBatches)))
-      } else if(processingBatches.size > 0 ){
-        markRequestAsSubmitted(request, JSONUtils.serialize(completedBatches))
+      val collectionBatchesData = collectionBatches._2.filter(p=> !completedBatchIds.contains(p.batchId))
+      //SB-26292: The request should fail if the course is retired with err_message: The request is made for retired collection
+      if(collectionBatches._2.size > 0) {
+        val result = CommonUtil.time(processBatches(userCachedDF, collectionBatchesData, storageConfig, Some(request.request_id), Some(request.requested_channel), processedRequests.toList))
+        val response = result._2;
+        val failedBatches = response.filter(p => p.status.equals("FAILED"))
+        val processingBatches= response.filter(p => p.status.equals("PROCESSING"))
+        response.filter(p=> p.status.equals("SUCCESS")).foreach(f => completedBatches += ProcessedRequest(request.requested_channel, f.batchId,f.file, f.fileSize))
+        if (response.size == 0) {
+          markRequestAsFailed(request, "No data found")
+        } else if (failedBatches.size > 0) {
+          markRequestAsFailed(request, failedBatches.map(f => f.statusMsg).mkString(","), Option(JSONUtils.serialize(completedBatches)))
+        } else if(processingBatches.size > 0 ){
+          markRequestAsSubmitted(request, JSONUtils.serialize(completedBatches))
+        } else {
+          request.status = "SUCCESS";
+          request.download_urls = Option(completedBatches.map(f => f.filePath).toList);
+          request.execution_time = Option(result._1);
+          request.dt_job_completed = Option(System.currentTimeMillis)
+          request.processed_batches = Option(JSONUtils.serialize(completedBatches))
+          request
+        }
       } else {
-        request.status = "SUCCESS";
-        request.download_urls = Option(completedBatches.map(f => f.filePath).toList);
-        request.execution_time = Option(result._1);
-        request.dt_job_completed = Option(System.currentTimeMillis)
-        request.processed_batches = Option(JSONUtils.serialize(completedBatches))
-        request
+        markRequestAsFailed(request, collectionBatches._1)
       }
     } else {
       markRequestAsFailed(request, s"Number of batches in request exceeded. It should be within $batchLimit")
@@ -252,29 +255,47 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     updateStatus(request);
   }
 
-  def getCollectionBatches(batchId: Option[String], batchFilter: Option[List[String]], searchFilter: Option[Map[String, AnyRef]], custodianOrgId: String, requestedOrgId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatch] = {
+  def getCollectionBatches(batchId: Option[String], batchFilter: Option[List[String]], searchFilter: Option[Map[String, AnyRef]], custodianOrgId: String, requestedOrgId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): (String,List[CollectionBatch]) = {
 
     val encoder = Encoders.product[CollectionBatch];
     val collectionBatches = getCollectionBatchDF(false);
     if (batchId.isDefined || batchFilter.isDefined) {
       val batches = validateBatches(collectionBatches, batchId, batchFilter)
       val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
-      val collectionDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "userConsent"))));
-      val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
-      val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
-        .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
-        .select(col("batchid").as("batchId"), col("courseid").as("collectionId"), col("name").as("batchName"), col("custodianOrgId"), col("requestedOrgId"), col("channel").as("collectionOrgId"), col("collectionName"), col("userConsent"));
-      finalDF.as[CollectionBatch](encoder).collect().toList
+      val collectionDF = validCollection(collectionIds)
+      collectionDF.show(false )
+      if (collectionDF.count() == 0) {
+        ("The request is made for retired collection", List())
+      }
+      else {
+        val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
+        val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
+          .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
+          .select(col("batchid").as("batchId"), col("courseid").as("collectionId"), col("name").as("batchName"), col("custodianOrgId"), col("requestedOrgId"), col("channel").as("collectionOrgId"), col("collectionName"), col("userConsent"));
+        ("Successfully fetched the records", finalDF.as[CollectionBatch](encoder).collect().toList)
+      }
     } else if (searchFilter.isDefined) {
       val collectionDF = searchContent(searchFilter.get)
       val joinedDF = collectionBatches.join(collectionDF, collectionBatches("courseid") === collectionDF("identifier"), "inner");
       val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
         .withColumn("requestedOrgId", when(lit(requestedOrgId) === "System", col("channel")).otherwise(requestedOrgId))
         .select(col("batchid").as("batchId"), col("courseid").as("collectionId"), col("name").as("batchName"), col("custodianOrgId"), col("requestedOrgId"), col("channel").as("collectionOrgId"), col("collectionName"), col("userConsent"));
-      finalDF.as[CollectionBatch](encoder).collect().toList
+      ("Successfully fetched the records with given searchFilter", finalDF.as[CollectionBatch](encoder).collect().toList)
     } else {
-      List();
+      ("No data found", List());
     }
+  }
+
+  /**
+    *
+    * @param collectionIds
+    *    - Filter the collection ids where status=Retired
+    * @return Dataset[Row] of valid collection Id
+    */
+  def validCollection(collectionIds: Array[Any])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Dataset[Row] = {
+    val searchContentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "userConsent", "status"))));
+    searchContentDF.show(false)
+    searchContentDF.filter(col("status").notEqual("Retired"))
   }
 
   /**
@@ -283,13 +304,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     * If batchFilter is defined
     *    Step 1: Filter the duplictae batches from batchFilter list
     * Common Step
-    * Step 2: Validate if the batchid is correct by checking in coursebatch table and is not expired (status=2) batch
+    * Step 2: Validate if the batchid is correct by checking in coursebatch table
     *
     * @return Dataset[Row] of valid batchid
     */
   def validateBatches(collectionBatches: DataFrame, batchId: Option[String], batchFilter: Option[List[String]]): Dataset[Row]  = {
     if (batchId.isDefined) {
-      collectionBatches.filter(col("batchid") === batchId.get && col("status").notEqual(2))
+      collectionBatches.filter(col("batchid") === batchId.get)
     } else {
       /**
         * Filter out the duplicate batches from batchFilter
@@ -298,7 +319,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         */
       val distinctBatch = batchFilter.get.distinct
       if (batchFilter.size != distinctBatch.size) JobLogger.log("Duplicate Batches are filtered:: TotalDistinctBatches: " + distinctBatch.size)
-      collectionBatches.filter(col("batchid").isin(distinctBatch: _*) && col("status").notEqual(2))
+      collectionBatches.filter(col("batchid").isin(distinctBatch: _*))
     }
   }
 
@@ -435,7 +456,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
     val response = RestUtil.post[CollectionDetails](apiURL, request).result.content
-    spark.createDataFrame(response).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent")
+    spark.createDataFrame(response).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status")
   }
 
   def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
