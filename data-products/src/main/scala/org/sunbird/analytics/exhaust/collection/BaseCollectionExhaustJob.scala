@@ -263,10 +263,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       val batches = validateBatches(collectionBatches, batchId, batchFilter)
       val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
       val collectionDF = validCollection(collectionIds)
-      collectionDF.show(false )
-      if (collectionDF.count() == 0) {
-        ("The request is made for retired collection", List())
-      }
+      if (collectionDF.count() == 0) { ("The request is made for retired collection", List()) }
       else {
         val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
         val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
@@ -294,7 +291,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     */
   def validCollection(collectionIds: Array[Any])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Dataset[Row] = {
     val searchContentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "userConsent", "status"))));
-    searchContentDF.show(false)
     searchContentDF.filter(col("status").notEqual("Retired"))
   }
 
