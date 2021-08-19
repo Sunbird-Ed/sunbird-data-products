@@ -101,7 +101,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val total_records = result.count()
     JobLogger.log("Computed the max_score for all the records", Option(Map("batch_id" -> batchId, "total_records" -> total_records)), INFO)
     if (isDryRunMode) {
-      result.repartition(1).write.format("com.databricks.spark.csv").save(outputPath)
+      result.repartition(1).write.option("header",true).format("com.databricks.spark.csv").save(outputPath.concat(s"/corrected-report-$batchId.csv"))
       JobLogger.log("Generated a CSV file", Option(Map("batch_id" -> batchId, "total_records" -> total_records)), INFO)
     } else {
       result.write.format("org.apache.spark.sql.cassandra").options(assessmentAggDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
