@@ -52,7 +52,8 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"archivalFetcherConfig":{"store":"local","format":"csv.gz","filePath":"src/test/resources/assessment-archival/archival-data/","container":""},"deleteArchivedBatch":true,"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val reportData = AssessmentArchivalJob.removeRecords()
+    val reportData = AssessmentArchivalJob.removeRecords("2021-08-18", None)
+    reportData.head("deleted_records") should be(6)
   }
 
 
