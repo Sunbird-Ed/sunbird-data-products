@@ -105,7 +105,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   // Delete the records for the archived batch data.
   // Date - YYYY-MM-DD Format
   def removeRecords(date: String, batchId: Option[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Array[Map[String, Any]] = {
-    val period: Period = getWeekAndYearVal(date)
+    val period: Period = getWeekAndYearVal(date) // Date is optional, By default it will provide the previous week num of current year
     val archivedDataDF = fetchArchivedBatches(period, batchId)
     val archivedDataRDD = archivedDataDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").rdd
     val totalArchivedRecords = archivedDataRDD.count
@@ -129,8 +129,8 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   def fetchArchivedBatches(period: Period, batchId: Option[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val azureFetcherConfig = config.modelParams.get("archivalFetcherConfig").asInstanceOf[Map[String, AnyRef]]
     val store = azureFetcherConfig("store").asInstanceOf[String]
-    val format: String = azureFetcherConfig.getOrElse("format", "csv.gz").asInstanceOf[String]
-    val filePath = azureFetcherConfig.getOrElse("filePath", "archival-data/").asInstanceOf[String]
+    val format: String = azureFetcherConfig.getOrElse("blobExt", "csv.gz").asInstanceOf[String]
+    val filePath = azureFetcherConfig.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
     val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
     val blobFields = Map("year" -> period.year.toString, "weekNum" -> period.week_of_year.toString, "batchId" -> batchId.orNull)
     JobLogger.log(s"Fetching a archived records", Some(blobFields), INFO)
@@ -152,7 +152,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
              batch: BatchPartition,
              jobConfig: JobConfig): List[String] = {
     val modelParams = jobConfig.modelParams.get
-    val reportPath: String = modelParams.getOrElse("reportPath", "archival-data/").asInstanceOf[String]
+    val reportPath: String = modelParams.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val fileName = s"${batch.batch_id}/${batch.year}-${batch.week_of_year}"
