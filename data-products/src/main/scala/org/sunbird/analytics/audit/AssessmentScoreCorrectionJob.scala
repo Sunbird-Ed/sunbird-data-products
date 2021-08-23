@@ -53,8 +53,8 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   // $COVERAGE-ON$ Enabling scoverage
   def processBatches()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[Map[String, Any]] = {
-    val batchIds: List[String] = AppConf.getConfig("assessment.score.correction.batches").split(",").toList.filter(x => x.nonEmpty)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
+    val batchIds: List[String] = modelParams.getOrElse("assessment.score.correction.batches", List()).asInstanceOf[List[String]].filter(x => x.nonEmpty)
     val isDryRunMode = modelParams.getOrElse("isDryRunMode", true).asInstanceOf[Boolean]
     for (batchId <- batchIds) yield {
       JobLogger.log("Started Fetching the Incorrect Max Score Value for the Batch", Option(Map("batch_id" -> batchId, "isDryRunMode" -> isDryRunMode)), INFO)
