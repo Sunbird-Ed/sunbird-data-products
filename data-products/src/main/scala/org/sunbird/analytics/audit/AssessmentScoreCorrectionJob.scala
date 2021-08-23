@@ -57,7 +57,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val isDryRunMode = modelParams.getOrElse("isDryRunMode", false).asInstanceOf[Boolean]
     for (batchId <- batchIds) yield {
-      JobLogger.log("Started Correcting the Max Score Value for the Batch", Option(Map("batch_id" -> batchId, "isDryRunMode" -> isDryRunMode)), INFO)
+      JobLogger.log("Started Fetching the Incorrect Max Score Value for the Batch", Option(Map("batch_id" -> batchId, "isDryRunMode" -> isDryRunMode)), INFO)
       removeRecords(batchId = batchId, isDryRunMode = isDryRunMode)
     }
   }
@@ -66,7 +66,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
     // Get the Assessment Data for the specific Batch
-    val assessmentData: DataFrame = getAssessmentAggData(batchId).select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "question")
+    val assessmentData: DataFrame = getAssessmentAggData(batchId).select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score")
     // Take the content Id which is associated to the batch being invoked for the correction
     val contentId: String = assessmentData.select("content_id").collect().map(_ (0)).toList.head.asInstanceOf[String]
 
@@ -75,13 +75,14 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val totalQuestions: Int = Await.result[Int](getTotalQuestions(contentId, contentMetaURL), 60.seconds)
     JobLogger.log("Fetched the total questions value for the processing batch", Option(Map("batch_id" -> batchId, "content_id" -> contentId, "total_questions" -> totalQuestions)), INFO)
     val filteredAssessmentData = assessmentData.filter(col("total_max_score") =!= totalQuestions)
-      .select("course_id", "batch_id", "content_id", "attempt_id", "user_id")
+      .select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score")
     val totalRecords = filteredAssessmentData.count()
-    JobLogger.log("Total Incorrect Records", Option(Map("batch_id" -> batchId, "total_records" -> totalRecords), INFO))
     if (isDryRunMode) {
       filteredAssessmentData.repartition(1).write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
+      JobLogger.log("Generated the CSV File", Option(Map("batch_id" -> batchId, "total_records" -> totalRecords), INFO))
     } else {
       filteredAssessmentData.rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"))
+      JobLogger.log("Deleted the records from table", Option(Map("batch_id" -> batchId, "total_records" -> totalRecords), INFO))
     }
     Map("batch_id" -> batchId, "total_records" -> totalRecords, "content_id" -> contentId, "total_questions" -> totalQuestions)
 
