@@ -1,5 +1,6 @@
 package org.sunbird.analytics.jobs
 
+//import redis.clients.jedis.Jedis
 import com.redislabs.provider.redis._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
@@ -7,6 +8,7 @@ import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_oute
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.sunbird.analytics.util.JSONUtils
+import redis.clients.jedis.Jedis
 
 case class AnonymousData(userid:String, usersignintype: String, userlogintype: String)
 case class LocationId(userid: String, locationids: List[String])
@@ -21,10 +23,12 @@ object UserCacheIndexer extends Serializable {
     var specificUserId: String = null
     var fromSpecificDate: String = null
     var populateAnonymousData: String = "false"
+    var refreshUserData: String = "false"
     if (!args.isEmpty) {
       specificUserId = args(0) // userid
       fromSpecificDate = args(1) // date in YYYY-MM-DD format
       populateAnonymousData = args(2) // populate anonymous data
+      refreshUserData = args(3) // refresh existing user data
     }
     val sunbirdKeyspace = "sunbird"
 
@@ -283,6 +287,17 @@ object UserCacheIndexer extends Serializable {
       }.toDF()
     }
 
+    def refreshData(): Unit = {
+      val jedis = new Jedis(config.getString("redis.host"), config.getString("redis.port").toInt)
+      jedis.select(redisIndex.toInt)
+      if (null != specificUserId && !StringUtils.equalsIgnoreCase(specificUserId, "null")) {
+        jedis.del(s"user:$specificUserId");
+      } else {
+        jedis.flushDB()
+      }
+      jedis.close()
+    }
+
     def populateToRedis(dataFrame: DataFrame): Unit = {
       val filteredDF = dataFrame.filter(col("userid").isNotNull)
       val schema = filteredDF.schema
@@ -300,6 +315,13 @@ object UserCacheIndexer extends Serializable {
         .option("key.column", "userid")
         .mode(SaveMode.Append)
         .save()
+    }
+
+    if (refreshUserData.equalsIgnoreCase("true")) {
+      val refresh1 = time(refreshData())
+      Console.println("Time taken to refresh user data:", refresh1._1);
+    } else {
+      Console.println("Redis data not getting cleared");
     }
 
     if (!populateAnonymousData.equalsIgnoreCase("true")) {
