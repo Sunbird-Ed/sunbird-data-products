@@ -61,7 +61,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val isDryRunMode = modelParams.getOrElse("isDryRunMode", true).asInstanceOf[Boolean]
     val correctRawAssessment = modelParams.getOrElse("correctRawAssessment", true).asInstanceOf[Boolean]
     for (batchId <- batchIds) yield {
-      JobLogger.log("Started Fetching the Incorrect Max Score Value for the Batch", Option(Map("batch_id" -> batchId, "isDryRunMode" -> isDryRunMode)), INFO)
+      JobLogger.log("Started Processing the Batch", Option(Map("batch_id" -> batchId, "isDryRunMode" -> isDryRunMode)), INFO)
       process(correctRawAssessment, batchId = batchId, isDryRunMode = isDryRunMode)
     }
   }
@@ -149,7 +149,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     if (isDryRunMode) {
       // Stringifying the agg and agg_last_updated_on col since CSV Doesn't support the Map object
       correctedData.withColumn("agg", to_json(col("agg"))).withColumn("agg_last_updated", to_json(col("agg_last_updated")))
-        .repartition(1).write.option("header",  true).format("com.databricks.spark.csv").save(outputPath.concat(s"/user-activity-agg-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
+        .repartition(1).write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/user-activity-agg-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
       JobLogger.log("Generated a CSV file", Option(metrics), INFO)
     } else {
       correctedData.write.format("org.apache.spark.sql.cassandra").options(userActivityAggDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
@@ -176,7 +176,9 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     resultDF
       .withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
-      .select("user_id", "context_id", "activity_id", "agg", "agg_last_updated")
+      .withColumn("activity_type", lit("Course"))
+      .select("activity_type", "user_id", "context_id", "activity_id", "agg", "agg_last_updated")
+
   }
 
   def mergeAggMapCol(): (Map[String, Int], Int, String) => Map[String, Int] = (agg: Map[String, Int], score: Int, content_id: String) => {
