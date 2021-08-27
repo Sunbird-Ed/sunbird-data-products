@@ -1,6 +1,5 @@
 package org.sunbird.analytics.jobs
 
-//import redis.clients.jedis.Jedis
 import com.redislabs.provider.redis._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
