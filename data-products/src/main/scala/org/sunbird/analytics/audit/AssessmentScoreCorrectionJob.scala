@@ -94,7 +94,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
         /**
          * 1.Remove assessment records for the self assess contents
-         * 2.Update the user_activity_agg table agg column after removing assessment data
+         * 2.Update the user_activitybatch_id_agg table agg column after removing assessment data
          * 3.Delete the certificate data and generate re issue certificate events after updating the activity agg table
          *
          */
@@ -108,17 +108,20 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     }
   }
 
-  def removeAssessmentRecords(filteredAssessmentData: DataFrame, batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
+  def removeAssessmentRecords(filteredAssessmentData: DataFrame, batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
     val totalRecords = filteredAssessmentData.count()
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
     JobLogger.log("Total Incorrect Records", Option(Map("total_records" -> totalRecords)), INFO)
     if (isDryRunMode) {
-      filteredAssessmentData.select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score")
-        .repartition(1).write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/assessment-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
-      JobLogger.log("Generated the CSV File", Option(Map("batch_id" -> batchId, "total_records" -> totalRecords), INFO))
+      JobLogger.log("Generating the CSV File", Option(Map("batch_id" -> batchId, "total_records" -> totalRecords), INFO))
+      filteredAssessmentData.select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").repartition(1)
+        .write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/assessment-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
     } else {
       JobLogger.log("Deleting the records from the table", Option(Map("total_records" -> totalRecords)), INFO)
+      // Saving the Incorrect Assessment DF as csv for verification purpose after removing from table
+      filteredAssessmentData.select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").repartition(1)
+        .write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/assessment-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
       filteredAssessmentData.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), "assessment_aggregator")
     }
   }
@@ -139,36 +142,41 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   // Start of Correcting activity agg table
   def updateUserActivityAgg(isDryRunMode: Boolean, batchId: String, incorrectAssessmentDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[Map[String, Any]] = {
+    JobLogger.log("Started updating the activity agg table", None, INFO)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
-    val correctedData = computeScoreMetrics(batchId = batchId, incorrectAssessmentDF)
+    val correctedData = computeScoreMetrics(batchId = batchId, incorrectAssessmentDF).persist()
     val metrics = Map("batch_id" -> batchId, "activity_agg_corrected_data" -> correctedData.count())
     if (isDryRunMode) {
       // Stringifying the agg and agg_last_updated_on col since CSV Doesn't support the Map object
+      JobLogger.log("Activity agg table Data corrected & Generated a CSV file ", Option(metrics), INFO)
       correctedData.withColumn("agg", to_json(col("agg"))).withColumn("agg_last_updated", to_json(col("agg_last_updated"))).repartition(1).write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/user-activity-agg-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
-      JobLogger.log("Generated a CSV file", Option(metrics), INFO)
     } else {
+      JobLogger.log("Activity agg table Data corrected & Updating", Option(metrics), INFO)
       correctedData.write.format("org.apache.spark.sql.cassandra").options(userActivityAggDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
-      JobLogger.log("Updated the table", Option(metrics), INFO)
     }
     // Re issue of certificate logic will trigger from here
     correctCertificateRecords(correctedData, batchId, isDryRunMode)
     List(metrics)
   }
 
-  def computeScoreMetrics(batchId: String, incorrectAssessmentDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  def computeScoreMetrics(batchId: String, incorrectAssessmentDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): DataFrame = {
     // UDF Methods Initialization
     val updateAggColumn = udf(mergeAggMapCol())
     val updatedAggLastUpdatedCol = udf(mergeAggLastUpdatedMapCol())
+    val deletedAssessmentRecords = incorrectAssessmentDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
+    val assessmentDF = getAssessmentAggData(batchId).select("course_id", "batch_id", "user_id", "content_id", "attempt_id", "total_score")
+    val bestScoreDF: DataFrame = getBestScore(assessmentDF)
+
     // Get the Best score assessment data for a given batchId and process it
-    val assessmentData = getAssessmentAggData(batchId).join(incorrectAssessmentDF.select("course_id", "batch_id", "user_id", "content_id"), Seq("course_id", "batch_id", "user_id", "content_id"), "inner")
-    val bestScoreDF: DataFrame = getBestScore(assessmentData)
-      .withColumn("context_id", concat(lit("cb:"), col("batch_id")))
+    val assessmentData = bestScoreDF.join(deletedAssessmentRecords, Seq("course_id", "batch_id", "user_id", "content_id"), "inner")
+      .withColumn("context_id", concat(lit("cb:"), bestScoreDF.col("batch_id")))
       .withColumnRenamed("course_id", "activity_id")
+      .select("context_id", "activity_id", "user_id", "content_id", "total_score").distinct() // Distinct here since doing join operation without attempt_id so
 
     val activityAggDF: DataFrame = getUserActivityAggData(context_id = "cb:".concat(batchId))
 
-    val resultDF = bestScoreDF.join(activityAggDF, Seq("context_id", "user_id", "activity_id"), "inner")
+    val resultDF = assessmentData.join(activityAggDF, Seq("context_id", "user_id", "activity_id"), "inner")
 
     // Compute tha agg columns using UDF methods
     resultDF
@@ -183,29 +191,25 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   // Start Of re-issue cert logic
   def correctCertificateRecords(correctedData: DataFrame, batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
+    JobLogger.log("Started Correcting the Certificate data", None, INFO)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val certRegistryPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
-      .concat(s"cert-registry/$batchId-${System.currentTimeMillis()}.csv")
+      .concat(s"/cert-registry/$batchId-${System.currentTimeMillis()}.csv")
     val userEnrolmentPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
-      .concat(s"user-enrolment/$batchId-${System.currentTimeMillis()}.csv")
+      .concat(s"/user-enrolment/$batchId-${System.currentTimeMillis()}.csv")
     val certEventsPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
-      .concat(s"cert-events-$batchId-${System.currentTimeMillis()}.json")
+      .concat(s"/cert-events-$batchId-${System.currentTimeMillis()}.json")
 
     val userEnrolmentDF = getUserEnrolment(batchId = batchId)
-      .withColumn("batch_id", concat(lit("cb:"), col("batchid")))
+      .withColumn("batchid", concat(lit("cb:"), col("batchid")))
 
-    val certificateData = correctedData.join(userEnrolmentDF,
-      userEnrolmentDF.col("batch_id") === correctedData.col("context_id") &&
-        userEnrolmentDF.col("userid") === correctedData.col("user_id") &&
-        userEnrolmentDF.col("courseid") === correctedData.col("activity_id"), "inner")
+    val filteredCertData = userEnrolmentDF.join(correctedData, userEnrolmentDF.col("userid") === correctedData.col("user_id"), "inner").persist()
 
-      .withColumn("certificate_data", explode_outer(col("issued_certificates")))
-      .withColumn("certificate_id", col("certificate_data.id"))
-
+    val certificateData = filteredCertData.withColumn("certificate_data", explode_outer(col("issued_certificates"))).withColumn("certificate_id", col("certificate_data.id"))
     val certificate_ids = certificateData.select("certificate_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-    deleteCertFromES(certificate_ids, isDryRunMode = isDryRunMode) // ES Delete
     deleteFromCertRegistry(certificateData, isDryRunMode, certRegistryPath) // Cert Registry Data Correction
     updateUserEnrollment(certificateData, isDryRunMode, userEnrolmentPath) // Update issued_certificates = null in the user_enrolment table data
+    deleteCertFromES(certificate_ids, isDryRunMode = isDryRunMode) // ES Delete
     reIssueCertificate(certificateData, isDryRunMode, certEventsPath) // Generate Cert Event
   }
 
@@ -213,8 +217,9 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     if (isDryRunMode) {
       certificateData.select("certificate_id").repartition(1).write.option("header", true).format("com.databricks.spark.csv").save(path)
     } else {
-      certificateData.select("certificate_id").rdd.deleteFromCassandra(AppConf.getConfig("sunbird.keyspace"), "cert_registry")
+      certificateData.select("certificate_id").rdd.deleteFromCassandra(AppConf.getConfig("sunbird.user.keyspace"), "cert_registry")
     }
+    JobLogger.log("Cert Registry Task Completed", Some(Map("total_records" -> certificateData.count())), INFO)
   }
 
   def updateUserEnrollment(certificateData: DataFrame, isDryRunMode: Boolean, path: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
@@ -226,6 +231,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     } else {
       updatedCertDF.write.format("org.apache.spark.sql.cassandra").options(userEnrolmentDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
     }
+    JobLogger.log("User enrolment Task Completed", Some(Map("total_records" -> updatedCertDF.count())), INFO)
   }
 
   def reIssueCertificate(certificateData: DataFrame, isDryRunMode: Boolean, path: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
@@ -238,10 +244,11 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     for (cert <- certMap) yield {
       generateCertEvent(cert("course_id").asInstanceOf[String],
         cert("batch_id").asInstanceOf[String],
-        cert("user_id").asInstanceOf[Array[String]], isDryRunMode, writer
+        cert("user_id").asInstanceOf[Array[String]].distinct, isDryRunMode, writer
       )
     }
     writer.close()
+    JobLogger.log("Re Issue of Cert Task Completed", Some(Map("total_records" -> certMap.size)), INFO)
   }
 
   def generateCertEvent(courseId: String, batchId: String, userIds: Array[String], dryRunMode: Boolean, writter: BufferedWriter)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
@@ -259,6 +266,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   def deleteCertFromES(certIds: List[String], isDryRunMode: Boolean)(implicit fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
+    JobLogger.log("Total Cert ID's to delete", Option(Map("cert_id" -> certIds.distinct.size)), INFO)
     for (certId <- certIds) yield {
       JobLogger.log("Deleting the certificate from cert index", Option(Map("cert_id" -> certId)), INFO)
       if (isDryRunMode) {
@@ -305,7 +313,9 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   def getBestScore(assessmentData: DataFrame): DataFrame = {
     val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc("total_score"))
-    assessmentData.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
+    assessmentData.withColumn("rownum", row_number.over(df))
+      .where(col("rownum") === 1).drop("rownum").distinct()
   }
+
   // End Of UDF Util Methods
 }
