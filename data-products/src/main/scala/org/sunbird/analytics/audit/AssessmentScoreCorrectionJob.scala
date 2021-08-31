@@ -100,8 +100,10 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
          */
         val incorrectRecords: Long = filteredDF.count()
         JobLogger.log("Total Incorrect Records", Option(Map("total_records" -> incorrectRecords)), INFO)
-        removeAssessmentRecords(filteredDF, batchId, isDryRunMode)
-        updateUserActivityAgg(isDryRunMode = isDryRunMode, batchId, filteredDF)
+        if (incorrectRecords > 0) {
+          removeAssessmentRecords(filteredDF, batchId, isDryRunMode)
+          updateUserActivityAgg(isDryRunMode = isDryRunMode, batchId, filteredDF)
+        }
         Map("batch_id" -> batchId, "total_assessment_records" -> incorrectRecords, "content_id" -> contentId, "total_questions" -> totalQuestions, "total_distinct_users" -> filteredDF.select("user_id").distinct().count())
       } else {
         JobLogger.log("The content ID is not self assess, Skipping data removal", Some(Map("contentId" -> contentId, "contentType" -> contentType)), INFO)
@@ -122,7 +124,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       // Saving the Incorrect Assessment DF as csv for verification purpose after removing from table
       filteredAssessmentData.select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").repartition(1)
         .write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/assessment-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
-      filteredAssessmentData.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), "assessment_aggregator")
+      filteredAssessmentData.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), "assessment_aggregator", keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
     }
   }
 
@@ -153,7 +155,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       correctedData.withColumn("agg", to_json(col("agg"))).withColumn("agg_last_updated", to_json(col("agg_last_updated"))).repartition(1).write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/user-activity-agg-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
     } else {
       JobLogger.log("Activity agg table Data corrected & Updating", Option(metrics), INFO)
-      correctedData.write.format("org.apache.spark.sql.cassandra").options(userActivityAggDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Append).save()
+      correctedData.write.format("org.apache.spark.sql.cassandra").options(userActivityAggDBSettings ++ Map("confirm.truncate" -> "false")).mode(SaveMode.Overwrite).save()
     }
     // Re issue of certificate logic will trigger from here
     correctCertificateRecords(correctedData, batchId, isDryRunMode)
@@ -185,6 +187,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       .withColumn("activity_type", lit("Course"))
       .select("activity_type", "user_id", "context_id", "activity_id", "agg", "agg_last_updated")
   }
+
   // End of Correcting activity agg table
 
   // Start Of re-issue cert logic
@@ -243,6 +246,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       .groupBy("courseid", "batchid").agg(collect_list("userid").alias("userid"))
       .collect().map(x => x).toList
     val certMap = reIssueData.map(x => Map("course_id" -> x.getAs[String]("courseid"), "batch_id" -> x.getAs[String]("batchid"), "user_id" -> x.getAs[mutable.WrappedArray[String]]("userid").toArray))
+
     for (cert <- certMap) yield {
       generateCertEvent(cert("course_id").asInstanceOf[String],
         cert("batch_id").asInstanceOf[String],
