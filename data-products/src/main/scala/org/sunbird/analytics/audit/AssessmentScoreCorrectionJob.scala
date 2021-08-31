@@ -98,9 +98,11 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
          * 3.Delete the certificate data and generate re issue certificate events after updating the activity agg table
          *
          */
+        val incorrectRecords: Long = filteredDF.count()
+        JobLogger.log("Total Incorrect Records", Option(Map("total_records" -> incorrectRecords)), INFO)
         removeAssessmentRecords(filteredDF, batchId, isDryRunMode)
         updateUserActivityAgg(isDryRunMode = isDryRunMode, batchId, filteredDF)
-        Map("batch_id" -> batchId, "total_assessment_records" -> filteredDF.count(), "content_id" -> contentId, "total_questions" -> totalQuestions, "total_distinct_users" -> filteredDF.select("user_id").distinct().count())
+        Map("batch_id" -> batchId, "total_assessment_records" -> incorrectRecords, "content_id" -> contentId, "total_questions" -> totalQuestions, "total_distinct_users" -> filteredDF.select("user_id").distinct().count())
       } else {
         JobLogger.log("The content ID is not self assess, Skipping data removal", Some(Map("contentId" -> contentId, "contentType" -> contentType)), INFO)
         Map[String, String]()
@@ -109,16 +111,14 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   }
 
   def removeAssessmentRecords(filteredAssessmentData: DataFrame, batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
-    val totalRecords = filteredAssessmentData.count()
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val outputPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String]
-    JobLogger.log("Total Incorrect Records", Option(Map("total_records" -> totalRecords)), INFO)
     if (isDryRunMode) {
-      JobLogger.log("Generating the CSV File", Option(Map("batch_id" -> batchId, "total_records" -> totalRecords), INFO))
+      JobLogger.log("Generating the CSV File", None, INFO)
       filteredAssessmentData.select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").repartition(1)
         .write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/assessment-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
     } else {
-      JobLogger.log("Deleting the records from the table", Option(Map("total_records" -> totalRecords)), INFO)
+      JobLogger.log("Deleting the records from the table", None, INFO)
       // Saving the Incorrect Assessment DF as csv for verification purpose after removing from table
       filteredAssessmentData.select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").repartition(1)
         .write.option("header", true).format("com.databricks.spark.csv").save(outputPath.concat(s"/assessment-corrected-report-$batchId-${System.currentTimeMillis()}.csv"))
@@ -185,9 +185,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       .withColumn("activity_type", lit("Course"))
       .select("activity_type", "user_id", "context_id", "activity_id", "agg", "agg_last_updated")
   }
-
   // End of Correcting activity agg table
-
 
   // Start Of re-issue cert logic
   def correctCertificateRecords(correctedData: DataFrame, batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
@@ -205,8 +203,12 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
     val filteredCertData = userEnrolmentDF.join(correctedData, userEnrolmentDF.col("userid") === correctedData.col("user_id"), "inner").persist()
 
-    val certificateData = filteredCertData.withColumn("certificate_data", explode_outer(col("issued_certificates"))).withColumn("certificate_id", col("certificate_data.id"))
+    val certificateData = filteredCertData.withColumn("certificate_data", explode_outer(col("issued_certificates")))
+      .withColumn("certificate_id", col("certificate_data.identifier"))
+      .select("courseid", "batchid", "userid", "certificate_id").filter(col("certificate_id") =!= "")
+
     val certificate_ids = certificateData.select("certificate_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
+
     deleteFromCertRegistry(certificateData, isDryRunMode, certRegistryPath) // Cert Registry Data Correction
     updateUserEnrollment(certificateData, isDryRunMode, userEnrolmentPath) // Update issued_certificates = null in the user_enrolment table data
     deleteCertFromES(certificate_ids, isDryRunMode = isDryRunMode) // ES Delete
@@ -237,10 +239,10 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   def reIssueCertificate(certificateData: DataFrame, isDryRunMode: Boolean, path: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
     val file = new File(path)
     val writer = new BufferedWriter(new FileWriter(file))
-    val reIssueData = certificateData.select("courseid", "batchid", "user_id")
-      .groupBy("courseid", "batchid").agg(collect_list("user_id").alias("user_id"))
+    val reIssueData = certificateData.select("courseid", "batchid", "userid")
+      .groupBy("courseid", "batchid").agg(collect_list("userid").alias("userid"))
       .collect().map(x => x).toList
-    val certMap = reIssueData.map(x => Map("course_id" -> x.getAs[String]("courseid"), "batch_id" -> x.getAs[String]("batchid"), "user_id" -> x.getAs[mutable.WrappedArray[String]]("user_id").toArray))
+    val certMap = reIssueData.map(x => Map("course_id" -> x.getAs[String]("courseid"), "batch_id" -> x.getAs[String]("batchid"), "user_id" -> x.getAs[mutable.WrappedArray[String]]("userid").toArray))
     for (cert <- certMap) yield {
       generateCertEvent(cert("course_id").asInstanceOf[String],
         cert("batch_id").asInstanceOf[String],
@@ -255,7 +257,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val ets = System.currentTimeMillis
     val mid = s"""LP.${ets}.${UUID.randomUUID}"""
     val userIdentifiers = JSONUtils.serialize(userIds)
-    val event = s"""{"eid": "BE_JOB_REQUEST","ets": ${ets},"mid": "${mid}","actor": {"id": "Course Certificate Generator","type": "System"},"context": {"pdata": {"ver": "1.0","id": "org.sunbird.platform"}},"object": {"id": "${batchId}_${courseId}","type": "CourseCertificateGeneration"},"edata": {"userIds":$userIdentifiers,"action": "issue-certificate","iteration": 1, "trigger": "auto-issue","batchId": "${batchId}","reIssue": false,"courseId": "${courseId}"}}"""
+    val event = s"""{"eid": "BE_JOB_REQUEST","ets": ${ets},"mid": "${mid}","actor": {"id": "Course Certificate Generator","type": "System"},"context": {"pdata": {"ver": "1.0","id": "org.sunbird.platform"}},"object": {"id": "${batchId}_${courseId}","type": "CourseCertificateGeneration"},"edata": {"userIds":$userIdentifiers,"action": "issue-certificate","iteration": 1, "trigger": "auto-issue","batchId": "${batchId}","reIssue": true,"courseId": "${courseId}"}}"""
     if (dryRunMode) {
       writter.write(event)
     } else {
@@ -266,7 +268,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   def deleteCertFromES(certIds: List[String], isDryRunMode: Boolean)(implicit fc: FrameworkContext, config: JobConfig, sc: SparkContext) = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
-    JobLogger.log("Total Cert ID's to delete", Option(Map("cert_id" -> certIds.distinct.size)), INFO)
+    JobLogger.log("Total Cert ID's to delete", Option(Map("cert_ids" -> certIds.distinct.size)), INFO)
     for (certId <- certIds) yield {
       JobLogger.log("Deleting the certificate from cert index", Option(Map("cert_id" -> certId)), INFO)
       if (isDryRunMode) {

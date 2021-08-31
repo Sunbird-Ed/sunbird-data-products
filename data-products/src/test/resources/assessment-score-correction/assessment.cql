@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
       PRIMARY KEY (userid, courseid, batchid)
 ) WITH CLUSTERING ORDER BY (courseid ASC, batchid ASC);
 
-INSERT INTO sunbird_courses.user_enrolments (userid, courseid, batchid, issued_certificates) VALUES('user-001', 'do_1130928636168192001667', 'batch-00001', [{'id': 'e08017de-3cb7-47d2-a375-6dd3f8575806', 'lastIssuedOn': '2020-05-01T11:27:35.130+0000', 'name': 'Acknowledgement Certificate', 'token': 'U4M3F6', 'url': 'https://diksha.gov.in/certs/0126684405014528002_0130107203983114243/e08017de-3cb7-47d2-a375-6dd3f8575806.pdf'}]);
+INSERT INTO sunbird_courses.user_enrolments (userid, courseid, batchid, issued_certificates) VALUES('user-001', 'do_1130928636168192001667', 'batch-00001', [{'identifier': 'e08017de-3cb7-47d2-a375-6dd3f8575806', 'lastIssuedOn': '2020-05-01T11:27:35.130+0000', 'name': 'Acknowledgement Certificate', 'token': 'U4M3F6', 'url': 'https://diksha.gov.in/certs/0126684405014528002_0130107203983114243/e08017de-3cb7-47d2-a375-6dd3f8575806.pdf'}]);
 INSERT INTO sunbird_courses.user_enrolments (userid, courseid, batchid, issued_certificates) VALUES('user-002', 'do_1130928636168192001667', 'batch-00001',  [{'identifier': '0e045c27-5c9f-4d8d-9f2e-6c123eed63a7', 'lastIssuedOn': '2020-11-25T00:12:32.211+0000', 'name': 'Completion Certificate', 'token': 'N1C9D5'}]);
 
 CREATE TABLE IF NOT EXISTS sunbird.cert_registry (
