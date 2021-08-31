@@ -28,7 +28,7 @@ import java.util.function.Supplier
 case class RequestBody(`type`: String,`params`: Map[String,AnyRef])
 case class OnDemandDruidResponse(file: List[String], status: String, statusMsg: String, execTime: Long)
 
-object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob with Serializable with OnDemandExhaustJob {
+object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob with Serializable with IJob with OnDemandExhaustJob {
   override def getClassName(): String = "org.sunbird.analytics.exhaust.OnDemandDruidExhaustJob"
 
   val jobId: String = "druid-dataset"
