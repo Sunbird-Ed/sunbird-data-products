@@ -70,7 +70,8 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     }
   }
 
-  def process(batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[AssessmentCorrectionMetrics] = {
+  def process(batchId: String,
+              isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[AssessmentCorrectionMetrics] = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
     val assessmentData: DataFrame = getAssessmentAggData(batchId = batchId).select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").persist()
     val userEnrolmentDF = getUserEnrolment(batchId = batchId)
@@ -109,9 +110,11 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   }
 
 
-  def saveRevokingCertIds(incorrectRecords: DataFrame, userEnrolmentDF: DataFrame, batchId: String)(implicit config: JobConfig): Unit = {
-    val certIdsDF: DataFrame = incorrectRecords.join(userEnrolmentDF,
-      incorrectRecords.col("user_id") === userEnrolmentDF.col("userid") && incorrectRecords.col("course_id") === userEnrolmentDF.col("courseid") &&
+  def saveRevokingCertIds(incorrectRecords: DataFrame,
+                          userEnrolmentDF: DataFrame,
+                          batchId: String)(implicit config: JobConfig): Unit = {
+    val certIdsDF: DataFrame = incorrectRecords.select("course_id", "batch_id", "content_id", "user_id").distinct()
+      .join(userEnrolmentDF, incorrectRecords.col("user_id") === userEnrolmentDF.col("userid") && incorrectRecords.col("course_id") === userEnrolmentDF.col("courseid") &&
         incorrectRecords.col("batch_id") === userEnrolmentDF.col("batchid"), "left_outer")
       .withColumn("certificate_data", explode_outer(col("issued_certificates")))
       .withColumn("certificate_id", col("certificate_data.identifier"))
@@ -119,24 +122,30 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     saveLocal(certIdsDF, batchId, "revoked-cert-data")
   }
 
-  def saveLocal(data: DataFrame, batchId: String, folderName: String)(implicit config: JobConfig): Unit = {
+  def saveLocal(data: DataFrame,
+                batchId: String,
+                folderName: String)(implicit config: JobConfig): Unit = {
     JobLogger.log("Generating the CSV File", None, INFO)
     val outputPath = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("csvPath", "").asInstanceOf[String]
     data.repartition(1).write.option("header", value = true).format("com.databricks.spark.csv").save(outputPath.concat(s"/$folderName-$batchId-${System.currentTimeMillis()}.csv"))
   }
 
 
-  def removeAssessmentRecords(incorrectRecords: DataFrame, batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
+  def removeAssessmentRecords(incorrectRecords: DataFrame,
+                              batchId: String,
+                              isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
     if (isDryRunMode) {
       saveLocal(incorrectRecords, batchId, "assessment-invalid-attempts-records")
     } else {
       JobLogger.log("Deleting the records from the table", None, INFO)
-      saveLocal(incorrectRecords, batchId, "assessment-invalid-attempts-records")
+      saveLocal(incorrectRecords, batchId, "assessment-invalid-attempts-records") // For cross verification purpose
       incorrectRecords.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), "assessment_aggregator", keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
     }
   }
 
-  def generateInstructionEvents(inCorrectRecordsDF: DataFrame, batchId: String, contentId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
+  def generateInstructionEvents(inCorrectRecordsDF: DataFrame,
+                                batchId: String,
+                                contentId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
     val outputPath = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("csvPath", "").asInstanceOf[String]
     val file = new File(outputPath.concat(s"/instruction-events-$batchId-${System.currentTimeMillis()}.json"))
     val writer = new BufferedWriter(new FileWriter(file))
@@ -150,7 +159,8 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   }
 
   // Method to fetch the totalQuestion count from the content meta
-  def getTotalQuestions(contentId: String, apiUrl: String): Future[ContentMeta] = {
+  def getTotalQuestions(contentId: String,
+                        apiUrl: String): Future[ContentMeta] = {
     Future {
       val response = RestUtil.get[ContentResponse](apiUrl.concat(contentId))
       if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
@@ -173,6 +183,5 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).select("batchid", "courseid", "userid", "issued_certificates")
       .filter(col("batchid") === batchId)
   }
-
   // End of fetch logic from the DB
 }
