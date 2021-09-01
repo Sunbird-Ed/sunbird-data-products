@@ -33,11 +33,11 @@ class TestAssessmentScoreCorrectionJob extends BaseReportSpec with MockFactory {
     val reportData = AssessmentScoreCorrectionJob.processBatches()
     reportData.foreach(report => {
       report.foreach(data => {
-        data.batch_id should be("batch-00001")
-        data.invalid_records should be(2)
-        data.content_id should be("do_11307972307046400011917")
-        data.content_total_questions should be(4)
-        data.total_affected_users should be(1)
+        data.batchId should be("batch-00001")
+        data.invalidRecords should be(2)
+        data.contentId should be("do_11307972307046400011917")
+        data.contentTotalQuestions should be(4)
+        data.totalAffectedUsers should be(1)
       })
     })
   }

@@ -24,7 +24,10 @@ case class ContentResponse(result: ContentResult, responseCode: String)
 
 case class ContentResult(content: Map[String, AnyRef])
 
-case class AssessmentCorrectionMetrics(batch_id: String, content_id: String, invalid_records: Long, total_affected_users: Long, content_total_questions: Long)
+case class AssessmentCorrectionMetrics(batchId: String, contentId: String, invalidRecords: Long, totalAffectedUsers: Long, contentTotalQuestions: Long)
+
+case class ContentMeta(totalQuestions: Int, contentType: String, contentId: String)
+
 
 object AssessmentScoreCorrectionJob extends optional.Application with IJob with BaseReportsJob {
   implicit val className: String = "org.sunbird.analytics.audit.AssessmentScoreCorrectionJob"
@@ -63,47 +66,48 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val isDryRunMode = modelParams.getOrElse("isDryRunMode", true).asInstanceOf[Boolean]
     for (batchId <- batchIds) yield {
       JobLogger.log("Started Processing the Batch", Option(Map("batch_id" -> batchId, "isDryRunMode" -> isDryRunMode)), INFO)
-      correctData(batchId = batchId, isDryRunMode = isDryRunMode)
+      process(batchId = batchId, isDryRunMode = isDryRunMode)
     }
   }
 
-  def correctData(batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[AssessmentCorrectionMetrics] = {
+  def process(batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[AssessmentCorrectionMetrics] = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
-    val instructionEventsPath = modelParams.getOrElse("csvPath", "").asInstanceOf[String].concat(s"/instruction-events-$batchId-${System.currentTimeMillis()}.json")
-    // Get the Assessment Data for the specific Batch
     val assessmentData: DataFrame = getAssessmentAggData(batchId = batchId).select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").persist()
     val userEnrolmentDF = getUserEnrolment(batchId = batchId)
-    // Take the contentId's which is associated to the batch being invoked for the correction
     val contentIds: List[String] = assessmentData.select("content_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
     for (contentId <- contentIds) yield {
       val contentMetaURL: String = modelParams.getOrElse("contentReadAPI", "https://diksha.gov.in/api/content/v1/read/").asInstanceOf[String]
       val supportedContentType: String = modelParams.getOrElse("supportedContentType", "SelfAssess").asInstanceOf[String]
-      // Get the TotalQuestion Value from the Content Meta API
-      val contentMeta: Map[String, Any] = Await.result[Map[String, Any]](getTotalQuestions(contentId, contentMetaURL), 60.seconds)
-      val contentType: String = contentMeta.getOrElse("contentType", "").asInstanceOf[String]
-      val totalQuestions: Int = contentMeta.getOrElse("totalQuestions", 0).asInstanceOf[Int]
-
-      JobLogger.log("Fetched the content meta value to the processing batch", Option(contentMeta ++ Map("totalQuestions" -> totalQuestions)), INFO)
-      // Filter only supported content Type ie SelfAssess Content Type
-      if (StringUtils.equals(contentType, supportedContentType)) {
-        val filteredRecords: DataFrame = assessmentData.filter(col("content_id") === contentId)
-        val incorrectRecords: DataFrame = filteredRecords.filter(col("total_max_score") =!= totalQuestions)
-          .select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score")
-
-        val incorrectRecordsSize: Long = incorrectRecords.count()
-        JobLogger.log("Total Incorrect Records", Option(Map("total_records" -> incorrectRecordsSize)), INFO)
-        if (incorrectRecordsSize > 0) {
-          removeAssessmentRecords(incorrectRecords, batchId, isDryRunMode)
-          generateInstructionEvents(incorrectRecords, batchId, contentId, isDryRunMode, instructionEventsPath)
-          saveRevokingCertIds(incorrectRecords, userEnrolmentDF, batchId)
-        }
-        AssessmentCorrectionMetrics(batch_id = batchId, content_id = contentId, invalid_records = incorrectRecordsSize, total_affected_users = incorrectRecords.select("user_id").distinct().count(), content_total_questions = totalQuestions)
+      val contentMeta: ContentMeta = Await.result[ContentMeta](getTotalQuestions(contentId, contentMetaURL), 60.seconds)
+      JobLogger.log("Fetched the content meta value to the processing batch", Option(contentMeta), INFO)
+      if (StringUtils.equals(contentMeta.contentType, supportedContentType)) {
+        correctData(assessmentData, userEnrolmentDF, batchId, contentMeta.contentId, contentMeta.totalQuestions, isDryRunMode)
       } else {
-        JobLogger.log("The content ID is not self assess, Skipping data removal process", Some(Map("contentId" -> contentId, "contentType" -> contentType)), INFO)
-        AssessmentCorrectionMetrics(batch_id = batchId, content_id = contentId, invalid_records = 0, total_affected_users = 0, content_total_questions = totalQuestions)
+        JobLogger.log("The content ID is not self assess, Skipping data removal process", Some(Map("contentId" -> contentId, "contentType" -> contentMeta.contentType)), INFO)
+        AssessmentCorrectionMetrics(batchId = batchId, contentId = contentId, invalidRecords = 0, totalAffectedUsers = 0, contentTotalQuestions = contentMeta.totalQuestions)
       }
     }
   }
+
+  def correctData(assessmentDF: DataFrame,
+                  userEnrolDF: DataFrame,
+                  batchId: String,
+                  contentId: String,
+                  totalQuestions: Int,
+                  isDryRunMode: Boolean
+                 )(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): AssessmentCorrectionMetrics = {
+    val incorrectRecords: DataFrame = assessmentDF.filter(col("content_id") === contentId).filter(col("total_max_score") =!= totalQuestions)
+      .select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score")
+    val incorrectRecordsSize: Long = incorrectRecords.count()
+    JobLogger.log("Total Incorrect Records", Option(Map("total_records" -> incorrectRecordsSize)), INFO)
+    if (incorrectRecordsSize > 0) {
+      removeAssessmentRecords(incorrectRecords, batchId, isDryRunMode)
+      generateInstructionEvents(incorrectRecords, batchId, contentId)
+      saveRevokingCertIds(incorrectRecords, userEnrolDF, batchId)
+    }
+    AssessmentCorrectionMetrics(batchId = batchId, contentId = contentId, invalidRecords = incorrectRecordsSize, totalAffectedUsers = incorrectRecords.select("user_id").distinct().count(), contentTotalQuestions = totalQuestions)
+  }
+
 
   def saveRevokingCertIds(incorrectRecords: DataFrame, userEnrolmentDF: DataFrame, batchId: String)(implicit config: JobConfig): Unit = {
     val certIdsDF: DataFrame = incorrectRecords.join(userEnrolmentDF,
@@ -123,7 +127,6 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
 
   def removeAssessmentRecords(incorrectRecords: DataFrame, batchId: String, isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
-    val outputPath = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("csvPath", "").asInstanceOf[String]
     if (isDryRunMode) {
       saveLocal(incorrectRecords, batchId, "assessment-invalid-attempts-records")
     } else {
@@ -133,8 +136,9 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     }
   }
 
-  def generateInstructionEvents(inCorrectRecordsDF: DataFrame, batchId: String, contentId: String, isDryRunMode: Boolean, path: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
-    val file = new File(path)
+  def generateInstructionEvents(inCorrectRecordsDF: DataFrame, batchId: String, contentId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
+    val outputPath = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("csvPath", "").asInstanceOf[String]
+    val file = new File(outputPath.concat(s"/instruction-events-$batchId-${System.currentTimeMillis()}.json"))
     val writer = new BufferedWriter(new FileWriter(file))
     val userIds: List[String] = inCorrectRecordsDF.select("user_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
     val courseId: String = inCorrectRecordsDF.select("user_id").distinct().head.getString(0)
@@ -146,19 +150,18 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   }
 
   // Method to fetch the totalQuestion count from the content meta
-  def getTotalQuestions(contentId: String, apiUrl: String): Future[Map[String, Any]] = {
+  def getTotalQuestions(contentId: String, apiUrl: String): Future[ContentMeta] = {
     Future {
       val response = RestUtil.get[ContentResponse](apiUrl.concat(contentId))
       if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
         val totalQuestions: Int = response.result.content.getOrElse("totalQuestions", 0).asInstanceOf[Int]
         val contentType: String = response.result.content.getOrElse("contentType", null).asInstanceOf[String]
-        Map("totalQuestions" -> totalQuestions, "contentType" -> contentType, "contentId" -> contentId)
+        ContentMeta(totalQuestions, contentType, contentId)
       } else {
-        Map()
+        throw new Exception(s"Failed to fetch the content meta for the content ID: $contentId") // Job should stop if the api has failed
       }
     }
   }
-
 
   // Start of fetch logic from the DB
   def getAssessmentAggData(batchId: String)(implicit spark: SparkSession): DataFrame = {
@@ -170,5 +173,6 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     fetchData(spark, userEnrolmentDBSettings, cassandraFormat, new StructType()).select("batchid", "courseid", "userid", "issued_certificates")
       .filter(col("batchid") === batchId)
   }
+
   // End of fetch logic from the DB
 }
