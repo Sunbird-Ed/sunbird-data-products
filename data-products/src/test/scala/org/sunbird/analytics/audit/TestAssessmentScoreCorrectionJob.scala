@@ -5,7 +5,8 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.job.report.{BaseReportSpec, BaseReportsJob}
+import org.sunbird.analytics.exhaust.BaseReportsJob
+import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.EmbeddedCassandra
 
 class TestAssessmentScoreCorrectionJob extends BaseReportSpec with MockFactory {

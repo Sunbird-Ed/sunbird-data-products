@@ -12,7 +12,7 @@ import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
-import org.sunbird.analytics.job.report.BaseReportsJob
+import org.sunbird.analytics.exhaust.BaseReportsJob
 
 import java.io._
 import scala.collection.immutable.List
@@ -165,12 +165,12 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   // Start of fetch logic from the DB
   def getAssessmentAggData(batchId: String)(implicit spark: SparkSession): DataFrame = {
-    fetchData(spark, assessmentAggDBSettings, cassandraFormat, new StructType())
+    loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
       .filter(col("batch_id") === batchId)
   }
 
   def getUserEnrolment(batchId: String)(implicit spark: SparkSession): DataFrame = {
-    fetchData(spark, userEnrolmentDBSettings, cassandraFormat, new StructType()).select("batchid", "courseid", "userid", "issued_certificates")
+    loadData(userEnrolmentDBSettings, cassandraFormat, new StructType()).select("batchid", "courseid", "userid", "issued_certificates")
       .filter(col("batchid") === batchId)
   }
 
