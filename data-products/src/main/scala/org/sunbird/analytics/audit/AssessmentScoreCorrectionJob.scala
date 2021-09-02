@@ -150,7 +150,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     val file = new File(outputPath.concat(s"/instruction-events-$batchId-${System.currentTimeMillis()}.json"))
     val writer = new BufferedWriter(new FileWriter(file))
     val userIds: List[String] = inCorrectRecordsDF.select("user_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-    val courseId: String = inCorrectRecordsDF.select("user_id").distinct().head.getString(0)
+    val courseId: String = inCorrectRecordsDF.select("course_id").distinct().head.getString(0)
     for (userId <- userIds) yield {
       val event = s"""{"assessmentTs":${System.currentTimeMillis()}},"batchId":"$batchId","courseId":"$courseId","userId":"$userId","contentId":"$contentId"}"""
       writer.write(event)
