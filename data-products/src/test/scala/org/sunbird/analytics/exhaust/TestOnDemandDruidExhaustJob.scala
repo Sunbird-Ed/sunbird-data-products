@@ -53,7 +53,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
   val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime())
   "TestOnDemandDruidExhaustJob" should "generate report with correct values" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -63,7 +63,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -72,11 +72,11 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
             "project_description":"test","program_externalId":"PGM-Prerak-Head-Teacher-of-the-Block-19-20-Feb2021",
             "organisation_name":"Pre-prod Custodian Organization","createdBy":"7651c7ab-88f9-4b23-8c1d-ac8d92844f8f",
             "area_of_improvement":"Education Leader","school_name":"MPPS (GN) SAMANTHAKURRU","district_name":"EAST GODAVARI",
-            "program_name":"Prerak Head Teacher of the Block 19-20","state_name":"Andhra Pradesh","task_remarks":"<NULL>"}
+            "program_name":"Prerak Head Teacher of the Block 19-20","state_name":"Andhra Pradesh","task_remarks":"<NULL>","status_of_project":"completed"}
              """.stripMargin
     val doc: Json = parse(json).getOrElse(Json.Null);
     val events = List(DruidScanResult.apply(doc))
-    val results = DruidScanResults.apply("dev_ml_project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
+    val results = DruidScanResults.apply("sl-project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
     val druidResponse =  DruidScanResponse.apply(List(results))
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -118,7 +118,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "insert status as Invalid request in the absence request_data" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -128,7 +128,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -158,7 +158,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "insert as failed with No Range" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -168,7 +168,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -198,7 +198,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "insert status as FAILED  with No Interval" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -208,7 +208,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -237,7 +237,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "insert status as Success with interval" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "1901-01-01T05:30:00/2101-01-01T05:30:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "1901-01-01T05:30:00/2101-01-01T05:30:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -247,7 +247,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
 
     val json: String ="""
@@ -257,11 +257,11 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
             "project_description":"test","program_externalId":"PGM-Prerak-Head-Teacher-of-the-Block-19-20-Feb2021",
             "organisation_name":"Pre-prod Custodian Organization","createdBy":"7651c7ab-88f9-4b23-8c1d-ac8d92844f8f",
             "area_of_improvement":"Education Leader","school_name":"MPPS (GN) SAMANTHAKURRU","district_name":"EAST GODAVARI",
-            "program_name":"Prerak Head Teacher of the Block 19-20","state_name":"Andhra Pradesh","task_remarks":"<NULL>"}
+            "program_name":"Prerak Head Teacher of the Block 19-20","state_name":"Andhra Pradesh","task_remarks":"<NULL>","status_of_project":"inProgress"}
              """.stripMargin
     val doc: Json = parse(json).getOrElse(Json.Null);
     val events = List(DruidScanResult.apply(doc))
-    val results = DruidScanResults.apply("dev_ml_project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
+    val results = DruidScanResults.apply("sl-project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
     val druidResponse =  DruidScanResponse.apply(List(results))
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -295,7 +295,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "insert status as SUCCESS encryption key not provided" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -305,7 +305,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -314,11 +314,11 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
             "project_description":"test","program_externalId":"PGM-Prerak-Head-Teacher-of-the-Block-19-20-Feb2021",
             "organisation_name":"Pre-prod Custodian Organization","createdBy":"7651c7ab-88f9-4b23-8c1d-ac8d92844f8f","area_of_improvement":"Education Leader",
             "school_name":"MPPS (GN) SAMANTHAKURRU","district_name":"EAST GODAVARI","program_name":"Prerak Head Teacher of the Block 19-20",
-            "state_name":"Andhra Pradesh","task_remarks":"<NULL>"}
+            "state_name":"Andhra Pradesh","task_remarks":"<NULL>","status_of_project":"completed"}
              """.stripMargin
     val doc: Json = parse(json).getOrElse(Json.Null);
     val events = List(DruidScanResult.apply(doc))
-    val results = DruidScanResults.apply("dev_ml_project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
+    val results = DruidScanResults.apply("sl-project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
     val druidResponse =  DruidScanResponse.apply(List(results))
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -368,7 +368,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "generate the report with quote column" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -378,7 +378,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -387,11 +387,11 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
             "project_description":"test","program_externalId":"PGM-Prerak-Head-Teacher-of-the-Block-19-20-Feb2021",
             "organisation_name":"Pre-prod Custodian Organization","createdBy":"7651c7ab-88f9-4b23-8c1d-ac8d92844f8f","area_of_improvement":"Education Leader",
             "school_name":"MPPS (GN) SAMANTHAKURRU","district_name":"EAST GODAVARI","program_name":"Prerak Head Teacher of the Block 19-20",
-            "state_name":"Andhra Pradesh","task_remarks":"<NULL>"}
+            "state_name":"Andhra Pradesh","task_remarks":"<NULL>","status_of_project":"inProgress"}
              """.stripMargin
     val doc: Json = parse(json).getOrElse(Json.Null);
     val events = List(DruidScanResult.apply(doc))
-    val results = DruidScanResults.apply("dev_ml_project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
+    val results = DruidScanResults.apply("sl-project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
     val druidResponse =  DruidScanResponse.apply(List(results))
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -428,7 +428,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "generate the report  with no label" in {
-    val query = DruidQueryModel("scan", "dev_ml_project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -438,7 +438,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     val json: String ="""
             {"block_name":"ALLAVARAM","project_title_editable":"Test-कृपया उस प्रोजेक्ट का शीर्षक जोड़ें जिसे आप ब्लॉक के Prerak HT के लिए सबमिट करना चाहते हैं","task_evidence":"<NULL>",
@@ -447,11 +447,11 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
             "project_description":"test","program_externalId":"PGM-Prerak-Head-Teacher-of-the-Block-19-20-Feb2021",
             "organisation_name":"Pre-prod Custodian Organization","createdBy":"7651c7ab-88f9-4b23-8c1d-ac8d92844f8f","area_of_improvement":"Education Leader",
             "school_name":"MPPS (GN) SAMANTHAKURRU","district_name":"EAST GODAVARI","program_name":"Prerak Head Teacher of the Block 19-20",
-            "state_name":"Andhra Pradesh","task_remarks":"<NULL>"}
+            "state_name":"Andhra Pradesh","task_remarks":"<NULL>","status_of_project":"inProgress"}
              """.stripMargin
     val doc: Json = parse(json).getOrElse(Json.Null);
     val events = List(DruidScanResult.apply(doc))
-    val results = DruidScanResults.apply("dev_ml_project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
+    val results = DruidScanResults.apply("sl-project_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
     val druidResponse =  DruidScanResponse.apply(List(results))
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -497,7 +497,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
     implicit val config = jobConfig
     implicit val conf = spark.sparkContext.hadoopConfiguration
 
-    val query = DruidQueryModel("scan", "dev_ml_project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-project", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","private_program",Option("false"),None),
         DruidFilter("equals","sub_task_deleted_flag",Option("false"),None),
         DruidFilter("equals","task_deleted_flag",Option("false"),None),
@@ -507,7 +507,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
       Option(List("__time","createdBy","designation","state_name","district_name","block_name",
         "school_name","school_externalId", "organisation_name","program_name",
         "program_externalId","project_id","project_title_editable","project_description", "area_of_improvement",
-        "project_duration","tasks","sub_task","task_evidence","task_remarks")), None, None,None,None,None,0)
+        "project_duration","tasks","sub_task","task_evidence","task_remarks","status_of_project")), None, None,None,None,None,0)
     val druidQuery = DruidDataFetcher.getDruidQuery(query)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
@@ -524,7 +524,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
   }
 
   it should "generate report with other generic query" in {
-    val query = DruidQueryModel("scan", "dev_ml_observation", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
+    val query = DruidQueryModel("scan", "sl-observation", "1901-01-01T00:00+00:00/2101-01-01T00:00:00+00:00", Option("all"),
       None, None, Option(List(DruidFilter("equals","isAPrivateProgram",Option("false"),None),
         DruidFilter("equals","programId",Option("60549338acf1c71f0b2409c3"),None),
         DruidFilter("equals","solutionId",Option("605c934eda9dea6400302afc"),None))),None, None,
@@ -560,7 +560,7 @@ class TestOnDemandDruidExhaustJob extends BaseSpec with Matchers with BeforeAndA
     val doc1: Json = parse(json1).getOrElse(Json.Null);
 
     val events = List(DruidScanResult.apply(doc),DruidScanResult.apply(doc1))
-    val results = DruidScanResults.apply("dev_ml_observation_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
+    val results = DruidScanResults.apply("sl-observation_2020-06-08T00:00:00.000Z_2020-06-09T00:00:00.000Z_2020-11-20T06:13:29.089Z_45",List(),events)
     val druidResponse =  DruidScanResponse.apply(List(results))
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
