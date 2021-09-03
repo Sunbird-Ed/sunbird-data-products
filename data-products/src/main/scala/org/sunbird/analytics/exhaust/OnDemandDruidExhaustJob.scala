@@ -3,8 +3,8 @@ package org.sunbird.analytics.exhaust
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-import org.apache.spark.sql.functions.{col,when}
-import org.ekstep.analytics.framework.Level.INFO
+import org.apache.spark.sql.functions.{col, when}
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{DruidQueryModel, FrameworkContext, JobConfig, JobContext, StorageConfig, _}
@@ -17,6 +17,9 @@ import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.model.DruidQueryProcessingModel.{getDateRange, getReportDF}
 import org.apache.hadoop.conf.Configuration
+import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
+import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
+import org.joda.time.DateTime
 import org.sunbird.analytics.exhaust.collection.Metrics
 
 import java.text.SimpleDateFormat
@@ -48,7 +51,26 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
 
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     implicit val conf = spark.sparkContext.hadoopConfiguration
-    execute()
+    try {
+      execute()
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(ex.getMessage, None, ERROR);
+        JobLogger.end("OnDemandDruidExhaustJob execution failed", "FAILED",
+          Option(Map("model" -> "OnDemandDruidExhaustJob",
+          "statusMsg" -> ex.getMessage)));
+        // generate metric event and push it to kafka topic in case of failure
+        val metricEvent = getMetricJson("OnDemandDruidExhaustJob", Option(new
+            DateTime().toString(CommonUtil.dateFormat)), "FAILED", List())
+        // $COVERAGE-OFF$
+        if (AppConf.getConfig("push.metrics.kafka").toBoolean)
+          KafkaDispatcher.dispatch(Array(metricEvent), Map("topic" -> AppConf.getConfig("metric.kafka.topic"), "brokerList" -> AppConf.getConfig("metric.kafka.broker")))
+      // $COVERAGE-ON$
+    } finally {
+      frameworkContext.closeContext();
+      spark.close()
+      cleanUp()
+    }
     // $COVERAGE-ON$ Disabling scoverage for main and execute method
   }
 
