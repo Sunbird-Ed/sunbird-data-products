@@ -128,7 +128,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
                 batchId: String,
                 contentId: String,
                 folderName: String)(implicit config: JobConfig): Unit = {
-    JobLogger.log("Generating the CSV File", None, INFO)
+    JobLogger.log("Generating the CSV File", Option(Map("batch_id" -> batchId, "content_id" -> contentId)), INFO)
     val outputPath = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("csvPath", "").asInstanceOf[String]
     data.repartition(1).write.option("header", value = true).format("com.databricks.spark.csv").save(outputPath.concat(s"/$folderName-$batchId-$contentId-${System.currentTimeMillis()}.csv"))
   }
@@ -152,14 +152,22 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
                                 contentId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
     val outputPath = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("csvPath", "").asInstanceOf[String]
     val file = new File(outputPath.concat(s"/instruction-events-$batchId-$contentId-${System.currentTimeMillis()}.json"))
-    val writer = new BufferedWriter(new FileWriter(file))
-    val userIds: List[String] = inCorrectRecordsDF.select("user_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-    val courseId: String = inCorrectRecordsDF.select("course_id").distinct().head.getString(0)
-    for (userId <- userIds) yield {
-      val event = s"""{"assessmentTs":${System.currentTimeMillis()},"batchId":"$batchId","courseId":"$courseId","userId":"$userId","contentId":"$contentId"}"""
-      writer.write(event)
+    var writer: BufferedWriter = null
+    try {
+      writer = new BufferedWriter(new FileWriter(file))
+      val userIds: List[String] = inCorrectRecordsDF.select("user_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
+      val courseId: String = inCorrectRecordsDF.select("course_id").distinct().head.getString(0)
+      for (userId <- userIds) yield {
+        val event = s"""{"assessmentTs":${System.currentTimeMillis()},"batchId":"$batchId","courseId":"$courseId","userId":"$userId","contentId":"$contentId"}"""
+        writer.write(event)
+        writer.newLine()
+        writer.flush()
+      }
+    } catch {
+      case ex: IOException => ex.printStackTrace()
+    } finally {
+      writer.close()
     }
-    writer.close()
   }
 
   // Method to fetch the totalQuestion count from the content meta
