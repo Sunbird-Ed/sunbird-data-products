@@ -39,7 +39,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
 
   def name(): String = "OnDemandDruidExhaustJob"
 
-  // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
     JobLogger.init("OnDemandDruidExhaustJob")
     JobLogger.start("OnDemandDruidExhaustJob Started executing", Option(Map("config" -> config, "model" -> name)))
@@ -79,7 +78,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
       spark.close()
       cleanUp()
     }
-    // $COVERAGE-ON$ Disabling scoverage for main and execute method
   }
 
   def validateEncryptionRequest(request: JobRequest): Boolean = {
