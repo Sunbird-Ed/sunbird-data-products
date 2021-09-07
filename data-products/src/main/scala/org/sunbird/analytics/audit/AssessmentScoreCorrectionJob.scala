@@ -16,9 +16,6 @@ import org.sunbird.analytics.exhaust.BaseReportsJob
 
 import java.io._
 import scala.collection.immutable.List
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, Future}
 
 case class ContentResponse(result: ContentResult, responseCode: String)
 
@@ -73,13 +70,17 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   def process(batchId: String,
               isDryRunMode: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): List[AssessmentCorrectionMetrics] = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
-    val assessmentData: DataFrame = getAssessmentAggData(batchId = batchId).select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score").persist()
+    val assessmentData: DataFrame = getAssessmentAggData(batchId = batchId)
+      .withColumn("question_data", explode_outer(col("question")))
+      .withColumn("question_id", col("question_data.id"))
+      .select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "question_id")
+      .groupBy("course_id", "batch_id", "content_id", "attempt_id", "user_id").agg(size(collect_list("question_id")).as("total_question")).persist()
     val userEnrolmentDF = getUserEnrolment(batchId = batchId)
     val contentIds: List[String] = assessmentData.select("content_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
     for (contentId <- contentIds) yield {
       val contentMetaURL: String = modelParams.getOrElse("contentReadAPI", "https://diksha.gov.in/api/content/v1/read/").asInstanceOf[String]
       val supportedContentType: String = modelParams.getOrElse("supportedContentType", "SelfAssess").asInstanceOf[String]
-      val contentMeta: ContentMeta = Await.result[ContentMeta](getTotalQuestions(contentId, contentMetaURL), 60.seconds)
+      val contentMeta: ContentMeta = getTotalQuestions(contentId, contentMetaURL)
       JobLogger.log("Fetched the content meta value to the processing batch", Option(contentMeta), INFO)
       if (StringUtils.equals(contentMeta.contentType, supportedContentType)) {
         correctData(assessmentData, userEnrolmentDF, batchId, contentMeta.contentId, contentMeta.totalQuestions, isDryRunMode)
@@ -97,8 +98,8 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
                   totalQuestions: Int,
                   isDryRunMode: Boolean
                  )(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): AssessmentCorrectionMetrics = {
-    val incorrectRecords: DataFrame = assessmentDF.filter(col("content_id") === contentId).filter(col("total_max_score") =!= totalQuestions)
-      .select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "total_max_score", "total_score")
+    val incorrectRecords: DataFrame = assessmentDF.filter(col("content_id") === contentId).filter(col("total_question") =!= totalQuestions)
+      .select("course_id", "batch_id", "content_id", "attempt_id", "user_id")
     val incorrectRecordsSize: Long = incorrectRecords.count()
     val metrics = AssessmentCorrectionMetrics(batchId = batchId, contentId = contentId, invalidRecords = incorrectRecordsSize, totalAffectedUsers = incorrectRecords.select("user_id").distinct().count(), contentTotalQuestions = totalQuestions)
     JobLogger.log("Total Incorrect Records", Option(metrics), INFO)
@@ -152,17 +153,16 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
                                 contentId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig, sc: SparkContext): Unit = {
     val outputPath = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("csvPath", "").asInstanceOf[String]
     val file = new File(outputPath.concat(s"/instruction-events-$batchId-$contentId-${System.currentTimeMillis()}.json"))
-    var writer: BufferedWriter = null
+    val writer: BufferedWriter = new BufferedWriter(new FileWriter(file))
     try {
-      writer = new BufferedWriter(new FileWriter(file))
       val userIds: List[String] = inCorrectRecordsDF.select("user_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
       val courseId: String = inCorrectRecordsDF.select("course_id").distinct().head.getString(0)
       for (userId <- userIds) yield {
         val event = s"""{"assessmentTs":${System.currentTimeMillis()},"batchId":"$batchId","courseId":"$courseId","userId":"$userId","contentId":"$contentId"}"""
         writer.write(event)
         writer.newLine()
-        writer.flush()
       }
+      writer.flush()
     } catch {
       case ex: IOException => ex.printStackTrace()
     } finally {
@@ -172,16 +172,14 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
 
   // Method to fetch the totalQuestion count from the content meta
   def getTotalQuestions(contentId: String,
-                        apiUrl: String): Future[ContentMeta] = {
-    Future {
-      val response = RestUtil.get[ContentResponse](apiUrl.concat(contentId))
-      if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
-        val totalQuestions: Int = response.result.content.getOrElse("totalQuestions", 0).asInstanceOf[Int]
-        val contentType: String = response.result.content.getOrElse("contentType", null).asInstanceOf[String]
-        ContentMeta(totalQuestions, contentType, contentId)
-      } else {
-        throw new Exception(s"Failed to fetch the content meta for the content ID: $contentId") // Job should stop if the api has failed
-      }
+                        apiUrl: String): ContentMeta = {
+    val response = RestUtil.get[ContentResponse](apiUrl.concat(contentId))
+    if (null != response && response.responseCode.equalsIgnoreCase("ok") && null != response.result.content && response.result.content.nonEmpty) {
+      val totalQuestions: Int = response.result.content.getOrElse("totalQuestions", 0).asInstanceOf[Int]
+      val contentType: String = response.result.content.getOrElse("contentType", null).asInstanceOf[String]
+      ContentMeta(totalQuestions, contentType, contentId)
+    } else {
+      throw new Exception(s"Failed to fetch the content meta for the content ID: $contentId") // Job should stop if the api has failed
     }
   }
 
