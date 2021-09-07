@@ -378,7 +378,7 @@ object UserCacheIndexer extends Serializable {
         )
         .option("table", "user")
         .option("key.column", "userid")
-        .load().filter(col("usersignintype") === "Anonymous").persist(StorageLevel.MEMORY_ONLY)
+        .load().filter(col("usersignintype") === "Anonymous" || col("usersignintype").isNull).persist(StorageLevel.MEMORY_ONLY)
       Console.println("Anonymous data user count: " + anonymousDataDF.count())
 
       anonymousDataDF
