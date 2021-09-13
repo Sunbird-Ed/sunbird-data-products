@@ -78,20 +78,20 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       .groupBy("course_id", "batch_id", "content_id", "attempt_id", "user_id").agg(size(collect_list("question_id")).as("total_question")).persist()
     val userEnrolmentDF = getUserEnrolment(batchId = batchId).persist()
     val contentIds: List[String] = assessmentData.select("content_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-    for (contentId <- contentIds) yield {
+    val res = for (contentId <- contentIds) yield {
       val contentMetaURL: String = modelParams.getOrElse("contentReadAPI", "https://diksha.gov.in/api/content/v1/read/").asInstanceOf[String]
       val supportedContentType: String = modelParams.getOrElse("supportedContentType", "SelfAssess").asInstanceOf[String]
       val contentMeta: ContentMeta = getTotalQuestions(contentId, contentMetaURL)
       JobLogger.log("Fetched the content meta value to the processing batch", Option(contentMeta), INFO)
-      val metrics = if (StringUtils.equals(contentMeta.contentType, supportedContentType)) {
+      if (StringUtils.equals(contentMeta.contentType, supportedContentType)) {
         correctData(assessmentData, userEnrolmentDF, batchId, contentMeta.contentId, contentMeta.totalQuestions, isDryRunMode)
       } else {
         JobLogger.log("The content ID is not self assess, Skipping data removal process", Some(Map("contentId" -> contentId, "contentType" -> contentMeta.contentType)), INFO)
         AssessmentCorrectionMetrics(batchId = batchId, contentId = contentId, invalidRecords = 0, totalAffectedUsers = 0, contentTotalQuestions = contentMeta.totalQuestions)
       }
-      userEnrolmentDF.unpersist()
-      metrics
     }
+    userEnrolmentDF.unpersist()
+    res
   }
 
   def correctData(assessmentDF: DataFrame,
