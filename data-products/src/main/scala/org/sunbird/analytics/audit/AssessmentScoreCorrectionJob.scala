@@ -30,7 +30,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   implicit val className: String = "org.sunbird.analytics.audit.AssessmentScoreCorrectionJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
+  private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "ReportCluster")
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
@@ -43,6 +43,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     implicit val sc: SparkContext = spark.sparkContext
     try {
       spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
+      spark.setCassandraConf("ReportCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.report.cluster.host")))
       val res = CommonUtil.time(processBatches())
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("time_taken" -> res._1, "processed_batches" -> res._2)))
     } catch {
@@ -75,9 +76,9 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
       .withColumn("question_id", col("question_data.id"))
       .select("course_id", "batch_id", "content_id", "attempt_id", "user_id", "question_id")
       .groupBy("course_id", "batch_id", "content_id", "attempt_id", "user_id").agg(size(collect_list("question_id")).as("total_question")).persist()
-    val userEnrolmentDF = getUserEnrolment(batchId = batchId)
+    val userEnrolmentDF = getUserEnrolment(batchId = batchId).persist()
     val contentIds: List[String] = assessmentData.select("content_id").distinct().collect().map(_ (0)).toList.asInstanceOf[List[String]]
-    for (contentId <- contentIds) yield {
+    val res = for (contentId <- contentIds) yield {
       val contentMetaURL: String = modelParams.getOrElse("contentReadAPI", "https://diksha.gov.in/api/content/v1/read/").asInstanceOf[String]
       val supportedContentType: String = modelParams.getOrElse("supportedContentType", "SelfAssess").asInstanceOf[String]
       val contentMeta: ContentMeta = getTotalQuestions(contentId, contentMetaURL)
@@ -89,6 +90,8 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
         AssessmentCorrectionMetrics(batchId = batchId, contentId = contentId, invalidRecords = 0, totalAffectedUsers = 0, contentTotalQuestions = contentMeta.totalQuestions)
       }
     }
+    userEnrolmentDF.unpersist()
+    res
   }
 
   def correctData(assessmentDF: DataFrame,

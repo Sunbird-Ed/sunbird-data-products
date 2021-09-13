@@ -41,27 +41,28 @@ INSERT INTO sunbird_courses.assessment_aggregator (course_id, batch_id, user_id,
 INSERT INTO sunbird_courses.user_activity_agg (activity_type, activity_id, user_id, context_id, agg, agg_last_updated) VALUES('Course', 'do_1130928636168192001667', 'user-001', 'cb:batch-00001', {'completedCount': 1}, {'completedCount': '2020-08-17'});
 INSERT INTO sunbird_courses.user_activity_agg (activity_type, activity_id, user_id, context_id, agg, agg_last_updated) VALUES('Course', 'do_1130928636168192001667', 'user-002', 'cb:batch-00001', {'completedCount': 0}, {'completedCount': '2020-09-17'});
 
-CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
-      userid text,
-      courseid text,
-      batchid text,
-      active boolean,
-      addedby text,
-      certificates list<frozen<map<text, text>>>,
-      certstatus int,
-      completedon timestamp,
-      completionpercentage int,
-      contentstatus map<text, int>,
-      datetime timestamp,
-      enrolled_date timestamp,
-      enrolleddate text,
-      issued_certificates list<frozen<map<text, text>>>,
-      lastreadcontentid text,
-      lastreadcontentstatus int,
-      progress int,
-      status int,
-      PRIMARY KEY (userid, courseid, batchid)
-) WITH CLUSTERING ORDER BY (courseid ASC, batchid ASC);
+DROP TABLE sunbird_courses.user_enrolments;
+CREATE TABLE sunbird_courses.user_enrolments (
+    batchid text,
+    courseid text,
+    userid text,
+    "active" boolean,
+    addedby text,
+    certificates frozen<list<frozen<map<text, text>>>>,
+    certstatus int,
+    completedon timestamp,
+    completionpercentage int,
+    contentstatus frozen<map<text, int>>,
+    datetime timestamp,
+    enrolled_date timestamp,
+    enrolleddate text,
+    issued_certificates frozen<list<frozen<map<text, text>>>>,
+    lastreadcontentid text,
+    lastreadcontentstatus int,
+    progress int,
+    status int,
+    PRIMARY KEY (batchid, courseid, userid)
+) WITH CLUSTERING ORDER BY (courseid ASC, userid ASC);
 
 INSERT INTO sunbird_courses.user_enrolments (userid, courseid, batchid, issued_certificates) VALUES('user-001', 'do_1130928636168192001667', 'batch-00001', [{'identifier': 'e08017de-3cb7-47d2-a375-6dd3f8575806', 'lastIssuedOn': '2020-05-01T11:27:35.130+0000', 'name': 'Acknowledgement Certificate', 'token': 'U4M3F6', 'url': 'https://diksha.gov.in/certs/0126684405014528002_0130107203983114243/e08017de-3cb7-47d2-a375-6dd3f8575806.pdf'}]);
 INSERT INTO sunbird_courses.user_enrolments (userid, courseid, batchid, issued_certificates) VALUES('user-002', 'do_1130928636168192001667', 'batch-00001',  [{'identifier': '0e045c27-5c9f-4d8d-9f2e-6c123eed63a7', 'lastIssuedOn': '2020-11-25T00:12:32.211+0000', 'name': 'Completion Certificate', 'token': 'N1C9D5'}]);
