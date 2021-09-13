@@ -30,7 +30,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
   implicit val className: String = "org.sunbird.analytics.audit.AssessmentScoreCorrectionJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
+  private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "ReportCluster")
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
@@ -43,6 +43,7 @@ object AssessmentScoreCorrectionJob extends optional.Application with IJob with 
     implicit val sc: SparkContext = spark.sparkContext
     try {
       spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
+      spark.setCassandraConf("ReportCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.report.cluster.host")))
       val res = CommonUtil.time(processBatches())
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("time_taken" -> res._1, "processed_batches" -> res._2)))
     } catch {
