@@ -4,11 +4,9 @@ import com.redislabs.provider.redis._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.lang.StringUtils
 import org.apache.spark.sql.functions.{col, collect_set, concat_ws, explode_outer, lit, lower, to_json, _}
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.sunbird.analytics.util.JSONUtils
-import redis.clients.jedis.Jedis
 
 case class AnonymousData(userid:String, usersignintype: String, userlogintype: String)
 case class LocationId(userid: String, locationids: List[String])
@@ -23,12 +21,10 @@ object UserCacheIndexer extends Serializable {
     var specificUserId: String = null
     var fromSpecificDate: String = null
     var populateAnonymousData: String = "false"
-    var refreshUserData: String = "false"
     if (!args.isEmpty) {
-      if(!StringUtils.equalsIgnoreCase(args(0), "null")) specificUserId = args(0) // userid
-      if(!StringUtils.equalsIgnoreCase(args(1), "null")) fromSpecificDate = args(1) // date in YYYY-MM-DD format
+      specificUserId = args(0) // userid
+      fromSpecificDate = args(1) // date in YYYY-MM-DD format
       populateAnonymousData = args(2) // populate anonymous data
-      refreshUserData = args(3) // refresh existing user data
     }
     val sunbirdKeyspace = "sunbird"
 
@@ -52,10 +48,10 @@ object UserCacheIndexer extends Serializable {
         .getOrCreate()
 
     def filterUserData(userDF: DataFrame): DataFrame = {
-      if (specificUserId != null) {
+      if (null != specificUserId && !StringUtils.equalsIgnoreCase(specificUserId, "null")) {
         println("Filtering for " + specificUserId)
         userDF.filter(col("id") === specificUserId)
-      } else if (null != fromSpecificDate) {
+      } else if (null != fromSpecificDate && !StringUtils.equalsIgnoreCase(fromSpecificDate, "null")) {
         println(s"Filtering for :$fromSpecificDate ")
         userDF.filter(col("updateddate").isNull || to_date(col("updateddate"), "yyyy-MM-dd HH:mm:ss:SSSZ").geq(lit(fromSpecificDate)))
       } else {
@@ -72,7 +68,7 @@ object UserCacheIndexer extends Serializable {
 
       val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load()
           .select(col("firstname"),col("lastname"), col("email"), col("phone"),
-            col("rootorgid"), col("framework"), col("userid"))
+            col("rootorgid"), col("framework"), col("userid"), col("language"))
         .filter(col("userid").isNotNull))
         .withColumn("medium", col("framework.medium"))  // Flattening the BGMS
         .withColumn("subject", col("framework.subject"))
@@ -85,8 +81,7 @@ object UserCacheIndexer extends Serializable {
         .persist(StorageLevel.MEMORY_ONLY)
 
       Console.println("User records count:", userDF.count());
-      val saveMode = if (specificUserId == null && refreshUserData.equalsIgnoreCase("true")) SaveMode.Overwrite else SaveMode.Append
-      val res1 = time(populateToRedis(userDF, saveMode = saveMode)) // Insert all userData Into redis
+      val res1 = time(populateToRedis(userDF)) // Insert all userData Into redis
       Console.println("Time taken to insert user records", res1._1)
 
       val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_organisation").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
@@ -288,57 +283,23 @@ object UserCacheIndexer extends Serializable {
       }.toDF()
     }
 
-    def backupUserData(): Unit = {
-      val userDf = populateAnonymousUserData()
-      userDf.write
-            .option("header","true")
-            .option("sep",",")
-            .mode("overwrite")
-            .format("csv").save(config.getString("redis.user.backup.dir"))
-
-      userDf.unpersist()
-
-      val jedis = new Jedis(config.getString("redis.host"), config.getString("redis.port").toInt)
-      jedis.select(redisIndex.toInt)
-
-      if (null != specificUserId) {
-        jedis.del(s"user:$specificUserId");
-      }
-      jedis.close()
-    }
-
-    def restoreBackupData(): Unit = {
-      val backupDf = spark.read.option("header", true).csv(s"${config.getString("redis.user.backup.dir")}/part-*.csv")
-      indexToRedis(backupDf, config.getString("redis.user.database.index"), SaveMode.Append)
-    }
-
-    def populateToRedis(dataFrame: DataFrame, redisIndex: String = config.getString("redis.user.database.index"), saveMode: SaveMode = SaveMode.Append): Unit = {
+    def populateToRedis(dataFrame: DataFrame): Unit = {
       val filteredDF = dataFrame.filter(col("userid").isNotNull)
       val schema = filteredDF.schema
       val complexFields = schema.fields.filter(field => complexFieldTypes.contains(field.dataType.typeName))
 
       val resultDF = complexFields.foldLeft(filteredDF)((df, field) =>
         df.withColumn(field.name, to_json(col(field.name))))
-      indexToRedis(resultDF, redisIndex, saveMode)
-    }
 
-    def indexToRedis(dataFrame: DataFrame, redisIndex: String, saveMode: SaveMode): Unit = {
-      dataFrame.write
+      resultDF.write
         .format("org.apache.spark.sql.redis")
         .option("host", config.getString("redis.host"))
         .option("port", config.getString("redis.port"))
-        .option("dbNum", redisIndex)
+        .option("dbNum", config.getString("redis.user.database.index"))
         .option("table", "user")
         .option("key.column", "userid")
-        .mode(saveMode)
+        .mode(SaveMode.Append)
         .save()
-    }
-
-    if (populateAnonymousData.equalsIgnoreCase("false") && refreshUserData.equalsIgnoreCase("true")) {
-      val refresh1 = time(backupUserData())
-      Console.println("Time taken to backup user data:", refresh1._1/1000);
-    } else {
-      Console.println("Redis data not getting cleared");
     }
 
     if (!populateAnonymousData.equalsIgnoreCase("true")) {
@@ -348,40 +309,24 @@ object UserCacheIndexer extends Serializable {
       Console.println("Time taken for individual steps:", "stage1", res1._1, "stage2", res2._1)
       Console.println("Time taken for complete script:", totalTimeTaken);
     } else {
-      val res1 = time(populateAnonymousUserData())
-      Console.println("Time taken for populate anonymous records:", res1._1);
-
-      val res2 = time(populateToRedis(res1._2)) // Insert all userData Into redis
-      Console.println("Time taken to insert anonymous records", res1._1)
-      res1._2.unpersist()
-      Console.println("Time taken for complete script:", (res1._1 + res2._1).toDouble/1000);
+      val res = time(populateAnonymousUserData())
+      Console.println("Time taken for complete script:", res._1);
     }
 
-    if (populateAnonymousData.equalsIgnoreCase("false") && refreshUserData.equalsIgnoreCase("true")) {
-      val refresh2 = time(restoreBackupData())
-      Console.println("Time taken to restore backup data:", refresh2._1/1000);
-    }
+    def populateAnonymousUserData(): Unit = {
+      val sqlContext = new SQLContext(spark.sparkContext)
+      import sqlContext.implicits._
 
-    def populateAnonymousUserData(anonymousDataIndex: String = redisIndex): DataFrame = {
-      val anonymousDataDF = spark.read.format("org.apache.spark.sql.redis")
-        .option("host", config.getString("redis.host"))
-        .option("port", config.getString("redis.port"))
-        .option("dbNum", anonymousDataIndex)
-        .schema(
-          StructType(
-            Array(
-              StructField("userid", StringType),
-              StructField("usersignintype", StringType),
-              StructField("userlogintype", StringType)
-            )
-          )
-        )
-        .option("table", "user")
-        .option("key.column", "userid")
-        .load().filter(col("usersignintype") === "Anonymous" || col("usersignintype").isNull).persist(StorageLevel.MEMORY_ONLY)
+      val anonymousDataRDD = spark.sparkContext.fromRedisKV("*")
+      val filteredData = anonymousDataRDD.map{f => (f._1, JSONUtils.deserialize[Map[String, AnyRef]](f._2))}.filter(f => f._2.getOrElse("usersignintype", "").equals("Anonymous"))
+
+      val anonymousDataDF = filteredData.map{f =>
+        AnonymousData(f._1, f._2.getOrElse("usersignintype", "Anonymous").toString, f._2.getOrElse("userlogintype", "").toString)
+      }.toDF()
       Console.println("Anonymous data user count: " + anonymousDataDF.count())
 
-      anonymousDataDF
+      val res1 = time(populateToRedis(anonymousDataDF)) // Insert all userData Into redis
+      Console.println("Time taken to insert anonymous records", res1._1)
     }
   }
 

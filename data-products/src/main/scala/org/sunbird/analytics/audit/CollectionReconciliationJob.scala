@@ -210,7 +210,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     val enrolmentRDD = enrolmentDF.rdd.repartition(30).map(f => UserEnrolment(f.getString(0), f.getString(1), f.getString(2)))
 
     val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime", "last_completed_time"), SomeColumns("userid", "batchid", "courseid"))
-    val finalRDD = joinedRdd.filter(f => f._2.getIntOption(1).getOrElse(0) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getStringOption(2).orNull, f._2.getStringOption(3).orNull))
+    val finalRDD = joinedRdd.filter(f => f._2.getIntOption(1).getOrElse(0) == 2).map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getString(2), f._2.getStringOption(3).orNull))
     val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid")
       .withColumnRenamed("_4", "lastcompletedtime").withColumnRenamed("_5", "last_completed_time")
       .withColumn("lastcompletedtime", UDFUtils.getLatestValue(col("last_completed_time"), col("lastcompletedtime")))
