@@ -239,6 +239,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
       else {
         request.status = "SUCCESS";
         request.download_urls = Option(response.file);
+        JobLogger.log("download url", request.download_urls, INFO)
         request.execution_time = Option(result._1);
         request.dt_job_completed = Option(System.currentTimeMillis)
       }
@@ -271,6 +272,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
             JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId, "totalRequests" -> requests.length)), INFO)
             val res = processRequest(request, reportConfig, storageConfig)
             print(request, reportConfig, storageConfig)
+            JobLogger.log("final response ", Some(res),INFO)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time,
               "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
