@@ -80,10 +80,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
   }
 
-  def validateEncryptionRequest(request: JobRequest): Boolean = {
-    if (request.encryption_key.nonEmpty) true else false;
-  }
-
   def validateRequest(request: JobRequest): Boolean = {
     if (request.request_data != null) true else false
   }
@@ -142,7 +138,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
   }
 
-  def druidPostProcess(data: RDD[DruidOutput], request_id: String, reportConfig: ReportConfig, storageConfig: StorageConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc: SparkContext, config: JobConfig): OnDemandDruidResponse = {
+  def druidPostProcess(data: RDD[DruidOutput], request_id: String, reportConfig: ReportConfig)(implicit spark: SparkSession, sqlContext: SQLContext, fc: FrameworkContext, sc: SparkContext, config: JobConfig): OnDemandDruidResponse = {
     val labelsLookup = reportConfig.labels
     val dimFields = reportConfig.metrics.flatMap { m =>
       if (m.druidQuery.dimensions.nonEmpty) m.druidQuery.dimensions.get.map(f => f.aliasName.getOrElse(f.fieldName))
@@ -207,7 +203,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     new SimpleDateFormat(pattern)
   }
 
-  def processRequest(request: JobRequest, reportConfig: ReportConfig, storageConfig: StorageConfig)(implicit spark: SparkSession, fc: FrameworkContext, sqlContext: SQLContext, sc: SparkContext, config: JobConfig, conf: Configuration): JobRequest = {
+  def processRequest(request: JobRequest, reportConfig: ReportConfig)(implicit spark: SparkSession, fc: FrameworkContext, sqlContext: SQLContext, sc: SparkContext, config: JobConfig, conf: Configuration): JobRequest = {
     markRequestAsProcessing(request)
     val requestBody = JSONUtils.deserialize[RequestBody](request.request_data)
     val requestParamsBody = requestBody.`params`
@@ -222,26 +218,18 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
 
     val finalReportConfig = JSONUtils.deserialize[ReportConfig](finalConfig)
     val druidData: RDD[DruidOutput] = druidAlgorithm(finalReportConfig)
-    val result = CommonUtil.time(druidPostProcess(druidData, request.request_id, JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(finalReportConfig)), storageConfig))
+    val result = CommonUtil.time(druidPostProcess(druidData, request.request_id, JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(finalReportConfig))))
     val response = result._2;
     val failedOnDemandDruidRes = response.status.equals("FAILED")
     if (failedOnDemandDruidRes) {
       markRequestAsFailed(request, response.statusMsg)
     } else {
-      if (validateEncryptionRequest(request)) {
         val storageConfig = getStorageConfig(config, response.file.head)
         request.download_urls = Option(response.file);
         request.execution_time = Option(result._1);
         processRequestEncryption(storageConfig, request)
         request.status = "SUCCESS";
         request.dt_job_completed = Option(System.currentTimeMillis)
-      }
-      else {
-        request.status = "SUCCESS";
-        request.download_urls = Option(response.file);
-        request.execution_time = Option(result._1);
-        request.dt_job_completed = Option(System.currentTimeMillis)
-      }
     }
     request
   }
@@ -267,10 +255,9 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
             val requestBody = JSONUtils.deserialize[RequestBody](request.request_data)
             val requestType = requestBody.`type`
             val reportConfig = JSONUtils.deserialize[ReportConfig](AppConf.getConfig("druid_query." + requestType))
-            val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
             JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId, "totalRequests" -> requests.length)), INFO)
-            val res = processRequest(request, reportConfig, storageConfig)
-            print(request, reportConfig, storageConfig)
+            val res = processRequest(request, reportConfig)
+            print(request, reportConfig)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time,
               "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
