@@ -80,10 +80,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     }
   }
 
-  def validateEncryptionRequest(request: JobRequest): Boolean = {
-    if (request.encryption_key.nonEmpty) true else false;
-  }
-
   def validateRequest(request: JobRequest): Boolean = {
     if (request.request_data != null) true else false
   }
@@ -228,21 +224,12 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
     if (failedOnDemandDruidRes) {
       markRequestAsFailed(request, response.statusMsg)
     } else {
-      if (validateEncryptionRequest(request)) {
         val storageConfig = getStorageConfig(config, response.file.head)
         request.download_urls = Option(response.file);
         request.execution_time = Option(result._1);
         processRequestEncryption(storageConfig, request)
         request.status = "SUCCESS";
         request.dt_job_completed = Option(System.currentTimeMillis)
-      }
-      else {
-        request.status = "SUCCESS";
-        request.download_urls = Option(response.file);
-        JobLogger.log("download url", request.download_urls, INFO)
-        request.execution_time = Option(result._1);
-        request.dt_job_completed = Option(System.currentTimeMillis)
-      }
     }
     request
   }
@@ -272,7 +259,6 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
             JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId, "totalRequests" -> requests.length)), INFO)
             val res = processRequest(request, reportConfig, storageConfig)
             print(request, reportConfig, storageConfig)
-            JobLogger.log("final response ", Some(res),INFO)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time,
               "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
