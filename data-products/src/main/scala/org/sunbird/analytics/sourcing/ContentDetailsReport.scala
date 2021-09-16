@@ -23,7 +23,8 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
 
   // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
-    JobLogger.log(s"Started execution - $jobName",None, Level.INFO)
+    JobLogger.init(jobName)
+    JobLogger.start(s"Started execution - $jobName",Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     implicit val spark = openSparkSession(jobConfig)

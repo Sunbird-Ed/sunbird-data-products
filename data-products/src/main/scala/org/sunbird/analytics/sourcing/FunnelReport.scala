@@ -50,7 +50,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
   // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
     JobLogger.init("FunnelReport")
-    JobLogger.log("Started execution - FunnelReport Job",None, Level.INFO)
+    JobLogger.start("Started execution - FunnelReport Job",Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
 
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig)
@@ -122,7 +122,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     saveReportToBlob(funnelReport, configMap, storageConfig, "FunnelReport")
 
     funnelReport.unpersist(true)
-    JobLogger.end("FunnelReport Job completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> "FunnelReport")))
     Map("funnelReportCount"->funnelReport.count())
   }
 
