@@ -64,6 +64,18 @@ object UserCacheIndexer extends Serializable {
       }
     }
 
+    def extractFromArrayStringFun(schoolname: String): String = {
+      try {
+        val str = schoolname.replaceAll("\\[", "\\\\[").replaceAll("\\]", "\\\\]")
+        str
+      } catch {
+        case ex: Exception =>
+          schoolname
+      }
+    }
+
+    val extractFromArrayString = udf[String, String](extractFromArrayStringFun)
+
     def populateUserData() {
 
       // Get CustodianOrgID
@@ -162,7 +174,7 @@ object UserCacheIndexer extends Serializable {
         .join(userOrgDF, userOrgDF.col("userid") === userLocationTypeDF.col("userid"), "left")
         .join(organisationDF, userOrgDF.col("organisationid") === organisationDF.col("id")
           && organisationDF.col("organisationtype").equalTo(2), "left")
-        .withColumn("schoolname", organisationDF.col("orgname"))
+        .withColumn("schoolname", extractFromArrayString(organisationDF.col("orgname")))
         .withColumn("schooludisecode", organisationDF.col("externalid"))
         .select(
           userLocationTypeDF.col("userid"),

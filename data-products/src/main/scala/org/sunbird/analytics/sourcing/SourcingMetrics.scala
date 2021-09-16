@@ -37,7 +37,8 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
 
   // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
-    JobLogger.log(s"Started execution - $jobName",None, Level.INFO)
+    JobLogger.init(jobName)
+    JobLogger.start(s"Started execution - $jobName",Option(Map("config" -> config, "model" -> jobName)))
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     implicit val spark = openSparkSession(jobConfig)
@@ -45,6 +46,10 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
     try {
       val res = CommonUtil.time(execute());
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "chapterReportCount" -> res._2.getOrElse("chapterReportCount",0), "textbookReportCount" -> res._2.getOrElse("textbookReportCount",0))))
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(ex.getMessage, None, Level.ERROR);
+        JobLogger.end(s"$jobName execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
     } finally {
       frameworkContext.closeContext()
       spark.close()
