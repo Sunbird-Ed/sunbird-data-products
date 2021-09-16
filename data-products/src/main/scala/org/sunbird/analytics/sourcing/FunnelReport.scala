@@ -67,6 +67,10 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     try {
       val res = CommonUtil.time(execute());
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "funnelReportCount" -> res._2.getOrElse("funnelReportCount",0))))
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(ex.getMessage, None, Level.ERROR);
+        JobLogger.end(s"$jobName execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
     } finally {
       frameworkContext.closeContext()
     }
