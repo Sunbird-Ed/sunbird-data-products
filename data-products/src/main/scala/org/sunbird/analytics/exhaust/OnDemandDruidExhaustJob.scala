@@ -230,7 +230,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
         processRequestEncryption(storageConfig, request)
         request.status = "SUCCESS";
         request.dt_job_completed = Option(System.currentTimeMillis)
-    }
+      }
     request
   }
 
@@ -258,6 +258,7 @@ object OnDemandDruidExhaustJob extends optional.Application with BaseReportsJob 
             JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId, "totalRequests" -> requests.length)), INFO)
             val res = processRequest(request, reportConfig)
             print(request, reportConfig)
+            JobLogger.log("final response ", Some(res),INFO)
             JobLogger.log("The Request is processed. Pending zipping", Some(Map("requestId" -> request.request_id, "timeTaken" -> res.execution_time,
               "remainingRequest" -> totalRequests.getAndDecrement())), INFO)
             res
