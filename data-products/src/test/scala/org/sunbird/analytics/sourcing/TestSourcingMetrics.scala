@@ -60,7 +60,7 @@ class TestSourcingMetrics extends SparkSpec with Matchers with MockFactory {
 
     val doc: Json = parse(json).getOrElse(Json.Null)
     val results = List(DruidResult.apply(Some(ZonedDateTime.of(2020, 1, 23, 17, 10, 3, 0, ZoneOffset.UTC)), doc))
-    val druidResponse = DruidResponseTimeseriesImpl.apply(results, QueryType.GroupBy)
+    val druidResponse = DruidResult.apply(Some(ZonedDateTime.of(2019, 11, 28, 17, 0, 0, 0, ZoneOffset.UTC)), doc)
     implicit val mockDruidConfig = DruidConfig.DefaultConfig
     val mockDruidClient = mock[DruidClient]
     (mockDruidClient.actorSystem _).expects().returning(ActorSystem("TestQuery")).anyNumberOfTimes()
