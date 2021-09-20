@@ -155,7 +155,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
   def getTextBooks(config: Map[String, AnyRef])(implicit sc:SparkContext,fc: FrameworkContext): List[TextbookInfo] = {
     val request = JSONUtils.serialize(config.get("druidConfig").get)
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
-    val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
+    val druidResponse = DruidDataFetcher.getDruidData(druidQuery, true)
 
     val result = druidResponse.map(f => {
       JSONUtils.deserialize[TextbookInfo](f)
