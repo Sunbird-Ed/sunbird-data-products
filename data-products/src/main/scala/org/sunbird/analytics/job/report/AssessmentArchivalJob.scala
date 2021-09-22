@@ -88,8 +88,8 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       .withColumn("question", to_json(col("question")))
 
     val archiveBatchList = assessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
-    val batchesToArchiveCount = new AtomicInteger(archiveBatchList.length)
-    JobLogger.log(s"Total Batches to Archive By Year & Week $batchesToArchiveCount", None, INFO)
+    val totalBatchesToArchive = new AtomicInteger(archiveBatchList.length)
+    JobLogger.log(s"Total Batches to Archive By Year & Week $totalBatchesToArchive", None, INFO)
 
     // Loop through the batches to archive list
     val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
@@ -107,7 +107,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
         JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), INFO)
         metrics
       }
-      JobLogger.log(s"${batches._1} is successfully archived", Some(Map("batch_id" -> batches._1, "pending_batches" -> batchesToArchiveCount.getAndDecrement())), INFO)
+      JobLogger.log(s"${batches._1} is successfully archived", Some(Map("batch_id" -> batches._1, "pending_batches" -> totalBatchesToArchive.getAndDecrement())), INFO)
       res
     }).toArray
     assessmentData.unpersist()
@@ -138,18 +138,6 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     archivedData.rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"), keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
     ArchivalMetrics(batchId = batchId, Period(year = period.year, weekOfYear = period.weekOfYear),
       pendingWeeksOfYears = None, totalArchivedRecords = Some(totalArchivedRecords), totalDeletedRecords = Some(totalArchivedRecords), totalDistinctBatches = totalDistinctBatches)
-  }
-
-  // Date - YYYY-MM-DD Format
-  def getWeekAndYearVal(date: String): Period = {
-    if (null != date && date.nonEmpty) {
-      val dt = new DateTime(date)
-      Period(year = dt.getYear, weekOfYear = dt.getWeekOfWeekyear)
-    } else {
-      val today = new DateTime()
-      val lastWeek = today.minusWeeks(1) // Get always for the previous week of the current
-      Period(year = lastWeek.getYear, weekOfYear = lastWeek.getWeekOfWeekyear)
-    }
   }
 
   def fetchArchivedBatches(period: Period, batchId: Option[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
@@ -194,6 +182,17 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       jobConfig)
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     archivedData.saveToBlobStore(storageConfig = storageConfig, format = "csv", reportId = s"$reportPath$fileName-${System.currentTimeMillis()}", options = Option(Map("header" -> "true", "codec" -> "org.apache.hadoop.io.compress.GzipCodec")), partitioningColumns = None, fileExt = Some("csv.gz"))
+  }
+  // Date - YYYY-MM-DD Format
+  def getWeekAndYearVal(date: String): Period = {
+    if (null != date && date.nonEmpty) {
+      val dt = new DateTime(date)
+      Period(year = dt.getYear, weekOfYear = dt.getWeekOfWeekyear)
+    } else {
+      val today = new DateTime()
+      val lastWeek = today.minusWeeks(1) // Get always for the previous week of the current
+      Period(year = lastWeek.getYear, weekOfYear = lastWeek.getWeekOfWeekyear)
+    }
   }
 
 }
