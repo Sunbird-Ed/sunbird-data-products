@@ -23,7 +23,7 @@ object ExhaustUtil {
       case "s3" | "azure" =>
         val key = AppConf.getConfig("azure_storage_key")
         val file = s"${filePath}${batchId}/${year}-${weekNumb}-*.${format}"
-        s"wasb://$bucket@$key.blob.core.windows.net/$file."
+        s"wasb://$bucket@$key.blob.core.windows.net/$file"
       // $COVERAGE-ON$
     }
 

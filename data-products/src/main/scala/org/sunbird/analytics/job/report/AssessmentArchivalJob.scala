@@ -60,7 +60,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       val batchIds = modelParams.getOrElse("batchIds", null).asInstanceOf[List[String]]
       val archiveForLastWeek: Boolean = modelParams.getOrElse("archiveForLastWeek", true).asInstanceOf[Boolean]
 
-      val res = if (deleteArchivedBatch) CommonUtil.time(removeRecords(date, Some(batchIds), archiveForLastWeek)) else CommonUtil.time(archiveData(date, Some(batchIds), archiveForLastWeek))
+      val res = if (deleteArchivedBatch) CommonUtil.time(removeRecords(date, Some(batchIds), archiveForLastWeek)) else CommonUtil.time(archiveData(date, Option(batchIds), archiveForLastWeek))
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "archived_details" -> res._2, "total_archived_files" -> res._2.length)))
     } catch {
       case ex: Exception =>
@@ -79,7 +79,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   // $COVERAGE-ON$
   def archiveData(date: String, batchIds: Option[List[String]], archiveForLastWeek: Boolean)(implicit spark: SparkSession, config: JobConfig): Array[ArchivalMetrics] = {
     // Get the assessment Data
-    val assessmentDF: DataFrame = getAssessmentData(spark, batchIds.getOrElse(List()))
+    val assessmentDF: DataFrame = getAssessmentData(spark, batchIds)
     val period = getWeekAndYearVal(date, archiveForLastWeek)
     //Get the Week Num & Year Value for Based on the updated_on value column
     val assessmentData = assessmentDF.withColumn("updated_on", to_timestamp(col("updated_on")))
@@ -88,7 +88,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       .withColumn("question", to_json(col("question")))
 
     /**
-     *  The below filter is required, If we want to archive the data for a specific week of year and year
+     * The below filter is required, If we want to archive the data for a specific week of year and year
      */
     val filteredAssessmentData = if (!isEmptyPeriod(period)) assessmentData.filter(col("year") === period.year).filter(col("week_of_year") === period.weekOfYear) else assessmentData
 
@@ -124,7 +124,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     val period: Period = getWeekAndYearVal(date, archiveForLastWeek) // Date is optional, By default it will provide the previous week num of current year
     val res = if (batchIds.nonEmpty) {
       for (batchId <- batchIds.getOrElse(List())) yield {
-        remove(period, Some(batchId))
+        remove(period, Option(batchId))
       }
     } else {
       List(remove(period, None))
@@ -137,7 +137,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     val archivedData = archivedDataDF.select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
     val totalArchivedRecords: Long = archivedData.count
     val totalDistinctBatches: Long = archivedData.select("batch_id").distinct().count()
-    JobLogger.log(s"Deleting $totalArchivedRecords records for the year ${period.year} and week of year ${period.weekOfYear} from the DB ", None, INFO)
+    JobLogger.log(s"Deleting $totalArchivedRecords archived records only, for the year ${period.year} and week of year ${period.weekOfYear} from the DB ", None, INFO)
     archivedData.rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"), keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
     ArchivalMetrics(batchId = batchId, Period(year = period.year, weekOfYear = period.weekOfYear),
       pendingWeeksOfYears = None, totalArchivedRecords = Some(totalArchivedRecords), totalDeletedRecords = Some(totalArchivedRecords), totalDistinctBatches = totalDistinctBatches)
@@ -146,26 +146,27 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   def fetchArchivedBatches(period: Period, batchId: Option[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val modelParams = config.modelParams.get
     val azureFetcherConfig = modelParams.getOrElse("archivalFetcherConfig", Map()).asInstanceOf[Map[String, AnyRef]]
-    println("azureFetcherConfig" + azureFetcherConfig)
-    val store = azureFetcherConfig.getOrElse("store", "local").asInstanceOf[String]
+    val store = azureFetcherConfig.getOrElse("store", "azure").asInstanceOf[String]
     val format: String = azureFetcherConfig.getOrElse("blobExt", "csv.gz").asInstanceOf[String]
     val filePath = azureFetcherConfig.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
     val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
-    val blobFields = Map("year" -> period.year, "weekNum" -> period.weekOfYear, "batchId" -> batchId.orNull)
-    JobLogger.log(s"Fetching a archived records", Some(blobFields), INFO)
+    val blobFields = if (!isEmptyPeriod(period)) Map("year" -> period.year, "weekNum" -> period.weekOfYear, "batchId" -> batchId.orNull)
+    else Map("batchId" -> batchId.orNull)
+    JobLogger.log(s"Fetching a archived records only from the blob store", Some(Map("reportPath" -> filePath, "container" -> container) ++ blobFields), INFO)
     ExhaustUtil.getArchivedData(store, filePath, container, blobFields, Some(format))
   }
 
-  def getAssessmentData(spark: SparkSession, batchIds: List[String]): DataFrame = {
+  def getAssessmentData(spark: SparkSession, batchIds: Option[List[String]]): DataFrame = {
     import spark.implicits._
     val assessmentDF = fetchData(spark, assessmentAggDBSettings, cassandraUrl, new StructType())
-    if (batchIds.nonEmpty) {
-      if (batchIds.size > 1) {
-        val batchListDF = batchIds.toDF("batch_id")
-        assessmentDF.join(batchListDF, Seq("batch_id"),  "inner").persist()
+    val batchIdentifiers = batchIds.getOrElse(List())
+    if (batchIdentifiers.nonEmpty) {
+      if (batchIdentifiers.size > 1) {
+        val batchListDF = batchIdentifiers.toDF("batch_id")
+        assessmentDF.join(batchListDF, Seq("batch_id"), "inner").persist()
       }
       else {
-        assessmentDF.filter(col("batch_id") === batchIds.head).persist()
+        assessmentDF.filter(col("batch_id") === batchIdentifiers.head).persist()
       }
     } else {
       assessmentDF
