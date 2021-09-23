@@ -8,7 +8,7 @@ import org.ekstep.analytics.framework.util.JobLogger
 
 object ExhaustUtil {
 
-  def getArchivedData(store: String, filePath: String, bucket: String, blobFields: Map[String, String], fileFormat: Option[String])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+  def getArchivedData(store: String, filePath: String, bucket: String, blobFields: Map[String, Any], fileFormat: Option[String])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val filteredBlobFields = blobFields.filter(_._2 != null)
     val format = fileFormat.getOrElse("csv.gz")
     val batchId = filteredBlobFields.getOrElse("batchId", "*")

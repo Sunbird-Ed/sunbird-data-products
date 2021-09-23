@@ -24,8 +24,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   private val partitionCols = List("batch_id", "year", "week_of_year")
   private val columnWithOrder = List("course_id", "batch_id", "user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
 
-  case class Period(year: Int,
-                    weekOfYear: Int)
+  case class Period(year: Int, weekOfYear: Int)
 
   case class BatchPartition(batchId: String, period: Period)
 
@@ -59,9 +58,10 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
        */
       val date = modelParams.getOrElse("date", null).asInstanceOf[String]
       val batchIds = modelParams.getOrElse("batchIds", null).asInstanceOf[List[String]]
-      val res = if (deleteArchivedBatch) CommonUtil.time(removeRecords(date, Some(batchIds))) else CommonUtil.time(archiveData(Some(batchIds)))
-      val total_archived_files = res._2.length
-      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "archived_details" -> res._2, "total_archived_files" -> total_archived_files)))
+      val archiveForLastWeek: Boolean = modelParams.getOrElse("archiveForLastWeek", true).asInstanceOf[Boolean]
+
+      val res = if (deleteArchivedBatch) CommonUtil.time(removeRecords(date, Some(batchIds), archiveForLastWeek)) else CommonUtil.time(archiveData(date, Some(batchIds), archiveForLastWeek))
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "archived_details" -> res._2, "total_archived_files" -> res._2.length)))
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
@@ -77,19 +77,24 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   }
 
   // $COVERAGE-ON$
-  def archiveData(batchIds: Option[List[String]])(implicit spark: SparkSession, config: JobConfig): Array[ArchivalMetrics] = {
+  def archiveData(date: String, batchIds: Option[List[String]], archiveForLastWeek: Boolean)(implicit spark: SparkSession, config: JobConfig): Array[ArchivalMetrics] = {
     // Get the assessment Data
     val assessmentDF: DataFrame = getAssessmentData(spark, batchIds.getOrElse(List()))
-
+    val period = getWeekAndYearVal(date, archiveForLastWeek)
     //Get the Week Num & Year Value for Based on the updated_on value column
     val assessmentData = assessmentDF.withColumn("updated_on", to_timestamp(col("updated_on")))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
       .withColumn("question", to_json(col("question")))
 
-    val archiveBatchList = assessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
+    /**
+     *  The below filter is required, If we want to archive the data for a specific week of year and year
+     */
+    val filteredAssessmentData = if (!isEmptyPeriod(period)) assessmentData.filter(col("year") === period.year).filter(col("week_of_year") === period.weekOfYear) else assessmentData
+
+    val archiveBatchList = filteredAssessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
     val totalBatchesToArchive = new AtomicInteger(archiveBatchList.length)
-    JobLogger.log(s"Total Batches to Archive By Year & Week $totalBatchesToArchive", None, INFO)
+    JobLogger.log(s"Total Batches to Archive is $totalBatchesToArchive for a period $period", None, INFO)
 
     // Loop through the batches to archive list
     val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
@@ -99,11 +104,9 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       // Loop through the week_num & year batch partition
       val res = for (batch <- batches._2.asInstanceOf[Array[BatchPartition]]) yield {
         val filteredDF = assessmentData.filter(col("batch_id") === batch.batchId && col("year") === batch.period.year && col("week_of_year") === batch.period.weekOfYear).select(columnWithOrder.head, columnWithOrder.tail: _*)
-        upload(filteredDF, batch, config)
-
+        upload(filteredDF, batch) // Upload the archived files into blob store
         val metrics = ArchivalMetrics(batchId = Some(batch.batchId), Period(year = batch.period.year, weekOfYear = batch.period.weekOfYear),
           pendingWeeksOfYears = Some(processingBatch.getAndDecrement()), totalArchivedRecords = Some(filteredDF.count()), totalDeletedRecords = None, totalDistinctBatches = filteredDF.select("batch_id").distinct().count())
-
         JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), INFO)
         metrics
       }
@@ -111,14 +114,14 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
       res
     }).toArray
     assessmentData.unpersist()
-    archivalStatus
+    archivalStatus // List of metrics
   }
 
   // Delete the records for the archived batch data.
   // Date - YYYY-MM-DD Format
   // Batch IDs are optional
-  def removeRecords(date: String, batchIds: Option[List[String]])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Array[ArchivalMetrics] = {
-    val period: Period = getWeekAndYearVal(date) // Date is optional, By default it will provide the previous week num of current year
+  def removeRecords(date: String, batchIds: Option[List[String]], archiveForLastWeek: Boolean)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Array[ArchivalMetrics] = {
+    val period: Period = getWeekAndYearVal(date, archiveForLastWeek) // Date is optional, By default it will provide the previous week num of current year
     val res = if (batchIds.nonEmpty) {
       for (batchId <- batchIds.getOrElse(List())) yield {
         remove(period, Some(batchId))
@@ -141,12 +144,14 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   }
 
   def fetchArchivedBatches(period: Period, batchId: Option[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    val azureFetcherConfig = config.modelParams.get("archivalFetcherConfig").asInstanceOf[Map[String, AnyRef]]
-    val store = azureFetcherConfig("store").asInstanceOf[String]
+    val modelParams = config.modelParams.get
+    val azureFetcherConfig = modelParams.getOrElse("archivalFetcherConfig", Map()).asInstanceOf[Map[String, AnyRef]]
+    println("azureFetcherConfig" + azureFetcherConfig)
+    val store = azureFetcherConfig.getOrElse("store", "local").asInstanceOf[String]
     val format: String = azureFetcherConfig.getOrElse("blobExt", "csv.gz").asInstanceOf[String]
     val filePath = azureFetcherConfig.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
     val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
-    val blobFields = Map("year" -> period.year.toString, "weekNum" -> period.weekOfYear.toString, "batchId" -> batchId.orNull)
+    val blobFields = Map("year" -> period.year, "weekNum" -> period.weekOfYear, "batchId" -> batchId.orNull)
     JobLogger.log(s"Fetching a archived records", Some(blobFields), INFO)
     ExhaustUtil.getArchivedData(store, filePath, container, blobFields, Some(format))
   }
@@ -157,20 +162,18 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     if (batchIds.nonEmpty) {
       if (batchIds.size > 1) {
         val batchListDF = batchIds.toDF("batch_id")
-        assessmentDF.join(batchListDF, Seq("batch_id"), "inner").persist()
+        assessmentDF.join(batchListDF, Seq("batch_id"),  "inner").persist()
       }
       else {
-        assessmentDF.filter(col("batch_id") === batchIds).persist()
+        assessmentDF.filter(col("batch_id") === batchIds.head).persist()
       }
-
     } else {
       assessmentDF
     }
   }
 
   def upload(archivedData: DataFrame,
-             batch: BatchPartition,
-             jobConfig: JobConfig): List[String] = {
+             batch: BatchPartition)(implicit jobConfig: JobConfig): List[String] = {
     val modelParams = jobConfig.modelParams.get
     val reportPath: String = modelParams.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
@@ -183,16 +186,25 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
     archivedData.saveToBlobStore(storageConfig = storageConfig, format = "csv", reportId = s"$reportPath$fileName-${System.currentTimeMillis()}", options = Option(Map("header" -> "true", "codec" -> "org.apache.hadoop.io.compress.GzipCodec")), partitioningColumns = None, fileExt = Some("csv.gz"))
   }
+
   // Date - YYYY-MM-DD Format
-  def getWeekAndYearVal(date: String): Period = {
-    if (null != date && date.nonEmpty) {
-      val dt = new DateTime(date)
-      Period(year = dt.getYear, weekOfYear = dt.getWeekOfWeekyear)
-    } else {
+  def getWeekAndYearVal(date: String, archiveForLastWeek: Boolean): Period = {
+    if (archiveForLastWeek) {
       val today = new DateTime()
       val lastWeek = today.minusWeeks(1) // Get always for the previous week of the current
       Period(year = lastWeek.getYear, weekOfYear = lastWeek.getWeekOfWeekyear)
+    } else {
+      if (null != date && date.nonEmpty) {
+        val dt = new DateTime(date)
+        Period(year = dt.getYear, weekOfYear = dt.getWeekOfWeekyear)
+      } else {
+        Period(0, 0)
+      }
     }
+  }
+
+  def isEmptyPeriod(period: Period): Boolean = {
+    if (period.year == 0 && period.weekOfYear == 0) true else false
   }
 
 }

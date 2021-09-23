@@ -34,7 +34,7 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"deleteArchivedBatch":false,"store":"local","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val reportData = AssessmentArchivalJob.archiveData(None)
+    val reportData = AssessmentArchivalJob.archiveData(date = null, None, archiveForLastWeek = true)
 
     val batch_1 = reportData.filter(x => x.batchId.getOrElse("") === "batch-001")
     batch_1.foreach(res => res.period.year === "2021")
@@ -51,7 +51,7 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"archivalFetcherConfig":{"store":"local","format":"csv.gz","reportPath":"src/test/resources/assessment-archival/archival-data/","container":""},"deleteArchivedBatch":true,"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val reportData = AssessmentArchivalJob.removeRecords("2021-08-18", None)
+    val reportData = AssessmentArchivalJob.removeRecords(date = "2021-08-18", None, archiveForLastWeek = false)
     reportData.head.totalDeletedRecords.get should be(6)
   }
 
