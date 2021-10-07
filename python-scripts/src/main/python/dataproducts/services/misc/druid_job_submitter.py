@@ -83,7 +83,10 @@ class DruidJobSubmitter:
         print('Starting the job submitter...')
         reports = self.get_active_jobs()
         for report in reports:
-            if(self.check_schedule(report['reportSchedule'].upper(), report['reportId'], report['config']['reportConfig']['dateRange'].get('intervalSlider'))):
-                report_config = self.interpolate_config(report['config'])
-                self.submit_job(report_config)
+            try:
+                if(self.check_schedule(report['reportSchedule'].upper(), report['reportId'], report['config']['reportConfig']['dateRange'].get('intervalSlider'))):
+                    report_config = self.interpolate_config(report['config'])
+                    self.submit_job(report_config)
+            except Exception as e:
+                print('ERROR::While submitting druid report', report['reportId'])
         print('Job submission completed...')
