@@ -29,10 +29,11 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
 
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
+    val batchIds: List[String] = jobConfig.modelParams.getOrElse("batchId", List()).asInstanceOf[List[String]]
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
-      val res = CommonUtil.time(migrateData(spark))
+      val res = CommonUtil.time(migrateData(spark, batchIds))
       val total_records = res._2.count()
       JobLogger.log(s"Updating the $total_records records in the cassandra table table", None, INFO)
       updatedTable(res._2, userActivityAggDBSettings)
@@ -44,14 +45,14 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
   }
 
   // $COVERAGE-ON$
-  def migrateData(session: SparkSession): DataFrame = {
+  def migrateData(session: SparkSession, batchIds: List[String]): DataFrame = {
     val updateAggColumn = udf(mergeAggMapCol())
     val updatedAggLastUpdatedCol = udf(mergeAggLastUpdatedMapCol())
     val flatAggList = udf(mergeAggListValues())
     val flatAggLastUpdatedList = udf(mergeAggLastUpdatedListValues())
 
-    val activityAggDF = fetchActivityData(session)
-    val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session))
+    val activityAggDF = fetchActivityData(session, batchIds)
+    val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session, batchIds))
 
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
@@ -72,13 +73,21 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     JobLogger.log(s"Updating the records into the db is completed", None, INFO)
   }
 
-  def fetchActivityData(session: SparkSession): DataFrame = {
-    fetchData(session, userActivityAggDBSettings, cassandraUrl, new StructType()).withColumnRenamed("user_id", "userid")
+  def fetchActivityData(session: SparkSession, batchIds: List[String]): DataFrame = {
+    var activityAggDF = fetchData(session, userActivityAggDBSettings, cassandraUrl, new StructType()).withColumnRenamed("user_id", "userid")
+    if(batchIds.nonEmpty) {
+      activityAggDF = activityAggDF.filter(col("context_id").isin(batchIds: _*))
+    }
+    activityAggDF
   }
 
-  def fetchAssessmentData(session: SparkSession): DataFrame = {
-    fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
+  def fetchAssessmentData(session: SparkSession, batchIds: List[String]): DataFrame = {
+    var assessmentAggDF = fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
       .select("batch_id", "course_id", "content_id", "user_id", "total_score", "total_max_score")
+    if(batchIds.nonEmpty) {
+      assessmentAggDF = assessmentAggDF.filter(col("batchid").isin(batchIds: _*))
+    }
+    assessmentAggDF
   }
 
   def mergeAggMapCol(): (Map[String, Int], Int, Int, String) => Map[String, Int] = (agg: Map[String, Int], max_score: Int, score: Int, content_id: String) => {

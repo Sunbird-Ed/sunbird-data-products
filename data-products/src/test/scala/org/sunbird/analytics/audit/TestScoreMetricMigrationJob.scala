@@ -28,7 +28,7 @@ class TestScoreMetricMigrationJob extends BaseReportSpec with MockFactory {
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.audit.ScoreMetricMigrationJob","modelParams":{"store":"azure","sparkCassandraConnectionHost":"localhost", "fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"ScoreMetricMigrationJob"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val sc: SparkContext = spark.sparkContext
-    val res = ScoreMetricMigrationJob.migrateData(spark)
+    val res = ScoreMetricMigrationJob.migrateData(spark, List[String]())
     res.count() should be(5)
     println("ress" + res.show(false))
     val result = res.filter(col("context_id") === "cb:batch-001")
