@@ -12,6 +12,7 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.sunbird.analytics.job.report.BaseReportsJob
+import org.ekstep.analytics.framework.util.JSONUtils
 
 import java.util.Date
 
@@ -29,7 +30,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
 
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
-    val batchIds: List[String] = jobConfig.modelParams.getOrElse("batchId", List()).asInstanceOf[List[String]]
+    val batchIds: List[String] = jobConfig.modelParams.get.getOrElse("batchId", List()).asInstanceOf[List[String]]
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
@@ -50,6 +51,8 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     val updatedAggLastUpdatedCol = udf(mergeAggLastUpdatedMapCol())
     val flatAggList = udf(mergeAggListValues())
     val flatAggLastUpdatedList = udf(mergeAggLastUpdatedListValues())
+    val flatAggDetailList = udf(mergeAggDetailListValues())
+    val updatedAggDetailsCol = udf(mergeAggDetailsCol())
 
     val activityAggDF = fetchActivityData(session, batchIds)
     val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session, batchIds))
@@ -57,15 +60,21 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
-      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id",  "total_max_score", "total_score", "content_id")
+      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id",  "total_max_score", "total_score", "content_id", "agg_details", "new_agg_details")
 
     filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
+      .withColumn("agg_details", updatedAggDetailsCol(col("agg_details"), col("new_agg_details")))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
       .groupBy("activity_type", "user_id", "context_id", "activity_id")
-      .agg(collect_list("agg").as("agg"), collect_list("agg_last_updated").as("agg_last_updated"))
+      .agg(
+        collect_list("agg").as("agg"),
+        collect_list("agg_last_updated").as("agg_last_updated"),
+        collect_list("agg_details").as("agg_details")
+      )
       .withColumn("agg", flatAggList(col("agg")))
       .withColumn("agg_last_updated", flatAggLastUpdatedList(col("agg_last_updated")))
-      .select("activity_type", "user_id", "context_id", "activity_id", "agg", "agg_last_updated")
+      .withColumn("agg_details", flatAggDetailList(col("agg_details")))
+      .select("activity_type", "user_id", "context_id", "activity_id", "agg", "agg_last_updated", "agg_details")
   }
 
   def updatedTable(data: DataFrame, tableSettings: Map[String, String]): Unit = {
@@ -76,16 +85,17 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
   def fetchActivityData(session: SparkSession, batchIds: List[String]): DataFrame = {
     var activityAggDF = fetchData(session, userActivityAggDBSettings, cassandraUrl, new StructType()).withColumnRenamed("user_id", "userid")
     if(batchIds.nonEmpty) {
-      activityAggDF = activityAggDF.filter(col("context_id").isin(batchIds: _*))
+      val batchIdsList = batchIds.map(batchId => "cb:"+batchId)
+      activityAggDF = activityAggDF.filter(col("context_id").isin(batchIdsList: _*))
     }
     activityAggDF
   }
 
   def fetchAssessmentData(session: SparkSession, batchIds: List[String]): DataFrame = {
     var assessmentAggDF = fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
-      .select("batch_id", "course_id", "content_id", "user_id", "total_score", "total_max_score")
+      .select("batch_id", "course_id", "content_id", "user_id", "total_score", "total_max_score", "attempt_id", "last_attempted_on")
     if(batchIds.nonEmpty) {
-      assessmentAggDF = assessmentAggDF.filter(col("batchid").isin(batchIds: _*))
+      assessmentAggDF = assessmentAggDF.filter(col("batch_id").isin(batchIds: _*))
     }
     assessmentAggDF
   }
@@ -106,10 +116,48 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     aggregation.toList.flatten.toMap
   }
 
+  def mergeAggDetailListValues(): Seq[Seq[String]] => List[String] = (aggregation: Seq[Seq[String]]) => {
+    aggregation.toList.flatten
+  }
+
+  def mergeAggDetailsCol(): (Seq[String], List[String]) => List[String] = (aggDetails: Seq[String], newAggDetails: Seq[String]) => {
+    val filteredAggDetails = newAggDetails.foldLeft(List[String]())((finalResult, aggDetail: String) => {
+      val aggDetailMap = JSONUtils.deserialize[Map[String, AnyRef]](aggDetail)
+      val existingAgg = aggDetails.filter(row => {
+        aggDetailMap.get("attempt_id").get == JSONUtils.deserialize[Map[String, AnyRef]](row).get("attempt_id").get
+      })
+      if(existingAgg.isEmpty) {
+        finalResult :+ aggDetail
+      } else finalResult
+    })
+
+    aggDetails.toList ++ filteredAggDetails
+  }
+
+  val updateAggDetailsColumn = udf(mergeAttemptDetailsCol())
+
+  def mergeAttemptDetailsCol(): Seq[Row] => List[String] = (rows: Seq[Row]) => {
+    rows.map(row => {
+      val aggMap = Map("attempt_id" -> row.getAs[String]("attempt_id"),
+        "attempted_on" -> row.getAs[String]("last_attempted_on"),
+        "score" -> row.getAs[Double]("total_score"),
+        "content_id"-> row.getAs[String]("content_id"),
+        "max_score" -> row.getAs[Double]("total_max_score"),
+        "type" -> "score_metrics"
+      )
+      JSONUtils.serialize(aggMap)
+    }).toList
+  }
+
   def getBestScoreRecordsDF(assessmentDF: DataFrame): DataFrame = {
-    val df = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc("total_score"))
-    assessmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
+    val bsPart = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc("total_score"))
+    val aggPart = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc("total_score")).rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+
+    assessmentDF.withColumn("rownum", row_number.over(bsPart))
+      .withColumn("new_agg_details", when(col("rownum") === 1, updateAggDetailsColumn(collect_list(struct("*")).over(aggPart))))
+      .where(col("rownum") === 1).drop("rownum")
       .withColumn("batchid", concat(lit("cb:"), col("batch_id"))).drop("batch_id")
   }
+
 
 }
