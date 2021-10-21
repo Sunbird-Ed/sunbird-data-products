@@ -2,7 +2,6 @@ package org.sunbird.analytics.audit
 
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
-import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{SparkSession, _}
@@ -12,7 +11,6 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.sunbird.analytics.job.report.BaseReportsJob
-import org.ekstep.analytics.framework.util.JSONUtils
 
 import java.util.Date
 
@@ -60,10 +58,10 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
-      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id",  "total_max_score", "total_score", "content_id", "agg_details", "new_agg_details")
+      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id",  "total_max_score", "total_score", "content_id", "agg_details", "migrating_agg_details")
 
     filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
-      .withColumn("agg_details", updatedAggDetailsCol(col("agg_details"), col("new_agg_details")))
+      .withColumn("agg_details", updatedAggDetailsCol(col("agg_details"), col("migrating_agg_details")))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
       .groupBy("activity_type", "user_id", "context_id", "activity_id")
       .agg(
@@ -134,29 +132,19 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     aggDetails.toList ++ filteredAggDetails
   }
 
-  val updateAggDetailsColumn = udf(mergeAttemptDetailsCol())
-
-  def mergeAttemptDetailsCol(): Seq[Row] => List[String] = (rows: Seq[Row]) => {
-    rows.map(row => {
-      val aggMap = Map("attempt_id" -> row.getAs[String]("attempt_id"),
-        "attempted_on" -> row.getAs[String]("last_attempted_on"),
-        "score" -> row.getAs[Double]("total_score"),
-        "content_id"-> row.getAs[String]("content_id"),
-        "max_score" -> row.getAs[Double]("total_max_score"),
-        "type" -> "score_metrics"
-      )
-      JSONUtils.serialize(aggMap)
-    }).toList
-  }
-
   def getBestScoreRecordsDF(assessmentDF: DataFrame): DataFrame = {
-    val bsPart = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc("total_score"))
-    val aggPart = Window.partitionBy("user_id", "batch_id", "course_id", "content_id").orderBy(desc("total_score")).rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
-
-    assessmentDF.withColumn("rownum", row_number.over(bsPart))
-      .withColumn("new_agg_details", when(col("rownum") === 1, updateAggDetailsColumn(collect_list(struct("*")).over(aggPart))))
-      .where(col("rownum") === 1).drop("rownum")
-      .withColumn("batchid", concat(lit("cb:"), col("batch_id"))).drop("batch_id")
+    assessmentDF.groupBy("user_id", "batch_id", "course_id", "content_id").agg(
+      max("total_score").as("total_score"),
+      max("total_max_score").as("total_max_score"),
+      collect_list(to_json(struct(
+        col("total_max_score").as("max_score"),
+        col("total_score").as("score"),
+        lit("score_metrics").as("type"),
+        col("attempt_id"),
+        col("content_id"),
+        col("last_attempted_on").as("last_attempted_on")
+      ))).as("migrating_agg_details")
+    ).withColumn("batchid", concat(lit("cb:"), col("batch_id"))).drop("batch_id")
   }
 
 
