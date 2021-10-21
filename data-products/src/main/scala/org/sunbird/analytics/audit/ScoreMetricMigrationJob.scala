@@ -3,7 +3,7 @@ package org.sunbird.analytics.audit
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.{SparkSession, _}
 import org.apache.spark.{SparkContext, sql}
 import org.ekstep.analytics.framework.Level.INFO
@@ -43,9 +43,24 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
   }
 
   // $COVERAGE-ON$
+
+  /**
+   * Get the migrateable dataframe by joining assessment_aggregator to user_activity_agg records
+   *
+   * Configs:
+   * batchId: List of batchids to migrate data for specific batch. if empty list, migrates data for all batches
+   * metricsType: type to store in agg_details as identifier of agg_detail
+   * forceMerge: option to forcefully replace in exisiting agg_details in user_activity_agg
+   *
+   * @param session SparkSession
+   * @param jobConfig JobConfig
+   *
+   * @return DataFrame
+   */
   def migrateData(session: SparkSession, jobConfig: JobConfig): DataFrame = {
     val batchIds: List[String] = jobConfig.modelParams.get.getOrElse("batchId", List()).asInstanceOf[List[String]]
-    val metricsType: String = jobConfig.modelParams.get.getOrElse("metrics_type", "attempt_metrics").toString
+    val metricsType: String = jobConfig.modelParams.get.getOrElse("metricsType", "attempt_metrics").toString
+    val forceMerge: Boolean = jobConfig.modelParams.get.getOrElse("forceMerge", true).asInstanceOf[Boolean]
 
     val updateAggColumn = udf(mergeAggMapCol())
     val updatedAggLastUpdatedCol = udf(mergeAggLastUpdatedMapCol())
@@ -55,22 +70,18 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     val updatedAggDetailsCol = udf(mergeAggDetailsCol())
 
     val activityAggDF = fetchActivityData(session, batchIds)
-    val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session, batchIds), metricsType)
+    val assessmentAggDF = getBestScoreAggDetailsDF(fetchAssessmentData(session, batchIds), metricsType)
 
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
-      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id",  "total_max_score", "total_score", "content_id", "agg_details", "migrating_agg_details")
+      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id", "total_max_score", "total_score", "content_id", "agg_details", "migrating_agg_details")
 
     filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
-      .withColumn("agg_details", updatedAggDetailsCol(col("agg_details"), col("migrating_agg_details")))
+      .withColumn("agg_details", when(lit(forceMerge), col("migrating_agg_details")).otherwise(updatedAggDetailsCol(col("agg_details"), col("migrating_agg_details"))))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
       .groupBy("activity_type", "user_id", "context_id", "activity_id")
-      .agg(
-        collect_list("agg").as("agg"),
-        collect_list("agg_last_updated").as("agg_last_updated"),
-        collect_list("agg_details").as("agg_details")
-      )
+      .agg(collect_list("agg").as("agg"), collect_list("agg_last_updated").as("agg_last_updated"), collect_list("agg_details").as("agg_details"))
       .withColumn("agg", flatAggList(col("agg")))
       .withColumn("agg_last_updated", flatAggLastUpdatedList(col("agg_last_updated")))
       .withColumn("agg_details", flatAggDetailList(col("agg_details")))
@@ -84,8 +95,8 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
 
   def fetchActivityData(session: SparkSession, batchIds: List[String]): DataFrame = {
     var activityAggDF = fetchData(session, userActivityAggDBSettings, cassandraUrl, new StructType()).withColumnRenamed("user_id", "userid")
-    if(batchIds.nonEmpty) {
-      val batchIdsList = batchIds.map(batchId => "cb:"+batchId)
+    if (batchIds.nonEmpty) {
+      val batchIdsList = batchIds.map(batchId => "cb:" + batchId)
       activityAggDF = activityAggDF.filter(col("context_id").isin(batchIdsList: _*))
     }
     activityAggDF
@@ -94,7 +105,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
   def fetchAssessmentData(session: SparkSession, batchIds: List[String]): DataFrame = {
     var assessmentAggDF = fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
       .select("batch_id", "course_id", "content_id", "user_id", "total_score", "total_max_score", "attempt_id", "last_attempted_on")
-    if(batchIds.nonEmpty) {
+    if (batchIds.nonEmpty) {
       assessmentAggDF = assessmentAggDF.filter(col("batch_id").isin(batchIds: _*))
     }
     assessmentAggDF
@@ -126,7 +137,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
       val existingAgg = aggDetails.filter(row => {
         aggDetailMap.get("attempt_id").get == JSONUtils.deserialize[Map[String, AnyRef]](row).get("attempt_id").get
       })
-      if(existingAgg.isEmpty) {
+      if (existingAgg.isEmpty) {
         finalResult :+ aggDetail
       } else finalResult
     })
@@ -134,7 +145,22 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     aggDetails.toList ++ filteredAggDetails
   }
 
-  def getBestScoreRecordsDF(assessmentDF: DataFrame, metrics_type: String): DataFrame = {
+
+
+  /**
+   * Get the best score out of the attempts and accumulates all atttempts detail in one list
+   * @param assessmentDF AssessmentAggregator records DF
+   * @param metrics_type
+   *
+   * @return DataFrame
+   * Example Output:
+   * +--------+-------------------------+-----------------------+-----------+---------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
+   * |user_id |course_id                |content_id             |total_score|total_max_score|migrating_agg_details                                                                                                        |batchid     |
+   * +--------+-------------------------+-----------------------+-----------+---------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
+   * |user-012|do_1130293726460805121168|do_11307593493010022419|10.0       |15.0           |[{"max_score":15.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_11307593493010022419"}]|cb:batch-002|
+   * +--------+-------------------------+-----------------------+-----------+---------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
+   */
+  def getBestScoreAggDetailsDF(assessmentDF: DataFrame, metrics_type: String): DataFrame = {
     assessmentDF.groupBy("user_id", "batch_id", "course_id", "content_id").agg(
       max("total_score").as("total_score"),
       first("total_max_score").as("total_max_score"),
@@ -144,10 +170,8 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
         lit(metrics_type).as("type"),
         col("attempt_id"),
         col("content_id"),
-        col("last_attempted_on").as("last_attempted_on")
+        col("last_attempted_on").cast(IntegerType).as("attempted_on")
       ))).as("migrating_agg_details")
     ).withColumn("batchid", concat(lit("cb:"), col("batch_id"))).drop("batch_id")
   }
-
-
 }
