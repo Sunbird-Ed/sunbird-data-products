@@ -137,7 +137,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
   def getBestScoreRecordsDF(assessmentDF: DataFrame, metrics_type: String): DataFrame = {
     assessmentDF.groupBy("user_id", "batch_id", "course_id", "content_id").agg(
       max("total_score").as("total_score"),
-      max("total_max_score").as("total_max_score"),
+      first("total_max_score").as("total_max_score"),
       collect_list(to_json(struct(
         col("total_max_score").as("max_score"),
         col("total_score").as("score"),
