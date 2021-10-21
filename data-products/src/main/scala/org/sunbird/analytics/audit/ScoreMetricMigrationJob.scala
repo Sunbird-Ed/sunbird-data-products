@@ -75,9 +75,9 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
-      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id", "total_max_score", "total_score", "content_id", "agg_details", "migrating_agg_details")
+      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id", "total_max_score", "best_score", "content_id", "agg_details", "migrating_agg_details")
 
-    filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("total_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
+    filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("best_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
       .withColumn("agg_details", when(lit(forceMerge), col("migrating_agg_details")).otherwise(updatedAggDetailsCol(col("agg_details"), col("migrating_agg_details"))))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
       .groupBy("activity_type", "user_id", "context_id", "activity_id")
@@ -162,7 +162,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
    */
   def getBestScoreAggDetailsDF(assessmentDF: DataFrame, metrics_type: String): DataFrame = {
     assessmentDF.groupBy("user_id", "batch_id", "course_id", "content_id").agg(
-      max("total_score").as("total_score"),
+      max("total_score").as("best_score"),
       first("total_max_score").as("total_max_score"),
       collect_list(to_json(struct(
         col("total_max_score").as("max_score"),
