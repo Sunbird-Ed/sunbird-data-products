@@ -28,11 +28,10 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
 
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val spark: SparkSession = openSparkSession(jobConfig)
-    val batchIds: List[String] = jobConfig.modelParams.get.getOrElse("batchId", List()).asInstanceOf[List[String]]
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
-      val res = CommonUtil.time(migrateData(spark, batchIds))
+      val res = CommonUtil.time(migrateData(spark, jobConfig))
       val total_records = res._2.count()
       JobLogger.log(s"Updating the $total_records records in the cassandra table table", None, INFO)
       updatedTable(res._2, userActivityAggDBSettings)
@@ -44,7 +43,10 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
   }
 
   // $COVERAGE-ON$
-  def migrateData(session: SparkSession, batchIds: List[String]): DataFrame = {
+  def migrateData(session: SparkSession, jobConfig: JobConfig): DataFrame = {
+    val batchIds: List[String] = jobConfig.modelParams.get.getOrElse("batchId", List()).asInstanceOf[List[String]]
+    val metricsType: String = jobConfig.modelParams.get.getOrElse("metrics_type", "attempt_metrics").toString
+
     val updateAggColumn = udf(mergeAggMapCol())
     val updatedAggLastUpdatedCol = udf(mergeAggLastUpdatedMapCol())
     val flatAggList = udf(mergeAggListValues())
@@ -53,7 +55,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     val updatedAggDetailsCol = udf(mergeAggDetailsCol())
 
     val activityAggDF = fetchActivityData(session, batchIds)
-    val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session, batchIds))
+    val assessmentAggDF = getBestScoreRecordsDF(fetchAssessmentData(session, batchIds), metricsType)
 
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
@@ -132,14 +134,14 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     aggDetails.toList ++ filteredAggDetails
   }
 
-  def getBestScoreRecordsDF(assessmentDF: DataFrame): DataFrame = {
+  def getBestScoreRecordsDF(assessmentDF: DataFrame, metrics_type: String): DataFrame = {
     assessmentDF.groupBy("user_id", "batch_id", "course_id", "content_id").agg(
       max("total_score").as("total_score"),
       max("total_max_score").as("total_max_score"),
       collect_list(to_json(struct(
         col("total_max_score").as("max_score"),
         col("total_score").as("score"),
-        lit("score_metrics").as("type"),
+        lit(metrics_type).as("type"),
         col("attempt_id"),
         col("content_id"),
         col("last_attempted_on").as("last_attempted_on")
