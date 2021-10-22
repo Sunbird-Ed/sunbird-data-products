@@ -37,9 +37,9 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     val todayDate: String = java.time.LocalDate.now.toString
     val reportData = AssessmentArchivalJob.archiveData(date = todayDate, batchIds = None, archiveForLastWeek = false)
-    val batch_1 = reportData.filter(x => x.batchId.getOrElse("") === "batch-001")
     val period: Period = getWeekAndYearVal(todayDate, archiveForLastWeek = false)
-
+    
+    val batch_1 = reportData.filter(x => x.batchId.getOrElse("") === "batch-001")
     batch_1.foreach(res => res.period.year should be(period.year))
     batch_1.foreach(res => res.totalArchivedRecords.get should be(5))
     batch_1.foreach(res => res.period.weekOfYear should be(period.weekOfYear))
