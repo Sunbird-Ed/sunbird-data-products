@@ -20,10 +20,13 @@ object ExhaustUtil {
       case "local" =>
         filePath + s"${batchId}/${year}-${weekNumb}-*.${format}"
       // $COVERAGE-OFF$ for azure testing
-      case "s3" | "azure" =>
+      case "azure" =>
         val key = AppConf.getConfig("azure_storage_key")
         val file = s"${filePath}${batchId}/${year}-${weekNumb}-*.${format}"
         s"wasb://$bucket@$key.blob.core.windows.net/$file"
+      case "s3" =>
+        //TODO - Need to support the S3 As well.
+        throw new Exception("s3 is currently not supported.")
       // $COVERAGE-ON$
     }
 
