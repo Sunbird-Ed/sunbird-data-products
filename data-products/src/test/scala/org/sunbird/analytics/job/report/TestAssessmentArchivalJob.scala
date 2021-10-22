@@ -6,6 +6,7 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
+import org.sunbird.analytics.job.report.AssessmentArchivalJob.{Period, getWeekAndYearVal}
 import org.sunbird.analytics.util.EmbeddedCassandra
 
 
@@ -30,21 +31,23 @@ class TestAssessmentArchivalJob extends BaseReportSpec with MockFactory {
   }
 
 
-  it should "Should able to archive the batch data" in {
+  it should "Should able to archive the batch data for a specific date" in {
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
     val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.AssessmentArchivalJob","modelParams":{"deleteArchivedBatch":false,"store":"local","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"Assessment Archival Job"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val reportData = AssessmentArchivalJob.archiveData(date = null, None, archiveForLastWeek = true)
-
+    val todayDate: String = java.time.LocalDate.now.toString
+    val reportData = AssessmentArchivalJob.archiveData(date = todayDate, batchIds = None, archiveForLastWeek = false)
     val batch_1 = reportData.filter(x => x.batchId.getOrElse("") === "batch-001")
-    batch_1.foreach(res => res.period.year === "2021")
-    batch_1.foreach(res => res.totalArchivedRecords === "5")
-    batch_1.foreach(res => res.period.weekOfYear === "32")
+    val period: Period = getWeekAndYearVal(todayDate, archiveForLastWeek = false)
+
+    batch_1.foreach(res => res.period.year should be(period.year))
+    batch_1.foreach(res => res.totalArchivedRecords.get should be(5))
+    batch_1.foreach(res => res.period.weekOfYear should be(period.weekOfYear))
 
     val batch_2 = reportData.filter(x => x.batchId.getOrElse("") === "batch-004")
-    batch_2.foreach(res => res.period.year === "2021")
-    batch_2.foreach(res => res.totalArchivedRecords === "1")
-    batch_2.foreach(res => res.period.weekOfYear === "32")
+    batch_2.foreach(res => res.period.year should be(period.year))
+    batch_2.foreach(res => res.totalArchivedRecords.get should be (1))
+    batch_2.foreach(res => res.period.weekOfYear should be(period.weekOfYear))
   }
 
   it should "Should able to fetch the archived records from the azure and delete the records" in {
