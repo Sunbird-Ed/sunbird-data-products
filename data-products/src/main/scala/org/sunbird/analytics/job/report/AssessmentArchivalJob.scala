@@ -77,6 +77,7 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
   }
 
   // $COVERAGE-ON$
+  // date - yyyy-mm-dd, in string format
   def archiveData(date: String, batchIds: Option[List[String]], archiveForLastWeek: Boolean)(implicit spark: SparkSession, config: JobConfig): Array[ArchivalMetrics] = {
     // Get the assessment Data
     val assessmentDF: DataFrame = getAssessmentData(spark, batchIds)
@@ -91,12 +92,14 @@ object AssessmentArchivalJob extends optional.Application with IJob with BaseRep
      * The below filter is required, If we want to archive the data for a specific week of year and year
      */
     val filteredAssessmentData = if (!isEmptyPeriod(period)) assessmentData.filter(col("year") === period.year).filter(col("week_of_year") === period.weekOfYear) else assessmentData
-
+    // Creating a batchId, year and weekOfYear Map from the filteredAssessmentData and loading into memory to iterate over the BatchId's
+    // Example - [BatchId, Year, WeekNumOfYear] -> Number of records
+    //  1. batch-001",2021,42 -> 5
     val archiveBatchList = filteredAssessmentData.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
     val totalBatchesToArchive = new AtomicInteger(archiveBatchList.length)
     JobLogger.log(s"Total Batches to Archive is $totalBatchesToArchive for a period $period", None, INFO)
-
     // Loop through the batches to archive list
+    // Example Map - {"batch-001":[{"batchId":"batch-001","period":{"year":2021,"weekOfYear":42}}],"batch-004":[{"batchId":"batch-004","period":{"year":2021,"weekOfYear":42}}]}
     val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
     val archivalStatus: Array[ArchivalMetrics] = batchesToArchive.flatMap(batches => {
       val processingBatch = new AtomicInteger(batches._2.length)
