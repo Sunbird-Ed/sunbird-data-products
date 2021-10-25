@@ -11,11 +11,11 @@ object ExhaustUtil {
   def getArchivedData(store: String, filePath: String, bucket: String, blobFields: Map[String, Any], fileFormat: Option[String])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val filteredBlobFields = blobFields.filter(_._2 != null)
     val format = fileFormat.getOrElse("csv.gz")
-    val batchId = filteredBlobFields.getOrElse("batchId", "*")
+    val batchId = filteredBlobFields.getOrElse("batchId", "*").toString()
     val year = filteredBlobFields.getOrElse("year", "*")
-    val weekNum = filteredBlobFields.getOrElse("weekNum", "*")
+    val weekNum = filteredBlobFields.getOrElse("weekNum", "*").toString()
 
-    val url = CommonUtil.getArchivalBlobUrl(store: String, filePath: String, bucket:String, batchId: Any, year: Any, weekNum: Any, format: String)
+    val url = CommonUtil.getArchivalBlobUrl(store, filePath, bucket, batchId, year, weekNum, format)
 
     JobLogger.log(s"Fetching data from ${store} ")(new String())
     fetch(url, "csv")
