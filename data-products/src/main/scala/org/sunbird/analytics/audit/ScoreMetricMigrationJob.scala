@@ -97,7 +97,9 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     var activityAggDF = fetchData(session, userActivityAggDBSettings, cassandraUrl, new StructType()).withColumnRenamed("user_id", "userid")
     if (batchIds.nonEmpty) {
       val batchIdsList = batchIds.map(batchId => "cb:" + batchId)
-      activityAggDF = activityAggDF.filter(col("context_id").isin(batchIdsList: _*))
+      import session.sqlContext.implicits._
+      val batchIdDF = session.sparkContext.parallelize(batchIdsList).toDF("context_id")
+      activityAggDF = activityAggDF.join(batchIdDF, Seq("context_id"), "inner");
     }
     activityAggDF
   }
@@ -106,7 +108,9 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     var assessmentAggDF = fetchData(session, assessmentAggregatorDBSettings, cassandraUrl, new StructType())
       .select("batch_id", "course_id", "content_id", "user_id", "total_score", "total_max_score", "attempt_id", "last_attempted_on")
     if (batchIds.nonEmpty) {
-      assessmentAggDF = assessmentAggDF.filter(col("batch_id").isin(batchIds: _*))
+      import session.sqlContext.implicits._
+      val batchIdDF = session.sparkContext.parallelize(batchIds).toDF("batch_id")
+      assessmentAggDF = assessmentAggDF.join(batchIdDF, Seq("batch_id"), "inner");
     }
     assessmentAggDF
   }
