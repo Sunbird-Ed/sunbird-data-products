@@ -58,16 +58,9 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
     val batchid = userEnrolmentDataDF.select("batchid").distinct().collect().head.getString(0)
 
     val assessAggregateData = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
-    println("assess Aggregate data: ")
-    assessAggregateData.show(false)
     val joinedDF = try {
       val assessBlobData = getAssessmentBlobDF(batchid, config)
-      println("assess blob data: ")
-      assessBlobData.show(false)
-      val joinDF = assessAggregateData.join(assessBlobData, Seq("batch_id", "course_id", "user_id"), "full")
-      println("full_join")
-      joinDF.show(false)
-      joinDF
+      assessAggregateData.join(assessBlobData, Seq("batch_id", "course_id", "user_id"), "full")
     } catch {
       case e => JobLogger.log("Blob does not contain any file for batchid: " + batchid)
         assessAggregateData
