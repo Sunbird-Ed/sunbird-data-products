@@ -233,9 +233,3 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     val addUserSubType = udf[String, String](profileSubTypeFunction)
 }
-
-object StateAdminReportJobTest {
-    def main(args: Array[String]): Unit = {
-        StateAdminReportJob.main("""{"model":"Test"}""")
-    }
-}
