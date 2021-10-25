@@ -57,15 +57,14 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         import sparkSession.implicits._
         val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
         //loading user_declarations table details based on declared values and location details and appending org-external-id if present
-        var userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
-       val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+        val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+       val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_dconsent", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
        val activeConsentDF = userConsentDataDF.where(col("status") === "ACTIVE" && col("object_type") ===  "organisation")
        val activeSelfDeclaredDF = userSelfDeclaredDataDF.join(activeConsentDF, userSelfDeclaredDataDF.col("organisationid") === activeConsentDF.col("consumer_id")).
            select(userSelfDeclaredDataDF.col("*"))
        //userSelfDeclaredDataDF = userSelfDeclaredDataDF.where(col("userid")==="fd4051d5-cb62-4b3b-8672-baa4a2c90559")
         val userSelfDeclaredUserInfoDataDF = activeSelfDeclaredDF.select(col("*"), col("userinfo").getItem("declared-email").as("declared-email"), col("userinfo").getItem("declared-phone").as("declared-phone"),
             col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
-       userSelfDeclaredUserInfoDataDF.show(10,false)
        val locationDF = locationData()
         //to-do later check if externalid is necessary not-null check is necessary
         val orgExternalIdDf = loadOrganisationData().select("externalid","channel", "id","orgName").filter(col("channel").isNotNull)
@@ -158,8 +157,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     private def saveUserSelfDeclaredExternalInfo(userExternalDecryptData: DataFrame, userDenormLocationDF: DataFrame): DataFrame ={
-        import com.datastax.spark.connector.cql.CassandraConnectorConf
-        import com.datastax.spark.connector.{SomeColumns, toRDDFunctions}
         var userDenormLocationDFWithCluster : DataFrame = null;
         if(!userDenormLocationDF.columns.contains("cluster")) {
             if(!userDenormLocationDF.columns.contains("block")) {
@@ -190,9 +187,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
                 col("userroororg").as("Root Org of user"),
                 col("channel").as("provider"))
         resultDf.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
-        resultDf.select("course_id", "batch_id", "user_id", "content_id", "attempt_id").rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), "assessment_aggregator", keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
-        
-    
         resultDf
     }
     
@@ -238,8 +232,6 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     val addUserSubType = udf[String, String](profileSubTypeFunction)
-    
-
 }
 
 object StateAdminReportJobTest {
