@@ -4,7 +4,7 @@ package org.sunbird.analytics.exhaust.util
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.JobLogger
+import org.ekstep.analytics.framework.util.{CommonUtil, JobLogger}
 
 object ExhaustUtil {
 
@@ -13,22 +13,9 @@ object ExhaustUtil {
     val format = fileFormat.getOrElse("csv.gz")
     val batchId = filteredBlobFields.getOrElse("batchId", "*")
     val year = filteredBlobFields.getOrElse("year", "*")
-    val weekNumb = filteredBlobFields.getOrElse("weekNum", "*")
+    val weekNum = filteredBlobFields.getOrElse("weekNum", "*")
 
-
-    val url = store match {
-      case "local" =>
-        filePath + s"${batchId}/${year}-${weekNumb}-*.${format}"
-      // $COVERAGE-OFF$ for azure testing
-      case "azure" =>
-        val key = AppConf.getConfig("azure_storage_key")
-        val file = s"${filePath}${batchId}/${year}-${weekNumb}-*.${format}"
-        s"wasb://$bucket@$key.blob.core.windows.net/$file"
-      case "s3" =>
-        //TODO - Need to support the S3 As well.
-        throw new Exception("s3 is currently not supported.")
-      // $COVERAGE-ON$
-    }
+    val url = CommonUtil.getArchivalBlobUrl(store: String, filePath: String, bucket:String, batchId: Any, year: Any, weekNum: Any, format: String)
 
     JobLogger.log(s"Fetching data from ${store} ")(new String())
     fetch(url, "csv")
