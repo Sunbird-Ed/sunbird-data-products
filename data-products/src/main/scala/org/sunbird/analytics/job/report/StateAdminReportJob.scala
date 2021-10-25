@@ -1,6 +1,5 @@
 package org.sunbird.analytics.job.report
 
-import com.datastax.spark.connector.SomeColumns
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{col, lit, when, _}
 import org.apache.spark.sql.{DataFrame, _}
@@ -59,10 +58,9 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         //loading user_declarations table details based on declared values and location details and appending org-external-id if present
         val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
        val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_dconsent", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
-       val activeConsentDF = userConsentDataDF.where(col("status") === "ACTIVE" && col("object_type") ===  "organisation")
+       val activeConsentDF = userConsentDataDF.where(col("status") === "ACTIVE" && lower(col("object_type")) ===  "organisation")
        val activeSelfDeclaredDF = userSelfDeclaredDataDF.join(activeConsentDF, userSelfDeclaredDataDF.col("organisationid") === activeConsentDF.col("consumer_id")).
            select(userSelfDeclaredDataDF.col("*"))
-       //userSelfDeclaredDataDF = userSelfDeclaredDataDF.where(col("userid")==="fd4051d5-cb62-4b3b-8672-baa4a2c90559")
         val userSelfDeclaredUserInfoDataDF = activeSelfDeclaredDF.select(col("*"), col("userinfo").getItem("declared-email").as("declared-email"), col("userinfo").getItem("declared-phone").as("declared-phone"),
             col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
        val locationDF = locationData()
