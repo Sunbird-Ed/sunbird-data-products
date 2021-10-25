@@ -57,7 +57,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
         //loading user_declarations table details based on declared values and location details and appending org-external-id if present
         val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
-       val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_dconsent", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+       val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_consent", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
        val activeConsentDF = userConsentDataDF.where(col("status") === "ACTIVE" && lower(col("object_type")) ===  "organisation")
        val activeSelfDeclaredDF = userSelfDeclaredDataDF.join(activeConsentDF, userSelfDeclaredDataDF.col("organisationid") === activeConsentDF.col("consumer_id")).
            select(userSelfDeclaredDataDF.col("*"))
