@@ -57,9 +57,13 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
         //loading user_declarations table details based on declared values and location details and appending org-external-id if present
         val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
-        val userSelfDeclaredUserInfoDataDF = userSelfDeclaredDataDF.select(col("*"), col("userinfo").getItem("declared-email").as("declared-email"), col("userinfo").getItem("declared-phone").as("declared-phone"),
+       val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_consent", "keyspace" -> sunbirdKeyspace))
+       val activeConsentDF = userConsentDataDF.where(col("status") === "ACTIVE" && lower(col("object_type")) ===  "organisation")
+       val activeSelfDeclaredDF = userSelfDeclaredDataDF.join(activeConsentDF, userSelfDeclaredDataDF.col("orgid") === activeConsentDF.col("consumer_id")).
+           select(userSelfDeclaredDataDF.col("*"))
+        val userSelfDeclaredUserInfoDataDF = activeSelfDeclaredDF.select(col("*"), col("userinfo").getItem("declared-email").as("declared-email"), col("userinfo").getItem("declared-phone").as("declared-phone"),
             col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
-        val locationDF = locationData()
+       val locationDF = locationData()
         //to-do later check if externalid is necessary not-null check is necessary
         val orgExternalIdDf = loadOrganisationData().select("externalid","channel", "id","orgName").filter(col("channel").isNotNull)
         val userSelfDeclaredExtIdDF = userSelfDeclaredUserInfoDataDF.join(orgExternalIdDf, userSelfDeclaredUserInfoDataDF.col("orgid") === orgExternalIdDf.col("id"), "leftouter").
@@ -226,6 +230,4 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     }
     
     val addUserSubType = udf[String, String](profileSubTypeFunction)
-    
-
 }
