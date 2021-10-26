@@ -15,7 +15,8 @@ object ExhaustUtil {
     val year = filteredBlobFields.getOrElse("year", "*")
     val weekNum = filteredBlobFields.getOrElse("weekNum", "*").toString()
 
-    val url = CommonUtil.getArchivalBlobUrl(store, filePath, bucket, batchId, year, weekNum, format)
+    val file: String = s"${filePath}${batchId}/${year}-${weekNum}-*.${format}"
+    val url = CommonUtil.getBlobUrl(store, file, bucket)
 
     JobLogger.log(s"Fetching data from ${store} ")(new String())
     fetch(url, "csv")
