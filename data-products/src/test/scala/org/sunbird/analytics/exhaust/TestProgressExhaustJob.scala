@@ -6,7 +6,7 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.exhaust.collection.{AssessmentData, CollectionBatch, CourseData, ProgressExhaustJob}
+import org.sunbird.analytics.exhaust.collection.{AssessmentData, CollectionBatch, CourseData, Metrics, ProgressExhaustJob}
 import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
 import redis.embedded.RedisServer
@@ -73,7 +73,11 @@ class TestProgressExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val config = jobConfig
 
-    ProgressExhaustJob.execute()
+    val metrics:Metrics = ProgressExhaustJob.execute()
+    metrics.totalRequests.getOrElse(0) should be(1)
+    metrics.failedRequests.getOrElse(0) should be(0)
+    metrics.successRequests.getOrElse(0) should be(1)
+    metrics.duplicateRequests.getOrElse(0) should be(0)
 
     val outputLocation = AppConf.getConfig("collection.exhaust.store.prefix")
     val outputDir = "progress-exhaust"
