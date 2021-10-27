@@ -32,6 +32,7 @@ class TestStateSelfUserExternalIDJob extends BaseReportSpec with MockFactory {
     implicit val fc = new FrameworkContext()
     val tempDir = AppConf.getConfig("admin.metrics.temp.dir")
     val reportDF = StateAdminReportJob.generateExternalIdReport()(spark, fc)
+    assert(reportDF.count() === (2));
     assert(reportDF.columns.contains("Diksha UUID") === true)
     assert(reportDF.columns.contains("Name") === true)
     assert(reportDF.columns.contains("State") === true)
