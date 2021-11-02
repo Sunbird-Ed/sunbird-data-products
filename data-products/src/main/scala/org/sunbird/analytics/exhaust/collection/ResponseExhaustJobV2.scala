@@ -1,7 +1,7 @@
 package org.sunbird.analytics.exhaust.collection
 
-import org.apache.spark.sql.functions.{col, explode_outer, round}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.functions.{col, explode_outer, round, when}
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JobLogger
@@ -55,30 +55,21 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
         col("batchName"),
         col("batchid"))
 
-    val batchid = userEnrolmentDataDF.select("batchid").distinct().collect().head.getString(0)
+    val assessAggregateData = prepareReportDf(loadData(assessmentAggDBSettings, cassandraFormat, new StructType()))
 
-    val assessAggregateData = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
     val joinedDF = try {
-      val assessBlobData = getAssessmentBlobDF(batchid, config)
-      assessAggregateData.join(assessBlobData, Seq("batch_id", "course_id", "user_id"), "full")
+      val assessBlobData = prepareReportDf(getAssessmentBlobDF(batch.batchId, config))
+
+      dropDuplicateColumns(assessAggregateData.columns, assessAggregateData, assessBlobData)
+
     } catch {
-      case e => JobLogger.log("Blob does not contain any file for batchid: " + batchid)
+      case e: Exception => {
+        JobLogger.log("Blob does not contain any file for batchid: " + batch.batchId)
         assessAggregateData
+      }
     }
 
-    joinedDF.join(userEnrolmentDataDF, joinedDF.col("user_id") === userEnrolmentDataDF.col("userid") && joinedDF.col("course_id") === userEnrolmentDataDF.col("courseid"), "inner")
-      .select(userEnrolmentDataDF.col("*"), joinedDF.col("question"), col("content_id"), col("attempt_id"), col("last_attempted_on"))
-      .withColumn("questiondata",explode_outer(col("question")))
-      .withColumn("questionid" , col("questiondata.id"))
-      .withColumn("questiontype", col("questiondata.type"))
-      .withColumn("questiontitle", col("questiondata.title"))
-      .withColumn("questiondescription", col("questiondata.description"))
-      .withColumn("questionduration", round(col("questiondata.duration")))
-      .withColumn("questionscore", col("questiondata.score"))
-      .withColumn("questionmaxscore", col("questiondata.max_score"))
-      .withColumn("questionresponse", UDFUtils.toJSON(col("questiondata.resvalues")))
-      .withColumn("questionoption", UDFUtils.toJSON(col("questiondata.params")))
-      .drop("question", "questiondata", "question_data")
+    joinedDF.join(userEnrolmentDataDF, joinedDF.col("user_id") === userEnrolmentDataDF.col("userid") && joinedDF.col("course_id") === userEnrolmentDataDF.col("courseid") && joinedDF.col("batch_id") === userEnrolmentDataDF.col("batchid"), "inner")
   }
 
   def getAssessmentBlobDF(batchid: String, config: JobConfig)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
@@ -93,6 +84,44 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
 
     assessAggData.distinct()
       .withColumn("question", UDFUtils.convertStringToList(col("question")))
+  }
+
+  def prepareReportDf(df: DataFrame): DataFrame = {
+    df.withColumn("questiondata",explode_outer(col("question")))
+      .withColumn("questionid" , col("questiondata.id"))
+      .withColumn("questiontype", col("questiondata.type"))
+      .withColumn("questiontitle", col("questiondata.title"))
+      .withColumn("questiondescription", col("questiondata.description"))
+      .withColumn("questionduration", round(col("questiondata.duration")))
+      .withColumn("questionscore", col("questiondata.score"))
+      .withColumn("questionmaxscore", col("questiondata.max_score"))
+      .withColumn("questionresponse", UDFUtils.toJSON(col("questiondata.resvalues")))
+      .withColumn("questionoption", UDFUtils.toJSON(col("questiondata.params")))
+      .withColumn("last_attempted_on", col("last_attempted_on").cast(StringType))
+      .drop("question", "questiondata", "question_data", "created_on", "updated_on")
+  }
+
+  def dropDuplicateColumns(colNames: Array[String], latestDf: DataFrame, assistDf: DataFrame): DataFrame = {
+    val latestDfCols = latestDf.columns.map(c => "latest_" + c)
+
+    val renamedLatestDf = latestDf.toDF(latestDfCols: _*)
+
+    val assitDfCols = assistDf.columns.map(c => "assist_" + c)
+
+    val renamedAssistDf = assistDf.toDF(assitDfCols: _*)
+
+    var joinedDf = renamedLatestDf.join(renamedAssistDf,
+      renamedLatestDf("latest_batch_id") === renamedAssistDf("assist_batch_id") &&
+      renamedLatestDf("latest_course_id") === renamedAssistDf("assist_course_id") &&
+      renamedLatestDf("latest_user_id") === renamedAssistDf("assist_user_id") &&
+      renamedLatestDf("latest_attempt_id") === renamedAssistDf("assist_attempt_id")
+      , "full")
+
+    colNames.foreach(colName => {
+      joinedDf = joinedDf.withColumn(colName, when(col("latest_"+colName).isNotNull,col("latest_"+colName)).otherwise("assist_"+colName))
+    })
+
+    joinedDf.select(colNames.head, colNames.tail: _*)
   }
 }
 

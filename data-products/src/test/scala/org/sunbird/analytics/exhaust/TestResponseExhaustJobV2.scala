@@ -81,7 +81,7 @@ class TestResponseExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     implicit val responseExhaustEncoder = Encoders.product[ResponseExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$filePath.csv").as[ResponseExhaustReport].collectAsList().asScala
-    batch1Results.size should be (6)
+    batch1Results.size should be (15)
 
     val user1Result = batch1Results.filter(f => f.`User UUID`.equals("user-001"))
     user1Result.foreach(f => println("user1data: " + JSONUtils.serialize("f")))
