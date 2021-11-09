@@ -75,17 +75,17 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     val filterDF = activityAggDF.join(assessmentAggDF, activityAggDF.col("activity_id") === assessmentAggDF.col("course_id") &&
       activityAggDF.col("userid") === assessmentAggDF.col("user_id") &&
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
-      .select("agg", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id", "total_max_score", "best_score", "content_id", "agg_details", "migrating_agg_details")
+      .select("agg", "aggregates", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id", "total_max_score", "best_score", "content_id", "agg_details", "migrating_agg_details", "attempts_count")
 
-    filterDF.withColumn("agg", updateAggColumn(col("agg").cast("map<string, int>"), col("total_max_score").cast(sql.types.IntegerType), col("best_score").cast(sql.types.IntegerType), col("content_id").cast(sql.types.StringType)))
+    filterDF.withColumn("aggregates", updateAggColumn(when(lit(forceMerge), col("agg").cast("map<string, double>")).otherwise(col("aggregates").cast("map<string, double>")), col("total_max_score").cast(sql.types.DoubleType), col("best_score").cast(sql.types.DoubleType), col("attempts_count").cast(sql.types.DoubleType), col("content_id").cast(sql.types.StringType)))
       .withColumn("agg_details", when(lit(forceMerge), col("migrating_agg_details")).otherwise(updatedAggDetailsCol(col("agg_details"), col("migrating_agg_details"))))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
       .groupBy("activity_type", "user_id", "context_id", "activity_id")
-      .agg(collect_list("agg").as("agg"), collect_list("agg_last_updated").as("agg_last_updated"), collect_list("agg_details").as("agg_details"))
-      .withColumn("agg", flatAggList(col("agg")))
+      .agg(collect_list("aggregates").as("aggregates"), collect_list("agg_last_updated").as("agg_last_updated"), collect_list("agg_details").as("agg_details"))
+      .withColumn("aggregates", flatAggList(col("aggregates")))
       .withColumn("agg_last_updated", flatAggLastUpdatedList(col("agg_last_updated")))
       .withColumn("agg_details", flatAggDetailList(col("agg_details")))
-      .select("activity_type", "user_id", "context_id", "activity_id", "agg", "agg_last_updated", "agg_details")
+      .select("activity_type", "user_id", "context_id", "activity_id", "aggregates", "agg_last_updated", "agg_details")
   }
 
   def updatedTable(data: DataFrame, tableSettings: Map[String, String]): Unit = {
@@ -115,15 +115,15 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     assessmentAggDF
   }
 
-  def mergeAggMapCol(): (Map[String, Int], Int, Int, String) => Map[String, Int] = (agg: Map[String, Int], max_score: Int, score: Int, content_id: String) => {
-    agg ++ Map(s"score:$content_id" -> score, s"max_score:$content_id" -> max_score)
+  def mergeAggMapCol(): (Map[String, Double], Double, Double, Double, String) => Map[String, Double] = (agg: Map[String, Double], max_score: Double, score: Double, attempts_count: Double, content_id: String) => {
+    agg ++ Map(s"score:$content_id" -> score, s"max_score:$content_id" -> max_score, s"attempts_count:$content_id" -> attempts_count)
   }
 
   def mergeAggLastUpdatedMapCol(): (Map[String, Long], String) => Map[String, Long] = (aggLastUpdated: Map[String, Long], content_id: String) => {
     aggLastUpdated.map(x => Map(x._1 -> new Date(x._2 * 1000).getTime)).flatten.toMap ++ Map(s"score:$content_id" -> System.currentTimeMillis(), s"max_score:$content_id" -> System.currentTimeMillis())
   }
 
-  def mergeAggListValues(): Seq[Map[String, Int]] => Map[String, Int] = (aggregation: Seq[Map[String, Int]]) => {
+  def mergeAggListValues(): Seq[Map[String, Double]] => Map[String, Double] = (aggregation: Seq[Map[String, Double]]) => {
     aggregation.toList.flatten.toMap
   }
 
@@ -158,16 +158,18 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
    *
    * @return DataFrame
    * Example Output:
-   * +--------+-------------------------+-----------------------+-----------+---------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
-   * |user_id |course_id                |content_id             |total_score|total_max_score|migrating_agg_details                                                                                                        |batchid     |
-   * +--------+-------------------------+-----------------------+-----------+---------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
-   * |user-012|do_1130293726460805121168|do_11307593493010022419|10.0       |15.0           |[{"max_score":15.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_11307593493010022419"}]|cb:batch-002|
-   * +--------+-------------------------+-----------------------+-----------+---------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
+   * +--------+-------------------------+-----------------------+----------+---------------+--------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
+   * |user_id |course_id                |content_id             |best_score|total_max_score|attempts_count|migrating_agg_details                                                                                                        |batchid     |
+   * +--------+-------------------------+-----------------------+----------+---------------+--------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
+   * |user-012|do_1130293726460805121168|do_11307593493010022419|10.0      |15.0           |1             |[{"max_score":15.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_11307593493010022419"}]|cb:batch-002|
+   * +--------+-------------------------+-----------------------+----------+---------------+--------------+-----------------------------------------------------------------------------------------------------------------------------+------------+
+
    */
   def getBestScoreAggDetailsDF(assessmentDF: DataFrame, metrics_type: String): DataFrame = {
     assessmentDF.groupBy("user_id", "batch_id", "course_id", "content_id").agg(
       max("total_score").as("best_score"),
       first("total_max_score").as("total_max_score"),
+      count(col("attempt_id")).as("attempts_count"),
       collect_list(to_json(struct(
         col("total_max_score").as("max_score"),
         col("total_score").as("score"),
