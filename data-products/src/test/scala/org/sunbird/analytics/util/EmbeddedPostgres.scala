@@ -69,6 +69,28 @@ object EmbeddedPostgresql {
     execute(query)
   }
 
+  def createArchivalRequestTable(): Unit = {
+    val tableName: String = "archival_metadata"
+    val query =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |    request_id TEXT,
+         |    batch_id TEXT,
+         |    collection_id TEXT,
+         |    resource_type TEXT,
+         |    job_id TEXT,
+         |    archival_date TIMESTAMP,
+         |    completion_date TIMESTAMP,
+         |    archival_status TEXT,
+         |    deletion_status TEXT,
+         |    blob_url TEXT[],
+         |    iteration int,
+         |    request_data json,
+         |    err_message TEXT
+         |)
+      """.stripMargin
+    execute(query)
+  }
 
   def createConversationTable(): Unit = {
     val tableName: String = "bot"
