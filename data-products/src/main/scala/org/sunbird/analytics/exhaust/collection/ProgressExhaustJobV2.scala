@@ -105,10 +105,9 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
   }
 
   def getLeafNodeCount(hierarchyData: DataFrame): Int = {
-    hierarchyData.rdd.map(row => {
-      val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
-      hierarchy.getOrElse("leafNodesCount", 0).asInstanceOf[Int]
-    }).collect().head
+    val hierarchyStr = hierarchyData.first().getString(1)
+    val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](hierarchyStr)
+    hierarchy.getOrElse("leafNodesCount", 0).asInstanceOf[Int]
   }
 
   def filterAssessmentsFromHierarchy(data: List[Map[String, AnyRef]], assessmentTypes: List[String], prevData: AssessmentData): AssessmentData = {
