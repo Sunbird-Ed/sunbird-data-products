@@ -547,7 +547,7 @@ object UDFUtils extends Serializable {
   /**
    *  This UDF function used to filter the only selfAssess supported contents
    */
-  def filterSupportedContentTypesFn(agg: Map[String, Int], supportedContents: Seq[String]): Map[String, Int] = {
+  def filterSupportedContentTypesFn(agg: Map[String, Double], supportedContents: Seq[String]): Map[String, Double] = {
     val identifiers = agg.filter(x => x._1.startsWith("score")).keys.map(y => y.split(":")(1))
     val assessContentIdentifiers = identifiers.filter(identifier => supportedContents.contains(identifier))
     agg.filter(key => assessContentIdentifiers.exists(x => key._1.contains(x)))
@@ -574,16 +574,16 @@ object UDFUtils extends Serializable {
    * // As per previous report format
    *
    */
-  def computePercentageFn(agg: Map[String, Int]): Map[String, String] = {
+  def computePercentageFn(agg: Map[String, Double]): Map[String, String] = {
     val contentScoreList = agg.filter(x => x._1.startsWith("score"))
-    val total_score = contentScoreList.foldLeft(0)(_ + _._2) * 100
-    val total_max_score = agg.filter(x => x._1.startsWith("max_score")).foldLeft(0)(_ + _._2)
+    val total_max_score = agg.filter(x => x._1.startsWith("max_score")).foldLeft(0D)(_ + _._2)
     if (contentScoreList.nonEmpty && total_max_score > 0) {
-      val total_score_percentage = Math.ceil(total_score / total_max_score)
+      val total_score = contentScoreList.foldLeft(0D)(_ + _._2)
+      val total_score_percentage = Math.ceil((total_score / total_max_score) * 100).toInt
       val contentScoreInPercentage: Map[String, String] = contentScoreList.map(x => {
         val contentScore = x._2 * 100
-        val contentMaxScore = agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0)
-        val contentScoreInPercentage = if (contentMaxScore > 0) (contentScore / contentMaxScore).toString.concat("%") else ""
+        val contentMaxScore = agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0D)
+        val contentScoreInPercentage = if (contentMaxScore > 0) Math.ceil(contentScore / contentMaxScore).toInt.toString.concat("%") else ""
         Map(s"${x._1.split(":")(1)} - Score" -> contentScoreInPercentage)
       }).flatten.toMap
       contentScoreInPercentage ++ Map("total_sum_score" -> total_score_percentage.toString.concat("%"))
@@ -592,7 +592,7 @@ object UDFUtils extends Serializable {
     }
   }
 
-  val computePercentage = udf[Map[String, String], Map[String, Int]](computePercentageFn)
-  val filterSupportedContentTypes = udf[Map[String, Int], Map[String, Int], Seq[String]](filterSupportedContentTypesFn)
+  val computePercentage = udf[Map[String, String], Map[String, Double]](computePercentageFn)
+  val filterSupportedContentTypes = udf[Map[String, Double], Map[String, Double], Seq[String]](filterSupportedContentTypesFn)
 
 }
