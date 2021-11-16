@@ -53,10 +53,10 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
     val activityAggData: DataFrame = if (supportedContentIds.nonEmpty) {
       getActivityAggData(collectionBatch)
         // filter the selfAssess Contents from the "agg" column
-        .withColumn("filteredContents", UDFUtils.filterSupportedContentTypes(col("agg"), typedLit(supportedContentIds.headOption.getOrElse(AssessmentData("", List())).assessmentIds)))
+        .withColumn("filteredContents", UDFUtils.filterSupportedContentTypes(col("aggregates"), typedLit(supportedContentIds.headOption.getOrElse(AssessmentData("", List())).assessmentIds)))
         // Compute the percentage for filteredContents Map
         .withColumn("scorePercentage", UDFUtils.computePercentage(col("filteredContents")))
-        .drop("agg", "filteredContents")
+        .drop("aggregates", "filteredContents")
     } else null
     val progressDF = getProgressDF(enrolledUsersToBatch, activityAggData)
     organizeDF(progressDF, columnMapping, columnsOrder)
@@ -88,7 +88,7 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
   def getActivityAggData(collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     loadData(activityAggDBSettings, cassandraFormat, new StructType())
       .where(col("context_id") === s"cb:${collectionBatch.batchId}" && col("activity_id") === collectionBatch.collectionId)
-      .select("user_id", "activity_id", "agg", "context_id")
+      .select("user_id", "activity_id", "aggregates", "context_id")
 
   }
 

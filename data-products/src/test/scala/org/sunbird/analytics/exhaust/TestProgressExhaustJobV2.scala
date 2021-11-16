@@ -90,7 +90,7 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     import spark1.implicits._
 
     filteredDF.select("progress").rdd.map(r => r(0)).collect.toList.head should be("100")
-    filteredDF.select("Total Score").rdd.map(r => r(0)).collect.toList.head should be("100.0%")
+    filteredDF.select("Total Score").rdd.map(r => r(0)).collect.toList.head should be("100%")
     filteredDF.select("do_1128870328040161281204 - Score").rdd.map(r => r(0)).collect.toList.head should be("100%")
 
     val batch1Results = batchResult.as[ProgressExhaustReport].collectAsList().asScala
