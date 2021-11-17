@@ -58,7 +58,7 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
     val assessAggregateData = prepareReportDf(loadData(assessmentAggDBSettings, cassandraFormat, new StructType()))
 
     val joinedDF = try {
-      val assessBlobData = prepareReportDf(getAssessmentBlobDF(batch.batchId, config))
+      val assessBlobData = prepareReportDf(getAssessmentBlobDF(batch, config))
 
       dropDuplicateColumns(assessAggregateData.columns, assessAggregateData, assessBlobData)
 
@@ -72,7 +72,7 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
     joinedDF.join(userEnrolmentDataDF, joinedDF.col("user_id") === userEnrolmentDataDF.col("userid") && joinedDF.col("course_id") === userEnrolmentDataDF.col("courseid") && joinedDF.col("batch_id") === userEnrolmentDataDF.col("batchid"), "inner")
   }
 
-  def getAssessmentBlobDF(batchid: String, config: JobConfig)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+  def getAssessmentBlobDF(batch: CollectionBatch, config: JobConfig)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val azureFetcherConfig = config.modelParams.get("assessmentFetcherConfig").asInstanceOf[Map[String, AnyRef]]
 
     val store = azureFetcherConfig("store").asInstanceOf[String]
@@ -80,7 +80,7 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
     val filePath = azureFetcherConfig.getOrElse("filePath", "archival-data/").asInstanceOf[String]
     val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
 
-    val assessAggData = ExhaustUtil.getArchivedData(store, filePath, container, Map("batchId" -> batchid), Option(format))
+    val assessAggData = ExhaustUtil.getArchivedData(store, filePath, container, Map("batchId" -> batch.batchId, "collectionId"-> batch.collectionId), Option(format))
 
     assessAggData.distinct()
       .withColumn("question", UDFUtils.convertStringToList(col("question")))
