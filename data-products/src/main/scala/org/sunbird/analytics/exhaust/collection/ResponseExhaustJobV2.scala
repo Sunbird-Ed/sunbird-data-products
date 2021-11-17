@@ -55,17 +55,17 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
         col("batchName"),
         col("batchid"))
 
-    val assessAggregateData = prepareReportDf(loadData(assessmentAggDBSettings, cassandraFormat, new StructType()))
+    val assessAggregateData = loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("batch_id").equalTo(batch.batchId))
+
+    val preparedAssessAggregateData = prepareReportDf(assessAggregateData)
 
     val joinedDF = try {
       val assessBlobData = prepareReportDf(getAssessmentBlobDF(batch, config))
-
-      dropDuplicateColumns(assessAggregateData.columns, assessAggregateData, assessBlobData)
-
+      preparedAssessAggregateData.unionByName(assessBlobData).dropDuplicates("course_id","batch_id", "user_id", "attempt_id")
     } catch {
       case e: Exception => {
         JobLogger.log("Blob does not contain any file for batchid: " + batch.batchId)
-        assessAggregateData
+        preparedAssessAggregateData
       }
     }
 
@@ -99,29 +99,6 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
       .withColumn("questionoption", UDFUtils.toJSON(col("questiondata.params")))
       .withColumn("last_attempted_on", col("last_attempted_on").cast(StringType))
       .drop("question", "questiondata", "question_data", "created_on", "updated_on")
-  }
-
-  def dropDuplicateColumns(colNames: Array[String], latestDf: DataFrame, assistDf: DataFrame): DataFrame = {
-    val latestDfCols = latestDf.columns.map(c => "latest_" + c)
-
-    val renamedLatestDf = latestDf.toDF(latestDfCols: _*)
-
-    val assitDfCols = assistDf.columns.map(c => "assist_" + c)
-
-    val renamedAssistDf = assistDf.toDF(assitDfCols: _*)
-
-    var joinedDf = renamedLatestDf.join(renamedAssistDf,
-      renamedLatestDf("latest_batch_id") === renamedAssistDf("assist_batch_id") &&
-      renamedLatestDf("latest_course_id") === renamedAssistDf("assist_course_id") &&
-      renamedLatestDf("latest_user_id") === renamedAssistDf("assist_user_id") &&
-      renamedLatestDf("latest_attempt_id") === renamedAssistDf("assist_attempt_id")
-      , "full")
-
-    colNames.foreach(colName => {
-      joinedDf = joinedDf.withColumn(colName, when(col("latest_"+colName).isNotNull,col("latest_"+colName)).otherwise("assist_"+colName))
-    })
-
-    joinedDf.select(colNames.head, colNames.tail: _*)
   }
 }
 
