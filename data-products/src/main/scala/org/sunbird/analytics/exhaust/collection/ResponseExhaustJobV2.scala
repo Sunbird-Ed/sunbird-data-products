@@ -61,7 +61,7 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
 
     val joinedDF = try {
       val assessBlobData = prepareReportDf(getAssessmentBlobDF(batch, config))
-      preparedAssessAggregateData.unionByName(assessBlobData).dropDuplicates("course_id","batch_id", "user_id", "attempt_id")
+      preparedAssessAggregateData.unionByName(assessBlobData).dropDuplicates("course_id","batch_id", "user_id", "attempt_id", "questionid")
     } catch {
       case e: Exception => {
         JobLogger.log("Blob does not contain any file for batchid: " + batch.batchId)
