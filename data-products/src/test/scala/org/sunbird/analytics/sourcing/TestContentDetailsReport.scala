@@ -18,7 +18,7 @@ import org.scalatest.Matchers
 import org.sunbird.analytics.util.{EmbeddedPostgresql, SparkSpec}
 
 import scala.concurrent.Future
-case class TestContentDetails(contentId: String, contentName: String, primaryCategory: String, identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, programId: String, createdBy: String, creator: String, mimeType: String, unitIdentifiers: String, status: String, prevStatus: String, acceptedContents: String, rejectedContents: String)
+case class TestContentDetails(contentId: String, contentName: String, primaryCategory: String, identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, programId: String, createdBy: String, creator: String, mimeType: String, unitIdentifiers: String, status: String, prevStatus: String, acceptedContents: String, rejectedContents: String, collectionCategory: String)
 
 class TestContentDetailsReport extends SparkSpec with Matchers with MockFactory {
   implicit var spark: SparkSession = _
@@ -55,7 +55,8 @@ class TestContentDetailsReport extends SparkSpec with Matchers with MockFactory 
         |    "gradeLevel": "Class 8",
         |    "date": "2020-03-25",
         |    "medium": "English",
-        |    "subject": "Mathematics"
+        |    "subject": "Mathematics",
+        |    "primaryCategory": "digital textbook"
         |  }
       """.stripMargin
 
@@ -79,9 +80,9 @@ class TestContentDetailsReport extends SparkSpec with Matchers with MockFactory 
     import sqlContext.implicits._
     implicit val mockFc = mock[FrameworkContext]
     val reportDf = List(TestContentDetails("do_1895357","book-1","eTextbook","do_9635","tb-01","ncrt","english","class 6","maths",
-    "program-1","unknown","0987654334567","ecml","do_952457879895","live","draft","do_898765545","do_87654")).toDF()
+    "program-1","unknown","0987654334567","ecml","do_952457879895","live","draft","do_898765545","do_87654","Digital Textbook")).toDF()
       .groupBy("contentId","contentName","primaryCategory","identifier",
-        "name","board","medium","gradeLevel","subject","programId","createdBy",
+        "name","board","medium","gradeLevel","subject","programId","createdBy","collectionCategory",
         "creator","mimeType","unitIdentifiers", "status","prevStatus")
       .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
 
