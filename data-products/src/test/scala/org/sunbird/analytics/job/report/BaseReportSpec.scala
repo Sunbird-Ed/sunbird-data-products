@@ -5,8 +5,9 @@ import org.sunbird.analytics.util.EmbeddedES
 import org.sunbird.analytics.util.EsIndex
 import org.joda.time.DateTimeUtils
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfterEach
 
-class BaseReportSpec extends BaseSpec with BeforeAndAfterAll {
+class BaseReportSpec extends BaseSpec with BeforeAndAfterAll with BeforeAndAfterEach {
 
   override def beforeAll() {
     DateTimeUtils.setCurrentMillisFixed(1531047600000L)
