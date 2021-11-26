@@ -27,7 +27,8 @@ case class BatchInfo(batchId: String, startDate: String, endDate: String)
 
 case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), userchannel: Option[String] = Option(""), orgname: Option[String] = Option(""),
                     firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), maskedemail: Option[String] = Option(""), maskedphone: Option[String] = Option(""),
-                    block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""))
+                    block: Option[String] = Option(""), externalid: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""),
+                    usertype: Option[String] = Option(""), usersubtype: Option[String] = Option(""))
 
 trait CourseReport {
   def getCourse(config: Map[String, AnyRef])(sc: SparkContext): DataFrame
