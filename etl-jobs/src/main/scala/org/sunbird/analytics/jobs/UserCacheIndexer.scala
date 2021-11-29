@@ -9,10 +9,11 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.sunbird.analytics.util.JSONUtils
 import redis.clients.jedis.Jedis
+import scala.collection.mutable
 
 case class AnonymousData(userid:String, usersignintype: String, userlogintype: String)
 case class LocationId(userid: String, locationids: List[String])
-case class ProfileUserType(userid: String, usertype: String, usersubtype: String)
+case class ProfileUserType(userid: String, usertype: String, usersubtype: String, profileusertypes: String)
 
 object UserCacheIndexer extends Serializable {
 
@@ -145,7 +146,7 @@ object UserCacheIndexer extends Serializable {
 
       val userDF = filterUserData(spark.read.format("org.apache.spark.sql.cassandra").option("table", "user").option("keyspace", sunbirdKeyspace).load()
         .filter(col("userid").isNotNull))
-        .select(col("userid"), col("profilelocation"), col("profileusertype")).persist(StorageLevel.MEMORY_ONLY)
+        .select(col("userid"), col("profilelocation"), col("profileusertypes").as("profileusertypeslist")).persist(StorageLevel.MEMORY_ONLY)
 
       val userOrgDF = spark.read.format("org.apache.spark.sql.cassandra").option("table", "user_organisation").option("keyspace", sunbirdKeyspace).load().filter(lower(col("isdeleted")) === "false")
         .select(col("userid"), col("organisationid")).persist(StorageLevel.MEMORY_ONLY)
@@ -168,7 +169,7 @@ object UserCacheIndexer extends Serializable {
       val profileUserTypeDF = getProfileUserType(userDF)
 
       val userLocationTypeDF = userLocationDF.join(profileUserTypeDF, Seq("userid"), "left")
-        .drop("profilelocation", "profileusertype")
+        .drop("profilelocation", "profileusertypeslist")
 
       val UserPivotDF = userLocationTypeDF
         .join(userOrgDF, userOrgDF.col("userid") === userLocationTypeDF.col("userid"), "left")
@@ -269,34 +270,43 @@ object UserCacheIndexer extends Serializable {
       * @return userProfileTypeDF (containing fields: userid, usertype, usersubtype)
       *
       * INPUT:
-      * profileusertype (String)
+      * profileusertypelist (String)
       * ------------------------------------------------------------------------------------------------------------------------------
-      * {"subType":deo,"type":"teacher"}
+      * [{"subType":deo,"type":"teacher"}]
       *
       *  LOGIC: usertype: profileusertype.type
       *         usersubtype: profileusertype.subType
+      *         profileusertypes: Stringified profileusertypelist
       *
       *  OUTPUT:
-      *    +------------------------------------+------+---------------+
-      *    |userid                              |usertype |usersubtype |
-      *    +------------------------------------+---------+------------+
-      *    |56c2d9a3-fae9-4341-9862-4eeeead2e9a1|teacher  |deo         |
-      *    +------------------------------------+---------+------------+
+      *    +------------------------------------+---------+-------------+----------------------------------+
+      *    |userid                              |usertype |usersubtype | profileusertypes                  |
+      *    +------------------------------------+---------+------------+-----------------------------------+
+      *    |56c2d9a3-fae9-4341-9862-4eeeead2e9a1|teacher  |deo         |[{"subType":deo,"type":"teacher"}] |
+      *    +------------------------------------+---------+------------+-----------------------------------+
       *
       */
 
     def getProfileUserType(userDF: DataFrame)(implicit sqlContext: SQLContext): DataFrame = {
       import sqlContext.implicits._
 
-      userDF.select(col("profileusertype"), col("userid")).rdd.map{f =>
+      userDF.select(col("profileusertypeslist"), col("userid")).rdd.map{f =>
         if (null != f.getString(0) && f.getString(0).nonEmpty) {
-          val profileUserType = JSONUtils.deserialize[Map[String, String]](f.getString(0))
-          val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
-          val usertype = if (!usertypeList.isEmpty) usertypeList.head else ""
-          val usersubtypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
-          val usersubtype = if (!usersubtypeList.isEmpty) usersubtypeList.head else ""
-          ProfileUserType(f.getString(1), usertype, usersubtype)
-        } else ProfileUserType(f.getString(1),"","")
+          val profileUserTypes = JSONUtils.deserialize[List[Map[String, String]]](f.getString(0))
+
+          val userTypeValue = mutable.ListBuffer[String]()
+          val userSubtypeValue = mutable.ListBuffer[String]()
+          profileUserTypes.foreach(userType => {
+            val typeVal:String = userType.getOrElse("type", "")
+            val subTypeVal:String = userType.getOrElse("subType", "")
+
+            if (typeVal != null && typeVal.nonEmpty && !userTypeValue.contains(typeVal)) userTypeValue.append(typeVal)
+            if (subTypeVal != null && subTypeVal.nonEmpty && !userSubtypeValue.contains(subTypeVal)) userSubtypeValue.append(subTypeVal)
+          })
+
+          ProfileUserType(f.getString(1), userTypeValue.mkString(","), userSubtypeValue.mkString(","), JSONUtils.serialize(profileUserTypes))
+
+        } else ProfileUserType(f.getString(1),"","","")
       }.toDF()
     }
 
