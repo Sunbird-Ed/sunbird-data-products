@@ -37,7 +37,6 @@ class TestScoreMetricMigrationJob extends BaseReportSpec with MockFactory {
     implicit val sc: SparkContext = spark.sparkContext
     val res = ScoreMetricMigrationJob.migrateData(spark, jobConfig)
     res.count() should be(6)
-    println("ress" + res.show(false))
     val result = res.filter(col("context_id") === "cb:batch-001")
       .filter(col("activity_id") === "do_11306040245271756813015")
       .filter(col("user_id") === "user-008")
@@ -76,7 +75,6 @@ class TestScoreMetricMigrationJob extends BaseReportSpec with MockFactory {
     implicit val sc: SparkContext = spark.sparkContext
     val res = ScoreMetricMigrationJob.migrateData(spark, jobConfig)
     res.count() should be(1)
-    println("ress2" + res.show(false))
 
     val result = res.select("agg", "agg_last_updated", "agg_details").collect().head
     result.get(0).asInstanceOf[Map[String, Int]]("completedCount") should be(1)
@@ -99,7 +97,6 @@ class TestScoreMetricMigrationJob extends BaseReportSpec with MockFactory {
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val sc: SparkContext = spark.sparkContext
     val res = ScoreMetricMigrationJob.migrateData(spark, jobConfig)
-    println("ress3" + res.show(false))
 
     val result = res.filter(col("context_id") === "cb:batch-001")
       .filter(col("activity_id") === "do_11306040245271756813015")

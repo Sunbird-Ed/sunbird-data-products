@@ -33,7 +33,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     try {
       val res = CommonUtil.time(migrateData(spark, jobConfig))
       val total_records = res._2.count()
-      JobLogger.log(s"Updating the $total_records records in the cassandra table table", None, INFO)
+      JobLogger.log(s"Updating the $total_records records in the cassandra table", None, INFO)
       updatedTable(res._2, userActivityAggDBSettings)
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRecordsUpdated" -> total_records)))
     } finally {
