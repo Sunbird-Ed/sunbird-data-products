@@ -23,7 +23,7 @@ class TestScoreMetricMigrationJob extends BaseReportSpec with MockFactory {
   }
 
   override def beforeEach(): Unit = {
-    EmbeddedCassandra.loadData("src/test/resources/score-metrics-migration-job/data.cql")
+    EmbeddedCassandra.loadData("src/test/resources/score-metrics-migration/data.cql")
   }
 
   override def afterEach(): Unit = {
