@@ -82,8 +82,7 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
 
     val assessAggData = ExhaustUtil.getArchivedData(store, filePath, container, Map("batchId" -> batch.batchId, "collectionId"-> batch.collectionId), Option(format))
 
-    assessAggData.distinct()
-      .withColumn("question", UDFUtils.convertStringToList(col("question")))
+    assessAggData.withColumn("question", UDFUtils.convertStringToList(col("question")))
   }
 
   def prepareReportDf(df: DataFrame): DataFrame = {
