@@ -5,7 +5,6 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
-import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.job.report.BaseReportSpec
 import org.sunbird.analytics.util.EmbeddedCassandra
 
@@ -14,20 +13,24 @@ import scala.collection.immutable.List
 class TestAssessmentScoreCorrectionJob extends BaseReportSpec with MockFactory {
   implicit var spark: SparkSession = _
 
-  var assessmentAggDF: DataFrame = _
-  var reporterMock: BaseReportsJob = mock[BaseReportsJob]
-  val sunbirdCoursesKeyspace = "sunbird_courses"
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = getSparkSession();
+  }
+
+  override def beforeEach(): Unit = {
     EmbeddedCassandra.loadData("src/test/resources/assessment-score-correction/assessment.cql") // Load test data in embedded cassandra server
+  }
+
+  override def afterEach(): Unit = {
+    EmbeddedCassandra.close()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
     EmbeddedCassandra.close()
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, "src/test/resources/score-metrics-migration-job/")
+    spark.close()
   }
 
   it should "Should able correct assessment raw data records when dryRunMode is true" in {
