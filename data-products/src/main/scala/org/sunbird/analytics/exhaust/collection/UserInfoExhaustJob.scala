@@ -1,11 +1,8 @@
 package org.sunbird.analytics.exhaust.collection
 
-import org.apache.commons.lang.StringUtils
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.JobConfig
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.sunbird.analytics.exhaust.JobRequest
 
 object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaustJob with Serializable {
@@ -18,7 +15,7 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
   private val encryptedFields = Array("email", "phone");
 
   override def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "username", "state", "district", "externalid", "rootorgid", "orgname", "email", "phone", "userinfo")
+    Seq("userid", "username", "state", "district", "rootorgid", "orgname", "email", "phone", "block", "cluster", "usertype", "usersubtype", "schooludisecode", "schoolname")
   }
 
   override def validateRequest(request: JobRequest): Boolean = {
@@ -29,28 +26,23 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
     }
   }
 
-  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid", "username", "state", "district", "orgname", "externalid", "email", "phone",
-    "consentflag", "consentprovideddate");
+  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid", "username", "state", "district", "orgname", "email", "phone",
+    "consentflag", "consentprovideddate","block", "cluster", "usertype", "usersubtype", "schooludisecode", "schoolname");
 
   private val consentFields = List("email", "phone")
-  private val orgDerivedFields = List("externalid", "username")
-  private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "User Name", "State", "District", "Org Name", "External ID",
+  private val orgDerivedFields = List("username")
+  private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "User Name", "User Type", "User Sub Type", "State", "District","Block", "Cluster", "School Id", "School Name", "Org Name",
     "Email ID", "Mobile Number", "Consent Provided", "Consent Provided Date");
   val columnMapping = Map("courseid" -> "Collection Id", "collectionName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User UUID",
-    "username" -> "User Name", "state" -> "State", "district" -> "District", "orgname" -> "Org Name", "externalid" -> "External ID", "email" -> "Email ID",
-    "phone" -> "Mobile Number", "consentflag" -> "Consent Provided", "consentprovideddate" -> "Consent Provided Date")
+    "username" -> "User Name", "usertype" -> "User Type", "usersubtype" -> "User Sub Type", "state" -> "State", "district" -> "District", "block" -> "Block", "cluster" -> "Cluster", "orgname" -> "Org Name",
+    "email" -> "Email ID", "phone" -> "Mobile Number", "consentflag" -> "Consent Provided", "consentprovideddate" -> "Consent Provided Date",  "schooludisecode" -> "School Id", "schoolname" -> "School Name")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
     collectionBatch.userConsent.getOrElse("No").toLowerCase() match {
       case "yes" =>
-        val userEnrolments = userEnrolmentDF
-          .withColumn("userinfodata", UDFUtils.fromJSON(col("userinfo")))
-          .withColumn("email", when(col("userinfodata.declared-email").isNotNull, col("userinfodata.declared-email")).otherwise(col("email")))
-          .withColumn("phone", when(col("userinfodata.declared-phone").isNotNull, col("userinfodata.declared-phone")).otherwise(col("phone")))
-          .drop("userinfodata")
-        val unmaskedDF = decryptUserInfo(applyConsentRules(collectionBatch, userEnrolments))
-        val reportDF = unmaskedDF.withColumn("persona", when(col("externalid").isNotNull && length(col("externalid")) > 0, "Teacher").otherwise("")).select(filterColumns.head, filterColumns.tail: _*);
+        val unmaskedDF = decryptUserInfo(applyConsentRules(collectionBatch, userEnrolmentDF))
+        val reportDF = unmaskedDF.select(filterColumns.head, filterColumns.tail: _*);
         organizeDF(reportDF, columnMapping, columnsOrder)
 
       case _ =>
@@ -64,12 +56,12 @@ object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaus
       userDF.withColumn("consentflag", lit("false"));
     } else {
       val consentDF = getUserConsentDF(collectionBatch);
-      val resultDF = userDF.join(consentDF, Seq("userid"), "left_outer")
+      val resultDF = userDF.join(consentDF, Seq("userid"), "inner")
       // Org level consent - will be updated in 3.4 to read from user_consent table
       resultDF.withColumn("orgconsentflag", when(col("rootorgid") === collectionBatch.requestedOrgId, "true").otherwise("false"))
     }
-    val consentAppliedDF = consentFields.foldLeft(consentDF)((df, column) => df.withColumn(column, when(col("consentflag") === "true", col(column)).otherwise("")));
-    orgDerivedFields.foldLeft(consentAppliedDF)((df, field) => df.withColumn(field, when(col("consentflag") === "true", col(field)).when(col("orgconsentflag") === "true", col(field)).otherwise("")));
+    // Issue #SB-24966: Logic to exclude users whose consentflag is false
+    consentDF.filter(col("consentflag") === "true")
   }
 
   def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {

@@ -4,7 +4,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext}
-import org.ekstep.analytics.framework.util.CommonUtil
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils}
 import org.sunbird.cloud.storage.conf.AppConf
 
 trait BaseReportsJob {
@@ -19,6 +19,7 @@ trait BaseReportsJob {
 
   }
 
+  // $COVERAGE-OFF$ Disabling scoverage
   def getReportingFrameworkContext()(implicit fc: Option[FrameworkContext]): FrameworkContext = {
     fc match {
       case Some(value) => {
@@ -44,7 +45,7 @@ trait BaseReportsJob {
         CommonUtil.getSparkContext(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, sparkRedisConnectionHost, sparkUserDbRedisIndex)
       }
     }
-    setReportsStorageConfiguration(sparkContext)
+    setReportsStorageConfiguration(sparkContext, config)
     sparkContext;
 
   }
@@ -55,10 +56,10 @@ trait BaseReportsJob {
     val sparkElasticsearchConnectionHost = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).get("sparkElasticsearchConnectionHost")
     val sparkRedisConnectionHost = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).get("sparkRedisConnectionHost")
     val sparkUserDbRedisIndex = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).get("sparkUserDbRedisIndex")
-
+    val sparkUserDbRedisPort = config.modelParams.getOrElse(Map[String, Option[AnyRef]]()).getOrElse("sparkUserDbRedisPort", "6379")
     val readConsistencyLevel = AppConf.getConfig("course.metrics.cassandra.input.consistency")
-    val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, Option(readConsistencyLevel), sparkRedisConnectionHost, sparkUserDbRedisIndex)
-    setReportsStorageConfiguration(sparkSession.sparkContext)
+    val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, Option(readConsistencyLevel), sparkRedisConnectionHost, sparkUserDbRedisIndex, Option(sparkUserDbRedisPort))
+    setReportsStorageConfiguration(sparkSession.sparkContext, config)
     sparkSession;
 
   }
@@ -67,26 +68,28 @@ trait BaseReportsJob {
     sparkSession.stop();
   }
 
-  def setReportsStorageConfiguration(sc: SparkContext) {
-    val reportsStorageAccountKey = AppConf.getConfig("reports_storage_key")
-    val reportsStorageAccountSecret = AppConf.getConfig("reports_storage_secret")
-    if (reportsStorageAccountKey != null && !reportsStorageAccountSecret.isEmpty) {
+  def setReportsStorageConfiguration(sc: SparkContext, config: JobConfig) {
+    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
+    val reportsStorageAccountKey = modelParams.getOrElse("storageKeyConfig", "reports_storage_key").asInstanceOf[String];
+    val reportsStorageAccountSecret = modelParams.getOrElse("storageSecretConfig", "reports_storage_secret").asInstanceOf[String];
+    if (reportsStorageAccountKey != null && reportsStorageAccountSecret.nonEmpty) {
       sc.hadoopConfiguration.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-      sc.hadoopConfiguration.set("fs.azure.account.key." + reportsStorageAccountKey + ".blob.core.windows.net", reportsStorageAccountSecret)
-      sc.hadoopConfiguration.set("fs.azure.account.keyprovider." + reportsStorageAccountKey + ".blob.core.windows.net", "org.apache.hadoop.fs.azure.SimpleKeyProvider")
+      sc.hadoopConfiguration.set("fs.azure.account.key." + AppConf.getConfig(reportsStorageAccountKey) + ".blob.core.windows.net", AppConf.getConfig(reportsStorageAccountSecret))
+      sc.hadoopConfiguration.set("fs.azure.account.keyprovider." + AppConf.getConfig(reportsStorageAccountKey) + ".blob.core.windows.net", "org.apache.hadoop.fs.azure.SimpleKeyProvider")
     }
   }
+  // $COVERAGE-ON$ Enabling scoverage for all other functions
 
-  def getStorageConfig(container: String, key: String): org.ekstep.analytics.framework.StorageConfig = {
-    val reportsStorageAccountKey = AppConf.getConfig("reports_storage_key")
-    val reportsStorageAccountSecret = AppConf.getConfig("reports_storage_secret")
+  def getStorageConfig(container: String, key: String, config: JobConfig = JSONUtils.deserialize[JobConfig]("""{}""")): org.ekstep.analytics.framework.StorageConfig = {
+    val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]())
+    val reportsStorageAccountKey = modelParams.getOrElse("storageKeyConfig", "reports_storage_key").asInstanceOf[String];
+    val reportsStorageAccountSecret = modelParams.getOrElse("storageSecretConfig", "reports_storage_secret").asInstanceOf[String];
     val provider = AppConf.getConfig("cloud_storage_type")
-    if (reportsStorageAccountKey != null && !reportsStorageAccountSecret.isEmpty) {
-      org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option("reports_storage_key"), Option("reports_storage_secret"));
+    if (reportsStorageAccountKey != null && reportsStorageAccountSecret.nonEmpty) {
+      org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(reportsStorageAccountKey), Option(reportsStorageAccountSecret))
     } else {
       org.ekstep.analytics.framework.StorageConfig(provider, container, key, Option(provider), Option(provider));
     }
-
   }
 
   def fetchData(spark: SparkSession, settings: Map[String, String], url: String, schema: StructType): DataFrame = {

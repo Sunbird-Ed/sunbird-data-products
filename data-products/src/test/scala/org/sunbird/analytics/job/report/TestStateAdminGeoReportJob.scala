@@ -9,13 +9,12 @@ import org.sunbird.cloud.storage.conf.AppConf
 import java.io.File
 
 import org.ekstep.analytics.framework.{Fetcher, FrameworkContext, JobConfig}
-import org.ekstep.analytics.framework.util.HadoopFileUtil
+import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 
 class TestStateAdminGeoReportJob extends SparkSpec(null) with MockFactory {
 
   implicit var spark: SparkSession = _
   var map: Map[String, String] = _
-  var shadowUserDF: DataFrame = _
   var orgDF: DataFrame = _
   var reporterMock: BaseReportsJob = mock[BaseReportsJob]
   val sunbirdKeyspace = "sunbird"
@@ -60,7 +59,7 @@ class TestStateAdminGeoReportJob extends SparkSpec(null) with MockFactory {
     assert(geoSummaryDistrict.exists() === true)
   }
 
-  ignore should "execute dispatcher" in {
+  it should "execute dispatcher" in {
     implicit val fc = new FrameworkContext()
     val reportDF = StateAdminGeoReportJob.generateGeoReport()(spark, fc)
 
@@ -68,6 +67,21 @@ class TestStateAdminGeoReportJob extends SparkSpec(null) with MockFactory {
       "adhoc_scripts_output_dir" -> "/mount/portal_data")
 
     val jobConfig = JobConfig(Fetcher("local", None, None), None, None, "StateAdminJob", Some(modelParams), None, Some(4), Some("TestExecuteDispatchder"))
-    StateAdminGeoReportJob.generateDistrictZip(reportDF, jobConfig)
+    println("jobconfig: " + JSONUtils.serialize(jobConfig))
+    the[Exception] thrownBy {
+      StateAdminGeoReportJob.generateDistrictZip(reportDF, jobConfig)
+    } should have message "District level zip generation failed with exit code 127"
+  }
+
+  it should "execute main method" in {
+    implicit val fc = new FrameworkContext()
+    val modelParams = Map[String, AnyRef]("adhoc_scripts_virtualenv_dir" -> "/mount/venv",
+      "adhoc_scripts_output_dir" -> "/mount/portal_data")
+
+    val jobConfig = JobConfig(Fetcher("local", None, None), None, None, "StateAdminJob", Some(modelParams), None, Some(4), Some("TestExecuteDispatchder"))
+    val strConfig = JSONUtils.serialize(jobConfig)
+    the[Exception] thrownBy {
+      StateAdminGeoReportJob.main(strConfig)
+    } should have message "District level zip generation failed with exit code 127"
   }
 }

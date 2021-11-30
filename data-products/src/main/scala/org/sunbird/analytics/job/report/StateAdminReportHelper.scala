@@ -3,6 +3,7 @@ package org.sunbird.analytics.job.report
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
+import org.sunbird.analytics.job.report.StateAdminReportJob.locationIdList
 import org.sunbird.cloud.storage.conf.AppConf
 
 trait StateAdminReportHelper extends BaseReportsJob {
@@ -24,13 +25,12 @@ trait StateAdminReportHelper extends BaseReportsJob {
 
   def generateSubOrgData(organisationDF: DataFrame)(implicit sparkSession: SparkSession) = {
     var locationDF = locationData()
-
-    val rootOrgs = organisationDF.select(col("id").as("rootorgjoinid"), col("channel").as("rootorgchannel"), col("slug").as("rootorgslug")).where(col("isrootorg") && col("status").===(1)).collect();
+    val rootOrgs = organisationDF.select(col("id").as("rootorgjoinid"), col("channel").as("rootorgchannel"), col("slug").as("rootorgslug")).where(col("istenant") && col("status").===(1)).collect();
     val rootOrgRDD = sparkSession.sparkContext.parallelize(rootOrgs.toSeq);
     val rootOrgEncoder = Encoders.product[RootOrgData].schema
     val rootOrgDF = sparkSession.createDataFrame(rootOrgRDD, rootOrgEncoder);
-
-    val subOrgDF = organisationDF
+    val orgWithLocationDF = organisationDF.withColumn("locationids", locationIdList(col("orglocation")))
+    val subOrgDF = orgWithLocationDF
       .withColumn("explodedlocation", explode(when(size(col("locationids")).equalTo(0), array(lit(null).cast("string")))
         .otherwise(when(col("locationids").isNotNull, col("locationids"))
           .otherwise(array(lit(null).cast("string"))))))
@@ -68,14 +68,13 @@ trait StateAdminReportHelper extends BaseReportsJob {
   def loadOrganisationData()(implicit sparkSession: SparkSession) = {
     loadData(sparkSession, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace), None).select(
       col("id").as("id"),
-      col("isrootorg").as("isrootorg"),
       col("rootorgid").as("rootorgid"),
       col("channel").as("channel"),
       col("status").as("status"),
-      col("locationid").as("locationid"),
       col("orgname").as("orgname"),
-      col("locationids").as("locationids"),
       col("externalid").as("externalid"),
+      col("orglocation"),
+      col("istenant"),
       col("slug").as("slug")).cache();
   }
 

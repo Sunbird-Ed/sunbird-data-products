@@ -29,11 +29,11 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
       "questionscore" -> "Question Score", "questionmaxscore" -> "Question Max Score", "questionoption" -> "Question Options", "questionresponse" -> "Question Response")
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    val assessmentDF = getAssessmentDF(collectionBatch).persist();
+    val assessmentDF = getAssessmentDF(userEnrolmentDF, collectionBatch).persist();
     persistedDF.append(assessmentDF);
     val contentIds = assessmentDF.select("content_id").dropDuplicates().collect().map(f => f.get(0));
     val contentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> contentIds)))).withColumnRenamed("collectionName", "contentname").select("identifier", "contentname");
-    val reportDF = assessmentDF.join(contentDF, assessmentDF("content_id") === contentDF("identifier"), "left_outer").join(userEnrolmentDF, Seq("courseid", "batchid", "userid"), "left_outer").drop("identifier").select(filterColumns.head, filterColumns.tail: _*);
+    val reportDF = assessmentDF.join(contentDF, assessmentDF("content_id") === contentDF("identifier"), "left_outer").drop("identifier").select(filterColumns.head, filterColumns.tail: _*);
     organizeDF(reportDF, columnMapping, columnsOrder);
   }
   
@@ -41,11 +41,19 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
     persistedDF.foreach(f => f.unpersist(true))
   }
   
-  def getAssessmentDF(batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    loadData(assessmentAggDBSettings, cassandraFormat, new StructType()).where(col("course_id") === batch.collectionId && col("batch_id") === batch.batchId)
-      .withColumnRenamed("user_id", "userid")
-      .withColumnRenamed("batch_id", "batchid")
-      .withColumnRenamed("course_id", "courseid")
+  def getAssessmentDF(userEnrolmentDF: DataFrame, batch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+    val userEnrolmentDataDF = userEnrolmentDF
+      .select(
+        col("userid"),
+        col("courseid"),
+        col("collectionName"),
+        col("batchName"),
+        col("batchid"))
+
+    val assessAggData = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
+
+    assessAggData.join(userEnrolmentDataDF, assessAggData.col("user_id") === userEnrolmentDataDF.col("userid") && assessAggData.col("course_id") === userEnrolmentDataDF.col("courseid"), "inner")
+      .select(userEnrolmentDataDF.col("*"), assessAggData.col("question"), col("content_id"), col("attempt_id"), col("last_attempted_on"))
       .withColumn("questiondata",explode_outer(col("question")) )
       .withColumn("questionid" , col("questiondata.id"))
       .withColumn("questiontype", col("questiondata.type"))
@@ -58,5 +66,4 @@ object ResponseExhaustJob extends optional.Application with BaseCollectionExhaus
       .withColumn("questionoption", UDFUtils.toJSON(col("questiondata.params")))
       .drop("question", "questiondata")
   }
-  
 }

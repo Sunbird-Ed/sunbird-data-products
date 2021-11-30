@@ -174,98 +174,36 @@ CREATE KEYSPACE IF NOT EXISTS dev_hierarchy_store WITH replication = {
 CREATE TABLE IF NOT EXISTS dev_hierarchy_store.content_hierarchy (
     identifier text PRIMARY KEY,
     hierarchy text
-) WITH bloom_filter_fp_chance = 0.01
-    AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
-    AND comment = ''
-    AND compaction = {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
-    AND compression = {'chunk_length_in_kb': '64', 'class': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-    AND crc_check_chance = 1.0
-    AND dclocal_read_repair_chance = 0.1
-    AND default_time_to_live = 0
-    AND gc_grace_seconds = 864000
-    AND max_index_interval = 2048
-    AND memtable_flush_period_in_ms = 0
-    AND min_index_interval = 128
-    AND read_repair_chance = 0.0
-    AND speculative_retry = '99PERCENTILE';
+);
 
 CREATE KEYSPACE IF NOT EXISTS sunbird WITH replication = {
   'class': 'SimpleStrategy',
   'replication_factor': '1'
 };
 
-CREATE TABLE IF NOT EXISTS sunbird.shadow_user (
-    channel text,
-    userextid text,
-    addedby text,
-    claimedon timestamp,
-    claimstatus int,
-    createdon timestamp,
-    email text,
-    name text,
-    orgextid text,
-    phone text,
-    processid text,
-    updatedon timestamp,
-    userid text,
-    userids list<text>,
-    userstatus int,
-    PRIMARY KEY (channel, userextid)
-) WITH CLUSTERING ORDER BY (userextid ASC)
-    AND bloom_filter_fp_chance = 0.01
-    AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
-    AND comment = ''
-    AND compaction = {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
-    AND compression = {'chunk_length_in_kb': '64', 'class': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-    AND crc_check_chance = 1.0
-    AND dclocal_read_repair_chance = 0.1
-    AND default_time_to_live = 0
-    AND gc_grace_seconds = 864000
-    AND max_index_interval = 2048
-    AND memtable_flush_period_in_ms = 0
-    AND min_index_interval = 128
-    AND read_repair_chance = 0.0
-    AND speculative_retry = '99PERCENTILE';
-
 CREATE TABLE IF NOT EXISTS sunbird.organisation (
     id text PRIMARY KEY,
-    addressid text,
-    approvedby text,
-    approveddate text,
     channel text,
-    communityid text,
     contactdetail text,
     createdby text,
     createddate text,
-    datetime timestamp,
     description text,
     email text,
     externalid text,
     hashtagid text,
-    homeurl text,
-    imgurl text,
-    isapproved boolean,
-    isdefault boolean,
     isrootorg boolean,
+    istenant boolean,
     isssoenabled boolean,
     keys map<text, frozen<list<text>>>,
-    locationid text,
     locationids list<text>,
-    noofmembers int,
-    orgcode text,
     orgname text,
-    orgtype text,
-    orgtypeid text,
-    parentorgid text,
-    preferredlanguage text,
     provider text,
     rootorgid text,
     slug text,
     status int,
-    theme text,
-    thumbnail text,
     updatedby text,
-    updateddate text
+    updateddate text,
+    orglocation text
 ) WITH bloom_filter_fp_chance = 0.01
     AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
     AND comment = ''
@@ -316,11 +254,14 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.course_batch (
      createdfor list<text>,
      description text,
      enddate text,
+     end_date timestamp,
      enrollmentenddate text,
+     enrollment_enddate timestamp,
      enrollmenttype text,
      mentors list<text>,
      name text,
      startdate text,
+     start_date timestamp,
      status int,
      updateddate text,
      PRIMARY KEY (courseid, batchid)
@@ -342,47 +283,32 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.course_batch (
 
 CREATE TABLE IF NOT EXISTS sunbird.user (
     id text PRIMARY KEY,
-    accesscode text,
-    avatar text,
     channel text,
     countrycode text,
     createdby text,
     createddate text,
-    currentlogintime text,
     dob text,
     email text,
     emailverified boolean,
     firstname text,
     flagsvalue int,
     framework map<text, frozen<list<text>>>,
-    gender text,
-    grade list<text>,
     isdeleted boolean,
-    language list<text>,
-    lastlogintime text,
     lastname text,
-    location text,
     locationids list<text>,
     loginid text,
     managedby text,
     maskedemail text,
     maskedphone text,
-    password text,
     phone text,
     phoneverified boolean,
     prevusedemail text,
     prevusedphone text,
-    profilesummary text,
-    profilevisibility map<text, text>,
     recoveryemail text,
     recoveryphone text,
-    registryid text,
     roles list<text>,
     rootorgid text,
     status int,
-    subject list<text>,
-    temppassword text,
-    thumbnail text,
     tncacceptedon timestamp,
     tncacceptedversion text,
     updatedby text,
@@ -390,7 +316,9 @@ CREATE TABLE IF NOT EXISTS sunbird.user (
     userid text,
     username text,
     usertype text,
-    webpages list<frozen<map<text, text>>>
+    usersubtype text,
+    profileusertype text,
+    profilelocation text
 ) WITH bloom_filter_fp_chance = 0.01
     AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
     AND comment = ''
@@ -477,6 +405,16 @@ CREATE TABLE IF NOT EXISTS sunbird.user_organisation (
  updateddate text,
 PRIMARY KEY (userid, organisationid));
 
+CREATE TABLE IF NOT EXISTS sunbird_courses.user_activity_agg (
+    activity_type text,
+    activity_id text,
+    user_id text,
+    context_id text,
+    agg map<text, int>,
+    agg_last_updated map<text, timestamp>,
+    PRIMARY KEY ((activity_type, activity_id, user_id), context_id)
+);
+
 CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
     userid text,
     courseid text,
@@ -489,6 +427,7 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
     contentstatus map<text, int>,
     datetime timestamp,
     enrolleddate text,
+    enrolled_date timestamp,
     issued_certificates list<frozen<map<text, text>>>,
     lastreadcontentid text,
     lastreadcontentstatus int,
@@ -496,3 +435,101 @@ CREATE TABLE IF NOT EXISTS sunbird_courses.user_enrolments (
     status int,
     PRIMARY KEY (userid, courseid, batchid)
 );
+
+CREATE TYPE IF NOT EXISTS sunbird_courses.question (
+    id text,
+    assess_ts timestamp,
+    max_score double,
+    score double,
+    type text,
+    title text,
+    resvalues list<frozen<map<text, text>>>,
+    params list<frozen<map<text, text>>>,
+    description text,
+    duration decimal
+);
+
+CREATE TABLE IF NOT EXISTS sunbird.user_consent (
+    user_id text,
+    consumer_id text,
+    object_id text,
+    categories list<text>,
+    consent_data text,
+    consumer_type text,
+    created_on timestamp,
+    expiry timestamp,
+    id text,
+    last_updated_on timestamp,
+    object_type text,
+    status text,
+    PRIMARY KEY (user_id, consumer_id, object_id)
+);
+
+CREATE TABLE IF NOT EXISTS sunbird_courses.assessment_aggregator (
+    user_id text,
+    course_id text,
+    batch_id text,
+    content_id text,
+    attempt_id text,
+    created_on timestamp,
+    grand_total text,
+    last_attempted_on timestamp,
+    question list<frozen<question>>,
+    total_max_score double,
+    total_score double,
+    updated_on timestamp,
+    PRIMARY KEY ((user_id, course_id), batch_id, content_id, attempt_id)
+);
+
+
+CREATE KEYSPACE IF NOT EXISTS test_keyspace WITH replication = {
+  'class': 'SimpleStrategy',
+  'replication_factor': '1'
+};
+
+CREATE TABLE IF NOT EXISTS test_keyspace.user_enrolment_test(
+    batchid text,
+    active boolean,
+    addedby text,
+    certificates list<frozen<map<text, text>>>,
+    certstatus int,
+    completedon timestamp,
+    completionpercentage int,
+    contentstatus map<text, int>,
+    courseid text,
+    datetime timestamp,
+    enrolled_date timestamp,
+    enrolleddate text,
+    issued_certificates list<frozen<map<text, text>>>,
+    lastreadcontentid text,
+    lastreadcontentstatus int,
+    progress int,
+    status int,
+    userid text,
+    PRIMARY KEY(userid, courseid, batchid))
+    WITH COMPACTION = { 'class': 'SizeTieredCompactionStrategy', 'enabled': 'false' };
+
+
+INSERT INTO test_keyspace.user_enrolment_test(batchid, userid,courseid) VALUES ('b1','u1','c1');
+
+CREATE TABLE IF NOT EXISTS test_keyspace.report_user_enrolments(
+    batchid text,
+    courseid text,
+    userid text,
+    active boolean,
+    addedby text,
+    certificates frozen<list<frozen<map<text, text>>>>,
+    certstatus int,
+    completedon timestamp,
+    completionpercentage int,
+    contentstatus frozen<map<text, int>>,
+    datetime timestamp,
+    enrolled_date timestamp,
+    enrolleddate text,
+    issued_certificates frozen<list<frozen<map<text, text>>>>,
+    lastreadcontentid text,
+    lastreadcontentstatus int,
+    progress int,
+    status int,
+    PRIMARY KEY (batchid, courseid, userid))
+    WITH COMPACTION = { 'class': 'SizeTieredCompactionStrategy', 'enabled': 'false' };

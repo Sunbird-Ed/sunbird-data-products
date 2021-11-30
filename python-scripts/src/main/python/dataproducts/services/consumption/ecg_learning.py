@@ -24,7 +24,7 @@ class ECGLearning:
 
     def get_monitoring_data(self, from_time, to_time):
         url = "{}/prometheus/api/v1/query_range".format(self.prometheus_host)
-        querystring = {"query": "sum(rate(nginx_request_status_count{cluster=~\"Swarm1|Swarm2\"}[5m]))",
+        querystring = {"query": "sum(rate(nginx_http_requests_total{cluster=~\"$cluster\"}[5m]))",
                        "start": str(from_time), "end": str(to_time), "step": "900"}
         headers = {
             'Accept': "application/json, text/plain, */*",

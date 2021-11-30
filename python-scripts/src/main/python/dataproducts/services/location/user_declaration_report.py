@@ -35,10 +35,11 @@ class UserDeclarationReport:
                 print("declared_user_detail not available for "+slug)
                 continue
                 
-            user_df = pd.read_csv(state_result_loc.joinpath('declared_user_detail', '{}.csv'.format(slug)))
+
             os.makedirs(state_result_loc.joinpath('personas'), exist_ok=True)
-            for persona, user_data in user_df.groupby('Persona'):
-                user_data.to_csv(state_result_loc.joinpath('personas', persona.lower()+".csv"), index=False)
+
+            shutil.move(state_result_loc.joinpath('declared_user_detail', '{}.csv'.format(slug)),
+                        state_result_loc.joinpath('personas', '{}.csv'.format(slug)))
 
             shutil.make_archive(str(state_result_loc.joinpath('declared_user_detail', slug)),
                                 'zip',

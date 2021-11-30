@@ -13,26 +13,16 @@ import sun.misc.BASE64Decoder
 
 object DecryptUtil extends Serializable {
     
-    var sunbird_encryption = ""
-    
-    var sunbirdEncryption = ""
-    
+    var sunbird_encryption = DecryptUtil.getSalt()
+
     var encryption_key = ""
     
     val ALGORITHM = "AES"
     val ITERATIONS = 3
-    var c: Cipher = null
-    def initialise() : Unit = {
-        try {
-            sunbirdEncryption =  AppConf.getConfig("sunbird_encryption")
-            sunbird_encryption = DecryptUtil.getSalt()
-            val key = generateKey()
-            c = Cipher.getInstance(ALGORITHM)
-            c.init(Cipher.DECRYPT_MODE, key);
-        } catch {
-            case e: Exception => JobLogger.log(s"Error in DecryptUtil.initialise " + e.getMessage(), None, INFO)(e.getMessage)
-        }
-    }
+    val keyValue: Array[Byte] = Array[Byte]('T', 'h', 'i', 's', 'A', 's', 'I', 'S', 'e', 'r', 'c', 'e', 'K', 't', 'e', 'y')
+    val key = new SecretKeySpec(keyValue, ALGORITHM)
+    var c: Cipher = Cipher.getInstance(ALGORITHM)
+    c.init(Cipher.DECRYPT_MODE, key)
     
      def getSalt() : String = {
          encryption_key = AppConf.getConfig("sunbird_encryption_key")
@@ -50,9 +40,6 @@ object DecryptUtil extends Serializable {
         replacedValue = replacedValue.replace("\n", "\\n")
         replacedValue
     }
-    
-    val keyValue: Array[Byte] = Array[Byte]('T', 'h', 'i', 's', 'A', 's', 'I', 'S', 'e', 'r', 'c', 'e', 'K', 't', 'e', 'y')
-    def generateKey() = new SecretKeySpec(keyValue, ALGORITHM)
     
     def decryptData(data: String): String = decryptData(data, false)
     
