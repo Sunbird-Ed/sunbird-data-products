@@ -30,9 +30,10 @@ import org.ekstep.analytics.framework.util.JobLogger
 
 case class JobRequest(tag: String, request_id: String, job_id: String, var status: String, request_data: String, requested_by: String, requested_channel: String,
                       dt_job_submitted: Long, var download_urls: Option[List[String]], var dt_file_created: Option[Long], var dt_job_completed: Option[Long],
-                      var execution_time: Option[Long], var err_message: Option[String], var iteration: Option[Int], encryption_key: Option[String]) {
-  def this() = this("", "", "", "", "", "", "", 0, None, None, None, None, None, None, None)
+                      var execution_time: Option[Long], var err_message: Option[String], var iteration: Option[Int], encryption_key: Option[String], var processed_batches : Option[String] = None) {
+    def this() = this("", "", "", "", "", "", "", 0, None, None, None, None, None, None, None, None)
 }
+case class RequestStatus(channel: String, batchLimit: Long, fileLimit: Long)
 
 trait OnDemandExhaustJob {
   
@@ -54,14 +55,17 @@ trait OnDemandExhaustJob {
 
   def zipEnabled(): Boolean = true;
 
-  def getRequests(jobId: String)(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
+  def getRequests(jobId: String, batchNumber: Option[AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
 
     val encoder = Encoders.product[JobRequest]
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*));
 
-    val requests = reportConfigsDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
-    requests;
+    val filteredReportConfigDf = if (batchNumber.isDefined) reportConfigsDf.filter(col("batch_number").equalTo(batchNumber.get.asInstanceOf[Int])) else reportConfigsDf
+    JobLogger.log("fetched records count" + filteredReportConfigDf.count(), None, INFO)
+
+    val requests = filteredReportConfigDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
+    requests
   }
 
   def updateStatus(request: JobRequest) = {
@@ -78,7 +82,8 @@ trait OnDemandExhaustJob {
   }
 
   def updateRequest(request: JobRequest): Boolean = {
-    val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
+    val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, " +
+      s"execution_time=?, err_message=?, processed_batches=?::json WHERE tag=? and request_id=?";
     val pstmt: PreparedStatement = dbc.prepareStatement(updateQry);
     pstmt.setInt(1, request.iteration.getOrElse(0));
     pstmt.setString(2, request.status);
@@ -88,14 +93,16 @@ trait OnDemandExhaustJob {
     pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
     pstmt.setLong(6, request.execution_time.getOrElse(0L));
     pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
-    pstmt.setString(8, request.tag);
-    pstmt.setString(9, request.request_id);
+    pstmt.setString(8, request.processed_batches.getOrElse("[]"))
+    pstmt.setString(9, request.tag);
+    pstmt.setString(10, request.request_id);
+
     pstmt.execute()
   }
 
   private def updateRequests(requests: Array[JobRequest]) = {
     if (requests != null && requests.length > 0) {
-      val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=? WHERE tag=? and request_id=?";
+      val updateQry = s"UPDATE $requestsTable SET iteration = ?, status=?, download_urls=?, dt_file_created=?, dt_job_completed=?, execution_time=?, err_message=?, processed_batches=?::json WHERE tag=? and request_id=?";
       val pstmt: PreparedStatement = dbc.prepareStatement(updateQry);
       for (request <- requests) {
         pstmt.setInt(1, request.iteration.getOrElse(0));
@@ -106,8 +113,9 @@ trait OnDemandExhaustJob {
         pstmt.setTimestamp(5, if (request.dt_job_completed.isDefined) new Timestamp(request.dt_job_completed.get) else null);
         pstmt.setLong(6, request.execution_time.getOrElse(0L));
         pstmt.setString(7, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
-        pstmt.setString(8, request.tag);
-        pstmt.setString(9, request.request_id);
+        pstmt.setString(8, request.processed_batches.getOrElse("[]"))
+        pstmt.setString(9, request.tag);
+        pstmt.setString(10, request.request_id);
         pstmt.addBatch();
       }
       val updateCounts = pstmt.executeBatch();
@@ -169,22 +177,27 @@ trait OnDemandExhaustJob {
     val localPath = tempDir + path.getFileName;
     fc.getHadoopFileUtil().delete(conf, tempDir);
     val filePrefix = storageConfig.store.toLowerCase() match {
+      // $COVERAGE-OFF$ Disabling scoverage
       case "s3" =>
         CommonUtil.getS3File(storageConfig.container, "");
       case "azure" =>
         CommonUtil.getAzureFile(storageConfig.container, "", storageConfig.accountKey.getOrElse("azure_storage_key"))
+      // $COVERAGE-ON$ for case: local
       case _ =>
         storageConfig.fileName
     }
     val objKey = url.replace(filePrefix, "");
     if (storageConfig.store.equals("local")) {
-      fc.getHadoopFileUtil().copy(objKey, localPath, conf)
-    } else {
+      fc.getHadoopFileUtil().copy(filePrefix, localPath, conf)
+    }
+    // $COVERAGE-OFF$ Disabling scoverage
+    else {
       storageService.download(storageConfig.container, objKey, tempDir, Some(false));
     }
-
+    // $COVERAGE-ON$
     val zipPath = localPath.replace("csv", "zip")
     val zipObjectKey = objKey.replace("csv", "zip")
+    val zipLocalObjKey = url.replace("csv", "zip")
 
     request.encryption_key.map(key => {
       val zipParameters = new ZipParameters();
@@ -196,19 +209,29 @@ trait OnDemandExhaustJob {
       new ZipFile(zipPath).addFile(new File(localPath));
     })
     val resultFile = if (storageConfig.store.equals("local")) {
-      fc.getHadoopFileUtil().copy(zipPath, zipObjectKey, conf)
-    } else {
+      fc.getHadoopFileUtil().copy(zipPath, zipLocalObjKey, conf)
+    }
+    // $COVERAGE-OFF$ Disabling scoverage
+    else {
       storageService.upload(storageConfig.container, zipPath, zipObjectKey, Some(false), Some(0), Some(3), None);
     }
+    // $COVERAGE-ON$
     fc.getHadoopFileUtil().delete(conf, tempDir);
     resultFile;
   }
 
-  def markRequestAsFailed(request: JobRequest, failedMsg: String): JobRequest = {
+  def markRequestAsFailed(request: JobRequest, failedMsg: String, completed_Batches: Option[String] = None): JobRequest = {
     request.status = "FAILED";
     request.dt_job_completed = Option(System.currentTimeMillis());
     request.iteration = Option(request.iteration.getOrElse(0) + 1);
     request.err_message = Option(failedMsg);
+    if (completed_Batches.nonEmpty) request.processed_batches = completed_Batches;
+    request
+  }
+
+  def markRequestAsSubmitted(request: JobRequest, completed_Batches: String): JobRequest = {
+    request.status = "SUBMITTED";
+    request.processed_batches = Option(completed_Batches);
     request
   }
 }

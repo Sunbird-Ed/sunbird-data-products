@@ -17,3 +17,4 @@ object AssessmentCorrectionJob extends optional.Application with IJob {
   }
 
 }
+

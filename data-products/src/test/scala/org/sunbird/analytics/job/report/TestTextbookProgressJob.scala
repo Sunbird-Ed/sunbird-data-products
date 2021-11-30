@@ -9,7 +9,7 @@ class TestTextbookProgressJob extends SparkSpec(null) {
 
   "TextbookProgressJob" should "execute and won't throw any errors/exception" in {
     val reportConf = ReportConfig("content_progress", "", QueryDateRange(None, None, None),List(),
-      Map("review" -> "Review", "subject" -> "Subject", "application_html" -> "Uploaded Interactive Content", "resourceType" -> "Content Type",
+      collection.mutable.LinkedHashMap("review" -> "Review", "subject" -> "Subject", "application_html" -> "Uploaded Interactive Content", "resourceType" -> "Content Type",
         "gradeLevel" -> "Grade", "vedio_youtube" -> "YouTube Content", "draft" -> "Draft", "video_mp4" -> "Uploaded Videos", "medium" -> "Medium",
         "creator" -> "Created By", "board" -> "Board", "live" -> "Live", "status" -> "Status", "application_ecml" -> "Created on Diksha", "application_pdf" -> "Text Content"),
       List(OutputConfig("csv",None,List(),List(),List())))

@@ -156,7 +156,7 @@ if __name__ == '__main__':
     parser_ud.add_argument("--states", type=str,
                            help="State slugs in array")
     parser_ud.add_argument("--is_private", action='store_true',
-                            help="Upload report to private blob", default=False)
+                            help="Upload report to private blob", default=True)
 
     parser_udd = subparsers.add_parser('user_declared_detail',
                                       help='User declared details')
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     parser_udd.add_argument("--states", type=str,
                            help="State slugs in array")
     parser_udd.add_argument("--is_private", action='store_true',
-                            help="Upload report to private blob", default=False)
+                            help="Upload report to private blob", default=True)
 
     parser_report_merger = subparsers.add_parser('report_merger',
                                                  help='Report Merger')

@@ -96,6 +96,8 @@ class ReportMerger:
         file_path = self.base_path.joinpath(report_path)
         col_order = []
         report_container = self.report_config.get('postContainer') if self.report_config.get('postContainer') else 'report-verification'
+        delta_file_access = self.report_config.get('deltaFileAccess') if 'deltaFileAccess' in self.report_config else True
+        report_file_access = self.report_config.get('reportFileAccess') if 'reportFileAccess' in self.report_config else True
 
         try:
             os.makedirs(self.base_path.joinpath(delta_path).parent, exist_ok=True)
@@ -104,7 +106,7 @@ class ReportMerger:
                 container_name=self.report_config['container'],
                 blob_name=delta_path,
                 file_path=str(self.base_path.joinpath(delta_path)),
-                is_private=False
+                is_private=delta_file_access
                 )
             delta_df = pd.read_csv(self.base_path.joinpath(delta_path))
             col_order = delta_df.columns.to_list()
@@ -121,7 +123,7 @@ class ReportMerger:
                 container_name=report_container,
                 blob_name=report_path,
                 file_path=str(file_path),
-                is_private=False
+                is_private=report_file_access
             )
             report_df = pd.read_csv(file_path)
             col_order = report_df.columns.to_list()
@@ -155,13 +157,13 @@ class ReportMerger:
                 container_name=report_container,
                 blob_name=file_path.parent.name + '/' + file_path.name,
                 file_path=str(file_path),
-                is_private=False
+                is_private=report_file_access
                 )
         upload_file_to_store(
                 container_name=report_container,
                 blob_name=file_path.parent.name + '/' + file_path.name.replace('.csv', '.json'),
                 file_path=str(file_path).replace('.csv', '.json'),
-                is_private=False
+                is_private=report_file_access
                 )
 
 
