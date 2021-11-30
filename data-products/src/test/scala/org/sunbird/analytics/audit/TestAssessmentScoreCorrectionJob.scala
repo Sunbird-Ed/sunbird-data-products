@@ -26,6 +26,7 @@ class TestAssessmentScoreCorrectionJob extends BaseReportSpec with MockFactory {
 
   override def afterAll(): Unit = {
     super.afterAll()
+    EmbeddedCassandra.close()
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, "src/test/resources/score-metrics-migration-job/")
   }
 
