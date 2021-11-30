@@ -87,7 +87,7 @@ class TestResponseExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     user1Result.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
     user1Result.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
     user1Result.map(f => f.`User UUID`).toList should contain atLeastOneElementOf List("user-001")
-    user1Result.map(f => f.`Attempt Id`).toList should contain atLeastOneElementOf List("attempt-001")
+    user1Result.map(f => f.`Attempt Id`).toList should contain atLeastOneElementOf List("attempat-001")
     user1Result.map(f => f.`QuestionSet Id`).toList should contain atLeastOneElementOf List("do_1128870328040161281204", "do_112876961957437440179")
     user1Result.map(f => f.`QuestionSet Title`).toList should contain atLeastOneElementOf List("SelfAssess for course", "Assessment score report using summary plugin")
     user1Result.map(f => f.`Question Id`).toList should contain theSameElementsAs List("do_213019475454476288155", "do_213019970118279168165", "do_213019972814823424168", "do_2130256513760624641171")
