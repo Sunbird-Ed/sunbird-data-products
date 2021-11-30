@@ -1,15 +1,10 @@
 package org.sunbird.analytics.exhaust
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
-import org.ekstep.analytics.framework.FrameworkContext
-import org.ekstep.analytics.framework.JobConfig
-import org.ekstep.analytics.framework.JobContext
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, JobContext, StorageConfig}
 import org.ekstep.analytics.framework.util.CommonUtil
 import org.sunbird.cloud.storage.conf.AppConf
-import org.ekstep.analytics.framework.StorageConfig
 
 trait BaseReportsJob {
 
@@ -39,16 +34,14 @@ trait BaseReportsJob {
     val sparkElasticsearchConnectionHost = modelParams.get("sparkElasticsearchConnectionHost")
     val sparkRedisConnectionHost = modelParams.get("sparkRedisConnectionHost")
     val sparkUserDbRedisIndex = modelParams.get("sparkUserDbRedisIndex")
+    val sparkUserDbRedisPort = modelParams.get("sparkUserDbRedisPort")
     JobContext.parallelization = CommonUtil.getParallelization(config)
     val readConsistencyLevel = modelParams.getOrElse("cassandraReadConsistency", "LOCAL_QUORUM").asInstanceOf[String];
-    val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, Option(readConsistencyLevel), sparkRedisConnectionHost, sparkUserDbRedisIndex)
+    val writeConsistencyLevel = modelParams.getOrElse("cassandraWriteConsistency", "LOCAL_QUORUM").asInstanceOf[String]
+    val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model), sparkCassandraConnectionHost, sparkElasticsearchConnectionHost, Option(readConsistencyLevel),sparkRedisConnectionHost, sparkUserDbRedisIndex, sparkUserDbRedisPort, writeConsistencyLevel)
     setReportsStorageConfiguration(config)(sparkSession)
     sparkSession;
 
-  }
-
-  def closeSparkSession()(implicit sparkSession: SparkSession) {
-    sparkSession.stop();
   }
 
   def setReportsStorageConfiguration(config: JobConfig)(implicit spark: SparkSession) {

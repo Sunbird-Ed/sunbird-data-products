@@ -9,4 +9,6 @@ dependency-reduced-pom.xml
 data-products/.settings
 data-products/data-products.iml
 python-scripts/.pybuilder
+anomaly-detection/.pybuilder
+**/bin/*
 etl-jobs/.settings

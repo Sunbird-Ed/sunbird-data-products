@@ -38,7 +38,7 @@ object TextBookUtils {
   def getTextBooks(config: Map[String, AnyRef])(implicit sc:SparkContext,fc: FrameworkContext): List[TextbookData] = {
     val request = JSONUtils.serialize(config.get("druidConfig").get)
     val druidQuery = JSONUtils.deserialize[DruidQueryModel](request)
-    val druidResponse = DruidDataFetcher.getDruidData(druidQuery)
+    val druidResponse = DruidDataFetcher.getDruidData(druidQuery, true)
 
     val result = druidResponse.map(f => {
       JSONUtils.deserialize[TextbookData](f)

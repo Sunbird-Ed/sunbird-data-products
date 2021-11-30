@@ -30,7 +30,7 @@ case class TotalContributionData(facets: List[TotalContributions], count: Int)
 case class TotalContributions(values:List[ContributionData])
 case class ContributionData(name:String,count:Int)
 case class ProgramVisitors(program_id:String, startdate:String, enddate:String, visitors:String)
-case class FunnelResult(program_id:String, reportDate: String, projectName: String, noOfUsers: String, initiatedNominations: String,
+case class FunnelResult(program_id:String, reportDate: String, projectName: String, initiatedNominations: String,
                         rejectedNominations: String, pendingNominations: String, acceptedNominations: String,
                         noOfContributors: String, noOfContributions: String, pendingContributions: String,
                         approvedContributions: String, channel: String)
@@ -40,6 +40,7 @@ case class DruidTextbookData(visitors: Int)
 object FunnelReport extends optional.Application with IJob with BaseReportsJob {
 
   implicit val className = "org.sunbird.analytics.job.report.FunnelReport"
+  val jobName = "Funnel Report Job"
   val db = AppConf.getConfig("postgres.db")
   val url = AppConf.getConfig("postgres.url") + s"$db"
   val connProperties = CommonUtil.getPostgresConnectionProps
@@ -49,9 +50,8 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
   // $COVERAGE-OFF$ Disabling scoverage for main method
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
     JobLogger.init("FunnelReport")
-    JobLogger.log("Started execution - FunnelReport Job",None, Level.INFO)
-    val jobConfig = JSONUtils.deserialize[JobConfig](config)
-    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](config)
+    JobLogger.start("Started execution - FunnelReport Job",Option(Map("config" -> config, "model" -> jobName)))
+    implicit val jobConfig = JSONUtils.deserialize[JobConfig](config)
 
     JobContext.parallelization = CommonUtil.getParallelization(jobConfig)
     implicit val sparkContext: SparkContext = getReportingSparkContext(jobConfig)
@@ -62,12 +62,29 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val sparkConf = sparkContext.getConf
       .set("spark.cassandra.input.consistency.level", readConsistencyLevel)
       .set("spark.sql.caseSensitive", AppConf.getConfig(key = "spark.sql.caseSensitive"))
-    val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
-    generateFunnelReport(spark,configMap)
+    implicit val spark: SparkSession = SparkSession.builder.config(sparkConf).getOrCreate()
+
+    try {
+      val res = CommonUtil.time(execute());
+      JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "funnelReportCount" -> res._2.getOrElse("funnelReportCount",0))))
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(ex.getMessage, None, Level.ERROR);
+        JobLogger.end(s"$jobName execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
+    } finally {
+      frameworkContext.closeContext()
+    }
   }
 
   // $COVERAGE-ON$ Enabling scoverage for all other functions
-  def generateFunnelReport(spark: SparkSession, config: Map[String,AnyRef])(implicit sc: SparkContext, fc: FrameworkContext) = {
+  def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Map[String, Long] = {
+    implicit val sc = spark.sparkContext
+    import spark.implicits._
+    val tenantInfo = getTenantInfo(RestUtil).toDF()
+    process(tenantInfo)
+  }
+
+  def process(tenantInfo: DataFrame)(implicit spark: SparkSession, config: JobConfig): Map[String, Long] = {
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
 
@@ -86,44 +103,30 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
       .map(f => (f.program_id,f))
 
     val reportDate = DateTimeFormat.forPattern("dd-MM-yyyy").print(DateTime.now())
-    val tenantInfo = getTenantInfo(RestUtil).toDF()
 
     val data = programData.leftOuterJoin(nominationRdd).map(f=>(f._2._1,f._2._2.getOrElse(NominationData("","","","",""))))
     var druidData = List[ProgramVisitors]()
-    val druidQuery = JSONUtils.serialize(config("druidConfig"))
+    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config))
+
     val report = data
-      .filter(f=> null != f._1.status && (f._1.status.equalsIgnoreCase("Live") || f._1.status.equalsIgnoreCase("Unlisted"))).collect().toList
+      .filter(f=> null != f._1.status && (f._1.status.equalsIgnoreCase("Live") || f._1.status.equalsIgnoreCase("Closed") || f._1.status.equalsIgnoreCase("Unlisted"))).collect().toList
       .map(f => {
-        val contributionData = getContributionData(f._1.program_id)
+        val contributionData = getContributionData(f._1.program_id, configMap("modelParams").asInstanceOf[Map[String, AnyRef]])
         druidData = ProgramVisitors(f._1.program_id,f._1.startdate,f._1.enddate, "0") :: druidData
-        FunnelResult(f._1.program_id,reportDate,f._1.name,"0",f._2.Initiated,f._2.Rejected,
+        FunnelResult(f._1.program_id,reportDate,f._1.name,f._2.Initiated,f._2.Rejected,
           f._2.Pending,f._2.Approved,contributionData._1.toString,contributionData._2.toString,contributionData._3.toString,
           contributionData._4.toString,f._1.rootorg_id)
       }).toDF()
 
-    val df = report.join(tenantInfo,report.col("channel") === tenantInfo.col("id"),"left")
-      .drop("channel","id")
+    val funnelReport = report.join(tenantInfo,report.col("channel") === tenantInfo.col("id"),"left")
+      .drop("channel","id","program_id")
       .persist(StorageLevel.MEMORY_ONLY)
 
-    val visitorData = druidData.map(f => {
-      val druidData = if(null != f.enddate && null != f.startdate && DateTime.parse(f.enddate.split(" ")(0)).isAfter(DateTime.parse(f.startdate.split(" ")(0)).getMillis)) {
-        val query = getDruidQuery(druidQuery,f.program_id,s"${f.startdate.split(" ")(0)}T00:00:00+00:00/${f.enddate.split(" ")(0)}T00:00:00+00:00")
-        val response = DruidDataFetcher.getDruidData(query).collect()
-        response.map(f => JSONUtils.deserialize[DruidTextbookData](f))
-      } else Array[DruidTextbookData]()
-      val noOfVisitors = if(druidData.nonEmpty) druidData.head.visitors.toString else "0"
-      ProgramVisitors(f.program_id,f.startdate,f.enddate,noOfVisitors)
-    }).toDF().na.fill(0).persist(StorageLevel.MEMORY_ONLY)
-    JobLogger.log(s"FunnelReport Job - Execution completed for visitor count",None, Level.INFO)
-
-    val funnelReport = df
-      .join(visitorData,Seq("program_id"),"inner")
-      .drop("startdate","enddate","program_id","noOfUsers")
     val storageConfig = getStorageConfig("reports", "")
-    saveReportToBlob(funnelReport, config, storageConfig, "FunnelReport")
+    saveReportToBlob(funnelReport, configMap, storageConfig, "FunnelReport")
 
-    df.unpersist(true)
-    visitorData.unpersist(true)
+    funnelReport.unpersist(true)
+    Map("funnelReportCount"->funnelReport.count())
   }
 
   def getDruidQuery(query: String, programId: String, interval: String): DruidQueryModel = {
@@ -142,69 +145,39 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(finalMap))
   }
 
-  def getContributionData(programId: String): (Int,Int,Int,Int) = {
-    val url = Constants.COMPOSITE_SEARCH_URL
+  def getContributionRequest(query: String, programId: String): String = {
+    val mapQuery = JSONUtils.deserialize[Map[String,AnyRef]](query)
+    val request = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(mapQuery("request")))
+    val filters = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(request("filters")))
+    val updatedFilters = filters map {
+      case ("programId","programIdentifier") => "programId" -> programId
+      case x => x
+    }
 
-    val contributionRequest = s"""{
-                                 |    "request": {
-                                 |        "filters": {
-                                 |            "objectType": "content",
-                                 |            "status": ["Live"],
-                                 |            "programId": "$programId",
-                                 |            "mimeType": {"!=": "application/vnd.ekstep.content-collection"},
-                                 |            "contentType": {"!=": "Asset"}
-                                 |        },
-                                 |        "not_exists": [
-                                 |            "sampleContent"
-                                 |        ],
-                                 |        "facets":["createdBy"],
-                                 |        "limit":0
-                                 |    }
-                                 |}""".stripMargin
+    val finalMap = mapQuery.updated("request",request.updated("filters",updatedFilters))
+    JSONUtils.serialize(finalMap)
+  }
+
+  def getContributionData(programId: String, config: Map[String, AnyRef]): (Int,Int,Int,Int) = {
+    val url = Constants.COMPOSITE_SEARCH_URL
+    val contributionConfig = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config("contributionConfig")))
+
+    val contributionRequest = getContributionRequest(JSONUtils.serialize(contributionConfig("contributionRequest")), programId)
     val contributionResponse = RestUtil.post[TotalContributionResult](url,contributionRequest)
     val contributionResponses =if(null != contributionResponse && contributionResponse.responseCode.equalsIgnoreCase("OK") && contributionResponse.result.count>0) {
       contributionResponse.result.facets
     } else List()
     val totalContributors = contributionResponses.filter(p => null!=p.values).flatMap(f=>f.values).length
-    val totalContributions=contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
+    val totalContributions = contributionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
 
-    val correctionsPendingRequest = s"""{
-                                       |    "request": {
-                                       |        "filters": {
-                                       |            "objectType": "content",
-                                       |            "status": "Draft",
-                                       |            "prevStatus": "Live",
-                                       |            "programId": "$programId",
-                                       |            "mimeType": {"!=": "application/vnd.ekstep.content-collection"},
-                                       |            "contentType": {"!=": "Asset"}
-                                       |        },
-                                       |        "not_exists": [
-                                       |            "sampleContent"
-                                       |        ],
-                                       |        "facets":["createdBy"],
-                                       |        "limit":0
-                                       |    }
-                                       |}
-                                       |""".stripMargin
+    val correctionsPendingRequest = getContributionRequest(JSONUtils.serialize(contributionConfig("correctionsPendingRequest")), programId)
     val correctionsPendingResponse = RestUtil.post[TotalContributionResult](url,correctionsPendingRequest)
     val correctionResponses =if(null != correctionsPendingResponse && correctionsPendingResponse.responseCode.equalsIgnoreCase("OK") && correctionsPendingResponse.result.count>0) {
       correctionsPendingResponse.result.facets
     } else List()
     val correctionPending=correctionResponses.filter(p => null!=p.values).flatMap(f=> f.values).map(f=>f.count).sum
 
-    val tbRequest = s"""{
-                       |	"request": {
-                       |       "filters": {
-                       |         "programId": "$programId",
-                       |         "objectType": "content",
-                       |         "status": ["Draft","Live","Review"],
-                       |         "contentType": "Textbook",
-                       |         "mimeType": "application/vnd.ekstep.content-collection"
-                       |       },
-                       |       "fields": ["acceptedContents", "rejectedContents"],
-                       |       "limit": 10000
-                       |     }
-                       |}""".stripMargin
+    val tbRequest =getContributionRequest(JSONUtils.serialize(contributionConfig("contentRequest")), programId)
     val response = RestUtil.post[ContributionResult](url,tbRequest)
 
     val contentData = if(null != response && response.responseCode.equalsIgnoreCase("OK") && response.result.count>0) {
@@ -216,7 +189,6 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val pendingContributions = if(totalContributions-contents > 0) totalContributions-contents else 0
 
     (totalContributors,totalContributions+correctionPending,pendingContributions,acceptedContents)
-
   }
 
   def getTenantInfo(restUtil: HTTPClient)(implicit sc: SparkContext): RDD[TenantInfo] = {
@@ -225,7 +197,7 @@ object FunnelReport extends optional.Application with IJob with BaseReportsJob {
     val tenantRequest = s"""{
                            |    "params": { },
                            |    "request":{
-                           |        "filters": {"isRootOrg":"true"},
+                           |        "filters": {"isTenant":"true"},
                            |        "offset": 0,
                            |        "limit": 10000,
                            |        "fields": ["id", "channel", "slug", "orgName"]
