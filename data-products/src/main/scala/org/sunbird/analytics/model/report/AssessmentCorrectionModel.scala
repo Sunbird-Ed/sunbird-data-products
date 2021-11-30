@@ -8,13 +8,17 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
-import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.sunbird.analytics.exhaust.BaseReportsJob
-import org.sunbird.analytics.job.report.DruidOutput
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
+case class DruidOutput(identifier: String, channel: String)
 case class SelfAssessData(identifier: String, contentType: String)
 case class AssessEvent (contentid: String, attemptId: String, courseid: String, userid: String, assessEvent: String)
-case class AssessOutputEvent(assessmentTs: Long, batchId: String, courseId: String, userId: String, attemptId: String, contentId: String, events: java.util.List[String]) extends AlgoOutput with Output
+@scala.beans.BeanInfo
+case class AssessOutputEvent(assessmentTs: Long, batchId: String, courseId: String, userId: String, attemptId: String, contentId: String, events: mutable.Buffer[V3Event]) extends Output with AlgoOutput with scala.Product with scala.Serializable
 
 object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,AssessOutputEvent,AssessOutputEvent] with Serializable with BaseReportsJob {
 
@@ -23,66 +27,111 @@ object AssessmentCorrectionModel extends IBatchModelTemplate[String,V3Event,Asse
 
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   val cassandraFormat = "org.apache.spark.sql.cassandra";
-
   val assessEvent = "ASSESS"
   val contentType = "SelfAssess"
 
   override def preProcess(data: RDD[String], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[V3Event] = {
-    data.map(f => JSONUtils.deserialize[V3Event](f)).filter(f => null != f.eid && f.eid.equals(assessEvent))
+    JobLogger.log(s"Total input events from backup: ${data.count()}", None, Level.INFO)
+    data.map(f => JSONUtils.deserialize[V3Event](f)).filter(f => null != f.eid && f.eid.equals(assessEvent) && null != f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1 && !f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1.isEmpty)
   }
 
   override def algorithm(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
-    implicit val sqlContext = new SQLContext(sc)
+    val res = CommonUtil.time(algorithProcess(events,config))
 
-    val assessEventDF = getAssessEventData(events)
+    JobLogger.log(s"Time take to get SelfAssess data: ${res._1}", None, Level.INFO)
+    res._2
+  }
+
+  override def postProcess(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
+    val validEvents = filterEvents(events, config)
+    JobLogger.log(s"Total Events Pushing to Kafka: ${validEvents.count()}", None, Level.INFO)
+    validEvents
+  }
+
+  def filterEvents(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
+    val outputConfig = config.getOrElse("fileOutputConfig", """{"to": "file", "params": {"file": "/mount/data/analytics/tmp/assessment-correction/failedEvents"}}""")
+    val dispatcherConfig = JSONUtils.deserialize[Dispatcher](JSONUtils.serialize(outputConfig))
+    val skippedEvents: RDD[AssessOutputEvent] = events.filter(event => isLargerSizeMessage(event, config))
+    val validEvents: RDD[AssessOutputEvent] = events.filter(event => !isLargerSizeMessage(event, config))
+    val skippedEventsCount = skippedEvents.count()
+    JobLogger.log(s"Total Skipped Events: ${skippedEventsCount}", None, Level.INFO)
+    if (skippedEventsCount > 0) OutputDispatcher.dispatch(dispatcherConfig, skippedEvents)
+    validEvents
+  }
+
+  def isLargerSizeMessage(event: AssessOutputEvent, config: Map[String, AnyRef]): Boolean = {
+    val maxRequestSize = config.getOrElse("max_request_size", 1000000)
+    JSONUtils.serialize(event).getBytes.length > maxRequestSize.asInstanceOf[Int]
+  }
+
+  def algorithProcess(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
+    implicit val sqlContext = new SQLContext(sc)
+    val assessEventDF = getAssessEventData(events, config)
     val druidData = loadDruidData(config)
 
     val joinedDF = assessEventDF.join(druidData, assessEventDF.col("contentid") === druidData.col("identifier"), "inner")
       .select(assessEventDF.col("*"))
 
-    val outputData = joinedDF.rdd.map{f =>
+    joinedDF.rdd.map{f =>
       val assessmentTs: Long = System.currentTimeMillis()
-      AssessOutputEvent(assessmentTs, f.getString(4), f.getString(1), f.getString(2), f.getString(3), f.getString(0), f.getList(5) )
+      val eventList = f.getList(5).asInstanceOf[java.util.List[String]].asScala.map(f => JSONUtils.deserialize[V3Event](f))
+      AssessOutputEvent(assessmentTs, f.getString(4), f.getString(1), f.getString(2), f.getString(3), f.getString(0), eventList)
     }
-    outputData
-  }
-
-  override def postProcess(events: RDD[AssessOutputEvent], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[AssessOutputEvent] = {
-    events
   }
 
   def loadDruidData(config: Map[String, AnyRef])(implicit sc: SparkContext, sqlContext: SQLContext, fc: FrameworkContext): DataFrame = {
     import sqlContext.implicits._
-    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.get("modelParams").get.asInstanceOf[Map[String, AnyRef]].get("druidConfig").get))
+    val druidConfig = JSONUtils.deserialize[DruidQueryModel](JSONUtils.serialize(config.get("druidConfig").get))
     val druidResponse = DruidDataFetcher.getDruidData(druidConfig)
     val dataDF = druidResponse.map(f => JSONUtils.deserialize[DruidOutput](f)).toDF.select("identifier")
     dataDF
   }
 
-  def getAssessEventData(events: RDD[V3Event])(implicit sqlContext: SQLContext, sc: SparkContext): DataFrame = {
+  def getAssessEventData(events: RDD[V3Event], config: Map[String, AnyRef])(implicit sqlContext: SQLContext, sc: SparkContext): DataFrame = {
     import sqlContext.implicits._
-
     val assessEvent = events.map { f =>
       val userId = if (f.actor.`type`.equals("User")) f.actor.id else "" // UserID
     val cData = f.context.cdata.getOrElse(List())
-      val attemptIdList = cData.filter(f => f.`type`.equalsIgnoreCase("AttemptId")).map(f => f.id)
-      val attemptId = if (!attemptIdList.isEmpty) attemptIdList.head else ""  // AttempId
+    val attemptIdList = cData.filter(f => f.`type`.equalsIgnoreCase("AttemptId")).map(f => f.id)
+    val attemptId = if (!attemptIdList.isEmpty) attemptIdList.head else ""  // AttempId
     val courseId = f.`object`.get.rollup.getOrElse(RollUp("", "", "", "")).l1 // CourseId
     val contentId = f.`object`.get.id // ContentId
     val event = JSONUtils.serialize(f)
       AssessEvent(contentId, attemptId, courseId, userId, event)
     }.toDF
-    val userEnrollmentData = getUserEnrollData()
-    val df = assessEvent.join(userEnrollmentData, Seq("courseid", "userid"))
+
+    //Filter batchIds from config
+    val batchIds: List[String] = config.getOrElse("batchId", List()).asInstanceOf[List[String]]
+    val userEnrollmentData = getUserEnrollData(batchIds)
+
+    assessEvent.join(userEnrollmentData, Seq("courseid", "userid"))
       .groupBy("contentid", "courseid", "userid", "attemptId", "batchid")
       .agg(collect_list(col("assessEvent")).as("assessEventList"))
-    df
+      .withColumn("AttemptId_resolved",
+        when(col("attemptId").equalTo(""), md5(concat(col("contentid"), col("courseid"), col("userid"), col("batchid")))).otherwise(col("attemptId")))
+      .select(
+        col("contentid"),
+        col("courseid"),
+        col("userid"),
+        col("AttemptId_resolved").as("attemptId"),
+        col("batchid"),
+        col("assessEventList")
+      )
   }
 
-  def getUserEnrollData()(implicit sqlContext: SQLContext): DataFrame = {
+  def getUserEnrollData(batchIds: List[String])(implicit sqlContext: SQLContext): DataFrame = {
     implicit val spark = sqlContext.sparkSession
-    loadData(userEnrolmentDBSettings,cassandraFormat, new StructType())
-      .where(lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
-      .select("userid", "courseid", "batchid")
+    if(batchIds.size == 0) {
+      JobLogger.log("No batchid provided", None, Level.INFO)
+      loadData(userEnrolmentDBSettings,cassandraFormat, new StructType())
+        .where(lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
+        .select("userid", "courseid", "batchid")
+    } else {
+      JobLogger.log(s"Filtering for batches: ${batchIds}", None, Level.INFO)
+      loadData(userEnrolmentDBSettings,cassandraFormat, new StructType())
+        .where(lower(col("active")).equalTo("true") && col("enrolleddate").isNotNull)
+        .filter(col("batchid").isin(batchIds: _*))
+        .select("userid", "courseid", "batchid")
+    }
   }
 }

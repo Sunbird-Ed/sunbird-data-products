@@ -47,6 +47,11 @@
             <outputDirectory>/druid_models</outputDirectory>
             <filtered>true</filtered>
         </file>
+        <file>
+            <source>./ingestion-spec/vdn_content_index_batch.json</source>
+            <outputDirectory>/druid_models</outputDirectory>
+            <filtered>true</filtered>
+        </file>
     </files>
     <dependencySets>
         <dependencySet>
