@@ -18,8 +18,10 @@ object ESCloudUploader {
     def main(args: Array[String]): Unit = {
 
         val index = config.getString("elasticsearch.query.index")
+        val vdnIndex = config.getString("elasticsearch.query.vdn.index")
         val query = config.getString("elasticsearch.query.jsonString")
         val outputFilePath = config.getString("outputFilePath")
+        val outputVDNPath = config.getString("outputVDNPath")
 
         println(s"[$index] query ===> $query")
 
@@ -49,6 +51,27 @@ object ESCloudUploader {
         val storageService = StorageServiceFactory.getStorageService(StorageConfig(config.getString("cloudStorage.provider"), config.getString("cloudStorage.accountName"), config.getString("cloudStorage.accountKey")))
         storageService.upload(config.getString("cloudStorage.container"), outputFilePath + "/part-00000", config.getString("cloudStorage.objectKey"), isDirectory = Option(false))
         println("successfully backed up file to cloud!")
+
+        
+        // VDN metrics ingestion 
+
+        val sparkConfig = conf.set("es.nodes", config.getString("elasticsearch.vdn.host"))
+        val vdnsparkSession = SparkSession.builder.config(sparkConfig).getOrCreate
+        val vdnsparkConf = vdnsparkSession.sparkContext
+
+        println(s"deleting output folder if exist! : $outputVDNPath")
+        val vdnDirectory = new Directory(new File(outputVDNPath))
+        if (vdnDirectory.exists) vdnDirectory.deleteRecursively()
+
+        vdnsparkConf.esJsonRDD(vdnIndex).map(data => s"""{ "timestamp": ${now.getTime}, "data": ${data._2} }""")
+            .coalesce(1)
+            .saveAsTextFile(outputVDNPath)
+
+        // backup the output file to cloud
+        val vdnstorageService = StorageServiceFactory.getStorageService(StorageConfig(config.getString("cloudStorage.provider"), config.getString("cloudStorage.accountName"), config.getString("cloudStorage.accountKey")))
+        vdnstorageService.upload(config.getString("cloudStorage.container"), outputVDNPath + "/part-00000", config.getString("cloudStorage.vdn.objectKey"), isDirectory = Option(false))
+        println("successfully backed up file to cloud!")
+
         System.exit(0)
     }
 }
