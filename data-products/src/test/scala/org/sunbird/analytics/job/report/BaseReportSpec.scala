@@ -25,7 +25,7 @@ class BaseReportSpec extends BaseSpec with BeforeAndAfterAll {
   }
 
   override def afterAll() {
-    //super.afterAll();
+    super.afterAll();
     EmbeddedES.stop()
   }
   
