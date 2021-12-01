@@ -562,16 +562,4 @@ object UDFUtils extends Serializable {
   }
 
   val getLatestValue = udf[String, String, String](getLatestValueFun)
-
-  /**
-   *  This UDF function used to filter the only selfAssess supported contents
-   */
-  def filterSupportedContentTypesFn(agg: Map[String, Double], supportedContents: Seq[String]): Map[String, Double] = {
-    val identifiers = agg.filter(x => x._1.startsWith("score")).keys.map(y => y.split(":")(1))
-    val assessContentIdentifiers = identifiers.filter(identifier => supportedContents.contains(identifier))
-    agg.filter(key => assessContentIdentifiers.exists(x => key._1.contains(x)))
-  }
-
-  val filterSupportedContentTypes = udf[Map[String, Double], Map[String, Double], Seq[String]](filterSupportedContentTypesFn)
-
 }

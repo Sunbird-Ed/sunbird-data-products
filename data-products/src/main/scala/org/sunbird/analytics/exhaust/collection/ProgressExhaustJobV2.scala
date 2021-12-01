@@ -53,7 +53,7 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
     val activityAggData: DataFrame = if (supportedContentIds.nonEmpty) {
       getActivityAggData(collectionBatch)
         // filter the selfAssess Contents from the "agg" column
-        .withColumn("filteredContents", UDFUtils.filterSupportedContentTypes(col("aggregates"), typedLit(supportedContentIds.headOption.getOrElse(AssessmentData("", List())).assessmentIds)))
+        .withColumn("filteredContents", filterSupportedContentTypes(col("aggregates"), typedLit(supportedContentIds.headOption.getOrElse(AssessmentData("", List())).assessmentIds)))
         // Compute the percentage for filteredContents Map
         .withColumn("scorePercentage", computePercentage(col("filteredContents")))
         .drop("aggregates", "filteredContents")
@@ -169,4 +169,15 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
     }
   }
   val computePercentage = udf[Map[String, String], Map[String, Double]](computePercentageFn)
+
+  /**
+   *  This UDF function used to filter the only selfAssess supported contents
+   */
+  def filterSupportedContentTypesFn(agg: Map[String, Double], supportedContents: Seq[String]): Map[String, Double] = {
+    val identifiers = agg.filter(x => x._1.startsWith("score")).keys.map(y => y.split(":")(1))
+    val assessContentIdentifiers = identifiers.filter(identifier => supportedContents.contains(identifier))
+    agg.filter(key => assessContentIdentifiers.exists(x => key._1.contains(x)))
+  }
+
+  val filterSupportedContentTypes = udf[Map[String, Double], Map[String, Double], Seq[String]](filterSupportedContentTypesFn)
 }
