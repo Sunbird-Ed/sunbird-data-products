@@ -24,7 +24,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "ReportCluster");
   private val courseBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")
-  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "batchname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname", "createdfor", "medium", "subject")
+  private val filterColumns = Seq("contentorg", "batchid", "courseid", "collectionname", "batchname", "startdate", "enddate", "hascertified", "state", "district", "enrolleduserscount", "completionuserscount", "certificateissuedcount", "contentstatus", "keywords", "channel", "timestamp", "orgname", "createdfor", "medium", "subject", "usertype", "usersubtype")
   private val contentFields = Seq("framework", "identifier", "name", "channel", "batches", "organisation", "status", "keywords", "createdFor", "medium", "subject")
 
   implicit val className: String = "org.sunbird.analytics.job.report.CollectionSummaryJobV2"
@@ -105,7 +105,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
     implicit val sparkSession: SparkSession = spark
     implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
-    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state", "district", "orgname")
+    val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state", "district", "orgname", "usertype", "usersubtype")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)
       .join(getUserEnrollment(spark, fetchData), Seq("batchid", "courseid"), "left_outer")
       .join(userCachedDF, Seq("userid"), "inner").persist()
