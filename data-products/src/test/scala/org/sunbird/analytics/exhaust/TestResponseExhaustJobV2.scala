@@ -61,7 +61,7 @@ class TestResponseExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     jedis.close()
   }
 
-  "TestResponseExhaustJob" should "generate final output as csv and zip files" in {
+  "TestResponseExhaustJobV2" should "generate final output as csv and zip files" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
     EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:01250894314817126443', '37564CF8F134EE7532F125651B51D17F', 'response-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
 
@@ -81,7 +81,7 @@ class TestResponseExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     implicit val responseExhaustEncoder = Encoders.product[ResponseExhaustReport]
     val batch1Results = spark.read.format("csv").option("header", "true")
       .load(s"$outputLocation/$filePath.csv").as[ResponseExhaustReport].collectAsList().asScala
-    batch1Results.size should be (16)
+    batch1Results.size should be (18)
 
     val user1Result = batch1Results.filter(f => f.`User UUID`.equals("user-001"))
     user1Result.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
