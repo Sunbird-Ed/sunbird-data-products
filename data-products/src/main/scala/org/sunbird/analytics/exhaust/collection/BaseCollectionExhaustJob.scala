@@ -572,46 +572,6 @@ object UDFUtils extends Serializable {
     agg.filter(key => assessContentIdentifiers.exists(x => key._1.contains(x)))
   }
 
-  /**
-   * This UDF method used to compute the score percentage of total contents, individual contents
-   *
-   * Example  Input: agg = Map(
-   * 'completedCount' -> 26,
-   * "max_score:do_3131799116748881921729" -> 5,
-   * "max_score:do_3131799201424179201659" -> 1,
-   * "max_score:do_3131799335459307521660" -> 10,
-   * "score:do_3131799116748881921729" -> 3,
-   * "score:do_3131799201424179201659" -> 1,
-   * "score:do_3131799335459307521660" ->  1)
-   *
-   * result = Map(
-   * "total_sum_score" -> (3+1+1)/(5+1+10),
-   * "do_3131799116748881921729 - Score" -> ((3*100)/5)%,
-   * "do_3131799201424179201659 - Score" -> ((1*100)/1)%,
-   * "do_3131799335459307521660 - Score" -> ((1*100)/10)%
-   * )
-   * // As per previous report format
-   *
-   */
-  def computePercentageFn(agg: Map[String, Double]): Map[String, String] = {
-    val contentScoreList = agg.filter(x => x._1.startsWith("score"))
-    val total_max_score = agg.filter(x => x._1.startsWith("max_score")).foldLeft(0D)(_ + _._2)
-    if (contentScoreList.nonEmpty && total_max_score > 0) {
-      val total_score = contentScoreList.foldLeft(0D)(_ + _._2)
-      val total_score_percentage = Math.ceil((total_score / total_max_score) * 100).toInt
-      val contentScoreInPercentage: Map[String, String] = contentScoreList.map(x => {
-        val contentScore = x._2 * 100
-        val contentMaxScore = agg.getOrElse(s"max_score:${x._1.split(":")(1)}", 0D)
-        val contentScoreInPercentage = if (contentMaxScore > 0) Math.ceil(contentScore / contentMaxScore).toInt.toString.concat("%") else ""
-        Map(s"${x._1.split(":")(1)} - Score" -> contentScoreInPercentage)
-      }).flatten.toMap
-      contentScoreInPercentage ++ Map("total_sum_score" -> total_score_percentage.toString.concat("%"))
-    } else {
-      Map("total_sum_score" -> "")
-    }
-  }
-
-  val computePercentage = udf[Map[String, String], Map[String, Double]](computePercentageFn)
   val filterSupportedContentTypes = udf[Map[String, Double], Map[String, Double], Seq[String]](filterSupportedContentTypesFn)
 
 }
