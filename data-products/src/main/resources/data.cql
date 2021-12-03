@@ -318,6 +318,7 @@ CREATE TABLE IF NOT EXISTS sunbird.user (
     usertype text,
     usersubtype text,
     profileusertype text,
+    profileusertypes text,
     profilelocation text
 ) WITH bloom_filter_fp_chance = 0.01
     AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
