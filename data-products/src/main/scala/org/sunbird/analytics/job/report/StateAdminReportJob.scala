@@ -28,8 +28,8 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     val objectKey = AppConf.getConfig("admin.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey);
     
-  //$COVERAGE-OFF$ Disabling scoverage for main and execute method
-  def name(): String = "StateAdminReportJob"
+    //$COVERAGE-OFF$ Disabling scoverage for main and execute method
+    def name(): String = "StateAdminReportJob"
 
     def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
@@ -51,8 +51,8 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         JobLogger.end("ExternalIdReportJob zip completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
     }
     
-  // $COVERAGE-ON$ Enabling scoverage for other methods
-   def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
+    // $COVERAGE-ON$ Enabling scoverage for other methods
+    def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
         import sparkSession.implicits._
         val DECLARED_EMAIL: String = "declared-email"
         val DECLARED_PHONE: String = "declared-phone"
@@ -81,7 +81,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
                 concat_ws(" ", col("firstname"), col("lastname")).as("Name"),
-                col("email").as("profileemail"), col("phone").as("profilephone"), col("rootorgid"), col("profileusertype"), col("profilelocation"))
+                col("email").as("profileemail"), col("phone").as("profilephone"), col("rootorgid"), col("profileusertypes"), col("profilelocation"))
         val userWithProfileDF = appendUserProfileTypeWithLocation(userDf);
         
         val commonUserDf = userWithProfileDF.join(userExternalDecryptData, userWithProfileDF.col("userid") === userExternalDecryptData.col("userid"), "inner").
@@ -108,8 +108,8 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     def appendUserProfileTypeWithLocation(userDf: DataFrame) : DataFrame = {
         val userProfileDf = userDf.withColumn("locationids", locationIdList(col("profilelocation"))).
-            withColumn("usertype", addUserType(col("profileusertype"))).
-            withColumn("usersubtype", addUserSubType(col("profileusertype")))
+            withColumn("usertype", addUserType(col("profileusertypes"), lit("type"))).
+            withColumn("usersubtype", addUserType(col("profileusertypes"), lit("subType")))
         userProfileDf
     }
     
@@ -214,24 +214,17 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
     
     val locationIdList = udf[List[String], String](locationIdListFunction)
     
-    def profileTypeFunction(profileType: String) : String = {
-        if(profileType != null && !profileType.isEmpty) {
-            val profileUserType = JSONUtils.deserialize[Map[String, String]](profileType)
-            val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
-            if (!usertypeList.isEmpty) usertypeList.head else ""
+    def parseProfileTypeFunction(profileUserTypesStr: String, typeKey: String) : String = {
+        if(profileUserTypesStr != null && profileUserTypesStr.nonEmpty) {
+            val profileUserType = JSONUtils.deserialize[List[Map[String, String]]](profileUserTypesStr)
+            profileUserType.foldLeft(List[String]())((resultType, userType) => {
+                val typeVal:String = userType.getOrElse(typeKey, "")
+
+                if (typeVal != null && typeVal.nonEmpty && !resultType.contains(typeVal)) resultType :+ typeVal else resultType
+            }).mkString(",")
         } else ""
     }
-    val addUserType = udf[String, String](profileTypeFunction)
-    
-    def profileSubTypeFunction(profileSubType: String) : String = {
-        if(profileSubType != null && !profileSubType.isEmpty) {
-            val profileUserSubType = JSONUtils.deserialize[Map[String, String]](profileSubType)
-            val userSubTypeList = profileUserSubType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
-            if (!userSubTypeList.isEmpty) userSubTypeList.head else ""
-        } else ""
-    }
-    
-    val addUserSubType = udf[String, String](profileSubTypeFunction)
-    
+
+    val addUserType = udf[String, String, String](parseProfileTypeFunction)
 
 }
