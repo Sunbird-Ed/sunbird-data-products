@@ -70,9 +70,7 @@ trait ArchivalMetaDataStoreJob {
   def markRequestAsSuccess(request: ArchivalRequest, requestConfig: Request): Boolean = {
     val insertQry = s"INSERT INTO $requestsTable (request_id, batch_id, collection_id, resource_type, job_id, archival_date, completion_date, archival_status, " +
       s"deletion_status, blob_url, iteration, request_data, err_message) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
-    val updateQry = s"UPDATE $requestsTable SET iteration = ?, archival_status=?, blob_url=?, archival_date=?, completion_date=?, " +
-      s"err_message=?, request_data=? request_id=?";
-    val pstmt: PreparedStatement = dbc.prepareStatement(updateQry);
+    val pstmt: PreparedStatement = dbc.prepareStatement(insertQry);
     pstmt.setString(1, request.request_id);
     pstmt.setString(2, requestConfig.batchId.getOrElse(""));
     pstmt.setString(3, requestConfig.collectionId.getOrElse(""));

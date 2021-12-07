@@ -15,12 +15,19 @@ import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.apache.spark.sql.functions._
 import org.joda.time.DateTime
-import org.sunbird.analytics.archival.util.ArchivalMetaDataStoreJob
+import org.sunbird.analytics.archival.util.{ArchivalMetaDataStoreJob, ArchivalRequest}
 
 case class Period(year: Int, weekOfYear: Int)
 
 case class BatchPartition(batchId: String, period: Period)
 case class Request(archivalTable: String, keyspace: Option[String], query: Option[String] = Option(""), batchId: Option[String] = Option(""), collectionId: Option[String]=Option(""), date: Option[String] = Option(""))
+case class ArchivalMetrics(batchId: Option[String],
+                           period: Period,
+                           totalArchivedRecords: Option[Long],
+                           pendingWeeksOfYears: Option[Long],
+                           totalDeletedRecords: Option[Long],
+                           totalDistinctBatches: Long
+                          )
 
 trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStoreJob with Serializable {
 
@@ -89,31 +96,48 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
     println("requestLength: " + requests.length)
     try {
       if(requests.length == 0) {
-        val groupedDF = data.withColumn("updated_on", to_timestamp(col("updated_on")))
-          .withColumn("year", year(col("updated_on")))
-          .withColumn("week_of_year", weekofyear(col("updated_on")))
-          .withColumn("question", to_json(col("question")))
-        groupedDF.show(false)
-        val archiveBatchList = groupedDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
+        val dataDF = processArchival(data, archivalRequest)
+        dataDF.show(false)
+        val archiveBatchList = dataDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
         println("archiveBatchList: " + archiveBatchList.head)
 
         val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
 
-        val archivalStatus = batchesToArchive.flatMap(batches => {
-          val processingBatch = new AtomicInteger(batches._2.length)
-          //          JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> batches._2.length)))
-          // Loop through the week_num & year batch partition
-          val res = for (batch <- batches._2.asInstanceOf[Array[BatchPartition]]) yield {
-            val filteredDF = data.filter(col("batch_id") === batch.batchId && col("year") === batch.period.year && col("week_of_year") === batch.period.weekOfYear).select(columnWithOrder.head, columnWithOrder.tail: _*)
-            upload(filteredDF, batch) // Upload the archived files into blob store
-          }
-        })
+        val archivalStatus = archiveBatches(batchesToArchive, data, requests.head, archivalRequest)
+      } else {
+        for (request <- requests) yield {
+          if (request.archival_date)
+        }
       }
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
     }
-    processArchival(data, archivalRequest)
+  }
+
+  def generatePeriodInData(data: DataFrame): DataFrame = {
+    data.withColumn("updated_on", to_timestamp(col("updated_on")))
+      .withColumn("year", year(col("updated_on")))
+      .withColumn("week_of_year", weekofyear(col("updated_on")))
+      .withColumn("question", to_json(col("question")))
+  }
+
+  def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, archivalRequest: ArchivalRequest, request: Request)(implicit config: JobConfig): Unit = {
+    batchesToArchive.flatMap(batches => {
+      val processingBatch = new AtomicInteger(batches._2.length)
+      JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> processingBatch)))
+      // Loop through the week_num & year batch partition
+      val res = for (batch <- batches._2.asInstanceOf[Array[BatchPartition]]) yield {
+        val filteredDF = data.filter(col("batch_id") === batch.batchId && col("year") === batch.period.year && col("week_of_year") === batch.period.weekOfYear).select(columnWithOrder.head, columnWithOrder.tail: _*)
+        val urls = upload(filteredDF, batch) // Upload the archived files into blob store
+      //TO-DO: archival Request
+        markRequestAsSuccess(archivalRequest, request)
+       JobLogger.log(s"Data is archived and Processing the remaining part files ", None, Level.INFO)
+
+      }
+      JobLogger.log(s"${batches._1} is successfully archived", Some(Map("batch_id" -> batches._1)), Level.INFO)
+      res
+    }).toArray
   }
 
   def deleteArchivedData(data: DataFrame, archivalRequest: Request): Unit = {

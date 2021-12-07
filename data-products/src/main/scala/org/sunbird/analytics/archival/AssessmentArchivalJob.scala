@@ -13,8 +13,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
   override def processArchival(archivalTableData: DataFrame, requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     println("Process Archival")
-
-    spark.emptyDataFrame
+      generatePeriodInData(data = archivalTableData)
   }
 
 }
