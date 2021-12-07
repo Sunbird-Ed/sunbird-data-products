@@ -63,8 +63,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
 
     if(tenantId.nonEmpty && slug.nonEmpty) {
       generateTenantReport(tenantId, slug, contents)
-    }
-    else {
+    } else {
       val tenantInfo = getTenantInfo(RestUtil).collect()
       tenantInfo.map(f => {
         generateTenantReport(f.id, f.slug, contents)
