@@ -106,7 +106,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
         val archivalStatus = archiveBatches(batchesToArchive, data, requests.head, archivalRequest)
       } else {
         for (request <- requests) yield {
-          if (request.archival_date)
+        //TO-DO: for each request
         }
       }
     } catch {
