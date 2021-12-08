@@ -15,7 +15,7 @@ import org.sunbird.analytics.archival.Request
 
 case class ArchivalRequest(request_id: String, batch_id: String, collection_id: String, resource_type: Option[String], job_id: String,
                            var archival_date: Option[Long],var completion_date: Option[Long],var archival_status: String,var deletion_status: String,
-                           blob_url: Option[List[String]],var iteration: Option[Int], request_data: Option[String],var err_message: Option[String])
+                           var blob_url: Option[List[String]],var iteration: Option[Int], request_data: String, var err_message: Option[String])
 
 trait ArchivalMetaDataStoreJob {
 
@@ -59,11 +59,11 @@ trait ArchivalMetaDataStoreJob {
 
   def getRequest(collectionId: String, batchId: String, year: Int, week: Int): ArchivalRequest = {
     val requestId = getRequestID(collectionId, batchId, year, week)
-    val archivalRequest = s"""select * from $requestsTable where request_id = $requestId"""
+    val archivalRequest = s"""select * from $requestsTable where request_id = '$requestId' limit 1"""
     val pstmt: PreparedStatement = dbc.prepareStatement(archivalRequest);
     val resultSet = pstmt.executeQuery()
 
-    getArchivalRequest(resultSet)
+    if (resultSet.next()) getArchivalRequest(resultSet) else null
   }
 
   private def getArchivalRequest(resultSet: ResultSet): ArchivalRequest = {
@@ -73,13 +73,13 @@ trait ArchivalMetaDataStoreJob {
       resultSet.getString("collection_id"),
       Some(resultSet.getString("resource_type")),
       resultSet.getString("job_id"),
-      Some(resultSet.getLong("archival_date")),
-      Some(resultSet.getLong("completion_date")),
+      Some(resultSet.getTimestamp("archival_date").getTime),
+      if (resultSet.getTimestamp("completion_date") != null) Some(resultSet.getTimestamp("completion_date").getTime) else null,
       resultSet.getString("archival_status"),
       resultSet.getString("deletion_status"),
       Some(resultSet.getArray("blob_url").asInstanceOf[List[String]]),
       Some(resultSet.getInt("iteration")),
-      Some(resultSet.getString("request_data")),
+      resultSet.getString("request_data"),
       Some(resultSet.getString("err_message"))
     )
   }
@@ -100,13 +100,15 @@ trait ArchivalMetaDataStoreJob {
     request
   }
 
-  def markRequestAsSuccess(request: ArchivalRequest, requestConfig: Request): Boolean = {
+  def createRequest(request: ArchivalRequest) = {
     val insertQry = s"INSERT INTO $requestsTable (request_id, batch_id, collection_id, resource_type, job_id, archival_date, completion_date, archival_status, " +
       s"deletion_status, blob_url, iteration, request_data, err_message) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
     val pstmt: PreparedStatement = dbc.prepareStatement(insertQry);
-    pstmt.setString(1, request.request_id);
-    pstmt.setString(2, requestConfig.batchId.getOrElse(""));
-    pstmt.setString(3, requestConfig.collectionId.getOrElse(""));
+    val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
+    val requestId = getRequestID(request.collection_id, request.batch_id, request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int])
+    pstmt.setString(1, requestId);
+    pstmt.setString(2, request.batch_id);
+    pstmt.setString(3, request.collection_id);
     pstmt.setString(4, request.resource_type.getOrElse("assessment"));
     pstmt.setString(5, request.job_id);
     pstmt.setTimestamp(6, if (request.archival_date.isDefined) new Timestamp(request.archival_date.get) else null);
@@ -116,10 +118,40 @@ trait ArchivalMetaDataStoreJob {
     val blobURLs = request.blob_url.getOrElse(List()).toArray.asInstanceOf[Array[Object]];
     pstmt.setArray(10, dbc.createArrayOf("text", blobURLs))
     pstmt.setInt(11, request.iteration.getOrElse(0))
-    pstmt.setString(12, request.request_data.getOrElse("[]"))
+    pstmt.setString(12, request.request_data)
     pstmt.setString(13, StringUtils.abbreviate(request.err_message.getOrElse(""), 300));
 
     pstmt.execute()
+  }
+
+  def upsertRequest(request: ArchivalRequest): Unit = {
+    if (request.request_id.isEmpty) {
+      createRequest(request)
+    } else {
+      updateRequest(request)
+    }
+  }
+
+  def updateRequest(request: ArchivalRequest): Unit = {
+    val updateQry = s"UPDATE $requestsTable SET blob_url=?, iteration = ?, archival_date=?, completion_date=?, " +
+      s"archival_status=?, deletion_status=? WHERE request_id=?";
+    val pstmt: PreparedStatement = dbc.prepareStatement(updateQry)
+
+    val blobURLs = request.blob_url.getOrElse(List()).toArray.asInstanceOf[Array[Object]];
+    pstmt.setArray(1, dbc.createArrayOf("text", blobURLs))
+    pstmt.setInt(2, request.iteration.get);
+    pstmt.setTimestamp(3, if (request.archival_date.isDefined) new Timestamp(request.archival_date.get) else null);
+    pstmt.setTimestamp(4, if (request.completion_date.isDefined) new Timestamp(request.completion_date.get) else null);
+    pstmt.setString(5, request.archival_status);
+    pstmt.setString(6, request.deletion_status);
+    pstmt.setString(7, request.request_id);
+
+  }
+
+  def markRequestAsSuccess(request: ArchivalRequest, requestConfig: Request): ArchivalRequest = {
+    request.archival_status = "SUCCESS";
+    request.archival_date = Option(System.currentTimeMillis())
+    request
   }
 
 }

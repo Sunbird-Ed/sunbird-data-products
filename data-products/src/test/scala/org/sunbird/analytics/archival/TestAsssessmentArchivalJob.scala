@@ -6,9 +6,9 @@ import org.ekstep.analytics.framework.util.JSONUtils
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.job.report.BaseReportSpec
-import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql}
+import org.sunbird.analytics.util.{BaseSpec, EmbeddedCassandra, EmbeddedPostgresql}
 
-class TestAsssessmentArchivalJob extends BaseReportSpec with MockFactory with BaseReportsJob {
+class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseReportsJob {
 
   implicit var spark: SparkSession = _
 
@@ -40,7 +40,7 @@ class TestAsssessmentArchivalJob extends BaseReportSpec with MockFactory with Ba
     implicit val fc = new FrameworkContext()
 
     EmbeddedPostgresql.execute(s"TRUNCATE archival_metadata")
-    EmbeddedPostgresql.execute("INSERT INTO archival_metadata (request_id, batch_id, collection_id , resource_type , job_id , archival_date, completion_date, archival_status, blob_url, iteration,request_data , err_message ) VALUES ('do_1130928636168192001667_batch-001', 'batch-001', 'do_1130928636168192001667', 'assessment', 'assessment-archival','2020-10-19 05:58:18.666','2020-10-19 05:58:18.666','SUCCESS', '{\"reports/assessment-archival/batch-001/20-2019.csv.gz\"}', 1,'{\"batchId\": \"batch-001\"}', NULL);")
+    EmbeddedPostgresql.execute("INSERT INTO archival_metadata (request_id, batch_id, collection_id , resource_type , job_id , archival_date, completion_date, archival_status, blob_url, iteration,request_data , err_message ) VALUES ('898DF47D8C9B72454C72D2C574DB2A38', 'batch-001', 'do_1130928636168192001667', 'assessment', 'assessment-archival','2020-10-19 05:58:18.666','2020-10-19 05:58:18.666','FAILED', '{\"reports/assessment-archival/batch-001/20-2019.csv.gz\"}', 1,'{\"batchId\": \"batch-001\", \"week\": 43, \"year\": 2021}', NULL);")
 
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","query":"{}","batchId":"batch-001","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
     implicit val jobConfig= JSONUtils.deserialize[JobConfig](strConfig)

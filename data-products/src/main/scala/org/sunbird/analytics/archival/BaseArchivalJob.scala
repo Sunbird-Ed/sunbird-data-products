@@ -100,7 +100,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
         for (request <- requests) {
           // TODO: for each request
           if (request.archival_status.equals("SUCCESS")) {
-            val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data.get)
+            val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
             dataDF = dataDF.filter(
               col("week_of_year").notEqual(request_data.get("week").get) &&
               col("year").notEqual(request_data.get("year").get)
@@ -110,11 +110,10 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
       }
 
       val archiveBatchList = dataDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
-      println("archiveBatchList: " + archiveBatchList.head)
 
       val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
 
-      val archivalStatus = archiveBatches(batchesToArchive, dataDF, requestConfig)
+      archiveBatches(batchesToArchive, dataDF, requestConfig)
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
@@ -129,24 +128,40 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
   }
 
   def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): Unit = {
-    batchesToArchive.flatMap(batches => {
+    batchesToArchive.foreach(batches => {
       val processingBatch = new AtomicInteger(batches._2.length)
       JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> processingBatch)))
+
       // Loop through the week_num & year batch partition
-      val res = for (batch <- batches._2.asInstanceOf[Array[BatchPartition]]) yield {
+      batches._2.map((batch: BatchPartition) => {
         val filteredDF = data.filter(col("batch_id") === batch.batchId && col("year") === batch.period.year && col("week_of_year") === batch.period.weekOfYear).select(columnWithOrder.head, columnWithOrder.tail: _*)
-        val urls = upload(filteredDF, batch) // Upload the archived files into blob store
-
         val collectionId = filteredDF.first().getAs[String]("course_id")
-        val archivalRequest = getRequest(collectionId, batch.batchId, batch.period.year, batch.period.weekOfYear)
-        //TO-DO: archival Request
-        markRequestAsSuccess(archivalRequest, requestConfig)
-       JobLogger.log(s"Data is archived and Processing the remaining part files ", None, Level.INFO)
+        var archivalRequest = getRequest(collectionId, batch.batchId, batch.period.year, batch.period.weekOfYear)
 
-      }
+        if (archivalRequest != null) {
+          val request_data = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(Request)) ++ Map[String, Int](
+            "week" -> batch.period.weekOfYear,
+            "year"-> batch.period.year
+          )
+          archivalRequest = ArchivalRequest("", batch.batchId, collectionId, Some(getReportKey), jobId, null, null, null, null, null, Some(0), JSONUtils.serialize(request_data), null)
+        }
+
+        try {
+          val urls = upload(filteredDF, batch) // Upload the archived files into blob store
+          archivalRequest.blob_url = Some(urls)
+          JobLogger.log(s"Data is archived and Processing the remaining part files ", None, Level.INFO)
+          markRequestAsSuccess(archivalRequest, requestConfig)
+        } catch {
+          case ex: Exception => {
+            markArchivalRequestAsFailed(archivalRequest, ex.getLocalizedMessage)
+          }
+        }
+      }).foreach((archivalRequest: ArchivalRequest) => {
+        upsertRequest(archivalRequest)
+      })
+
       JobLogger.log(s"${batches._1} is successfully archived", Some(Map("batch_id" -> batches._1)), Level.INFO)
-      res
-    }).toArray
+    })
   }
 
   def deleteArchivedData(data: DataFrame, archivalRequest: Request): Unit = {
