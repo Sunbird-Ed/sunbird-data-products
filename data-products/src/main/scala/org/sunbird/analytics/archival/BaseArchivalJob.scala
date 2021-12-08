@@ -69,46 +69,52 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
 
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
-    val archivalRequest = JSONUtils.deserialize[Request](JSONUtils.serialize(modelParams.getOrElse("request", Request).asInstanceOf[Map[String,AnyRef]]))
-    val archivalTable = archivalRequest.archivalTable
-    val archivalKeyspace = archivalRequest.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
+    val requestConfig = JSONUtils.deserialize[Request](JSONUtils.serialize(modelParams.getOrElse("request", Request).asInstanceOf[Map[String,AnyRef]]))
+    val archivalTable = requestConfig.archivalTable
+    val archivalKeyspace = requestConfig.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
 
-    val batchId: String = archivalRequest.batchId.getOrElse("")
-    val date: String  = archivalRequest.date.getOrElse("")
+    val batchId: String = requestConfig.batchId.getOrElse("")
+    val date: String  = requestConfig.date.getOrElse("")
     val mode: String = modelParams.getOrElse("mode","archive").asInstanceOf[String]
 
     println("modelParams: " + modelParams)
-    println("archival request: " + archivalRequest)
+    println("archival request: " + requestConfig)
     val archivalTableData: DataFrame = getArchivalData(archivalTable, archivalKeyspace,Option(batchId),Option(date))
     println("archivalTableData ")
     archivalTableData.show(false)
 
     mode.toLowerCase() match {
       case "archival" =>
-        archiveData(archivalTableData, archivalRequest)
+        archiveData(archivalTableData, requestConfig)
       case "delete" =>
-        deleteArchivedData(archivalTableData,archivalRequest)
+        deleteArchivedData(archivalTableData,requestConfig)
     }
   }
 
-  def archiveData(data: DataFrame, archivalRequest: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
-    val requests = getRequests(jobId, archivalRequest.batchId)
+  def archiveData(data: DataFrame, requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
+    val requests = getRequests(jobId, requestConfig.batchId)
     println("requestLength: " + requests.length)
     try {
-      if(requests.length == 0) {
-        val dataDF = processArchival(data, archivalRequest)
-        dataDF.show(false)
-        val archiveBatchList = dataDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
-        println("archiveBatchList: " + archiveBatchList.head)
-
-        val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
-
-        val archivalStatus = archiveBatches(batchesToArchive, data, requests.head, archivalRequest)
-      } else {
-        for (request <- requests) yield {
-        //TO-DO: for each request
+      var dataDF = processArchival(data, requestConfig)
+      if(requests.length > 0) {
+        for (request <- requests) {
+          // TODO: for each request
+          if (request.archival_status.equals("SUCCESS")) {
+            val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data.get)
+            dataDF = dataDF.filter(
+              col("week_of_year").notEqual(request_data.get("week").get) &&
+              col("year").notEqual(request_data.get("year").get)
+            )
+          }
         }
       }
+
+      val archiveBatchList = dataDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
+      println("archiveBatchList: " + archiveBatchList.head)
+
+      val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
+
+      val archivalStatus = archiveBatches(batchesToArchive, dataDF, requestConfig)
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
@@ -122,7 +128,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
       .withColumn("question", to_json(col("question")))
   }
 
-  def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, archivalRequest: ArchivalRequest, request: Request)(implicit config: JobConfig): Unit = {
+  def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): Unit = {
     batchesToArchive.flatMap(batches => {
       val processingBatch = new AtomicInteger(batches._2.length)
       JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> processingBatch)))
@@ -130,8 +136,11 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
       val res = for (batch <- batches._2.asInstanceOf[Array[BatchPartition]]) yield {
         val filteredDF = data.filter(col("batch_id") === batch.batchId && col("year") === batch.period.year && col("week_of_year") === batch.period.weekOfYear).select(columnWithOrder.head, columnWithOrder.tail: _*)
         val urls = upload(filteredDF, batch) // Upload the archived files into blob store
-      //TO-DO: archival Request
-        markRequestAsSuccess(archivalRequest, request)
+
+        val collectionId = filteredDF.first().getAs[String]("course_id")
+        val archivalRequest = getRequest(collectionId, batch.batchId, batch.period.year, batch.period.weekOfYear)
+        //TO-DO: archival Request
+        markRequestAsSuccess(archivalRequest, requestConfig)
        JobLogger.log(s"Data is archived and Processing the remaining part files ", None, Level.INFO)
 
       }
@@ -144,7 +153,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
 
   }
 
-  def processArchival(archivalTableData: DataFrame, archivalRequest: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
+  def processArchival(archivalTableData: DataFrame, archiveRequest: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
 
   def getArchivalData(table: String, keyspace: String, batchId: Option[String], date: Option[String])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
     val archivalTableSettings = Map("table" -> table, "keyspace" -> keyspace, "cluster" -> "LMSCluster")
@@ -175,7 +184,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
     val fileName = s"${batch.batchId}/${batch.period.year}-${batch.period.weekOfYear}"
     val storageConfig = getStorageConfig(jobConfig, objectKey)
     JobLogger.log(s"Uploading reports to blob storage", None, Level.INFO)
-    archivedData.saveToBlobStore(storageConfig, "csv", s"$reportPath$fileName-${System.currentTimeMillis()}", Option(Map("header" -> "true", "codec" -> "org.apache.hadoop.io.compress.GzipCodec")), None, Some("csv.gz"))
+    archivedData.saveToBlobStore(storageConfig, "csv", s"$reportPath$fileName-${System.currentTimeMillis()}", Option(Map("header" -> "true", "codec" -> "org.apache.hadoop.io.compress.GzipCodec")), None, fileExt=Some("csv.gz"))
   }
 
   def jobId: String;

@@ -1,15 +1,16 @@
 package org.sunbird.analytics.archival.util
 
-import java.sql.{Connection, DriverManager, PreparedStatement, Timestamp}
+import java.security.MessageDigest
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Timestamp}
 import java.util.Properties
-
 import org.apache.commons.lang.StringUtils
 import org.apache.spark.sql.{Encoders, SparkSession}
 import org.apache.spark.sql.functions.{col, lit}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.{CommonUtil, JobLogger}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
+import org.ekstep.analytics.job.batch.VideoStreamingJob.JobRequest
 import org.sunbird.analytics.archival.Request
 
 case class ArchivalRequest(request_id: String, batch_id: String, collection_id: String, resource_type: Option[String], job_id: String,
@@ -49,6 +50,38 @@ trait ArchivalMetaDataStoreJob {
     JobLogger.log("fetched records count" + filteredReportConfigDf.count(), None, INFO)
     val requests = filteredReportConfigDf.as[ArchivalRequest](encoder).collect()
     requests
+  }
+
+  def getRequestID(collectionId: String, batchId: String, year: Int, week: Int): String = {
+    val requestComb = s"$collectionId:$batchId:$year:$week"
+    MessageDigest.getInstance("MD5").digest(requestComb.getBytes).map("%02X".format(_)).mkString
+  }
+
+  def getRequest(collectionId: String, batchId: String, year: Int, week: Int): ArchivalRequest = {
+    val requestId = getRequestID(collectionId, batchId, year, week)
+    val archivalRequest = s"""select * from $requestsTable where request_id = $requestId"""
+    val pstmt: PreparedStatement = dbc.prepareStatement(archivalRequest);
+    val resultSet = pstmt.executeQuery()
+
+    getArchivalRequest(resultSet)
+  }
+
+  private def getArchivalRequest(resultSet: ResultSet): ArchivalRequest = {
+    ArchivalRequest(
+      resultSet.getString("request_id"),
+      resultSet.getString("batch_id"),
+      resultSet.getString("collection_id"),
+      Some(resultSet.getString("resource_type")),
+      resultSet.getString("job_id"),
+      Some(resultSet.getLong("archival_date")),
+      Some(resultSet.getLong("completion_date")),
+      resultSet.getString("archival_status"),
+      resultSet.getString("deletion_status"),
+      Some(resultSet.getArray("blob_url").asInstanceOf[List[String]]),
+      Some(resultSet.getInt("iteration")),
+      Some(resultSet.getString("request_data")),
+      Some(resultSet.getString("err_message"))
+    )
   }
 
   def markArchivalRequestAsFailed(request: ArchivalRequest, failedMsg: String): ArchivalRequest = {
