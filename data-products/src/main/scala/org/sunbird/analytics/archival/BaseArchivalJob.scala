@@ -98,12 +98,11 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
       var dataDF = processArchival(data, requestConfig)
       if(requests.length > 0) {
         for (request <- requests) {
-          // TODO: for each request
           if (request.archival_status.equals("SUCCESS")) {
             val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
             dataDF = dataDF.filter(
-              col("week_of_year").notEqual(request_data.get("week").get) &&
-              col("year").notEqual(request_data.get("year").get)
+              col("batch_id").equalTo(request.batch_id) &&
+              concat(col("year"), lit("-"), col("week_of_year")) =!= lit(request_data.get("year").get + "-" + request_data.get("week").get)
             )
           }
         }
@@ -138,17 +137,17 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
         val collectionId = filteredDF.first().getAs[String]("course_id")
         var archivalRequest = getRequest(collectionId, batch.batchId, batch.period.year, batch.period.weekOfYear)
 
-        if (archivalRequest != null) {
-          val request_data = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(Request)) ++ Map[String, Int](
+        if (archivalRequest == null) {
+          val request_data = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(requestConfig)) ++ Map[String, Int](
             "week" -> batch.period.weekOfYear,
             "year"-> batch.period.year
           )
-          archivalRequest = ArchivalRequest("", batch.batchId, collectionId, Some(getReportKey), jobId, null, null, null, null, null, Some(0), JSONUtils.serialize(request_data), null)
+          archivalRequest = ArchivalRequest("", batch.batchId, collectionId, Option(getReportKey), jobId, None, None, null, null, None, Option(0), JSONUtils.serialize(request_data), None)
         }
 
         try {
           val urls = upload(filteredDF, batch) // Upload the archived files into blob store
-          archivalRequest.blob_url = Some(urls)
+          archivalRequest.blob_url = Option(urls)
           JobLogger.log(s"Data is archived and Processing the remaining part files ", None, Level.INFO)
           markRequestAsSuccess(archivalRequest, requestConfig)
         } catch {
@@ -190,10 +189,10 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
       Period(0, 0)
     }
   }
-  def upload(archivedData: DataFrame,
-             batch: BatchPartition)(implicit jobConfig: JobConfig): List[String] = {
-    val modelParams = jobConfig.modelParams.get
-    val reportPath: String = modelParams.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
+
+  def upload(archivedData: DataFrame, batch: BatchPartition)(implicit jobConfig: JobConfig): List[String] = {
+    val blobConfig = jobConfig.modelParams.get("blobConfig").asInstanceOf[Map[String, AnyRef]]
+    val reportPath: String = blobConfig.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val fileName = s"${batch.batchId}/${batch.period.year}-${batch.period.weekOfYear}"

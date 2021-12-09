@@ -10,7 +10,6 @@ import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.ekstep.analytics.job.batch.VideoStreamingJob.JobRequest
 import org.sunbird.analytics.archival.Request
 
 case class ArchivalRequest(request_id: String, batch_id: String, collection_id: String, resource_type: Option[String], job_id: String,
@@ -71,16 +70,16 @@ trait ArchivalMetaDataStoreJob {
       resultSet.getString("request_id"),
       resultSet.getString("batch_id"),
       resultSet.getString("collection_id"),
-      Some(resultSet.getString("resource_type")),
+      Option(resultSet.getString("resource_type")),
       resultSet.getString("job_id"),
-      Some(resultSet.getTimestamp("archival_date").getTime),
-      if (resultSet.getTimestamp("completion_date") != null) Some(resultSet.getTimestamp("completion_date").getTime) else null,
+      Option(resultSet.getTimestamp("archival_date").getTime),
+      if (resultSet.getTimestamp("completion_date") != null) Option(resultSet.getTimestamp("completion_date").getTime) else None,
       resultSet.getString("archival_status"),
       resultSet.getString("deletion_status"),
-      Some(resultSet.getArray("blob_url").asInstanceOf[List[String]]),
-      Some(resultSet.getInt("iteration")),
+      if (resultSet.getArray("blob_url") != null) Option(resultSet.getArray("blob_url").getArray().asInstanceOf[Array[String]].toList) else None,
+      Option(resultSet.getInt("iteration")),
       resultSet.getString("request_data"),
-      Some(resultSet.getString("err_message"))
+      Option(resultSet.getString("err_message"))
     )
   }
 
@@ -102,7 +101,7 @@ trait ArchivalMetaDataStoreJob {
 
   def createRequest(request: ArchivalRequest) = {
     val insertQry = s"INSERT INTO $requestsTable (request_id, batch_id, collection_id, resource_type, job_id, archival_date, completion_date, archival_status, " +
-      s"deletion_status, blob_url, iteration, request_data, err_message) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      s"deletion_status, blob_url, iteration, request_data, err_message) VALUES (?,?,?,?,?,?,?,?,?,?,?,?::json,?)"
     val pstmt: PreparedStatement = dbc.prepareStatement(insertQry);
     val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
     val requestId = getRequestID(request.collection_id, request.batch_id, request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int])
@@ -146,6 +145,7 @@ trait ArchivalMetaDataStoreJob {
     pstmt.setString(6, request.deletion_status);
     pstmt.setString(7, request.request_id);
 
+    pstmt.execute()
   }
 
   def markRequestAsSuccess(request: ArchivalRequest, requestConfig: Request): ArchivalRequest = {
