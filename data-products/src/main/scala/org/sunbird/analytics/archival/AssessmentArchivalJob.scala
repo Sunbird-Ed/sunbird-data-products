@@ -16,14 +16,14 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   private val columnWithOrder = List("course_id", "batch_id", "user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
 
   override def getClassName = "org.sunbird.analytics.archival.AssessmentArchivalJob"
-  override def jobName = "AssessmentArchivalJob";
-  override def jobId: String = "assessment-archival";
-  override def getReportPath = "assessment-archival/";
-  override def getReportKey = "assessment";
+  override def jobName = "AssessmentArchivalJob"
+  override def jobId: String = "assessment-archival"
+  override def getReportPath = "assessment-archival/"
+  override def getReportKey = "assessment"
+  override def dateColumn = "updated_on"
 
   override def processArchival(archivalTableData: DataFrame, requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    println("Process Archival")
-      generatePeriodInData(data = archivalTableData)
+    generatePeriodInData(data = archivalTableData)
   }
 
   override def archiveData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
@@ -42,7 +42,6 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
       data
     }
 
-    println("requestLength: " + requests.length)
     try {
       var dataDF = processArchival(data, requestConfig)
       if(requests.length > 0) {
@@ -108,11 +107,9 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   }
 
   def generatePeriodInData(data: DataFrame): DataFrame = {
-    data.withColumn("updated_on", to_timestamp(col("updated_on")))
+    data.withColumn("updated_on", to_timestamp(col(dateColumn)))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
       .withColumn("question", to_json(col("question")))
   }
-
-
 }

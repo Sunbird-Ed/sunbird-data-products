@@ -32,6 +32,7 @@ case class ArchivalMetrics(batchId: Option[String],
 trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStoreJob with Serializable {
 
   val cassandraUrl = "org.apache.spark.sql.cassandra"
+  def dateColumn: String
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
     implicit val className: String = getClassName;
