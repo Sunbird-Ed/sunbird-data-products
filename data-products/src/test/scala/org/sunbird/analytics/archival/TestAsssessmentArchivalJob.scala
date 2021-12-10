@@ -80,7 +80,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val user3Result = batch011Results.filter(col("user_id") === "user-003")
     user3Result.count() should be (2)
 
-    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId(), Option(batchId))
+    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, Option(batchId))
     archivalRequests.size should be (2)
 
     archivalRequests.map(ar => ar.request_id).toList should contain allElementsOf List("F08614119F64BC55B14CBE49B10B6730", "949887DE6364A07AE1BB5A04504368F9")
@@ -117,7 +117,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val user3Result = batch011Results.filter(col("user_id") === "user-003")
     user3Result.count() should be (2)
 
-    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId(), Option(batchId))
+    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, Option(batchId))
     archivalRequests.size should be (2)
 
     val failedRequest = AssessmentArchivalJob.getRequest("do_1130928636168192001667", batchId, 2021, 48)
@@ -160,7 +160,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val user3Result = batch011Results.filter(col("user_id") === "user-003")
     user3Result.count() should be (1)
 
-    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId(), Option(batchId))
+    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, Option(batchId))
     archivalRequests.size should be (2)
   }
 
