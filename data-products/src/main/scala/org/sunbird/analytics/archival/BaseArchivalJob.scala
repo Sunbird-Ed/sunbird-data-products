@@ -68,25 +68,30 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val requestConfig = JSONUtils.deserialize[Request](JSONUtils.serialize(modelParams.getOrElse("request", Request).asInstanceOf[Map[String,AnyRef]]))
+
     val mode: String = modelParams.getOrElse("mode","archive").asInstanceOf[String]
 
-    mode.toLowerCase() match {
+    val archivalRequests = mode.toLowerCase() match {
       case "archival" =>
         archiveData(requestConfig)
       case "delete" =>
         deleteArchivedData(requestConfig)
     }
+
+    for (archivalRequest <- archivalRequests) {
+      upsertRequest(archivalRequest)
+    }
   }
 
-  def arhivalDateFormat(combinationList: List[String]): String = {
-    combinationList.mkString("-")
+  def archivalFormat(batch: BatchPartition): String = {
+    s"${batch.batchId}/${batch.period.year}-${batch.period.weekOfYear}"
   }
 
-  def archiveData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit
+  def archiveData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest]
 
-  def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): Unit
+  def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): List[ArchivalRequest]
 
-  def deleteArchivedData(archivalRequest: Request): Unit
+  def deleteArchivedData(archivalRequest: Request): List[ArchivalRequest]
 
   def processArchival(archivalTableData: DataFrame, archiveRequest: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
 
@@ -104,7 +109,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
     val reportPath: String = blobConfig.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
-    val fileName = s"${batch.batchId}/${batch.period.year}-${batch.period.weekOfYear}"
+    val fileName = archivalFormat(batch)
     val storageConfig = getStorageConfig(jobConfig, objectKey)
     JobLogger.log(s"Uploading reports to blob storage", None, Level.INFO)
     archivedData.saveToBlobStore(storageConfig, "csv", s"$reportPath$fileName-${System.currentTimeMillis()}", Option(Map("header" -> "true", "codec" -> "org.apache.hadoop.io.compress.GzipCodec")), None, fileExt=Some("csv.gz"))

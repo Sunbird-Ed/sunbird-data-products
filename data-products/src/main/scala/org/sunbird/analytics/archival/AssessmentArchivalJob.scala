@@ -26,7 +26,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
       generatePeriodInData(data = archivalTableData)
   }
 
-  override def archiveData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
+  override def archiveData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
     val requests = getRequests(jobId, requestConfig.batchId)
 
     val archivalTable = requestConfig.archivalTable
@@ -65,11 +65,12 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
+        List()
     }
   }
 
-  override def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): Unit = {
-    batchesToArchive.foreach(batches => {
+  override def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): List[ArchivalRequest] = {
+    batchesToArchive.flatMap(batches => {
       val processingBatch = new AtomicInteger(batches._2.length)
       JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> processingBatch)))
 
@@ -97,16 +98,13 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
             markArchivalRequestAsFailed(archivalRequest, ex.getLocalizedMessage)
           }
         }
-      }).foreach((archivalRequest: ArchivalRequest) => {
-        upsertRequest(archivalRequest)
       })
-
-      JobLogger.log(s"${batches._1} is successfully archived", Some(Map("batch_id" -> batches._1)), Level.INFO)
-    })
+    }).toList
   }
 
-  def deleteArchivedData(archivalRequest: Request): Unit = {
-
+  def deleteArchivedData(archivalRequest: Request): List[ArchivalRequest] = {
+    // TODO: Deletion feature
+    List()
   }
 
   def generatePeriodInData(data: DataFrame): DataFrame = {
