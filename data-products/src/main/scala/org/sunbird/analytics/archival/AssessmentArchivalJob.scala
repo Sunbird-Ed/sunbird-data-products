@@ -1,6 +1,6 @@
 package org.sunbird.analytics.archival
 
-import org.apache.spark.sql.functions.{col, to_json, to_timestamp, weekofyear, year}
+import org.apache.spark.sql.functions.{col, concat, lit, to_json, to_timestamp, weekofyear, year}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
@@ -13,9 +13,14 @@ import java.util.concurrent.atomic.AtomicInteger
 object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
   case class Period(year: Int, weekOfYear: Int)
-  case class BatchPartition(batchId: String, period: Period)
+  case class BatchPartition(collectionId: String, batchId: String, period: Period)
+  case class ArchivalMetrics(batch: BatchPartition,
+                             totalArchivedRecords: Option[Long],
+                             pendingWeeksOfYears: Option[Long],
+                             totalDeletedRecords: Option[Long]
+                            )
 
-  private val partitionCols = List("batch_id", "year", "week_of_year")
+  private val partitionCols = List("course_id", "batch_id", "year", "week_of_year")
   private val columnWithOrder = List("course_id", "batch_id", "user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
 
   override def getClassName = "org.sunbird.analytics.archival.AssessmentArchivalJob"
@@ -53,19 +58,19 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
     var data = loadData(Map("table" -> requestConfig.archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
 
-    data = if (batchId.nonEmpty && collectionId.nonEmpty) {
-      data.filter(col("batch_id") === batchId && col("course_id") === collectionId).persist()
-    } else if (batchId.nonEmpty) {
-      data.filter(col("batch_id") === batchId).persist()
-    } else {
-      data
+    if(collectionId.nonEmpty) {
+      data = data.filter(col("course_id") === collectionId)
+    }
+
+    if (batchId.nonEmpty) {
+      data = data.filter(col("batch_id") === batchId).persist()
     }
 
     try {
       val dataDF = generatePeriodInData(data)
       val filteredDF = dataFilter(requests, dataDF)
       val archiveBatchList = filteredDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
-      val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
+      val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], f.get(1).asInstanceOf[String], Period(f.get(2).asInstanceOf[Int], f.get(3).asInstanceOf[Int]))).groupBy(_.batchId)
 
       archiveBatches(batchesToArchive, filteredDF, requestConfig)
     } catch {
@@ -82,7 +87,12 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
       // Loop through the week_num & year batch partition
       batches._2.map((batch: BatchPartition) => {
-        val filteredDF = data.filter(col("batch_id") === batch.batchId && col("year") === batch.period.year && col("week_of_year") === batch.period.weekOfYear).select(columnWithOrder.head, columnWithOrder.tail: _*)
+        val filteredDF = data.filter(
+          col("course_id") === batch.collectionId &&
+          col("batch_id") === batch.batchId &&
+          col("year") === batch.period.year &&
+          col("week_of_year") === batch.period.weekOfYear
+        ).select(columnWithOrder.head, columnWithOrder.tail: _*)
         val collectionId = filteredDF.first().getAs[String]("course_id")
         var archivalRequest:ArchivalRequest = getRequest(collectionId, batch.batchId, List(batch.period.year, batch.period.weekOfYear))
 
@@ -97,7 +107,8 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
         try {
           val urls = upload(filteredDF, Map("batchId" -> batch.batchId, "period"-> Map("year" -> batch.period.year, "weekOfYear" -> batch.period.weekOfYear))) // Upload the archived files into blob store
           archivalRequest.blob_url = Option(urls)
-          JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(Map("remaining_part_files_to_archive" -> processingBatch.decrementAndGet())), Level.INFO)
+          val metrics = ArchivalMetrics(batch, pendingWeeksOfYears = Some(processingBatch.getAndDecrement()), totalArchivedRecords = Some(filteredDF.count()), totalDeletedRecords = None)
+          JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), Level.INFO)
           markRequestAsSuccess(archivalRequest, requestConfig)
         } catch {
           case ex: Exception => {
