@@ -28,8 +28,8 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   override def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
 
     val archivalKeyspace = requestConfig.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
-    val batchId: String = requestConfig.batchId.getOrElse(null)
-    val collId: String = requestConfig.collectionId.getOrElse(null)
+    val batchId: String = requestConfig.batchId.getOrElse("")
+    val collId: String = requestConfig.collectionId.getOrElse("")
     val date: String  = requestConfig.date.getOrElse(null)
 
     var data = loadData(Map("table" -> requestConfig.archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
