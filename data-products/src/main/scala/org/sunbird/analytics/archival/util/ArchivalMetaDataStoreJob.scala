@@ -5,8 +5,8 @@ import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Timest
 import java.util.Properties
 import org.apache.commons.lang.StringUtils
 import org.apache.spark.sql.{Encoders, SparkSession}
-import org.apache.spark.sql.functions.{col, lit}
-import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
+import org.apache.spark.sql.functions.col
+import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
@@ -51,13 +51,13 @@ trait ArchivalMetaDataStoreJob {
     requests
   }
 
-  def getRequestID(collectionId: String, batchId: String, year: Int, week: Int): String = {
-    val requestComb = s"$collectionId:$batchId:$year:$week"
+  def getRequestID(collectionId: String, batchId: String, partitionCols: List[Int]): String = {
+    val requestComb = s"$collectionId:$batchId:" + partitionCols.mkString(":")
     MessageDigest.getInstance("MD5").digest(requestComb.getBytes).map("%02X".format(_)).mkString
   }
 
-  def getRequest(collectionId: String, batchId: String, year: Int, week: Int): ArchivalRequest = {
-    val requestId = getRequestID(collectionId, batchId, year, week)
+  def getRequest(collectionId: String, batchId: String, partitionCols: List[Int]): ArchivalRequest = {
+    val requestId = getRequestID(collectionId, batchId, partitionCols)
     val archivalRequest = s"""select * from $requestsTable where request_id = '$requestId' limit 1"""
     val pstmt: PreparedStatement = dbc.prepareStatement(archivalRequest);
     val resultSet = pstmt.executeQuery()
@@ -104,7 +104,7 @@ trait ArchivalMetaDataStoreJob {
       s"deletion_status, blob_url, iteration, request_data, err_message) VALUES (?,?,?,?,?,?,?,?,?,?,?,?::json,?)"
     val pstmt: PreparedStatement = dbc.prepareStatement(insertQry);
     val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
-    val requestId = getRequestID(request.collection_id, request.batch_id, request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int])
+    val requestId = getRequestID(request.collection_id, request.batch_id, List(request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int]))
     pstmt.setString(1, requestId);
     pstmt.setString(2, request.batch_id);
     pstmt.setString(3, request.collection_id);
