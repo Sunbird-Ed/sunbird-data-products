@@ -15,6 +15,7 @@ import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.apache.spark.sql.functions._
 import org.joda.time.DateTime
+import org.sunbird.analytics.archival.AssessmentArchivalJob.{getRequests, jobId}
 import org.sunbird.analytics.archival.util.{ArchivalMetaDataStoreJob, ArchivalRequest}
 
 case class Period(year: Int, weekOfYear: Int)
@@ -61,19 +62,32 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
     spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
   }
 
-//  def dataFilter(): Unit = {}
+  def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame): DataFrame = {
+    var filteredDF = dataDF
+      for (request <- requests) {
+        if (request.archival_status.equals("SUCCESS")) {
+          val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
+          filteredDF = dataDF.filter(
+            col("batch_id").equalTo(request.batch_id) &&
+              concat(col("year"), lit("-"), col("week_of_year")) =!= lit(request_data.get("year").get + "-" + request_data.get("week").get)
+          )
+        }
+      }
+    filteredDF
+  };
 
   def getClassName: String;
 
   def execute()(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Unit = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val requestConfig = JSONUtils.deserialize[Request](JSONUtils.serialize(modelParams.getOrElse("request", Request).asInstanceOf[Map[String,AnyRef]]))
-
     val mode: String = modelParams.getOrElse("mode","archive").asInstanceOf[String]
+
+    val requests = getRequests(jobId, requestConfig.batchId)
 
     val archivalRequests = mode.toLowerCase() match {
       case "archival" =>
-        archiveData(requestConfig)
+        archiveData(requestConfig, requests)
       case "delete" =>
         deleteArchivedData(requestConfig)
     }
@@ -87,13 +101,11 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
     s"${batch.batchId}/${batch.period.year}-${batch.period.weekOfYear}"
   }
 
-  def archiveData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest]
+  def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest]
 
   def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): List[ArchivalRequest]
 
   def deleteArchivedData(archivalRequest: Request): List[ArchivalRequest]
-
-  def processArchival(archivalTableData: DataFrame, archiveRequest: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
 
   def getWeekAndYearVal(date: String): Period = {
     if (null != date && date.nonEmpty) {

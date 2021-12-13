@@ -21,47 +21,29 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   override def getReportPath = "assessment-archival/";
   override def getReportKey = "assessment";
 
-  override def processArchival(archivalTableData: DataFrame, requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    println("Process Archival")
-      generatePeriodInData(data = archivalTableData)
-  }
+  override def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
 
-  override def archiveData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
-    val requests = getRequests(jobId, requestConfig.batchId)
-
-    val archivalTable = requestConfig.archivalTable
     val archivalKeyspace = requestConfig.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
-    val batchId: String = requestConfig.batchId.getOrElse("")
-    val date: String  = requestConfig.date.getOrElse("")
+    val batchId: String = requestConfig.batchId.getOrElse(null)
+    val collId: String = requestConfig.collectionId.getOrElse(null)
+    val date: String  = requestConfig.date.getOrElse(null)
 
-    var data = loadData(Map("table" -> archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
+    var data = loadData(Map("table" -> requestConfig.archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
 
-    data = if (batchId.nonEmpty) {
+    data = if (batchId.nonEmpty && collId.nonEmpty) {
+      data.filter(col("batch_id") === batchId && col("course_id") === collId).persist()
+    } else if (batchId.nonEmpty) {
       data.filter(col("batch_id") === batchId).persist()
     } else {
       data
     }
-
-    println("requestLength: " + requests.length)
     try {
-      var dataDF = processArchival(data, requestConfig)
-      if(requests.length > 0) {
-        for (request <- requests) {
-          if (request.archival_status.equals("SUCCESS")) {
-            val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
-            dataDF = dataDF.filter(
-              col("batch_id").equalTo(request.batch_id) &&
-                concat(col("year"), lit("-"), col("week_of_year")) =!= lit(request_data.get("year").get + "-" + request_data.get("week").get)
-            )
-          }
-        }
-      }
-
-      val archiveBatchList = dataDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
-
+      val dataDF = generatePeriodInData(data)
+      val filteredDF = dataFilter(requests, dataDF)
+      val archiveBatchList = filteredDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
       val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], Period(f.get(1).asInstanceOf[Int], f.get(2).asInstanceOf[Int]))).groupBy(_.batchId)
 
-      archiveBatches(batchesToArchive, dataDF, requestConfig)
+      archiveBatches(batchesToArchive, filteredDF, requestConfig)
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
