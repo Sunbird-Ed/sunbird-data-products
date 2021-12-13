@@ -10,16 +10,20 @@ import org.sunbird.analytics.archival.util.ArchivalRequest
 
 import java.util.concurrent.atomic.AtomicInteger
 
+case class Period(year: Int, weekOfYear: Int)
+case class BatchPartition(batchId: String, period: Period)
+
 object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
   private val partitionCols = List("batch_id", "year", "week_of_year")
   private val columnWithOrder = List("course_id", "batch_id", "user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
 
   override def getClassName = "org.sunbird.analytics.archival.AssessmentArchivalJob"
-  override def jobName = "AssessmentArchivalJob";
-  override def jobId: String = "assessment-archival";
-  override def getReportPath = "assessment-archival/";
-  override def getReportKey = "assessment";
+  override def jobName = "AssessmentArchivalJob"
+  override def jobId: String = "assessment-archival"
+  override def getReportPath = "assessment-archival/"
+  override def getReportKey = "assessment"
+  override def dateColumn = "updated_on"
 
   override def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
 
@@ -37,6 +41,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     } else {
       data
     }
+
     try {
       val dataDF = generatePeriodInData(data)
       val filteredDF = dataFilter(requests, dataDF)
@@ -51,7 +56,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     }
   }
 
-  override def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): List[ArchivalRequest] = {
+  def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): List[ArchivalRequest] = {
     batchesToArchive.flatMap(batches => {
       val processingBatch = new AtomicInteger(batches._2.length)
       JobLogger.log(s"Started Processing to archive the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_archive" -> processingBatch)))
@@ -90,11 +95,9 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   }
 
   def generatePeriodInData(data: DataFrame): DataFrame = {
-    data.withColumn("updated_on", to_timestamp(col("updated_on")))
+    data.withColumn("updated_on", to_timestamp(col(dateColumn)))
       .withColumn("year", year(col("updated_on")))
       .withColumn("week_of_year", weekofyear(col("updated_on")))
       .withColumn("question", to_json(col("question")))
   }
-
-
 }
