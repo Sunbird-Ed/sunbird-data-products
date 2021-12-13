@@ -33,18 +33,14 @@ trait ArchivalMetaDataStoreJob {
   }
 
   def getRequests(jobId: String, batchId: Option[String])(implicit spark: SparkSession, fc: FrameworkContext): Array[ArchivalRequest] = {
-    println("jobid: " + jobId + " batchid: " + batchId)
     val encoder = Encoders.product[ArchivalRequest]
     val archivalConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3)
-    println("archivalConfigDF:")
-    archivalConfigsDf.show(false)
 
     val filteredReportConfigDf = if (batchId.isDefined) {
       val filteredArchivalConfig = archivalConfigsDf.filter(col("batch_id").equalTo(batchId.get))
       if (filteredArchivalConfig.count() > 0) filteredArchivalConfig else archivalConfigsDf
     } else archivalConfigsDf
-    println("filteredtReportCOnfig: ")
     filteredReportConfigDf.show(false)
     JobLogger.log("fetched records count" + filteredReportConfigDf.count(), None, INFO)
     val requests = filteredReportConfigDf.as[ArchivalRequest](encoder).collect()

@@ -10,10 +10,10 @@ import org.sunbird.analytics.archival.util.ArchivalRequest
 
 import java.util.concurrent.atomic.AtomicInteger
 
-case class Period(year: Int, weekOfYear: Int)
-case class BatchPartition(batchId: String, period: Period)
-
 object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
+
+  case class Period(year: Int, weekOfYear: Int)
+  case class BatchPartition(batchId: String, period: Period)
 
   private val partitionCols = List("batch_id", "year", "week_of_year")
   private val columnWithOrder = List("course_id", "batch_id", "user_id", "content_id", "attempt_id", "created_on", "grand_total", "last_attempted_on", "total_max_score", "total_score", "updated_on", "question")
@@ -24,6 +24,25 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   override def getReportPath = "assessment-archival/"
   override def getReportKey = "assessment"
   override def dateColumn = "updated_on"
+
+  override def archivalFormat(batch: Map[String,AnyRef]): String = {
+    val formatDetails = JSONUtils.deserialize[BatchPartition](JSONUtils.serialize(batch))
+    s"${formatDetails.batchId}/${formatDetails.period.year}-${formatDetails.period.weekOfYear}"
+  }
+
+  override def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame): DataFrame = {
+    var filteredDF = dataDF
+    for (request <- requests) {
+      if (request.archival_status.equals("SUCCESS")) {
+        val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
+        filteredDF = dataDF.filter(
+          col("batch_id").equalTo(request.batch_id) &&
+            concat(col("year"), lit("-"), col("week_of_year")) =!= lit(request_data.get("year").get + "-" + request_data.get("week").get)
+        )
+      }
+    }
+    filteredDF
+  }
 
   override def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
 
@@ -76,7 +95,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
         }
 
         try {
-          val urls = upload(filteredDF, batch) // Upload the archived files into blob store
+          val urls = upload(filteredDF, Map("batchId" -> batch.batchId, "period"-> Map("year" -> batch.period.year, "weekOfYear" -> batch.period.weekOfYear))) // Upload the archived files into blob store
           archivalRequest.blob_url = Option(urls)
           JobLogger.log(s"Data is archived and Processing the remaining part files ", None, Level.INFO)
           markRequestAsSuccess(archivalRequest, requestConfig)
