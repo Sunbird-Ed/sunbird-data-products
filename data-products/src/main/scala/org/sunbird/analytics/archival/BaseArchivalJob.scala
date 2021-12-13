@@ -1,21 +1,15 @@
 package org.sunbird.analytics.archival
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.cassandra._
-import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.Level.ERROR
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, Level}
 import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.apache.spark.sql.functions._
-import org.joda.time.DateTime
-import org.sunbird.analytics.archival.AssessmentArchivalJob.Period
 import org.sunbird.analytics.archival.util.{ArchivalMetaDataStoreJob, ArchivalRequest}
 
 case class Request(archivalTable: String, keyspace: Option[String], query: Option[String] = Option(""), batchId: Option[String] = Option(""), collectionId: Option[String]=Option(""), date: Option[String] = Option(""))

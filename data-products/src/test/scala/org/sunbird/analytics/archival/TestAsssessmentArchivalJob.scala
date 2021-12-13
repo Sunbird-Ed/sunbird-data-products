@@ -120,7 +120,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, Option(batchId))
     archivalRequests.size should be (2)
 
-    val failedRequest = AssessmentArchivalJob.getRequest("do_1130928636168192001667", batchId, 2021, 48)
+    val failedRequest = AssessmentArchivalJob.getRequest("do_1130928636168192001667", batchId, List(2021, 48))
 
     failedRequest.request_id should be ("949887DE6364A07AE1BB5A04504368F9")
     failedRequest.archival_status should be ("SUCCESS")
