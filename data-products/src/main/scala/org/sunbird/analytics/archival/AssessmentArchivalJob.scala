@@ -93,15 +93,14 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
           col("year") === batch.period.year &&
           col("week_of_year") === batch.period.weekOfYear
         ).select(columnWithOrder.head, columnWithOrder.tail: _*)
-        val collectionId = filteredDF.first().getAs[String]("course_id")
-        var archivalRequest:ArchivalRequest = getRequest(collectionId, batch.batchId, List(batch.period.year, batch.period.weekOfYear))
+        var archivalRequest:ArchivalRequest = getRequest(batch.collectionId, batch.batchId, List(batch.period.year, batch.period.weekOfYear))
 
         if (archivalRequest == null) {
           val request_data = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(requestConfig)) ++ Map[String, Int](
             "week" -> batch.period.weekOfYear,
             "year"-> batch.period.year
           )
-          archivalRequest = ArchivalRequest("", batch.batchId, collectionId, Option(getReportKey), jobId, None, None, null, null, None, Option(0), JSONUtils.serialize(request_data), None)
+          archivalRequest = ArchivalRequest("", batch.batchId, batch.collectionId, Option(getReportKey), jobId, None, None, null, null, None, Option(0), JSONUtils.serialize(request_data), None)
         }
 
         try {
