@@ -32,7 +32,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
   override def archivalFormat(batch: Map[String,AnyRef]): String = {
     val formatDetails = JSONUtils.deserialize[BatchPartition](JSONUtils.serialize(batch))
-    s"${formatDetails.batchId}/${formatDetails.period.year}-${formatDetails.period.weekOfYear}"
+    s"${formatDetails.batchId}_${formatDetails.collectionId}/${formatDetails.period.year}-${formatDetails.period.weekOfYear}"
   }
 
   override def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame): DataFrame = {
@@ -92,7 +92,9 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
           col("batch_id") === batch.batchId &&
           col("year") === batch.period.year &&
           col("week_of_year") === batch.period.weekOfYear
-        ).select(columnWithOrder.head, columnWithOrder.tail: _*)
+        ).withColumn("last_attempted_on", tsToLongUdf(col("last_attempted_on")))
+         .withColumn("updated_on", tsToLongUdf(col("updated_on")))
+         .select(columnWithOrder.head, columnWithOrder.tail: _*)
         var archivalRequest:ArchivalRequest = getRequest(batch.collectionId, batch.batchId, List(batch.period.year, batch.period.weekOfYear))
 
         if (archivalRequest == null) {
@@ -104,7 +106,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
         }
 
         try {
-          val urls = upload(filteredDF, Map("batchId" -> batch.batchId, "period"-> Map("year" -> batch.period.year, "weekOfYear" -> batch.period.weekOfYear))) // Upload the archived files into blob store
+          val urls = upload(filteredDF, JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(batch))) // Upload the archived files into blob store
           archivalRequest.blob_url = Option(urls)
           val metrics = ArchivalMetrics(batch, pendingWeeksOfYears = Some(processingBatch.getAndDecrement()), totalArchivedRecords = Some(filteredDF.count()), totalDeletedRecords = None)
           JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), Level.INFO)

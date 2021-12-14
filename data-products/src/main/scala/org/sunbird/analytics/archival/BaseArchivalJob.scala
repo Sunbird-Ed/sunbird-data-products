@@ -4,6 +4,7 @@ import com.datastax.spark.connector.cql.CassandraConnectorConf
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.cassandra._
+import org.apache.spark.sql.functions.udf
 import org.ekstep.analytics.framework.Level.ERROR
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
@@ -88,4 +89,5 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
 
   //Overriding methods END:
 
+  val tsToLongUdf = udf[java.lang.Long, java.sql.Timestamp]((ts: java.sql.Timestamp) => if (ts != null) ts.getTime else null)
 }
