@@ -2,13 +2,21 @@ package org.sunbird.analytics.archival
 
 import org.apache.spark.sql.functions.{col, to_json, to_timestamp, weekofyear, year}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
-import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
+import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig, Level}
 import org.sunbird.analytics.archival.util.ArchivalRequest
-
 import java.util.concurrent.atomic.AtomicInteger
+
+import org.apache.spark.sql.functions._
+import org.sunbird.analytics.util.Constants
+
+import scala.collection.immutable.List
+
+case class CollectionDetails(result: Result)
+case class Result(content: List[CollectionInfo])
+case class CollectionInfo(identifier: String)
 
 object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
@@ -47,19 +55,11 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   override def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
 
     val archivalKeyspace = requestConfig.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
-    val batchId: String = requestConfig.batchId.getOrElse("")
-    val collectionId: String = requestConfig.collectionId.getOrElse("")
     val date: String  = requestConfig.date.getOrElse(null)
 
     var data = loadData(Map("table" -> requestConfig.archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
 
-    data = if (batchId.nonEmpty && collectionId.nonEmpty) {
-      data.filter(col("batch_id") === batchId && col("course_id") === collectionId).persist()
-    } else if (batchId.nonEmpty) {
-      data.filter(col("batch_id") === batchId).persist()
-    } else {
-      data
-    }
+    data = validateBatch(data, requestConfig.batchId, requestConfig.collectionId, requestConfig.batchFilters, requestConfig.query)
 
     try {
       val dataDF = generatePeriodInData(data)
@@ -73,6 +73,34 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
         ex.printStackTrace()
         List()
     }
+  }
+
+  def validateBatch(data: DataFrame,batchid: Option[String], collectionid: Option[String], batchFilters: Option[List[String]], searchFilter: Option[Map[String, AnyRef]]) (implicit spark: SparkSession, fc: FrameworkContext) ={
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+
+    val filteredDF = if(batchid.isDefined && collectionid.isDefined) {
+      data.filter(col("batch_id") === batchid.get && col("course_id") === collectionid.get).persist()
+    } else if (batchFilters.isDefined) {
+      val batch = batchFilters.get.toDF()
+      data.join(batch, Seq("batch_id"), "inner")
+    } else {
+      JobLogger.log("Neither batchId nor batchFilters present", None, Level.INFO)
+      data
+    }
+    if (searchFilter.isDefined) {
+      val res = searchContent(searchFilter.get)
+      filteredDF.join(res, col("course_id") === col("identifier"), "inner")
+    } else filteredDF
+
+  }
+
+  def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame = {
+    // TODO: Handle limit and do a recursive search call
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result.content
+    spark.createDataFrame(response).select("identifier")
   }
 
   def archiveBatches(batchesToArchive: Map[String, Array[BatchPartition]], data: DataFrame, requestConfig: Request)(implicit config: JobConfig): List[ArchivalRequest] = {

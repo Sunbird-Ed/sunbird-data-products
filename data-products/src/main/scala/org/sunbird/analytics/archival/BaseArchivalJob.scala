@@ -12,7 +12,7 @@ import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.sunbird.analytics.archival.util.{ArchivalMetaDataStoreJob, ArchivalRequest}
 
-case class Request(archivalTable: String, keyspace: Option[String], query: Option[String] = Option(""), batchId: Option[String] = Option(""), collectionId: Option[String]=Option(""), date: Option[String] = Option(""))
+case class Request(archivalTable: String, keyspace: Option[String], query: Option[Map[String, AnyRef]] = Option(Map()), batchId: Option[String] = Option(""), collectionId: Option[String]=Option(""), batchFilters: Option[List[String]]=Option(List()), date: Option[String] = Option(""))
 
 trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStoreJob with Serializable {
 
