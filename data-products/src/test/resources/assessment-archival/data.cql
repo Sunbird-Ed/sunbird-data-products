@@ -1,6 +1,6 @@
 -- Week 48
-INSERT INTO sunbird_courses.assessment_aggregator (course_id, batch_id, user_id, content_id, attempt_id, grand_total, total_max_score, total_score, last_attempted_on, updated_on) VALUES ('do_1130928636168192001667', 'batch-011', 'user-001', 'do_1128870328040161281204', 'attempt-001', '10', 10, 10, 1638357693000, 1638357693000);
-INSERT INTO sunbird_courses.assessment_aggregator (course_id, batch_id, user_id, content_id, attempt_id, grand_total, total_max_score, total_score, last_attempted_on, updated_on) VALUES ('do_1130928636168192001667', 'batch-011', 'user-003', 'do_112876961957437440179', 'attempt-001', '10', 10, 10, 1638357693000, 1638357693000);
+INSERT INTO sunbird_courses.assessment_aggregator (course_id, batch_id, user_id, content_id, attempt_id, grand_total, total_max_score, total_score, last_attempted_on, updated_on) VALUES ('do_1130928636168192001667', 'batch-011', 'user-001', 'do_1128870328040161281204', 'attempt-001', '10', 10, 10, 1638357693200, 1638357693000);
+INSERT INTO sunbird_courses.assessment_aggregator (course_id, batch_id, user_id, content_id, attempt_id, grand_total, total_max_score, total_score, last_attempted_on, updated_on) VALUES ('do_1130928636168192001667', 'batch-011', 'user-003', 'do_112876961957437440179', 'attempt-001', '10', 10, 10, 1638357693200, 1638357693000);
 
 
 -- Week 49 --
