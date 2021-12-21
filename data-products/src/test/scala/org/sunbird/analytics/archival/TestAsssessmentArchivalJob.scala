@@ -24,6 +24,9 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
   override def afterEach(): Unit = {
     super.afterEach()
     EmbeddedPostgresql.execute(s"TRUNCATE archival_metadata")
+  }
+
+  override def beforeEach(): Unit = {
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
 
@@ -31,6 +34,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     super.afterAll()
     EmbeddedCassandra.close()
     EmbeddedPostgresql.close()
+    new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
     spark.close()
   }
 

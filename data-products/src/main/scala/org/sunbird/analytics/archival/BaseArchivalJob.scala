@@ -57,7 +57,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
       case "archival" =>
         archiveData(requestConfig, requests)
       case "delete" =>
-        deleteArchivedData(requestConfig)
+        deleteArchivedData(requestConfig, requests)
     }
     for (archivalRequest <- archivalRequests) {
       upsertRequest(archivalRequest)
@@ -83,9 +83,9 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
   def getClassName: String;
 
   def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest];
-  def deleteArchivedData(archivalRequest: Request): List[ArchivalRequest];
+  def deleteArchivedData(archivalRequest: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest];
   def archivalFormat(batch: Map[String,AnyRef]): String;
-  def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame): DataFrame;
+  def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame, isArchived: Boolean): DataFrame;
 
   //Overriding methods END:
 

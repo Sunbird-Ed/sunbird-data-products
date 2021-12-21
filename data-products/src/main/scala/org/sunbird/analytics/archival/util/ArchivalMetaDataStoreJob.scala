@@ -144,9 +144,15 @@ trait ArchivalMetaDataStoreJob {
     pstmt.execute()
   }
 
-  def markRequestAsSuccess(request: ArchivalRequest, requestConfig: Request): ArchivalRequest = {
+  def markArchivalRequestAsSuccess(request: ArchivalRequest, requestConfig: Request): ArchivalRequest = {
     request.archival_status = "SUCCESS";
     request.archival_date = Option(System.currentTimeMillis())
+    request
+  }
+
+  def markDeletionRequestAsSuccess(request: ArchivalRequest, requestConfig: Request): ArchivalRequest = {
+    request.deletion_status = "SUCCESS";
+    request.completion_date = Option(System.currentTimeMillis())
     request
   }
 
