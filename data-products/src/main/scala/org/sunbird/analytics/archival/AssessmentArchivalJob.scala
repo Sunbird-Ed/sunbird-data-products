@@ -11,6 +11,7 @@ import org.sunbird.analytics.archival.util.ArchivalRequest
 
 import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.sql.functions._
+import org.sunbird.analytics.exhaust.util.ExhaustUtil
 import org.sunbird.analytics.util.Constants
 
 import scala.collection.immutable.List
@@ -44,17 +45,15 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     s"${formatDetails.batchId}_${formatDetails.collectionId}/${formatDetails.period.year}-${formatDetails.period.weekOfYear}"
   }
 
-  override def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame, toDelete: Boolean): DataFrame = {
+  override def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame): DataFrame = {
     var filteredDF = dataDF
     for (request <- requests) {
       if (request.archival_status.equals("SUCCESS")) {
         val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
-        filteredDF = dataDF.filter(col("batch_id").equalTo(request.batch_id))
-        filteredDF = if(toDelete) {
-          filteredDF.filter(concat(col("year"), lit("-"), col("week_of_year")) === lit(request_data("year") + "-" + request_data("week")))
-        } else {
-          filteredDF.filter(concat(col("year"), lit("-"), col("week_of_year")) =!= lit(request_data("year") + "-" + request_data("week")))
-        }
+        filteredDF = dataDF.filter(
+          col("batch_id").equalTo(request.batch_id) &&
+          concat(col("year"), lit("-"), col("week_of_year")) =!= lit(request_data("year") + "-" + request_data("week"))
+        )
       }
     }
     filteredDF
@@ -62,26 +61,25 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
 
   override def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
     try {
-      val dataDF = prepareData(requestConfig)
-      val filteredDF = dataFilter(requests, dataDF, false)
+      val archivalKeyspace = requestConfig.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
+      val date: String  = requestConfig.date.getOrElse(null)
 
-      archiveBatches(getBatchPartitions(filteredDF), filteredDF, requestConfig)
+      var data = loadData(Map("table" -> requestConfig.archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
+      data = validateBatch(data, requestConfig.batchId, requestConfig.collectionId, requestConfig.batchFilters, requestConfig.query)
+
+      val dataDF = generatePeriodInData(data)
+      val filteredDF = dataFilter(requests, dataDF)
+
+      val archiveBatchList = filteredDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
+      val batchesToArchive: Map[String, Array[BatchPartition]] = archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], f.get(1).asInstanceOf[String], Period(f.get(2).asInstanceOf[Int], f.get(3).asInstanceOf[Int]))).groupBy(_.batchId)
+
+      archiveBatches(batchesToArchive, filteredDF, requestConfig)
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
         JobLogger.log("archiveData: Exception with error message = " + ex.getMessage, None, Level.ERROR)
         List()
     }
-  }
-
-  def prepareData(requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    val archivalKeyspace = requestConfig.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
-    val date: String  = requestConfig.date.getOrElse(null)
-
-    var data = loadData(Map("table" -> requestConfig.archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
-    data = validateBatch(data, requestConfig.batchId, requestConfig.collectionId, requestConfig.batchFilters, requestConfig.query)
-
-    generatePeriodInData(data)
   }
 
   def validateBatch(data: DataFrame,batchid: Option[String], collectionid: Option[String], batchFilters: Option[List[String]], searchFilter: Option[Map[String, AnyRef]])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame ={
@@ -153,57 +151,43 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     }).toList
   }
 
-  def getBatchPartitions(dataDF: DataFrame): Map[String, Array[BatchPartition]] = {
-    val archiveBatchList = dataDF.groupBy(partitionCols.head, partitionCols.tail: _*).count().collect()
-    archiveBatchList.map(f => BatchPartition(f.get(0).asInstanceOf[String], f.get(1).asInstanceOf[String], Period(f.get(2).asInstanceOf[Int], f.get(3).asInstanceOf[Int]))).groupBy(_.batchId)
+  def loadArchivedData(batch: BatchPartition)(implicit spark: SparkSession, fc: FrameworkContext, jobConfig: JobConfig): DataFrame = {
+    val azureFetcherConfig = jobConfig.modelParams.get("assessmentFetcherConfig").asInstanceOf[Map[String, AnyRef]]
+
+    val store = azureFetcherConfig("store").asInstanceOf[String]
+    val format:String = azureFetcherConfig.getOrElse("format", "csv").asInstanceOf[String]
+    val filePath = azureFetcherConfig.getOrElse("filePath", "archival-data/").asInstanceOf[String]
+    val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
+
+    ExhaustUtil.getArchivedData(store, filePath, container, Map("batchId" -> batch.batchId, "collectionId"-> batch.collectionId, "year" -> batch.period.year, "weekNum" -> batch.period.weekOfYear), Option(format))
   }
 
   override def deleteArchivedData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
-    try {
-      val dataDF = prepareData(requestConfig)
-      val filteredDF = dataFilter(requests, dataDF, true)
-
-      deleteBatches(getBatchPartitions(filteredDF), filteredDF, requestConfig)
-    } catch {
-      case ex: Exception =>
-        ex.printStackTrace()
-        JobLogger.log("deleteArchivedData: Exception with error message = " + ex.getMessage, None, Level.ERROR)
-        List()
-    }
+    requests.filter(r => r.archival_status.equals("SUCCESS")).map((request: ArchivalRequest) => {
+      deleteBatch(requestConfig, request)
+    }).toList
   }
 
-  def deleteBatches(batchesToDelete: Map[String, Array[BatchPartition]], dataDf: DataFrame, requestConfig: Request)(implicit config: JobConfig): List[ArchivalRequest] = {
-    batchesToDelete.flatMap(batches => {
-      val processingBatch = new AtomicInteger(batches._2.length)
-      JobLogger.log(s"Started Processing to delete the data", Some(Map("batch_id" -> batches._1, "total_part_files_to_delete" -> processingBatch)))
+  def deleteBatch(requestConfig: Request, request: ArchivalRequest)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): ArchivalRequest = {
+    try {
+      val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
+      val batchPartition = BatchPartition(request.collection_id, request.batch_id, Period(request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int]))
+      val archivedData = loadArchivedData(batchPartition).select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
 
-      // Loop through the week_num & year batch partition
-      batches._2.map((batch: BatchPartition) => {
-        val archivalRequest:ArchivalRequest = getRequest(batch.collectionId, batch.batchId, List(batch.period.year, batch.period.weekOfYear))
+      val totalArchivedRecords: Long = archivedData.count
+      JobLogger.log(s"Deleting $totalArchivedRecords archived records only, for the year ${batchPartition.period.year} and week of year ${batchPartition.period.weekOfYear} from the DB ", None, Level.INFO)
 
-        try {
-          val archivedData = dataDf.filter(
-            col("course_id") === batch.collectionId &&
-              col("batch_id") === batch.batchId &&
-              col("year") === batch.period.year &&
-              col("week_of_year") === batch.period.weekOfYear
-          ).select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
-          val totalArchivedRecords: Long = archivedData.count
-          JobLogger.log(s"Deleting $totalArchivedRecords archived records only, for the year ${batch.period.year} and week of year ${batch.period.weekOfYear} from the DB ", None, Level.INFO)
+      archivedData.rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"), keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
+      val metrics = ArchivalMetrics(batchPartition, pendingWeeksOfYears = None, totalArchivedRecords = Some(totalArchivedRecords), totalDeletedRecords = Some(totalArchivedRecords))
 
-          archivedData.rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"), keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
-          val metrics = ArchivalMetrics(batch, pendingWeeksOfYears = None, totalArchivedRecords = Some(totalArchivedRecords), totalDeletedRecords = Some(totalArchivedRecords))
-
-          JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), Level.INFO)
-          markDeletionRequestAsSuccess(archivalRequest, requestConfig)
-        } catch {
-          case ex: Exception => {
-            JobLogger.log("deleteBatch: Exception with error message = " + ex.getLocalizedMessage, Some(batch), Level.ERROR)
-            markDeletionRequestAsFailed(archivalRequest, ex.getLocalizedMessage)
-          }
-        }
-      })
-    }).toList
+      JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), Level.INFO)
+      markDeletionRequestAsSuccess(request, requestConfig)
+    } catch {
+      case ex: Exception => {
+        JobLogger.log("deleteBatch: Exception with error message = " + ex.getLocalizedMessage, Some(request), Level.ERROR)
+        markDeletionRequestAsFailed(request, ex.getLocalizedMessage)
+      }
+    }
   }
 
   def generatePeriodInData(data: DataFrame): DataFrame = {

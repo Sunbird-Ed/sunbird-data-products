@@ -85,7 +85,7 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
   def archiveData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest];
   def deleteArchivedData(archivalRequest: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest];
   def archivalFormat(batch: Map[String,AnyRef]): String;
-  def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame, isArchived: Boolean): DataFrame;
+  def dataFilter(requests: Array[ArchivalRequest], dataDF: DataFrame): DataFrame;
 
   //Overriding methods END:
 
