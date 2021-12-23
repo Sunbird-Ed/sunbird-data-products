@@ -54,7 +54,9 @@ commands:
       - run:
           name: Execute the testcases.
           command: |
-            cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.exclusions=/home/circleci/project/adhoc-scripts/**,/home/circleci/project/replay-scripts/** -Dsonar.scala.coverage.reportPaths=/home/circleci/project/data-products/target/scoverage.xml -Dsonar.organization=sunbird-ed
+            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+            export PATH=$JAVA_HOME/bin:$PATH
+            cd data-products && mvn scoverage:report
 #jobs:
 #  sunbird-ed-dp-build:
 #    machine:
@@ -128,12 +130,18 @@ jobs:
       - clone-dependency-repos
       - build-framework-artifacts
       - build-core-jobs-artifacts
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
   run-tests:
     docker:
-      - image: "circleci/openjdk:11-jdk"
+    machine: true
     steps:
       - checkout
       - execute-tests
+      - attach_workspace:
+          at: .
 workflows:
   main:
     jobs:
