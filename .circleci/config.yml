@@ -138,10 +138,11 @@ jobs:
     docker:
     machine: true
     steps:
-      - checkout
-      - execute-tests
       - attach_workspace:
           at: .
+      - checkout
+      - execute-tests
+
 workflows:
   main:
     jobs:
