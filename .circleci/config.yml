@@ -135,13 +135,20 @@ jobs:
           paths:
             - .
   run-tests:
-    docker:
     machine: true
     steps:
       - attach_workspace:
           at: .
-      - checkout
+      - checkout:
+          path: ~/project/sunbird-ed
+      - restore_cache:
+          keys:
+            - dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
       - execute-tests
+      - save_cache:
+          key: dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
+          paths:
+            - ~/.m2
 
 workflows:
   main:
