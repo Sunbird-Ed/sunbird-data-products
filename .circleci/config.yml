@@ -49,7 +49,7 @@ commands:
              export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
              export PATH=$JAVA_HOME/bin:$PATH
              cd sunbird-core-dataproducts && mvn install -DskipTests
-    run-tests:
+    execute-tests:
       steps:
         - run:
             name: Build analytics-core-dataproducts dependency jar
@@ -135,6 +135,6 @@ jobs:
       - image: "circleci/openjdk:11-jdk"
     steps:
       - checkout
-      - run-tests
+      - execute-tests
 
 
