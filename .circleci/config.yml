@@ -1,5 +1,4 @@
 version: 2.1
-
 commands:
   clone-dependency-repos:
     steps:
@@ -41,6 +40,7 @@ commands:
             export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
             export PATH=$JAVA_HOME/bin:$PATH
             cd sunbird-analytics-core && mvn install -DskipTests
+
   build-core-jobs-artifacts:
     steps:
       - run:
@@ -49,14 +49,14 @@ commands:
             export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
             export PATH=$JAVA_HOME/bin:$PATH
             cd sunbird-core-dataproducts && mvn install -DskipTests
-    execute-tests:
-      steps:
-        - run:
-            name: Build analytics-core-dataproducts dependency jar
-            command: |
-              export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
-              export PATH=$JAVA_HOME/bin:$PATH
-              cd data-products && mvn scoverage:report
+  execute-tests:
+    steps:
+      - run:
+          name: Build analytics-core-dataproducts dependency jar
+          command: |
+            export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+            export PATH=$JAVA_HOME/bin:$PATH
+            cd data-products && mvn scoverage:report
 #jobs:
 #  sunbird-ed-dp-build:
 #    machine:
