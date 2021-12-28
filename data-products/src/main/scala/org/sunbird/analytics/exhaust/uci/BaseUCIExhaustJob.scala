@@ -118,6 +118,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
   def getConversationDates(requestData: Map[String, AnyRef], conversationDF: DataFrame): Map[String, String] = {
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
     val today = fmt.print(DateTime.now)
+    println("today is" + today)
     val startDate: String = Option(requestData.getOrElse("startDate", null).asInstanceOf[String])
       .getOrElse(Option(conversationDF.head().getAs[Date]("startDate").toString)
         .getOrElse(today))

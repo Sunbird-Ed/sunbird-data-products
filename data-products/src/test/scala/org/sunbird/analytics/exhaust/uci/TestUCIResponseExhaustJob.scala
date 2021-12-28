@@ -121,11 +121,11 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
     implicit val config = jobConfig
-    val request_data = Map("conversationId" -> "56b31f3d-cc0f-49a1-b559-f7709200aa85", "startDate" -> "2022-01-01", "endDate" -> "2022-01-01")
+    val request_data = Map("conversationId" -> "56b31f3d-cc0f-49a1-b559-f7709200aa85", "startDate" -> "2022-01-01", "endDate" -> "2022-01-02")
     val spark = SparkSession.builder.getOrCreate
     import spark.implicits._
     val conversationDF = Seq(
-      ("2021-01-02", "2021-01-02", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
+      ("2022-01-01", "2022-01-02", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
       ("2021-01-03", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85")
     ).toDF("startDate", "endDate", "conversationId")
 
