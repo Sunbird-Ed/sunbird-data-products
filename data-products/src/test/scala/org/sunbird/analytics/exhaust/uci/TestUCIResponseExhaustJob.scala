@@ -1,9 +1,9 @@
 package org.sunbird.analytics.exhaust.uci
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{add_months, trunc}
-import org.ekstep.analytics.framework.{Fetcher, FrameworkContext, JobConfig, Query}
+import org.apache.spark.sql.functions.{col, to_date}
 import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.scalamock.scalatest.MockFactory
@@ -142,11 +142,13 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     implicit val config = jobConfig
     val request_data = Map("conversationId" -> "56b31f3d-cc0f-49a1-b559-f7709200aa85")
     val spark = SparkSession.builder.getOrCreate
+    import org.apache.spark.sql.functions._
     import spark.implicits._
+
     val conversationDF = Seq(
       ("2021-01-02", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
       ("2021-01-03", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85")
-    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", add_months(trunc($"startDate", "month"), -1)).withColumn("endDate", add_months(trunc($"endDate", "month"), -1))
+    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", to_date(col("startDate"), "yyyy-MM-dd")).withColumn("endDate", to_date(col("endDate"), "yyyy-MM-dd"))
 
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
     println("conversation response from table" + conversationDates)
@@ -165,8 +167,7 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     val conversationDF = Seq(
       (null, null, "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
       (null, null, "56b31f3d-cc0f-49a1-b559-f7709200aa85")
-    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", add_months(trunc($"startDate", "month"), -1)).withColumn("endDate", add_months(trunc($"endDate", "month"), -1))
-
+    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", to_date(col("startDate"), "yyyy-MM-dd")).withColumn("endDate", to_date(col("endDate"), "yyyy-MM-dd"))
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
     println("conversation response from none" + conversationDates)
 
