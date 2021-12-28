@@ -125,8 +125,11 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     if (conversationDF.count() > 0) {
       val telemetryDF = if (!config.search.`type`.equals("none")) {
         fc.inputEventsCount = sc.longAccumulator("InputEventsCount");
-        val startDate = conversationDF.head().getAs[Date]("startDate").toString
-        val endDate = conversationDF.head().getAs[Date]("endDate").toString
+        val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+        val today = fmt.print(DateTime.now)
+        println("today" + today)
+        val startDate = Option(conversationDF.head().getAs[Date]("startDate").toString).getOrElse(today)
+        val endDate = Option(conversationDF.head().getAs[Date]("endDate").toString).getOrElse(today)
         // prepare config with start & end dates
         val queryConf = config.search.queries.get.apply(0)
         val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
