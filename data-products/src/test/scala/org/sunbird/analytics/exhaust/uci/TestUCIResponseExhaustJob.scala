@@ -130,7 +130,6 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     ).toDF("startDate", "endDate", "conversationId")
 
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
-    println("conversation response" + conversationDates)
     conversationDates("conversationStartDate") should be ("2022-01-01")
     conversationDates("conversationEndDate") should be ("2022-01-02")
   }
@@ -151,7 +150,6 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", to_date(col("startDate"), "yyyy-MM-dd")).withColumn("endDate", to_date(col("endDate"), "yyyy-MM-dd"))
 
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
-    println("conversation response from table" + conversationDates)
     conversationDates("conversationStartDate") should be ("2021-01-02")
     conversationDates("conversationEndDate") should be ("2021-01-03")
   }
@@ -169,7 +167,8 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
       (null, null, "56b31f3d-cc0f-49a1-b559-f7709200aa85")
     ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", to_date(col("startDate"), "yyyy-MM-dd")).withColumn("endDate", to_date(col("endDate"), "yyyy-MM-dd"))
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
-    println("conversation response from none" + conversationDates)
+    conversationDates("conversationStartDate") should not be(null)
+    conversationDates("conversationEndDate") should not be(null)
 
   }
 
