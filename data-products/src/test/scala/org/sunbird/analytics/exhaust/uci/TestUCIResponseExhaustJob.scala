@@ -1,6 +1,7 @@
 package org.sunbird.analytics.exhaust.uci
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.{add_months, trunc}
 import org.ekstep.analytics.framework.{Fetcher, FrameworkContext, JobConfig, Query}
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.joda.time.DateTimeZone
@@ -130,11 +131,8 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
 
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
     println("conversation response" + conversationDates)
-    conversationDates.get("conversationStartDate") should be ("2022-01-01")
-    conversationDates.get("conversationEndDate") should be ("2022-01-01")
-
-    println("conversation response" + conversationDates)
-
+    conversationDates("conversationStartDate") should be ("2022-01-01")
+    conversationDates("conversationEndDate") should be ("2022-01-02")
   }
 
   it should "Able to get the correct start date and end date values from the Conversation Table" in {
@@ -146,17 +144,14 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     val spark = SparkSession.builder.getOrCreate
     import spark.implicits._
     val conversationDF = Seq(
-      ("2021-01-02", "2021-01-02", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
+      ("2021-01-02", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
       ("2021-01-03", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85")
-    ).toDF("startDate", "endDate", "conversationId")
+    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", add_months(trunc($"startDate", "month"), -1)).withColumn("endDate", add_months(trunc($"endDate", "month"), -1))
 
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
-    println("conversation response" + conversationDates)
-    conversationDates.get("conversationStartDate") should be ("2021-01-02")
-    conversationDates.get("conversationEndDate") should be ("2021-01-03")
-
-    println("conversation response from the table" + conversationDates)
-
+    println("conversation response from table" + conversationDates)
+    conversationDates("conversationStartDate") should be ("2021-01-02")
+    conversationDates("conversationEndDate") should be ("2021-01-03")
   }
 
   it should "Able to get the correct start date and end date values when both API and Tables are not defined" in {
@@ -170,10 +165,10 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     val conversationDF = Seq(
       (null, null, "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
       (null, null, "56b31f3d-cc0f-49a1-b559-f7709200aa85")
-    ).toDF("startDate", "endDate", "conversationId")
+    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", add_months(trunc($"startDate", "month"), -1)).withColumn("endDate", add_months(trunc($"endDate", "month"), -1))
 
     val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
-    println("conversation dates" + conversationDates)
+    println("conversation response from none" + conversationDates)
 
   }
 
