@@ -1,30 +1,24 @@
 package org.sunbird.analytics.exhaust.uci
 
-import java.sql.{Connection, DriverManager}
-import java.util.{Date, Properties}
-import java.util.concurrent.CompletableFuture
-
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.util.LongAccumulator
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
+import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
-import org.ekstep.analytics.framework._
-import org.ekstep.analytics.util.Constants
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
+
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
-
-import org.apache.spark.rdd.RDD
-import org.apache.spark.util.LongAccumulator
-import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
-
+import java.util.{Date, Properties}
 import scala.collection.immutable.List
 
 trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
@@ -141,8 +135,6 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
         val startDate = getConversationDates(requestData, conversationDF)("conversationStartDate")
         val endDate = getConversationDates(requestData, conversationDF)("conversationEndDate")
-        println("CstartDate" + startDate)
-        println("eendDate" + endDate)
         // prepare config with start & end dates
         val queryConf = config.search.queries.get.apply(0)
         val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
