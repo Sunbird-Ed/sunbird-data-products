@@ -141,6 +141,8 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
         val startDate = getConversationDates(requestData, conversationDF)("conversationStartDate")
         val endDate = getConversationDates(requestData, conversationDF)("conversationEndDate")
+        println("CstartDate" + startDate)
+        println("eendDate" + endDate)
         // prepare config with start & end dates
         val queryConf = config.search.queries.get.apply(0)
         val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
