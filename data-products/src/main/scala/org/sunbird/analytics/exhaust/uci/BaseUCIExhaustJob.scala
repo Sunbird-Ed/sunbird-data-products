@@ -119,12 +119,13 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
     val today = fmt.print(DateTime.now)
     println("today is" + today)
+
     val startDate: String = Option(requestData.getOrElse("startDate", null).asInstanceOf[String])
-      .getOrElse(Option(conversationDF.head().getAs[Date]("startDate").toString)
-        .getOrElse(today))
+      .getOrElse(Option(conversationDF.head().getAs[Date]("startDate"))
+        .getOrElse(today)).toString
     val endDate = Option(requestData.getOrElse("endDate", null).asInstanceOf[String])
-      .getOrElse(Option(conversationDF.head().getAs[Date]("endDate").toString)
-        .getOrElse(today))
+      .getOrElse(Option(conversationDF.head().getAs[Date]("endDate"))
+        .getOrElse(today)).toString
     Map("conversationStartDate" -> startDate, "conversationEndDate" -> endDate)
 
   }
