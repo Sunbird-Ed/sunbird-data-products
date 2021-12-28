@@ -116,7 +116,7 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     }
   }
 
-  it should "Able to get the correct start date and end date values from the API" in {
+  it should "Able to get the correct start date and end date values When the API values are defined" in {
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
@@ -134,7 +134,7 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     conversationDates("conversationEndDate") should be ("2022-01-02")
   }
 
-  it should "Able to get the correct start date and end date values from the Conversation Table" in {
+  it should "Able to get the correct start date and end date values when the conversation table values are defined" in {
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
