@@ -115,6 +115,19 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     if (!requestData.contains("conversationId")) false else true
   }
 
+  def getConversationDates(requestData: Map[String, AnyRef], conversationDF: DataFrame): Map[String, String] = {
+    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+    val today = fmt.print(DateTime.now)
+    val startDate: String = Option(requestData.getOrElse("startDate", null).asInstanceOf[String])
+      .getOrElse(Option(conversationDF.head().getAs[Date]("startDate").toString)
+        .getOrElse(today))
+    val endDate = Option(requestData.getOrElse("endDate", null).asInstanceOf[String])
+      .getOrElse(Option(conversationDF.head().getAs[Date]("endDate").toString)
+        .getOrElse(today))
+    Map("conversationStartDate" -> startDate, "conversationEndDate" -> endDate)
+
+  }
+
   def processRequest(request: JobRequest, storageConfig: StorageConfig)(implicit spark: SparkSession, sc: SparkContext, fc: FrameworkContext, config: JobConfig): JobRequest = {
 
     val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
@@ -125,10 +138,9 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     if (conversationDF.count() > 0) {
       val telemetryDF = if (!config.search.`type`.equals("none")) {
         fc.inputEventsCount = sc.longAccumulator("InputEventsCount");
-        val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-        val today = fmt.print(DateTime.now)
-        val startDate = Option(conversationDF.head().getAs[Date]("startDate").toString).getOrElse(today)
-        val endDate = Option(conversationDF.head().getAs[Date]("endDate").toString).getOrElse(today)
+
+        val startDate = getConversationDates(requestData, conversationDF)("conversationStartDate")
+        val endDate = getConversationDates(requestData, conversationDF)("conversationEndDate")
         // prepare config with start & end dates
         val queryConf = config.search.queries.get.apply(0)
         val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)

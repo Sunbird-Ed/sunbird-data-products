@@ -41,7 +41,7 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
 
     EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('4711abba-d06f-49fb-8c63-c80d0d3df790', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\"}}');")
     EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('6798fa5a2d8335c43ba64d5b96a944b9', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":false}}');")
-    
+
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
@@ -113,6 +113,24 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
       pResponse.getString("download_urls") should not be empty
       pResponse.getString("download_urls") should be (s"{src/test/resources/exhaust-reports/uci-response-exhaust/37564CF8F134EE7532F125651B51D17F/fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5_response_${getDate()}.csv}")
     }
+  }
+
+  it should "Able to get the correct start date and end date values" in {
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    val request_data = Map("conversationId" -> "56b31f3d-cc0f-49a1-b559-f7709200aa85", "startDate" -> "2022-01-01", "endDate" -> "2022-01-01")
+    val spark = SparkSession.builder.getOrCreate
+    import spark.implicits._
+    val conversationDF = Seq(
+      ("2021-01-02", "2021-01-02", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
+      ("2021-01-03", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85")
+    ).toDF("startDate", "endDate", "conversationId")
+
+    val res = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
+    println("conversation response" + res)
+
   }
 
   it should "update request as FAILED if conversation data is not available" in {
