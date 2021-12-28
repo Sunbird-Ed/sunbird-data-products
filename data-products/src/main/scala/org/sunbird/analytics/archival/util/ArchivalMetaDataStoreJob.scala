@@ -129,7 +129,7 @@ trait ArchivalMetaDataStoreJob {
 
   def updateRequest(request: ArchivalRequest): Unit = {
     val updateQry = s"UPDATE $requestsTable SET blob_url=?, iteration = ?, archival_date=?, completion_date=?, " +
-      s"archival_status=?, deletion_status=? WHERE request_id=?";
+      s"archival_status=?, deletion_status=?, err_message=? WHERE request_id=?";
     val pstmt: PreparedStatement = dbc.prepareStatement(updateQry)
 
     val blobURLs = request.blob_url.getOrElse(List()).toArray.asInstanceOf[Array[Object]];
@@ -139,7 +139,8 @@ trait ArchivalMetaDataStoreJob {
     pstmt.setTimestamp(4, if (request.completion_date.isDefined) new Timestamp(request.completion_date.get) else null);
     pstmt.setString(5, request.archival_status);
     pstmt.setString(6, request.deletion_status);
-    pstmt.setString(7, request.request_id);
+    pstmt.setString(7, request.err_message.getOrElse(""));
+    pstmt.setString(8, request.request_id);
 
     pstmt.execute()
   }

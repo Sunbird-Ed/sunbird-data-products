@@ -152,18 +152,18 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
   }
 
   def loadArchivedData(batch: BatchPartition)(implicit spark: SparkSession, fc: FrameworkContext, jobConfig: JobConfig): DataFrame = {
-    val azureFetcherConfig = jobConfig.modelParams.get("assessmentFetcherConfig").asInstanceOf[Map[String, AnyRef]]
+    val blobConfig = jobConfig.modelParams.get("blobConfig").asInstanceOf[Map[String, AnyRef]]
 
-    val store = azureFetcherConfig("store").asInstanceOf[String]
-    val format:String = azureFetcherConfig.getOrElse("format", "csv").asInstanceOf[String]
-    val filePath = azureFetcherConfig.getOrElse("filePath", "archival-data/").asInstanceOf[String]
-    val container = azureFetcherConfig.getOrElse("container", "reports").asInstanceOf[String]
+    val store = blobConfig("store").asInstanceOf[String]
+    val format:String = blobConfig.getOrElse("blobExt", "csv.gz").asInstanceOf[String]
+    val filePath = blobConfig.getOrElse("reportPath", "assessment-archived-data/").asInstanceOf[String]
+    val container = blobConfig.getOrElse("container", "reports").asInstanceOf[String]
 
     ExhaustUtil.getArchivedData(store, filePath, container, Map("batchId" -> batch.batchId, "collectionId"-> batch.collectionId, "year" -> batch.period.year, "weekNum" -> batch.period.weekOfYear), Option(format))
   }
 
   override def deleteArchivedData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
-    requests.filter(r => r.archival_status.equals("SUCCESS")).map((request: ArchivalRequest) => {
+    requests.filter(r => r.archival_status.equals("SUCCESS") && r.deletion_status != "SUCCESS").map((request: ArchivalRequest) => {
       deleteBatch(requestConfig, request)
     }).toList
   }
@@ -177,7 +177,9 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
       val totalArchivedRecords: Long = archivedData.count
       JobLogger.log(s"Deleting $totalArchivedRecords archived records only, for the year ${batchPartition.period.year} and week of year ${batchPartition.period.weekOfYear} from the DB ", None, Level.INFO)
 
-      archivedData.rdd.deleteFromCassandra(AppConf.getConfig("sunbird.courses.keyspace"), AppConf.getConfig("sunbird.courses.assessment.table"), keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
+      val archivalKeyspace = requestConfig.keyspace.getOrElse(AppConf.getConfig("sunbird.courses.keyspace"))
+
+      archivedData.rdd.deleteFromCassandra(archivalKeyspace, requestConfig.archivalTable, keyColumns = SomeColumns("course_id", "batch_id", "user_id", "content_id", "attempt_id"))
       val metrics = ArchivalMetrics(batchPartition, pendingWeeksOfYears = None, totalArchivedRecords = Some(totalArchivedRecords), totalDeletedRecords = Some(totalArchivedRecords))
 
       JobLogger.log(s"Data is archived and Processing the remaining part files ", Some(metrics), Level.INFO)

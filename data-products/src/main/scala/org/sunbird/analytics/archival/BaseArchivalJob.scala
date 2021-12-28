@@ -67,7 +67,6 @@ trait BaseArchivalJob extends BaseReportsJob with IJob with ArchivalMetaDataStor
   def upload(archivedData: DataFrame, batch: Map[String,AnyRef])(implicit jobConfig: JobConfig): List[String] = {
     val blobConfig = jobConfig.modelParams.get("blobConfig").asInstanceOf[Map[String, AnyRef]]
     val reportPath: String = blobConfig.getOrElse("reportPath", "archived-data/").asInstanceOf[String]
-    val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("course.metrics.cloud.objectKey")
     val fileName = archivalFormat(batch)
     val storageConfig = getStorageConfig(jobConfig, objectKey)
