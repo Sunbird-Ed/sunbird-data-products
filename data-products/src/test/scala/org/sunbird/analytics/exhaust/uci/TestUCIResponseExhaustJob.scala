@@ -1,8 +1,9 @@
 package org.sunbird.analytics.exhaust.uci
 
 import org.apache.spark.sql.SparkSession
-import org.ekstep.analytics.framework.{Fetcher, FrameworkContext, JobConfig, Query}
+import org.apache.spark.sql.functions.{col, to_date}
 import org.ekstep.analytics.framework.util.JSONUtils
+import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.scalamock.scalatest.MockFactory
@@ -41,7 +42,7 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
 
     EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('4711abba-d06f-49fb-8c63-c80d0d3df790', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\"}}');")
     EmbeddedPostgresql.execute("INSERT INTO users (id, data) VALUES ('6798fa5a2d8335c43ba64d5b96a944b9', '{\"device\":{\"id\":\"user-001\",\"type\":\"phone\",\"consent\":false}}');")
-    
+
     implicit val fc = new FrameworkContext()
     val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
@@ -115,6 +116,62 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     }
   }
 
+  it should "Able to get the correct start date and end date values When the API values are defined" in {
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    val request_data = Map("conversationId" -> "56b31f3d-cc0f-49a1-b559-f7709200aa85", "startDate" -> "2022-01-01", "endDate" -> "2022-01-02")
+    val spark = SparkSession.builder.getOrCreate
+    import spark.implicits._
+    val conversationDF = Seq(
+      ("2022-01-01", "2022-01-02", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
+      ("2021-01-03", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85")
+    ).toDF("startDate", "endDate", "conversationId")
+
+    val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
+    conversationDates("conversationStartDate") should be ("2022-01-01")
+    conversationDates("conversationEndDate") should be ("2022-01-02")
+  }
+
+  it should "Able to get the correct start date and end date values when the conversation table values are defined" in {
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    val request_data = Map("conversationId" -> "56b31f3d-cc0f-49a1-b559-f7709200aa85")
+    val spark = SparkSession.builder.getOrCreate
+    import org.apache.spark.sql.functions._
+    import spark.implicits._
+
+    val conversationDF = Seq(
+      ("2021-01-02", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
+      ("2021-01-03", "2021-01-03", "56b31f3d-cc0f-49a1-b559-f7709200aa85")
+    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", to_date(col("startDate"), "yyyy-MM-dd")).withColumn("endDate", to_date(col("endDate"), "yyyy-MM-dd"))
+
+    val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
+    conversationDates("conversationStartDate") should be ("2021-01-02")
+    conversationDates("conversationEndDate") should be ("2021-01-03")
+  }
+
+  it should "Able to get the correct start date and end date values when both API and Tables are not defined" in {
+    implicit val fc = new FrameworkContext()
+    val strConfig = """{"search":{"type":"local","queries":[{"file":"src/test/resources/exhaust/uci/telemetry_data.log"}]},"model":"org.sunbird.analytics.uci.UCIResponseExhaust","modelParams":{"store":"local","botPdataId":"dev.UCI.sunbird","mode":"OnDemand","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"UCI Response Exhaust"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    val request_data = Map("conversationId" -> "56b31f3d-cc0f-49a1-b559-f7709200aa85")
+    val spark = SparkSession.builder.getOrCreate
+    import spark.implicits._
+    val conversationDF = Seq(
+      (null, null, "56b31f3d-cc0f-49a1-b559-f7709200aa85"),
+      (null, null, "56b31f3d-cc0f-49a1-b559-f7709200aa85")
+    ).toDF("startDate", "endDate", "conversationId").withColumn("startDate", to_date(col("startDate"), "yyyy-MM-dd")).withColumn("endDate", to_date(col("endDate"), "yyyy-MM-dd"))
+    val conversationDates = UCIResponseExhaustJob.getConversationDates(request_data, conversationDF)
+    conversationDates("conversationStartDate") should not be(null)
+    conversationDates("conversationEndDate") should not be(null)
+
+  }
+
   it should "update request as FAILED if conversation data is not available" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
     EmbeddedPostgresql.execute(s"TRUNCATE bot")
@@ -163,5 +220,4 @@ class TestUCIResponseExhaustJob  extends BaseReportSpec with MockFactory with Ba
     dateFormat.print(System.currentTimeMillis());
   }
 }
-
 
