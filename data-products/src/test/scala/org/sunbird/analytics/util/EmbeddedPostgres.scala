@@ -81,6 +81,7 @@ object EmbeddedPostgresql {
          |   users TEXT[],
          |   logicIDs TEXT[],
          |   owners TEXT[],
+         |   ownerOrgID TEXT,
          |   created_at TIMESTAMP,
          |   updated_at TIMESTAMP,
          |   status TEXT,

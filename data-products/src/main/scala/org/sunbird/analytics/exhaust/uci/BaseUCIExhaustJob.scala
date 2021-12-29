@@ -204,7 +204,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
       */
     fetchData(conversationURL, connProperties, conversationTable).select("id", "name", "owners", "startDate", "endDate")
       .filter(col("id") === conversationId)
-      .filter(array_contains(col("owners"), tenant)) // Filtering only tenant specific report
+      .filter(col("ownerOrgID") === tenant)
 
   }
 
