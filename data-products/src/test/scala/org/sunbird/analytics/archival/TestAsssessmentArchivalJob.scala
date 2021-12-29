@@ -16,23 +16,23 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
   override def beforeAll(): Unit = {
     spark = getSparkSession();
     super.beforeAll()
-    EmbeddedCassandra.loadData("src/test/resources/assessment-archival/data.cql") // Load test data in embedded cassandra server
     EmbeddedPostgresql.start()
     EmbeddedPostgresql.createArchivalRequestTable()
   }
 
   override def afterEach(): Unit = {
     super.afterEach()
+    EmbeddedCassandra.close()
     EmbeddedPostgresql.execute(s"TRUNCATE archival_metadata")
   }
 
   override def beforeEach(): Unit = {
+    EmbeddedCassandra.loadData("src/test/resources/assessment-archival/data.cql") // Load test data in embedded cassandra server
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
   }
 
   override def afterAll() : Unit = {
     super.afterAll()
-    EmbeddedCassandra.close()
     EmbeddedPostgresql.close()
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
     spark.close()
