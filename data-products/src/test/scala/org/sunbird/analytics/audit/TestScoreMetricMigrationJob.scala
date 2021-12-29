@@ -46,7 +46,7 @@ class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
     aggDetail("score") should be(10.0)
     aggDetail("type") should be(jobConfig.modelParams.get.get("metricsType").get.toString)
     aggDetail("attempt_id") should be("attempat-001")
-    aggDetail("content_id") should be("do_112876961957437440110")
+    aggDetail("content_id") should be("do_112876961957437440179")
     aggDetail("attempted_on") should be(1634810023)
 
     result.head.get(2).asInstanceOf[Seq[String]](1) should be("""{"max_score":10.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_112876961957437440179"}""")
