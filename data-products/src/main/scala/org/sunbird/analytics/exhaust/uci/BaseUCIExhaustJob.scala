@@ -194,10 +194,9 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     /**
      * Fetch conversation for a specific conversation ID and Tenant
      */
-    fetchData(conversationURL, connProperties, conversationTable).select("id", "name", "owners", "startDate", "endDate")
+    fetchData(conversationURL, connProperties, conversationTable).select("id", "name", "ownerOrgID", "startDate", "endDate")
       .filter(col("id") === conversationId)
-      .filter(array_contains(col("owners"), tenant)) // Filtering only tenant specific report
-
+      .filter(col("ownerOrgID") === tenant)
   }
 
   def getUCIPostgresConnectionProps(user: String, pass: String): Properties = {
