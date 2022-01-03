@@ -125,7 +125,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
         ).withColumn("last_attempted_on", tsToLongUdf(col("last_attempted_on")))
          .withColumn("updated_on", tsToLongUdf(col("updated_on")))
          .select(columnWithOrder.head, columnWithOrder.tail: _*)
-        var archivalRequest:ArchivalRequest = getRequest(batch.collectionId, batch.batchId, List(batch.period.year, batch.period.weekOfYear))
+        var archivalRequest:ArchivalRequest = getRequest(jobId, batch.collectionId, batch.batchId, List(batch.period.year, batch.period.weekOfYear))
 
         if (archivalRequest == null) {
           val request_data = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(requestConfig)) ++ Map[String, Int](

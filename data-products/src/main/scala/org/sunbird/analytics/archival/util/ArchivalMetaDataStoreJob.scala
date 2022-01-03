@@ -47,13 +47,13 @@ trait ArchivalMetaDataStoreJob {
     requests
   }
 
-  def getRequestID(collectionId: String, batchId: String, partitionCols: List[Int]): String = {
-    val requestComb = s"$collectionId:$batchId:" + partitionCols.mkString(":")
+  def getRequestID(jobId: String, collectionId: String, batchId: String, partitionCols: List[Int]): String = {
+    val requestComb = s"$jobId:$collectionId:$batchId:" + partitionCols.mkString(":")
     MessageDigest.getInstance("MD5").digest(requestComb.getBytes).map("%02X".format(_)).mkString
   }
 
-  def getRequest(collectionId: String, batchId: String, partitionCols: List[Int]): ArchivalRequest = {
-    val requestId = getRequestID(collectionId, batchId, partitionCols)
+  def getRequest(jobId: String, collectionId: String, batchId: String, partitionCols: List[Int]): ArchivalRequest = {
+    val requestId = getRequestID(jobId, collectionId, batchId, partitionCols)
     val archivalRequest = s"""select * from $requestsTable where request_id = '$requestId' limit 1"""
     val pstmt: PreparedStatement = dbc.prepareStatement(archivalRequest);
     val resultSet = pstmt.executeQuery()
@@ -100,7 +100,7 @@ trait ArchivalMetaDataStoreJob {
       s"deletion_status, blob_url, iteration, request_data, err_message) VALUES (?,?,?,?,?,?,?,?,?,?,?,?::json,?)"
     val pstmt: PreparedStatement = dbc.prepareStatement(insertQry);
     val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
-    val requestId = getRequestID(request.collection_id, request.batch_id, List(request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int]))
+    val requestId = getRequestID(request.job_id, request.collection_id, request.batch_id, List(request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int]))
     pstmt.setString(1, requestId);
     pstmt.setString(2, request.batch_id);
     pstmt.setString(3, request.collection_id);

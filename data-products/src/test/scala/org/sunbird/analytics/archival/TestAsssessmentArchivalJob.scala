@@ -43,7 +43,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val batchId = "batch-011"
     val courseId = "do_1130928636168192001667"
 
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","collectionId": "do_1130928636168192001667","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
 
     AssessmentArchivalJob.execute()
@@ -88,7 +88,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, Option(batchId))
     archivalRequests.size should be (2)
 
-    archivalRequests.map(ar => ar.request_id).toList should contain allElementsOf List("F08614119F64BC55B14CBE49B10B6730", "949887DE6364A07AE1BB5A04504368F9")
+    archivalRequests.map(ar => ar.request_id).toList should contain allElementsOf List("2A04B5AF40E2E249EBB63530F19656F7", "AC0F439E287263DB49D54004DAA4644B")
     archivalRequests.map(ar => ar.batch_id).toList.distinct should contain allElementsOf List("batch-011")
     archivalRequests.map(ar => ar.collection_id).toList.distinct should contain allElementsOf List("do_1130928636168192001667")
     archivalRequests.map(ar => ar.archival_status).toList.distinct should contain allElementsOf List("SUCCESS")
@@ -102,9 +102,9 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val batchId = "batch-011"
     val courseId = "do_1130928636168192001667"
 
-    EmbeddedPostgresql.execute("INSERT INTO archival_metadata (request_id, batch_id, collection_id , resource_type , job_id , archival_date, completion_date, archival_status, blob_url, iteration,request_data , err_message ) VALUES ('949887DE6364A07AE1BB5A04504368F9', 'batch-011', 'do_1130928636168192001667', 'assessment', 'assessment-archival','2021-12-09 05:58:18.666', null,'FAILED', null, 1,'{\"batchId\": \"batch-011\", \"week\": 48, \"year\": 2021}', NULL);")
+    EmbeddedPostgresql.execute("INSERT INTO archival_metadata (request_id, batch_id, collection_id , resource_type , job_id , archival_date, completion_date, archival_status, blob_url, iteration,request_data , err_message ) VALUES ('2A04B5AF40E2E249EBB63530F19656F7', 'batch-011', 'do_1130928636168192001667', 'assessment', 'assessment-archival','2021-12-09 05:58:18.666', null,'FAILED', null, 1,'{\"batchId\": \"batch-011\", \"week\": 48, \"year\": 2021}', NULL);")
 
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","collectionId": "do_1130928636168192001667","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
 
     AssessmentArchivalJob.execute()
@@ -126,9 +126,9 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, Option(batchId))
     archivalRequests.size should be (2)
 
-    val failedRequest = AssessmentArchivalJob.getRequest("do_1130928636168192001667", batchId, List(2021, 48))
+    val failedRequest = AssessmentArchivalJob.getRequest(AssessmentArchivalJob.jobId, "do_1130928636168192001667", batchId, List(2021, 48))
 
-    failedRequest.request_id should be ("949887DE6364A07AE1BB5A04504368F9")
+    failedRequest.request_id should be ("AC0F439E287263DB49D54004DAA4644B")
     failedRequest.archival_status should be ("SUCCESS")
     failedRequest.blob_url.get.head should include (s"src/test/resources/reports/assessment-archived-data/${batchId}_${courseId}/2021")
   }
@@ -140,7 +140,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
 
     EmbeddedPostgresql.execute("INSERT INTO archival_metadata (request_id, batch_id, collection_id , resource_type , job_id , archival_date, completion_date, archival_status, blob_url, iteration,request_data , err_message ) VALUES ('949887DE6364A07AE1BB5A04504368F9', 'batch-011', 'do_1130928636168192001667', 'assessment', 'assessment-archival','2021-12-09 05:58:18.666', null,'SUCCESS', '{\"reports/assessment-archival/batch-011/2021-48.csv.gz\"}', 1,'{\"batchId\": \"batch-011\", \"week\": 48, \"year\": 2021}', NULL);")
 
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","collectionId": "do_1130928636168192001667","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
     implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
 
     AssessmentArchivalJob.execute()
@@ -176,7 +176,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val batchId = "batch-011"
     val courseId = "do_1130928636168192001667"
 
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","collectionId": "do_1130928636168192001667","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
 
     AssessmentArchivalJob.execute()(spark, fc, jobConfig)
@@ -196,7 +196,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     archivalRequests.map(ar => ar.archival_status).toList.distinct should contain allElementsOf List("SUCCESS")
     archivalRequests.map(ar => ar.deletion_status).toList.distinct should contain allElementsOf List(null)
 
-    val delStrConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"delete","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"local","blobExt":"csv.gz","reportPath":"src/test/resources/reports/assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    val delStrConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"delete","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","collectionId": "do_1130928636168192001667","date":"2021-11-01"},"blobConfig":{"store":"local","blobExt":"csv.gz","reportPath":"src/test/resources/reports/assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
 
     val delJobConfig = JSONUtils.deserialize[JobConfig](delStrConfig)
 
@@ -217,9 +217,9 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val courseId = "do_1130928636168192001667"
 
     // Week 48 records are processed will not be processed for archival again
-    EmbeddedPostgresql.execute("INSERT INTO archival_metadata (request_id, batch_id, collection_id , resource_type , job_id , archival_date, completion_date, archival_status, blob_url, iteration,request_data , err_message ) VALUES ('949887DE6364A07AE1BB5A04504368F9', 'batch-011', 'do_1130928636168192001667', 'assessment', 'assessment-archival','2021-12-09 05:58:18.666', null,'SUCCESS', '{\"reports/assessment-archival/batch-011/2021-48.csv.gz\"}', 1,'{\"batchId\": \"batch-011\", \"week\": 48, \"year\": 2021}', NULL);")
+    EmbeddedPostgresql.execute("INSERT INTO archival_metadata (request_id, batch_id, collection_id , resource_type , job_id , archival_date, completion_date, archival_status, blob_url, iteration,request_data , err_message ) VALUES ('AC0F439E287263DB49D54004DAA4644B', 'batch-011', 'do_1130928636168192001667', 'assessment', 'assessment-archival','2021-12-09 05:58:18.666', null,'SUCCESS', '{\"reports/assessment-archival/batch-011/2021-48.csv.gz\"}', 1,'{\"batchId\": \"batch-011\", \"week\": 48, \"year\": 2021}', NULL);")
 
-    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","collectionId": "do_1130928636168192001667","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
     val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
 
     AssessmentArchivalJob.execute()(spark, fc, jobConfig)
@@ -229,7 +229,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
 
     batch011Results.count() should be (3)
 
-    val delStrConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"delete","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"local","blobExt":"csv.gz","reportPath":"src/test/resources/reports/assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    val delStrConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"delete","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","collectionId": "do_1130928636168192001667","date":"2021-11-01"},"blobConfig":{"store":"local","blobExt":"csv.gz","reportPath":"src/test/resources/reports/assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
 
     val delJobConfig = JSONUtils.deserialize[JobConfig](delStrConfig)
 
@@ -239,16 +239,16 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
 
     delCassData.filter(col("batch_id") === batchId).count() should be (2)
 
-    val skippedRequest = AssessmentArchivalJob.getRequest("do_1130928636168192001667", batchId, List(2021, 48))
+    val skippedRequest = AssessmentArchivalJob.getRequest(AssessmentArchivalJob.jobId, "do_1130928636168192001667", batchId, List(2021, 48))
 
-    skippedRequest.request_id should be ("949887DE6364A07AE1BB5A04504368F9")
+    skippedRequest.request_id should be ("AC0F439E287263DB49D54004DAA4644B")
     skippedRequest.archival_status should be ("SUCCESS")
     skippedRequest.deletion_status should be ("FAILED")
     skippedRequest.err_message.get should include("Path does not exist")
 
-    val deletionRequest = AssessmentArchivalJob.getRequest("do_1130928636168192001667", batchId, List(2021, 49))
+    val deletionRequest = AssessmentArchivalJob.getRequest(AssessmentArchivalJob.jobId, "do_1130928636168192001667", batchId, List(2021, 49))
 
-    deletionRequest.request_id should be ("F08614119F64BC55B14CBE49B10B6730")
+    deletionRequest.request_id should be ("2A04B5AF40E2E249EBB63530F19656F7")
     deletionRequest.archival_status should be ("SUCCESS")
     deletionRequest.deletion_status should be ("SUCCESS")
 
