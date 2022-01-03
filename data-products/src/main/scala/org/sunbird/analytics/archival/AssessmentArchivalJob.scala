@@ -89,7 +89,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     val filteredDF = if(requestConfig.batchId.isDefined && requestConfig.collectionId.isDefined) {
       data.filter(col("batch_id") === requestConfig.batchId.get && col("course_id") === requestConfig.collectionId.get).persist()
     } else if (requestConfig.batchFilters.isDefined) {
-      val batch = requestConfig.batchFilters.get.toDF()
+      val batch = requestConfig.batchFilters.get.toDF("batch_id")
       data.join(batch, Seq("batch_id"), "inner")
     } else {
       throw new Exception("Either batchId or batchFilters should present")

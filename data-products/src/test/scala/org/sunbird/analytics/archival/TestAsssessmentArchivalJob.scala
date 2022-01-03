@@ -85,7 +85,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     val user3Result = batch011Results.filter(col("user_id") === "user-003")
     user3Result.count() should be (2)
 
-    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, Option(batchId))
+    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, None)
     archivalRequests.size should be (2)
 
     archivalRequests.map(ar => ar.request_id).toList should contain allElementsOf List("2A04B5AF40E2E249EBB63530F19656F7", "AC0F439E287263DB49D54004DAA4644B")
@@ -95,6 +95,22 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     archivalRequests.map(ar => ar.blob_url.get).toList.head.head should include (s"src/test/resources/reports/assessment-archived-data/${batchId}_${courseId}/2021")
     archivalRequests.map(ar => ar.iteration.get).toList.distinct should contain allElementsOf List(0)
     archivalRequests.map(ar => ar.err_message.get).toList.distinct should contain allElementsOf List("")
+  }
+
+  it should "archive the multiple batches which is not archived in past" in {
+    implicit val fc = new FrameworkContext()
+    val batchId = "batch-011"
+    val courseId = "do_1130928636168192001667"
+
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchFilters":["batch-011", "batch-021"],"date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+
+    AssessmentArchivalJob.execute()
+
+    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, None)
+    archivalRequests.size should be (3)
+
+    archivalRequests.map(ar => ar.batch_id).toList.distinct should contain allElementsOf List("batch-011", "batch-021")
   }
 
   it should "archive the batch which is failed to archive in past" in {
