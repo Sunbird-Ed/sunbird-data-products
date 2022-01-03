@@ -65,7 +65,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
       val date: String  = requestConfig.date.getOrElse(null)
 
       var data = loadData(Map("table" -> requestConfig.archivalTable, "keyspace" -> archivalKeyspace, "cluster" -> "LMSCluster"), cassandraUrl, new StructType())
-      data = validateBatch(data, requestConfig.batchId, requestConfig.collectionId, requestConfig.batchFilters, requestConfig.query)
+      data = validateBatches(data, requestConfig)
 
       val dataDF = generatePeriodInData(data)
       val filteredDF = dataFilter(requests, dataDF)
@@ -82,20 +82,20 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     }
   }
 
-  def validateBatch(data: DataFrame,batchid: Option[String], collectionid: Option[String], batchFilters: Option[List[String]], searchFilter: Option[Map[String, AnyRef]])(implicit spark: SparkSession, fc: FrameworkContext): DataFrame ={
+  def validateBatches(data: DataFrame, requestConfig: Request)(implicit spark: SparkSession, fc: FrameworkContext): DataFrame ={
     implicit val sqlContext = new SQLContext(spark.sparkContext)
     import sqlContext.implicits._
 
-    val filteredDF = if(batchid.isDefined && collectionid.isDefined) {
-      data.filter(col("batch_id") === batchid.get && col("course_id") === collectionid.get).persist()
-    } else if (batchFilters.isDefined) {
-      val batch = batchFilters.get.toDF()
+    val filteredDF = if(requestConfig.batchId.isDefined && requestConfig.collectionId.isDefined) {
+      data.filter(col("batch_id") === requestConfig.batchId.get && col("course_id") === requestConfig.collectionId.get).persist()
+    } else if (requestConfig.batchFilters.isDefined) {
+      val batch = requestConfig.batchFilters.get.toDF()
       data.join(batch, Seq("batch_id"), "inner")
     } else {
       throw new Exception("Either batchId or batchFilters should present")
     }
-    if (searchFilter.isDefined) {
-      val res = searchContent(searchFilter.get)
+    if (requestConfig.query.isDefined) {
+      val res = searchContent(requestConfig.query.get)
       filteredDF.join(res, col("course_id") === col("identifier"), "inner")
     } else filteredDF
 
@@ -150,15 +150,8 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     }).toList
   }
 
-  def loadArchivedData(batch: BatchPartition)(implicit spark: SparkSession, fc: FrameworkContext, jobConfig: JobConfig): DataFrame = {
-    val blobConfig = jobConfig.modelParams.get("blobConfig").asInstanceOf[Map[String, AnyRef]]
-
-    val store = blobConfig("store").asInstanceOf[String]
-    val format:String = blobConfig.getOrElse("blobExt", "csv.gz").asInstanceOf[String]
-    val filePath = blobConfig.getOrElse("reportPath", "assessment-archived-data/").asInstanceOf[String]
-    val container = blobConfig.getOrElse("container", "reports").asInstanceOf[String]
-
-    ExhaustUtil.getArchivedData(store, filePath, container, Map("batchId" -> batch.batchId, "collectionId"-> batch.collectionId, "year" -> batch.period.year, "weekNum" -> batch.period.weekOfYear), Option(format))
+  def loadArchivedData(request: ArchivalRequest)(implicit spark: SparkSession, fc: FrameworkContext, jobConfig: JobConfig): DataFrame = {
+    ExhaustUtil.fetch(request.blob_url.get.head, "csv")
   }
 
   override def deleteArchivedData(requestConfig: Request, requests: Array[ArchivalRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[ArchivalRequest] = {
@@ -171,7 +164,7 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
     try {
       val request_data = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
       val batchPartition = BatchPartition(request.collection_id, request.batch_id, Period(request_data("year").asInstanceOf[Int], request_data("week").asInstanceOf[Int]))
-      val archivedData = loadArchivedData(batchPartition).select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
+      val archivedData = loadArchivedData(request).select("course_id", "batch_id", "user_id", "content_id", "attempt_id")
 
       val totalArchivedRecords: Long = archivedData.count
       JobLogger.log(s"Deleting $totalArchivedRecords archived records only, for the year ${batchPartition.period.year} and week of year ${batchPartition.period.weekOfYear} from the DB ", None, Level.INFO)
