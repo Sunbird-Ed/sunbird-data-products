@@ -40,7 +40,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
       .join(identitiesDF, Seq("device_id"), "inner")
       // Decrypt the username column to get the mobile num based on the consent value
       .withColumn("device_id", when(col("consent") === true, decrypt(col("username"))).otherwise(col("device_id")))
-      .select("applications_id", "name", "device_id")
+      .select("applications_id", "name", "device_id", "consent")
     organizeDF(finalDF, columnMapping, columnsOrder)
   }
 
@@ -73,7 +73,8 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
 
   def getConsentValueFn: String => Boolean = (device_data: String) => {
     val device = JSONUtils.deserialize[Map[String, AnyRef]](device_data)
-    device.getOrElse("device", Map()).asInstanceOf[Map[String, AnyRef]].getOrElse("consent", isConsentToShare).asInstanceOf[Boolean]
+    val data = device.getOrElse("data", Map()).asInstanceOf[Map[String, AnyRef]]
+    data.getOrElse("device", Map()).asInstanceOf[Map[String, AnyRef]].getOrElse("consent", isConsentToShare).asInstanceOf[Boolean]
   }
 
   /**
