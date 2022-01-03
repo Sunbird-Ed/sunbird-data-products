@@ -254,4 +254,19 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
 
   }
 
+  it should "not create archival requests if request is invalid" in {
+    implicit val fc = new FrameworkContext()
+    val batchId = "batch-011"
+    val courseId = "do_1130928636168192001667"
+
+    // Collection ID should be present to be valid request
+    val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","batchId":"batch-011","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""
+    implicit val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+
+    AssessmentArchivalJob.execute()
+
+    val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, None)
+    archivalRequests.size should be (0)
+  }
+
 }
