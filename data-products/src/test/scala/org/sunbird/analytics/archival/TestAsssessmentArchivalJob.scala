@@ -279,7 +279,6 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
     AssessmentArchivalJob.execute()
 
     val archivalRequests = AssessmentArchivalJob.getRequests(AssessmentArchivalJob.jobId, None)
-    archivalRequests.size should be (4)
 
     archivalRequests.map(ar => ar.archival_status).toList.distinct should contain allElementsOf List("SUCCESS")
 
