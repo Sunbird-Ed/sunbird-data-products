@@ -92,7 +92,8 @@ object AssessmentArchivalJob extends optional.Application with BaseArchivalJob {
       val batch = requestConfig.batchFilters.get.toDF("batch_id")
       data.join(batch, Seq("batch_id"), "inner")
     } else {
-      throw new Exception("Either batchId or batchFilters should present")
+      JobLogger.log("Neither batchId nor batchFilters present", None, Level.INFO)
+      data
     }
     if (requestConfig.query.isDefined) {
       val res = searchContent(requestConfig.query.get)
