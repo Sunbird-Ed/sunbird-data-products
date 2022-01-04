@@ -270,7 +270,7 @@ class TestAsssessmentArchivalJob extends BaseSpec with MockFactory with BaseRepo
 
   }
 
-  it should "Archiva all batches if neither batchid nor batchfilters present" in {
+  it should "Archive all batches if neither batchid nor batchfilters present" in {
     implicit val fc = new FrameworkContext()
 
     val strConfig= """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.$job_name","modelParams":{"mode":"archival","request":{"archivalTable":"assessment_aggregator","date":"2021-11-01"},"blobConfig":{"store":"azure","blobExt":"csv.gz","reportPath":"assessment-archived-data/","container":"reports"},"sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')"},"parallelization":8,"appName":"$job_name"}"""

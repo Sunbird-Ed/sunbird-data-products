@@ -42,7 +42,7 @@ trait ArchivalMetaDataStoreJob {
       if (filteredArchivalConfig.count() > 0) filteredArchivalConfig else archivalConfigsDf
     } else archivalConfigsDf
 
-    JobLogger.log("fetched records count" + filteredReportConfigDf.count(), None, INFO)
+    JobLogger.log("fetched records count: " + filteredReportConfigDf.count(), None, INFO)
     val requests = filteredReportConfigDf.as[ArchivalRequest](encoder).collect()
     requests
   }
