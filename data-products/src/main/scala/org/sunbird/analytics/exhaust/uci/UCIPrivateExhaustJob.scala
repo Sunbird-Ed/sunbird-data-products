@@ -40,7 +40,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
       .join(identitiesDF, Seq("device_id"), "inner")
       // Decrypt the username column to get the mobile num based on the consent value
       .withColumn("device_id", when(col("consent") === true, decrypt(col("username"))).otherwise(col("device_id")))
-      .select("applications_id", "name", "device_id", "consent")
+      .select("applications_id", "name", "device_id")
     organizeDF(finalDF, columnMapping, columnsOrder)
   }
 
