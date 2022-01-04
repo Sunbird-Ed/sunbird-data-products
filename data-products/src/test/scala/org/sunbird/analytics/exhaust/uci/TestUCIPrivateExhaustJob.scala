@@ -58,7 +58,10 @@ class TestUCIPrivateExhaustJob extends BaseReportSpec with MockFactory with Base
     conversationResult.count() should be(1)
     conversationResult.select("Conversation ID").rdd.map(r => r(0)).collect.toList.head should be("fabc64a7-c9b0-4d0b-b8a6-8778757b2bb5")
     conversationResult.select("Conversation Name").rdd.map(r => r(0)).collect.toList.head should be("Diksha Bot")
-    conversationResult.select("Device ID").rdd.map(r => r(0)).collect.toList.head should be("phone:9380991721")
+    conversationResult.select("Decrypted Device ID").rdd.map(r => r(0)).collect.toList.head should be("phone:9380991721")
+    conversationResult.select(col = "Encrypted Device ID").rdd.map(r => r(0)).collect.toList.head should be("KYvpl3KzZrR57hFOwq6KpTO1fgXBY8erkqo93dj2mHs=")
+
+
   }
 
 
@@ -81,7 +84,8 @@ class TestUCIPrivateExhaustJob extends BaseReportSpec with MockFactory with Base
     conversationResult.count() should be(1)
     conversationResult.select("Conversation ID").rdd.map(r => r(0)).collect.toList.head should be("5db54579-04bb-4fb7-a9ee-0f9994cfaada")
     conversationResult.select("Conversation Name").rdd.map(r => r(0)).collect.toList.head should be("COVID")
-    conversationResult.select("Device ID").rdd.map(r => r(0)).collect.toList.head should be("dda0e8a2-0777-4edd-bb36-d1d8970bafa2")
+    conversationResult.select("Decrypted Device ID").rdd.map(r => r(0)).collect.toList.head should be("dda0e8a2-0777-4edd-bb36-d1d8970bafa2")
+    conversationResult.select(col = "Encrypted Device ID").rdd.map(r => r(0)).collect.toList.head should be("8dsi5k7w7LrI/Kc0S5eU5q96LUd8K7H59LH3TBKOi38=")
   }
 
   it should "update request as FAILED if conversation data is not available" in {
