@@ -170,7 +170,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         } catch {
           case ex: Exception =>
             ex.printStackTrace()
-            markRequestAsFailed(request, "Invalid request")
+            JobLogger.log(s"Failed to Process the Request ${ex.getMessage}", Some(Map("requestId" -> request.request_id), INFO))
+            markRequestAsFailed(request, ex.getMessage)
         }
       }
       // check for duplicates and update with same urls
