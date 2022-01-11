@@ -52,6 +52,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   private val redisFormat = "org.apache.spark.sql.redis";
   val cassandraFormat = "org.apache.spark.sql.cassandra";
+  val MAX_ERROR_MESSAGE_CHAR = 250
 
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -133,6 +134,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchNumber = modelParams.get("batchNumber")
+    val maxErrorMessageLength: Int = modelParams.getOrElse("maxErrorMessageLength", MAX_ERROR_MESSAGE_CHAR).asInstanceOf[Int]
     val requests = getRequests(jobId(), batchNumber)
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
     val totalRequests = new AtomicInteger(requests.length)
@@ -170,7 +172,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         } catch {
           case ex: Exception =>
             ex.printStackTrace()
-            markRequestAsFailed(request, "Invalid request")
+            JobLogger.log(s"Failed to Process the Request ${ex.getMessage}", Some(Map("requestId" -> request.request_id), INFO))
+            markRequestAsFailed(request, s"Internal Server Error: ${ex.getMessage.take(maxErrorMessageLength)}")
         }
       }
       // check for duplicates and update with same urls
