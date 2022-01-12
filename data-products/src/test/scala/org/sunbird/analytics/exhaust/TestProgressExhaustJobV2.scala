@@ -148,7 +148,7 @@ class TestProgressExhaustJobV2 extends BaseSpec with MockFactory with BaseReport
     while (pResponse.next()) {
       pResponse.getString("request_id") should be("37564CF8F134EE7532F125651B51D17F")
       pResponse.getString("status") should be("FAILED")
-      pResponse.getString("err_message") should contain("Internal Server Error:")
+      pResponse.getString("err_message") should include ("Internal Server Error:")
     }
   }
 
