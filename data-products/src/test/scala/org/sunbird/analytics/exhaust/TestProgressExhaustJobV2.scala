@@ -7,15 +7,14 @@ import org.ekstep.analytics.framework.util.{HadoopFileUtil, JSONUtils}
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.exhaust.collection.{AssessmentData, ProgressExhaustJobV2}
-import org.sunbird.analytics.job.report.BaseReportSpec
-import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
+import org.sunbird.analytics.util.{BaseSpec, EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
 import redis.embedded.RedisServer
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import scala.collection.JavaConverters._
 
-class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with BaseReportsJob {
+class TestProgressExhaustJobV2 extends BaseSpec with MockFactory with BaseReportsJob {
 
   val jobRequestTable = "job_request"
   implicit var spark: SparkSession = _
@@ -61,7 +60,7 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     jedis.close()
   }
 
-  "ProgressExhaustReportV2" should "generate the report with all the correct data" in {
+  it should "generate the report with all the correct data" in {
 
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
     EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1130928636168192001667_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
@@ -129,6 +128,30 @@ class TestProgressExhaustJobV2 extends BaseReportSpec with MockFactory with Base
     assert(assessmentData.assessmentIds.isEmpty)
 
   }
+
+  it should "make request as failed and add error message for invalid request_data" in {
+
+    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+    // batchid or batchfilter should present
+    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration, encryption_key) VALUES ('do_1130928636168192001667_batch-001:channel-01', '37564CF8F134EE7532F125651B51D17F', 'progress-exhaust', 'SUBMITTED', '{\"batchFilters\": \" \"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0, 'test12');")
+
+    implicit val fc = new FrameworkContext()
+
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ProgressExhaustJobV2","modelParams":{"store":"local","mode":"OnDemand","batchFilters":" ","searchFilter":{},"sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"localhost","sparkUserDbRedisPort":6341,"sparkUserDbRedisIndex":"0","sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"","storageContainer":""},"parallelization":8,"appName":"Progress Exhaust V2"}"""
+    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+    implicit val config = jobConfig
+    ProgressExhaustJobV2.execute()
+
+    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='progress-exhaust'")
+    val reportDate = getDate("yyyyMMdd").format(Calendar.getInstance().getTime)
+
+    while (pResponse.next()) {
+      pResponse.getString("request_id") should be("37564CF8F134EE7532F125651B51D17F")
+      pResponse.getString("status") should be("FAILED")
+      pResponse.getString("err_message") should be("Request should have either of batchId, batchFilter, searchFilter or encrption key")
+    }
+  }
+
   it should "validate the report path" in {
     val batch1 = "batch-001"
     val requestId = "37564CF8F134EE7532F125651B51D17F"
