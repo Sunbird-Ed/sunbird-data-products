@@ -172,7 +172,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         } catch {
           case ex: Exception =>
             ex.printStackTrace()
-            JobLogger.log(s"Failed to Process the Request ${ex.getMessage}", Some(Map("requestId" -> request.request_id), INFO))
+            JobLogger.log(s"Failed to Process the Request ${ex.getMessage}", Some(Map("requestId" -> request.request_id)), INFO)
             markRequestAsFailed(request, s"Internal Server Error: ${ex.getMessage.take(maxErrorMessageLength)}")
         }
       }
