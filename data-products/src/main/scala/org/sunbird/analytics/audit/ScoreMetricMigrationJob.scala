@@ -120,7 +120,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
   }
 
   def mergeAggLastUpdatedMapCol(): (Map[String, Long], String) => Map[String, Long] = (aggLastUpdated: Map[String, Long], content_id: String) => {
-    aggLastUpdated.map(x => Map(x._1 -> new Date(x._2 * 1000).getTime)).flatten.toMap ++ Map(s"score:$content_id" -> System.currentTimeMillis(), s"max_score:$content_id" -> System.currentTimeMillis())
+    Map(s"score:$content_id" -> System.currentTimeMillis(), s"max_score:$content_id" -> System.currentTimeMillis(), s"attempts_count:$content_id" -> System.currentTimeMillis()) ++ aggLastUpdated.map(x => Map(x._1 -> new Date(x._2 * 1000).getTime)).flatten.toMap
   }
 
   def mergeAggListValues(): Seq[Map[String, Double]] => Map[String, Double] = (aggregation: Seq[Map[String, Double]]) => {
