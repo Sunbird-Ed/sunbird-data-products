@@ -77,7 +77,7 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
       activityAggDF.col("context_id") === assessmentAggDF.col("batchid"), joinType = "inner")
       .select("agg", "aggregates", "agg_last_updated", "activity_type", "user_id", "context_id", "activity_id", "total_max_score", "best_score", "content_id", "agg_details", "migrating_agg_details", "attempts_count")
 
-    filterDF.withColumn("aggregates", updateAggColumn(when(lit(forceMerge), col("agg").cast("map<string, double>")).otherwise(col("aggregates").cast("map<string, double>")), col("total_max_score").cast(sql.types.DoubleType), col("best_score").cast(sql.types.DoubleType), col("attempts_count").cast(sql.types.DoubleType), col("content_id").cast(sql.types.StringType)))
+    filterDF.withColumn("aggregates", updateAggColumn(col("agg").cast("map<string, double>"), col("aggregates").cast("map<string, double>"), col("total_max_score").cast(sql.types.DoubleType), col("best_score").cast(sql.types.DoubleType), col("attempts_count").cast(sql.types.DoubleType), col("content_id").cast(sql.types.StringType)))
       .withColumn("agg_details", when(lit(forceMerge), col("migrating_agg_details")).otherwise(updatedAggDetailsCol(col("agg_details"), col("migrating_agg_details"))))
       .withColumn("agg_last_updated", updatedAggLastUpdatedCol(col("agg_last_updated").cast("map<string, long>"), col("content_id").cast(sql.types.StringType)))
       .groupBy("activity_type", "user_id", "context_id", "activity_id")
@@ -115,8 +115,8 @@ object ScoreMetricMigrationJob extends optional.Application with IJob with BaseR
     assessmentAggDF
   }
 
-  def mergeAggMapCol(): (Map[String, Double], Double, Double, Double, String) => Map[String, Double] = (agg: Map[String, Double], max_score: Double, score: Double, attempts_count: Double, content_id: String) => {
-    agg ++ Map(s"score:$content_id" -> score, s"max_score:$content_id" -> max_score, s"attempts_count:$content_id" -> attempts_count)
+  def mergeAggMapCol(): (Map[String, Double], Map[String, Double], Double, Double, Double, String) => Map[String, Double] = (agg: Map[String, Double], aggregates: Map[String, Double], max_score: Double, score: Double, attempts_count: Double, content_id: String) => {
+    agg ++ aggregates ++ Map(s"score:$content_id" -> score, s"max_score:$content_id" -> max_score, s"attempts_count:$content_id" -> attempts_count)
   }
 
   def mergeAggLastUpdatedMapCol(): (Map[String, Long], String) => Map[String, Long] = (aggLastUpdated: Map[String, Long], content_id: String) => {
