@@ -86,10 +86,11 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
   }
 
   def getActivityAggData(collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
-    loadData(activityAggDBSettings, cassandraFormat, new StructType())
-      .where(col("context_id") === s"cb:${collectionBatch.batchId}" && col("activity_id") === collectionBatch.collectionId)
-      .select("user_id", "activity_id", "aggregates", "context_id")
-
+    val dataDf = loadData(activityAggDBSettings, cassandraFormat, new StructType())
+      .where(col("context_id") === s"cb:${collectionBatch.batchId}")
+      .select("user_id", "activity_id", "aggregates", "context_id").persist()
+    persistedDF.append(dataDf)
+    dataDf.filter(col("activity_id") === collectionBatch.collectionId)
   }
 
 
