@@ -17,11 +17,15 @@ object EmbeddedCassandra {
   System.setProperty("cassandra.unsafesystem", "true");
   EmbeddedCassandraServerHelper.startEmbeddedCassandra("cassandra.yaml", 30000L);
   val connector = CassandraConnector(getSparkConf())
-  val session: CqlSession = CqlSession.builder()
-    .addContactPoint(new InetSocketAddress("localhost", AppConf.getConfig("cassandra.service.embedded.connection.port").toInt))
-    .withLocalDatacenter("datacenter1")
-    .withConfigLoader(DriverConfigLoader.programmaticBuilder().withDuration(DefaultDriverOption.REQUEST_TIMEOUT, Duration.ofMillis(15000)).build())
-    .build();
+
+  import org.cassandraunit.utils.EmbeddedCassandraServerHelper
+
+  val session = EmbeddedCassandraServerHelper.getSession
+  //  val session1: CqlSession = CqlSession.builder()
+  //    .addContactPoint(new InetSocketAddress("localhost", AppConf.getConfig("cassandra.service.embedded.connection.port").toInt))
+  //    .withLocalDatacenter("datacenter1")
+  //    .withConfigLoader(DriverConfigLoader.programmaticBuilder().withDuration(DefaultDriverOption.REQUEST_TIMEOUT, Duration.ofMillis(15000)).build())
+  //    .build();
   val dataLoader = new CQLDataLoader(session)
 
   private def getSparkConf(): SparkConf = {
