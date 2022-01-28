@@ -51,7 +51,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val response = DruidDataFetcher.getDruidData(contentQuery, true)
     val contents = response.map(f => JSONUtils.deserialize[ContentDetails](f)).toDF().withColumnRenamed("identifier","contentId")
       .withColumnRenamed("name","contentName").persist(StorageLevel.MEMORY_ONLY)
-    JobLogger.log(s"Total contents - ${contents.count()}",None, Level.INFO)
+    JobLogger.log(s"Total contents from druid - ${contents.count()}",None, Level.INFO)
     process(contents)
   }
 
@@ -77,24 +77,32 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
 
     val textbookQuery = getDruidQuery(JSONUtils.serialize(config.modelParams.get.getOrElse("textbookQuery","")), tenantId)
     val response = DruidDataFetcher.getDruidData(textbookQuery,true)
-    val textbooks = response.map(f=> JSONUtils.deserialize[TextbookDetails](f)).toDF()
-      .withColumnRenamed("primaryCategory","collectionCategory")
-    JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
+    if (response.count() > 0) {
+      val textbooks = response.map(f=> JSONUtils.deserialize[TextbookDetails](f)).toDF()
+        .withColumnRenamed("primaryCategory","collectionCategory")
+      JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
 
-    val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("contentId","contentName","primaryCategory","identifier",
-      "name","board","medium","gradeLevel","subject","programId","createdBy", "collectionCategory",
-      "creator","mimeType","unitIdentifiers", "status","prevStatus")
-      .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
+      val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("contentId","contentName","primaryCategory","identifier",
+        "name","board","medium","gradeLevel","subject","programId","createdBy", "collectionCategory",
+        "creator","mimeType","unitIdentifiers", "status","prevStatus")
+        .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
 
-    val finalDf = getContentDetails(reportDf, slug)
-    val configMap = JSONUtils.deserialize[Map[String,AnyRef]](JSONUtils.serialize(config.modelParams.get))
-    val reportConfig = configMap("reportConfig").asInstanceOf[Map[String, AnyRef]]
-    val reportPath = reportConfig.getOrElse("reportPath","sourcing").asInstanceOf[String]
-    val storageConfig = getStorageConfig(config, "")
-    saveReportToBlob(finalDf, JSONUtils.serialize(reportConfig), storageConfig, "ContentDetailsReport", reportPath)
-
+      val finalDf = getContentDetails(reportDf, slug)
+      if(finalDf.count() > 0) {
+        JobLogger.log(s"Report count for slug $slug- ${finalDf.count()}",None, Level.INFO)
+        val configMap = JSONUtils.deserialize[Map[String, AnyRef]](JSONUtils.serialize(config.modelParams.get))
+        val reportConfig = configMap("reportConfig").asInstanceOf[Map[String, AnyRef]]
+        val reportPath = reportConfig.getOrElse("reportPath", "sourcing").asInstanceOf[String]
+        val storageConfig = getStorageConfig(config, "")
+        saveReportToBlob(finalDf, JSONUtils.serialize(reportConfig), storageConfig, "ContentDetailsReport", reportPath)
+        finalDf.unpersist(true)
+      } else {
+        JobLogger.log(s"No program details found for slug: $slug",None, Level.INFO)
+      }
+    } else {
+      JobLogger.log("No textbook data found for slug: " + slug, None, Level.INFO)
+    }
     contents.unpersist(true)
-    finalDf.unpersist(true)
   }
 
   def getDruidQuery(query: String, channel: String): DruidQueryModel = {
@@ -126,7 +134,6 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
 
     val finalDf = programData.join(contentDf, programData.col("program_id") === contentDf.col("programId"), "inner")
       .drop("program_id").persist(StorageLevel.MEMORY_ONLY)
-    JobLogger.log(s"Report count for slug $slug- ${finalDf.count()}",None, Level.INFO)
 
     programData.unpersist(true)
     finalDf

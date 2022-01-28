@@ -38,6 +38,9 @@ class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
     result.head.get(0).asInstanceOf[Map[String, Int]]("completedCount") should be(0)
     result.head.get(0).asInstanceOf[Map[String, Int]]("score:do_112876961957437440179") should be(10)
     result.head.get(0).asInstanceOf[Map[String, Int]]("max_score:do_112876961957437440179") should be(10)
+    result.head.get(0).asInstanceOf[Map[String, Int]]("attempts_count:do_112876961957437440179") should be(1)
+
+    result.head.get(1).asInstanceOf[Map[String, Int]].keySet should contain allElementsOf List("completedCount", "score:do_112876961957437440179", "max_score:do_112876961957437440179", "attempts_count:do_112876961957437440179")
 
     result.head.get(2).asInstanceOf[Seq[String]].size should be (2)
     val aggDetail = JSONUtils.deserialize[Map[String, AnyRef]](result.head.get(2).asInstanceOf[Seq[String]].head)
