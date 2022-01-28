@@ -3,9 +3,12 @@ package org.sunbird.analytics.audit
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.SparkSession
+import org.cassandraunit.dataset.cql.FileCQLDataSet
+import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.scalamock.scalatest.MockFactory
+import org.sunbird.analytics.util.EmbeddedCassandra.dataLoader
 import org.sunbird.analytics.util.{BaseSpec, EmbeddedCassandra}
 
 class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
@@ -13,14 +16,11 @@ class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-  }
-
-  override def beforeEach(): Unit = {
     spark = getSparkSession()
     EmbeddedCassandra.loadData("src/test/resources/score-metrics-migration/data.cql")
   }
 
-  override def afterEach(): Unit = {
+  override def afterAll(): Unit = {
     spark.close()
     EmbeddedCassandra.close()
   }
