@@ -33,6 +33,8 @@ node('build-slave') {
         stage('Build') {
             sh '''
                 cd data-products
+                export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
+                export PATH=$JAVA_HOME/bin:$PATH
                 echo $(java -version)
                 mvn clean install -DskipTests
                 '''
