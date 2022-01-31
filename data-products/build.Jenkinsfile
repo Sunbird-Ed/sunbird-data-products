@@ -33,6 +33,7 @@ node('build-slave') {
         stage('Build') {
             sh '''
                 cd data-products
+                echo $(java -version)
                 mvn clean install -DskipTests
                 '''
         }
