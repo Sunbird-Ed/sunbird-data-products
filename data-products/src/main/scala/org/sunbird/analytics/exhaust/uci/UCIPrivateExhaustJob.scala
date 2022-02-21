@@ -16,7 +16,7 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
   val userRegistrationTable: String = AppConf.getConfig("uci.postgres.table.user_registration")
 
   private val columnsOrder = List("Conversation ID", "Conversation Name", "Decrypted Device ID", "Encrypted Device ID", "Device UUID")
-  private val columnMapping = Map("applications_id" -> "Conversation ID", "name" -> "Conversation Name", "device_id" -> "Decrypted Device ID", "username" -> "Encrypted Device ID", "device_id_uuid" => "Device UUID")
+  private val columnMapping = Map("applications_id" -> "Conversation ID", "name" -> "Conversation Name", "device_id" -> "Decrypted Device ID", "username" -> "Encrypted Device ID", "device_id_uuid" -> "Device UUID")
 
   /** START - Overridable Methods */
   override def jobId(): String = "uci-private-exhaust"
