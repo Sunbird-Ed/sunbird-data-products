@@ -15,8 +15,8 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
   val identityTable: String = AppConf.getConfig("uci.postgres.table.identities")
   val userRegistrationTable: String = AppConf.getConfig("uci.postgres.table.user_registration")
 
-  private val columnsOrder = List("Conversation ID", "Conversation Name", "Decrypted Device ID", "Encrypted Device ID")
-  private val columnMapping = Map("applications_id" -> "Conversation ID", "name" -> "Conversation Name", "device_id" -> "Decrypted Device ID", "username" -> "Encrypted Device ID")
+  private val columnsOrder = List("Conversation ID", "Conversation Name", "Decrypted Device ID", "Encrypted Device ID", "Device UUID")
+  private val columnMapping = Map("applications_id" -> "Conversation ID", "name" -> "Conversation Name", "device_id" -> "Decrypted Device ID", "username" -> "Encrypted Device ID", "device_id_uuid" => "Device UUID")
 
   /** START - Overridable Methods */
   override def jobId(): String = "uci-private-exhaust"
@@ -38,9 +38,11 @@ object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob 
       .join(userRegistrationDF, userRegistrationDF.col("applications_id") === conversationDF.col("id"), "inner")
       .join(userDF, Seq("device_id"), "inner")
       .join(identitiesDF, Seq("device_id"), "inner")
+      //Copying column device_id to device_id_uuid 
+      .withColumn("device_id_uuid", col("device_id"))
       // Decrypt the username column to get the mobile num based on the consent value
       .withColumn("device_id", when(col("consent") === true, decrypt(col("username"))).otherwise(col("device_id")))
-      .select("applications_id", "name", "device_id", "username")
+      .select("applications_id", "name", "device_id", "username", "device_id_uuid")
     organizeDF(finalDF, columnMapping, columnsOrder)
   }
 
