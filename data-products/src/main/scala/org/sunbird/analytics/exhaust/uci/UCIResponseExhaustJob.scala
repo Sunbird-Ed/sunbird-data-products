@@ -33,7 +33,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
       val conversationName = conversationDF.head().getAs[String]("name")
       val userDF = loadUserTable()
       val finalDF = telemetryDF
-        .select(telemetryDF.col("edata"), telemetryDF.col("context"), telemetryDF.col("mid"), telemetryDF.col("timestamp"))
+        .select(telemetryDF.col("edata"), telemetryDF.col("context"), telemetryDF.col("mid"), telemetryDF.col("@timestamp"))
         .withColumn("conversation_id", lit(conversationId))
         .withColumn("conversation_name", lit(conversationName))
         .withColumn("device_id",col("context.did"))
@@ -47,7 +47,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
         .withColumn("question_response", to_json(col("edata.resvalues")))
         .withColumn("question_option", to_json(col("edata.item.params")))
         .withColumn("mid", col("mid"))
-        .withColumn("timestamp", col("timestamp"))
+        .withColumn("timestamp", col("@timestamp"))
         .join(userDF, Seq("device_id"), "inner")
         .withColumn("question_response", when(col("consent") === true, col("question_response")).otherwise(lit("")))
         .drop("context", "edata", "data", "consent")
