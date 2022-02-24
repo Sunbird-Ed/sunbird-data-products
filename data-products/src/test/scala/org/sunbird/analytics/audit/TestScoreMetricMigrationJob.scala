@@ -43,16 +43,7 @@ class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
     result.head.get(1).asInstanceOf[Map[String, Int]].keySet should contain allElementsOf List("completedCount", "score:do_112876961957437440179", "max_score:do_112876961957437440179", "attempts_count:do_112876961957437440179")
 
     result.head.get(2).asInstanceOf[Seq[String]].size should be (2)
-    val aggDetail = JSONUtils.deserialize[Map[String, AnyRef]](result.head.get(2).asInstanceOf[Seq[String]].head)
-
-    aggDetail("max_score") should be(10.0)
-    aggDetail("score") should be(10.0)
-    aggDetail("type") should be(jobConfig.modelParams.get.get("metricsType").get.toString)
-    aggDetail("attempt_id") should be("attempat-001")
-    aggDetail("content_id") should be("do_112876961957437440110")
-    aggDetail("attempted_on") should be(1634810023)
-
-    result.head.get(2).asInstanceOf[Seq[String]](1) should be("""{"max_score":10.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_112876961957437440179"}""")
+    result.head.get(2).asInstanceOf[Seq[String]] should contain allElementsOf List("""{"max_score":10.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_112876961957437440110","attempted_on":1634810023}""", """{"max_score":10.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_112876961957437440179"}""")
 
     val result2 = res.filter(col("context_id") === "cb:batch-001")
       .filter(col("activity_id") === "do_11306040245271756813015")
@@ -60,8 +51,8 @@ class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
       .select("agg_details").collect()
 
     result2.head.get(0).asInstanceOf[Seq[String]].size should be (2)
-    result2.head.get(0).asInstanceOf[Seq[String]].head should be("""{"max_score":15.0,"score":15.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_11307593493010022418"}""")
-    result2.head.get(0).asInstanceOf[Seq[String]](1) should be("""{"max_score":15.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-002","content_id":"do_11307593493010022418"}""")
+
+    result2.head.get(0).asInstanceOf[Seq[String]] should contain allElementsOf List("""{"max_score":15.0,"score":15.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_11307593493010022418"}""", """{"max_score":15.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-002","content_id":"do_11307593493010022418"}""")
     ScoreMetricMigrationJob.updatedTable(res, ScoreMetricMigrationJob.userActivityAggDBSettings)
 
     val result3 = res.filter(col("context_id") === "cb:batch-001")
