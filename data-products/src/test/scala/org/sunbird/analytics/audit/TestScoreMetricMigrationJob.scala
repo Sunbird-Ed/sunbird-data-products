@@ -43,8 +43,14 @@ class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
     result.head.get(1).asInstanceOf[Map[String, Int]].keySet should contain allElementsOf List("completedCount", "score:do_112876961957437440179", "max_score:do_112876961957437440179", "attempts_count:do_112876961957437440179")
 
     result.head.get(2).asInstanceOf[Seq[String]].size should be (2)
+    val aggDetails = result.head.get(2).asInstanceOf[Seq[String]].map(aggD => JSONUtils.deserialize[Map[String, AnyRef]](aggD))
 
-    result.head.get(2).asInstanceOf[Seq[String]] should contain allElementsOf List("""{"max_score":10.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_112876961957437440110","attempted_on":1634810023}""", """{"max_score":10.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_112876961957437440179"}""")
+    aggDetails.map(f => f("max_score")).toList should contain allElementsOf List(10.0)
+    aggDetails.map(f => f("score")).toList should contain allElementsOf List(10.0)
+    aggDetails.map(f => f("type")).toList should contain allElementsOf List(jobConfig.modelParams.get.get("metricsType").get.toString)
+    aggDetails.map(f => f("attempt_id")).toList should contain allElementsOf List("attempat-001")
+    aggDetails.map(f => f("content_id")).toList should contain allElementsOf List("do_112876961957437440110", "do_112876961957437440179")
+    aggDetails.map(f => f.getOrElse("attempted_on", null)).toList should contain allElementsOf List(1634810023)
 
     val result2 = res.filter(col("context_id") === "cb:batch-001")
       .filter(col("activity_id") === "do_11306040245271756813015")
@@ -52,8 +58,13 @@ class TestScoreMetricMigrationJob extends BaseSpec with MockFactory {
       .select("agg_details").collect()
 
     result2.head.get(0).asInstanceOf[Seq[String]].size should be (2)
+    val aggDetails2 = result2.head.get(0).asInstanceOf[Seq[String]].map(aggD => JSONUtils.deserialize[Map[String, AnyRef]](aggD))
 
-    result2.head.get(0).asInstanceOf[Seq[String]] should contain allElementsOf List("""{"max_score":15.0,"score":15.0,"type":"attempt_metrics","attempt_id":"attempat-001","content_id":"do_11307593493010022418"}""", """{"max_score":15.0,"score":10.0,"type":"attempt_metrics","attempt_id":"attempat-002","content_id":"do_11307593493010022418"}""")
+    aggDetails2.map(f => f("max_score")).toList should contain allElementsOf List(15.0)
+    aggDetails2.map(f => f("score")).toList should contain allElementsOf List(10.0, 15.0)
+    aggDetails2.map(f => f("type")).toList should contain allElementsOf List(jobConfig.modelParams.get.get("metricsType").get.toString)
+    aggDetails2.map(f => f("attempt_id")).toList should contain allElementsOf List("attempat-001", "attempat-002")
+    aggDetails2.map(f => f("content_id")).toList should contain allElementsOf List("do_11307593493010022418")
 
     ScoreMetricMigrationJob.updatedTable(res, ScoreMetricMigrationJob.userActivityAggDBSettings)
 
