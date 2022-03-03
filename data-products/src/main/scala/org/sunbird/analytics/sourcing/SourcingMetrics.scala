@@ -21,11 +21,11 @@ case class TextbookInfo(channel: String, identifier: String, name: String, creat
                         board: String, medium: String, gradeLevel: String, subject: String, status: String, primaryCategory: String)
 case class TextbookReportResult(identifier: String, l1identifier: String, board: String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String, totalChapters: String, primaryCategory: String)
 case class ContentReportResult(identifier: String, l1identifier: String, contentType: String)
-case class TextbookHierarchy(channel: String, board: String, identifier: String, medium: Object, gradeLevel: List[String], subject: Object,
+case class TextbookHierarchy(channel: String, identifier: String, medium: Object, gradeLevel: List[String], subject: Object,
                              name: String, status: String, contentType: Option[String], leafNodesCount: Int, lastUpdatedOn: String,
                              depth: Int, createdOn: String, children: Option[List[TextbookHierarchy]], index: Int, parent: String)
 case class FinalReport(identifier: String,l1identifier: String,board: String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String, totalChapters: String, slug:String)
-case class TextbookResponse(l1identifier:String,board: String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String)
+case class TextbookResponse(l1identifier:String, medium: String, grade: String, subject: String, name: String, chapters: String, channel: String)
 
 object SourcingMetrics extends optional.Application with IJob with BaseReportsJob {
 
@@ -135,7 +135,7 @@ object SourcingMetrics extends optional.Application with IJob with BaseReportsJo
         textbook = units :: newData
         l1identifier = units.identifier
         val grade = TextBookUtils.getString(textbookInfo.gradeLevel)
-        val report = TextbookResponse(l1identifier,textbookInfo.board,TextBookUtils.getString(textbookInfo.medium),grade,TextBookUtils.getString(textbookInfo.subject),textbookInfo.name,units.name,textbookInfo.channel)
+        val report = TextbookResponse(l1identifier, TextBookUtils.getString(textbookInfo.medium),grade,TextBookUtils.getString(textbookInfo.subject),textbookInfo.name,units.name,textbookInfo.channel)
         totalChapters = (totalChapters.toInt+1).toString
         textbookReport = report :: textbookReport
       }
