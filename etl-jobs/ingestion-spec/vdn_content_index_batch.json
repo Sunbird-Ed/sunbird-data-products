@@ -434,6 +434,11 @@
                   "type": "path",
                   "name": "rejectComment",
                   "expr": "$.data.rejectComment"
+                },
+                {
+                  "type": "path",
+                  "name": "reusedContributions",
+                  "expr": "$.data.reusedContributions[*]"
                 }
               ]
             },
@@ -656,6 +661,9 @@
                 {
                   "type": "string",
                   "name": "rejectComment"
+                },
+                {
+                  "name": "reusedContributions"
                 }
               ],
               "dimensionsExclusions": []
