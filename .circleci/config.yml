@@ -5,6 +5,8 @@ jobs:
       image: ubuntu-2004:202008-01
     steps:
       - checkout
+      - attach_workspace:
+          at: . # rela
       - run:
           name: clone analytics core
           command: |
