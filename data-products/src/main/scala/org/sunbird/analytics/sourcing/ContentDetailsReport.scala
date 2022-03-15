@@ -1,7 +1,7 @@
 package org.sunbird.analytics.sourcing
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, collect_list, lit}
+import org.apache.spark.sql.functions.{col, collect_list, lit, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -87,7 +87,7 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
         "identifier","unitIdentifiers","contentName","contentId","primaryCategory",
         "mimeType","status","prevStatus", "creator", "createdBy", "objectType", "topic", "learningOutcome", "bloomsLevel", "addedFromLibrary")
         .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
-
+        .withColumn("addedFromLibrary", when(col("addedFromLibrary").isNull || col("addedFromLibrary") === "unknown", "No").otherwise(col("addedFromLibrary")))
       val finalDf = getContentDetails(reportDf, slug)
       if(finalDf.count() > 0) {
         JobLogger.log(s"Report count for slug $slug- ${finalDf.count()}",None, Level.INFO)
