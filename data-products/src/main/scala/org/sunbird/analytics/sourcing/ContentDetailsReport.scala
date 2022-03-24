@@ -11,9 +11,9 @@ import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.sourcing.FunnelReport.{connProperties, programTable, url}
 import org.sunbird.analytics.sourcing.SourcingMetrics.{getStorageConfig, getTenantInfo, saveReportToBlob}
 
-case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String)
-case class ContentDetails(identifier: String, collectionId: String, name: String, primaryCategory: String, unitIdentifiers: String,
-                          createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String, objectType: String,
+case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String, primaryCategory: String, objectType: String)
+case class ContentDetails(identifier: String, collectionId: String, name: String, unitIdentifiers: String,
+                          createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String,
                           topic: String, learningOutcome: String, bloomsLevel: String, addedFromLibrary: String)
 case class ContentReport(programId: String, board: String, medium: String, gradeLevel: String, subject: String, name: String,
                          identifier: String, chapterId: String, contentName: String, contentId: String, primaryCategory: String,
