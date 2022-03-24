@@ -21,19 +21,24 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
 
   private val columnsOrder = List("Message ID", "Conversation ID", "Conversation Name", "Device ID", "Question Id", "Question Type",
     "Question Title", "Question Description", "Question Duration", "Question Score", "Question Max Score",
-    "Question Options", "Question Response", "Rollup", "Timestamp")
+    "Question Options", "Question Response", "XPath", "Timestamp")
   private val columnMapping = Map("mid" -> "Message ID", "conversation_id" -> "Conversation ID", "conversation_name" -> "Conversation Name",
     "device_id" -> "Device ID", "question_id" -> "Question Id", "question_type" -> "Question Type", "question_title" -> "Question Title",
     "question_description" -> "Question Description", "question_duration" -> "Question Duration", "question_score" -> "Question Score", "question_maxscore" -> "Question Max Score",
-    "question_response" -> "Question Response", "question_option" -> "Question Options", "rollup" => "Rollup", "timestamp" -> "Timestamp")
+    "question_response" -> "Question Response", "question_option" -> "Question Options", "xpath" => "XPath", "timestamp" -> "Timestamp")
 
   override def process(conversationId: String, telemetryDF: DataFrame, conversationDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
     if (telemetryDF.count() > 0) {
       val conversationName = conversationDF.head().getAs[String]("name")
       val userDF = loadUserTable()
+      val rollupDF = telemetryDF.select("context.rollup")
+      val rollup = rollupDF
+                  .withColumn("xpath", col("rollup.l3"))
+                  .withColumn("eof", col("rollup.l4"))
+                  .drop(col("rollup"))
       val finalDF = telemetryDF
-        .select(telemetryDF.col("edata"), telemetryDF.col("context"), telemetryDF.col("mid"), telemetryDF.col("@timestamp"))
+        .select(telemetryDF.col("edata"), telemetryDF.col("context"), telemetryDF.col("context.rollup"), telemetryDF.col("mid"), telemetryDF.col("@timestamp"))
         .withColumn("conversation_id", lit(conversationId))
         .withColumn("conversation_name", lit(conversationName))
         .withColumn("device_id",col("context.did"))
@@ -46,7 +51,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
         .withColumn("question_maxscore", col("edata.item.maxscore"))
         .withColumn("question_response", to_json(col("edata.resvalues")))
         .withColumn("question_option", to_json(col("edata.item.params")))
-        .withColumn("rollup", gson.toJSON(col("context.rollup")))
+        .withColumn("xpath", col("rollup.l3"))
         .withColumn("mid", col("mid"))
         .withColumn("timestamp", col("@timestamp"))
         .join(userDF, Seq("device_id"), "inner")
