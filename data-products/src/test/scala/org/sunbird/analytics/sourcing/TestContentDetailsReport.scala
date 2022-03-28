@@ -118,7 +118,7 @@ class TestContentDetailsReport extends SparkSpec with Matchers with MockFactory 
     content("Added from library") should be ("Yes")
     content("Grade") should be ("Class 8")
     content("Medium") should be ("English")
-    content("Content Status") should be ("Corrections Pending")
+    content("Content Status") should be ("Approved")
     content("Blooms Level") should be ("Application")
     content("Content Name") should be ("content-1")
     content("Project Name") should be ("Dock-Project")
