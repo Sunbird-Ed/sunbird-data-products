@@ -51,7 +51,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
         .withColumn("question_maxscore", col("edata.item.maxscore"))
         .withColumn("question_response", to_json(col("edata.resvalues")))
         .withColumn("question_option", to_json(col("edata.item.params")))
-        .withColumn("mid", col("mid"))
+        .withColumn("mid", col("rollup.l3"))
         .withColumn("timestamp", col("@timestamp"))
         .join(userDF, Seq("device_id"), "inner")
         .withColumn("question_response", when(col("consent") === true, col("question_response")).otherwise(lit("")))
