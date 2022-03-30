@@ -38,7 +38,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
                   .withColumn("eof", col("rollup.l4"))
                   .drop(col("rollup"))
       val finalDF = telemetryDF
-        .select(telemetryDF.col("edata"), telemetryDF.col("context"), telemetryDF.col("mid"), telemetryDF.col("@timestamp"))
+        .select(telemetryDF.col("edata"), telemetryDF.col("context"), telemetryDF.col("context.rollup"), telemetryDF.col("mid"), telemetryDF.col("@timestamp"))
         .withColumn("conversation_id", lit(conversationId))
         .withColumn("conversation_name", lit(conversationName))
         .withColumn("device_id",col("context.did"))
