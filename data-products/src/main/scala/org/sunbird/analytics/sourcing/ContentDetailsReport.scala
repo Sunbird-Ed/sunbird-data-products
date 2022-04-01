@@ -11,7 +11,7 @@ import org.sunbird.analytics.exhaust.BaseReportsJob
 import org.sunbird.analytics.sourcing.FunnelReport.{connProperties, programTable, url}
 import org.sunbird.analytics.sourcing.SourcingMetrics.{getStorageConfig, getTenantInfo, saveReportToBlob}
 
-case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, rejectedContents: String, programId: String, primaryCategory: String, objectType: String)
+case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, acceptedContributions: String, rejectedContents: String, rejectedContributions: String, programId: String, primaryCategory: String, objectType: String)
 case class ContentDetails(identifier: String, collectionId: String, name: String, unitIdentifiers: String,
                           createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String,
                           topic: String, learningOutcome: String, bloomsLevel: String, addedFromLibrary: String)
@@ -82,6 +82,8 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val response = DruidDataFetcher.getDruidData(textbookQuery,true)
     if (response.count() > 0) {
       val textbooks = response.map(f=> JSONUtils.deserialize[TextbookDetails](f)).toDF()
+        .withColumn("acceptedContents", when(col("acceptedContributions").isNotNull, col("acceptedContributions")).otherwise(col("acceptedContents")))
+        .withColumn("rejectedContents", when(col("rejectedContributions").isNotNull, col("rejectedContributions")).otherwise(col("rejectedContents")))
       JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
       val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("programId","board","medium","gradeLevel","subject", "name",
         "identifier","unitIdentifiers","contentName","contentId","primaryCategory",
