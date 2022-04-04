@@ -89,7 +89,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
       .select("batchid", "name", "startdate", "enddate");
     
-    val joinedDF = enrolmentDF.join(courseBatchDF, "batchid").cache();
+    val joinedDF = enrolmentDF.join(courseBatchDF, "batchid")
     
     val missingEnrolmentDate = joinedDF.filter(col("enrolleddate").isNull).count()
     val missingCompletionDate = joinedDF.filter(col("completedon").isNull).count()
@@ -106,12 +106,12 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
       .filter(col("completedts") > col("endedon"))
       .count()
     
-    val notcompletedEnrolments = joinedDF.filter(col("completedon").isNull).cache();
+    val notcompletedEnrolments = joinedDF.filter(col("completedon").isNull)
     val distinctCourses = notcompletedEnrolments.select("courseid").distinct()
     val coursesDF = getCollectionLeafNodes();
     val joinedCoursesDF = distinctCourses.join(coursesDF, "courseid")
     
-    val progressCompleteDF = notcompletedEnrolments.join(joinedCoursesDF, "courseid").withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes"))).withColumn("completed", completed(col("contentstatus"), col("leafnodescount"))).cache();
+    val progressCompleteDF = notcompletedEnrolments.join(joinedCoursesDF, "courseid").withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes"))).withColumn("completed", completed(col("contentstatus"), col("leafnodescount")))
     val missingCompletionDateCount = progressCompleteDF.filter(col("completed") === "Yes").count();
 
     notcompletedEnrolments.unpersist(true);
@@ -121,7 +121,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
 
   def reconcileProgressUpdates()(implicit spark: SparkSession, fc: FrameworkContext, dryRunEnabled: Boolean) : Map[String, Long] = {
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType());
-    val notcompletedEnrolments = enrolmentDF.filter(col("completedon").isNull).cache();
+    val notcompletedEnrolments = enrolmentDF.filter(col("completedon").isNull)
     val distinctCourses = notcompletedEnrolments.select("courseid").distinct()
     val coursesDF = getCollectionLeafNodes();
     val joinedCoursesDF = distinctCourses.join(coursesDF, "courseid")
@@ -130,7 +130,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     val enrolmentCourseJoinedDF = nonCompleteEnrolmentsDF.join(joinedCoursesDF, "courseid")
       .withColumn("contentstatusupdated", contentStatusUpdated(col("contentstatus"), col("leafnodes")))
       .withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes")))
-      .withColumn("completed", completed(col("contentstatus"), col("leafnodescount"))).cache();
+      .withColumn("completed", completed(col("contentstatus"), col("leafnodescount")))
 
     val contentStatusMapUpdCount = enrolmentCourseJoinedDF.filter(col("contentstatusupdated") === "Yes").count();
     val missingCompletionDateCount = enrolmentCourseJoinedDF.filter(col("completed") === "Yes").count();
@@ -152,14 +152,14 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     // $COVERAGE-OFF$ Disabling scoverage for main and execute method
     implicit val sc = spark.sparkContext;
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
-      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate"))).cache();
+      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
     val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType());
     val courseBatchMinDF = courseBatchDF.withColumn("hasSVGCertificate", hasSVGCertificate(col("cert_templates")))
       .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
-      .select("batchid", "hasSVGCertificate", "startdate", "enddate").cache();
+      .select("batchid", "hasSVGCertificate", "startdate", "enddate")
     val joinedDF = enrolmentDF.join(courseBatchMinDF, "batchid").filter(col("completedon").isNotNull).withColumn("certificatestatus", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued")
-      .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise("")).cache();
+      .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
 
     val finalDF = joinedDF.select("batchid", "userid", "courseid", "hasSVGCertificate", "certificatestatus").filter(col("hasSVGCertificate") === "Yes").filter(col("certificatestatus") =!= "Issued").select("batchid", "userid", "courseid")
     val certIssueRDD = finalDF.rdd.map(f => certEvent(f))
@@ -171,7 +171,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     joinedDF.unpersist(true);
     
     // Fix blank enrolment dates
-    val blankEnrolmentDatesDF = enrolmentDF.filter(col("enrolleddate").isNull).cache();
+    val blankEnrolmentDatesDF = enrolmentDF.filter(col("enrolleddate").isNull)
     val blankEnrolmentCount = blankEnrolmentDatesDF.count()
     if(blankEnrolmentCount > 0) {
       updateEnrolmentDates(blankEnrolmentDatesDF, courseBatchMinDF);
@@ -230,7 +230,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     import spark.implicits._
     val enrolmentDF = blankEnrolmentDatesDF.select("userid", "courseid", "batchid");
     val enrolmentRDD = enrolmentDF.rdd.repartition(30).map(f => UserEnrolment(f.getString(0), f.getString(1), f.getString(2)))
-    val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime", "last_completed_time"), SomeColumns("userid", "batchid", "courseid")).cache();
+    val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime", "last_completed_time"), SomeColumns("userid", "batchid", "courseid"))
     val finalRDD = joinedRdd.map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getStringOption(2).getOrElse(null), f._2.getStringOption(3).orNull)).filter(f => f._4 != null || f._5 != null)
     val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid").withColumnRenamed("_4", "lastcompletedtime").withColumnRenamed("_5", "last_completed_time")
       .withColumn("lastcompletedtime", UDFUtils.getLatestValue(col("last_completed_time"), col("lastcompletedtime")))
