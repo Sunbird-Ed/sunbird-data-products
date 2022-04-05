@@ -1,7 +1,7 @@
 package org.sunbird.analytics.sourcing
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{col, collect_list, lit, when}
+import org.apache.spark.sql.functions.{array_join, col, collect_list, lit, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -14,11 +14,12 @@ import org.sunbird.analytics.sourcing.SourcingMetrics.{getStorageConfig, getTena
 case class TextbookDetails(identifier: String, name: String, board: String, medium: String, gradeLevel: String, subject: String, acceptedContents: String, acceptedContributions: String, rejectedContents: String, rejectedContributions: String, programId: String, primaryCategory: String, objectType: String)
 case class ContentDetails(identifier: String, collectionId: String, name: String, unitIdentifiers: String,
                           createdBy: String, creator: String, mimeType: String, prevStatus: String, status: String,
-                          topic: String, learningOutcome: String, bloomsLevel: String, addedFromLibrary: String)
-case class ContentReport(programId: String, board: String, medium: String, gradeLevel: String, subject: String, name: String,
-                         identifier: String, chapterId: String, contentName: String, contentId: String, primaryCategory: String,
-                         mimeType: String, contentStatus: String, creator: String, createdBy: String, objectType: String, topic: String,
-                         learningOutcome: String, bloomsLevel: String, addedFromLibrary: String)
+                          topic: String, learningOutcome: String, addedFromLibrary: String, contentType: String)
+case class ContentReport(programId: String, board: String, medium: String, gradeLevel: String, subject: String,
+                         objectType: String, primaryCategory: String, name: String, identifier: String, chapterId: String,
+                         contentName: String, contentId: String, contentType: String,
+                         mimeType: String, contentStatus: String, creator: String, createdBy: String, topic: String,
+                         learningOutcome: String, addedFromLibrary: String)
 
 object ContentDetailsReport extends optional.Application with IJob with BaseReportsJob {
   implicit val className = "org.sunbird.analytics.sourcing.ContentDetailsReport"
@@ -85,11 +86,12 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
         .withColumn("acceptedContents", when(col("acceptedContributions").isNotNull, col("acceptedContributions")).otherwise(col("acceptedContents")))
         .withColumn("rejectedContents", when(col("rejectedContributions").isNotNull, col("rejectedContributions")).otherwise(col("rejectedContents")))
       JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
-      val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("programId","board","medium","gradeLevel","subject", "name",
-        "identifier","unitIdentifiers","contentName","contentId","primaryCategory",
-        "mimeType","status","prevStatus", "creator", "createdBy", "objectType", "topic", "learningOutcome", "bloomsLevel", "addedFromLibrary")
-        .agg(collect_list("acceptedContents").as("acceptedContents"),collect_list("rejectedContents").as("rejectedContents"))
+      val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("programId","board","medium","gradeLevel","subject", "objectType", "primaryCategory",
+        "name","identifier","unitIdentifiers","contentName","contentId", "contentType",
+        "mimeType","status","prevStatus", "creator", "createdBy", "topic", "addedFromLibrary")
+        .agg(collect_list("acceptedContents").as("acceptedContents"), collect_list("rejectedContents").as("rejectedContents"), collect_list("learningOutcome").as("learningOutcome"))
         .withColumn("addedFromLibrary", when(col("addedFromLibrary").isNull || col("addedFromLibrary") === "unknown", "No").otherwise(col("addedFromLibrary")))
+        .withColumn("learningOutcome", array_join(col("learningOutcome"), ", "))
       val finalDf = getContentDetails(reportDf, slug)
       if(finalDf.count() > 0) {
         JobLogger.log(s"Report count for slug $slug- ${finalDf.count()}",None, Level.INFO)
@@ -124,10 +126,10 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     implicit val sc = spark.sparkContext
     import spark.implicits._
     val contentDf = reportDf.rdd.map(f => {
-      val contentStatus = if(f.getAs[Seq[String]](21).contains(f.getString(9))) "Approved" else if(f.getAs[Seq[String]](22).contains(f.getString(9))) "Rejected" else if(null !=f.getString(12) && f.getString(12).equalsIgnoreCase("Draft") && null != f.getString(13) && f.getString(13).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
+      val contentStatus = if(f.getAs[Seq[String]](20).contains(f.getString(11))) "Approved" else if(f.getAs[Seq[String]](21).contains(f.getString(11))) "Rejected" else if(null !=f.getString(14) && f.getString(14).equalsIgnoreCase("Draft") && null != f.getString(15) && f.getString(15).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
 
       ContentReport(
-        f.getString(0),f.getString(1),f.getString(2),f.getString(3),f.getString(4),f.getString(5),f.getString(6),f.getString(7),f.getString(8),f.getString(9),f.getString(10),f.getString(11),contentStatus,f.getString(14),f.getString(15),f.getString(16),f.getString(17),f.getString(18),f.getString(19),f.getString(20)
+        f.getString(0),f.getString(1),f.getString(2),f.getString(3),f.getString(4),f.getString(5),f.getString(6),f.getString(7),f.getString(8),f.getString(9),f.getString(10),f.getString(11),f.getString(12),f.getString(13),contentStatus,f.getString(16),f.getString(17),f.getString(18),f.getString(22),f.getString(19)
       )
     }).toDF().withColumn("slug",lit(slug))
     val programData = spark.read.jdbc(url, programTable, connProperties)
