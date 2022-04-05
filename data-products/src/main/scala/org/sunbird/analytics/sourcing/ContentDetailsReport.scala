@@ -1,7 +1,7 @@
 package org.sunbird.analytics.sourcing
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{array_join, col, collect_list, lit, when}
+import org.apache.spark.sql.functions.{array_join, col, collect_list, collect_set, lit, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -88,10 +88,16 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
       JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
       val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("programId","board","medium","gradeLevel","subject", "objectType", "primaryCategory",
         "name","identifier","unitIdentifiers","contentName","contentId", "contentType",
-        "mimeType","status","prevStatus", "creator", "createdBy", "topic", "addedFromLibrary")
-        .agg(collect_list("acceptedContents").as("acceptedContents"), collect_list("rejectedContents").as("rejectedContents"), collect_list("learningOutcome").as("learningOutcome"))
+        "mimeType","status","prevStatus", "creator", "createdBy", "addedFromLibrary")
+        .agg(collect_list("acceptedContents").as("acceptedContents"),
+          collect_list("rejectedContents").as("rejectedContents"),
+          collect_set("topic").as("topic"),
+          collect_set("learningOutcome").as("learningOutcome")
+        )
         .withColumn("addedFromLibrary", when(col("addedFromLibrary").isNull || col("addedFromLibrary") === "unknown", "No").otherwise(col("addedFromLibrary")))
+        .withColumn("topic", array_join(col("topic"), ", "))
         .withColumn("learningOutcome", array_join(col("learningOutcome"), ", "))
+
       val finalDf = getContentDetails(reportDf, slug)
       if(finalDf.count() > 0) {
         JobLogger.log(s"Report count for slug $slug- ${finalDf.count()}",None, Level.INFO)
@@ -126,10 +132,10 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     implicit val sc = spark.sparkContext
     import spark.implicits._
     val contentDf = reportDf.rdd.map(f => {
-      val contentStatus = if(f.getAs[Seq[String]](20).contains(f.getString(11))) "Approved" else if(f.getAs[Seq[String]](21).contains(f.getString(11))) "Rejected" else if(null !=f.getString(14) && f.getString(14).equalsIgnoreCase("Draft") && null != f.getString(15) && f.getString(15).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
+      val contentStatus = if(f.getAs[Seq[String]](19).contains(f.getString(11))) "Approved" else if(f.getAs[Seq[String]](20).contains(f.getString(11))) "Rejected" else if(null !=f.getString(14) && f.getString(14).equalsIgnoreCase("Draft") && null != f.getString(15) && f.getString(15).equalsIgnoreCase("Live")) "Corrections Pending" else "Pending Approval"
 
       ContentReport(
-        f.getString(0),f.getString(1),f.getString(2),f.getString(3),f.getString(4),f.getString(5),f.getString(6),f.getString(7),f.getString(8),f.getString(9),f.getString(10),f.getString(11),f.getString(12),f.getString(13),contentStatus,f.getString(16),f.getString(17),f.getString(18),f.getString(22),f.getString(19)
+        f.getString(0),f.getString(1),f.getString(2),f.getString(3),f.getString(4),f.getString(5),f.getString(6),f.getString(7),f.getString(8),f.getString(9),f.getString(10),f.getString(11),f.getString(12),f.getString(13),contentStatus,f.getString(16),f.getString(17),f.getString(21),f.getString(22),f.getString(18)
       )
     }).toDF().withColumn("slug",lit(slug))
     val programData = spark.read.jdbc(url, programTable, connProperties)
