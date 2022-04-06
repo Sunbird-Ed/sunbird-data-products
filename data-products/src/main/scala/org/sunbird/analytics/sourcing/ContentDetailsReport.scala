@@ -88,7 +88,11 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
         .withColumn("acceptedContents", when(col("acceptedContributions").isNotNull, col("acceptedContributions")).otherwise(col("acceptedContents")))
         .withColumn("rejectedContents", when(col("rejectedContributions").isNotNull, col("rejectedContributions")).otherwise(col("rejectedContents")))
       JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
-      val reportDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner").groupBy("programId","board","medium","gradeLevel","subject", "objectType", "primaryCategory",
+      val unionDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner")
+        .unionByName(
+          contents.join(textbooks, contents.col("contentId") === textbooks.col("reusedContributions"), "inner")
+        )
+      val reportDf = unionDf.groupBy("programId","board","medium","gradeLevel","subject", "objectType", "primaryCategory",
         "name","identifier","unitIdentifiers","contentName","contentId", "contentType",
         "mimeType","status","prevStatus", "creator", "createdBy")
         .agg(
