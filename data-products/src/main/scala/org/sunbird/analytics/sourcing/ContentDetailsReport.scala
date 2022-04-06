@@ -1,7 +1,7 @@
 package org.sunbird.analytics.sourcing
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{array_contains, array_join, col, collect_list, collect_set, lit, when}
+import org.apache.spark.sql.functions.{array_contains, array_join, col, collect_list, collect_set, lit, lower, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
@@ -85,8 +85,8 @@ object ContentDetailsReport extends optional.Application with IJob with BaseRepo
     val response = DruidDataFetcher.getDruidData(textbookQuery,true)
     if (response.count() > 0) {
       val textbooks = response.map(f=> JSONUtils.deserialize[TextbookDetails](f)).toDF()
-        .withColumn("acceptedContents", when(col("acceptedContributions").isNotNull, col("acceptedContributions")).otherwise(col("acceptedContents")))
-        .withColumn("rejectedContents", when(col("rejectedContributions").isNotNull, col("rejectedContributions")).otherwise(col("rejectedContents")))
+        .withColumn("acceptedContents", when(col("acceptedContents").isNull || lower(col("acceptedContents")) === "unknown", col("acceptedContributions")).otherwise(col("acceptedContents")))
+        .withColumn("rejectedContents", when(col("rejectedContents").isNull || lower(col("rejectedContents")) === "unknown", col("rejectedContributions")).otherwise(col("rejectedContents")))
       JobLogger.log(s"Textbook count for slug $slug- ${textbooks.count()}",None, Level.INFO)
       val unionDf = contents.join(textbooks, contents.col("collectionId") === textbooks.col("identifier"), "inner")
         .unionByName(
