@@ -1,3 +1,49 @@
+CREATE KEYSPACE IF NOT EXISTS sunbird_courses WITH replication = {
+    'class': 'SimpleStrategy',
+    'replication_factor': '1'
+};
+
+
+CREATE TABLE IF NOT EXISTS sunbird_courses.user_activity_agg (
+    activity_type text,
+    activity_id text,
+    user_id text,
+    context_id text,
+    agg map<text, int>,
+    aggregates map<text, double>,
+    agg_last_updated map<text, timestamp>,
+    agg_details list<text>,
+    PRIMARY KEY ((activity_type, activity_id, user_id), context_id)
+);
+CREATE TABLE IF NOT EXISTS sunbird_courses.assessment_aggregator (
+    user_id text,
+    course_id text,
+    batch_id text,
+    content_id text,
+    attempt_id text,
+    created_on timestamp,
+    grand_total text,
+    last_attempted_on timestamp,
+    question list<frozen<question>>,
+    total_max_score double,
+    total_score double,
+    updated_on timestamp,
+    PRIMARY KEY ((user_id, course_id), batch_id, content_id, attempt_id)
+);
+
+CREATE TYPE IF NOT EXISTS sunbird_courses.question (
+  id text,
+  assess_ts timestamp,
+  max_score double,
+  score double,
+  type text,
+  title text,
+  resvalues list<frozen<map<text, text>>>,
+  params list<frozen<map<text, text>>>,
+  description text,
+  duration decimal
+);
+
 INSERT INTO sunbird_courses.user_activity_agg (activity_type, activity_id, user_id, context_id, agg, aggregates, agg_last_updated) VALUES('Course', 'do_1130928636168192001667', 'user-001', 'cb:batch-001', {'completedCount': 1}, {'completedCount': 1}, {'completedCount': '2020-08-17'});
 INSERT INTO sunbird_courses.user_activity_agg (activity_type, activity_id, user_id, context_id, agg, aggregates, agg_last_updated) VALUES('Course', 'do_1130928636168192001667', 'user-002', 'cb:batch-001', {'completedCount': 0}, {'completedCount': 0}, {'completedCount': '2020-09-17'});
 INSERT INTO sunbird_courses.user_activity_agg (activity_type, activity_id, user_id, context_id, agg, aggregates, agg_last_updated) VALUES('Course', 'do_1130928636168192001667', 'user-003', 'cb:batch-001', {'completedCount': 1}, {'completedCount': 1}, {'completedCount': '2020-09-17'});

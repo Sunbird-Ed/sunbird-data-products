@@ -106,12 +106,12 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
       .filter(col("completedts") > col("endedon"))
       .count()
     
-    val notcompletedEnrolments = joinedDF.filter(col("completedon").isNull).cache();
+    val notcompletedEnrolments = joinedDF.filter(col("completedon").isNull)
     val distinctCourses = notcompletedEnrolments.select("courseid").distinct()
     val coursesDF = getCollectionLeafNodes();
     val joinedCoursesDF = distinctCourses.join(coursesDF, "courseid")
     
-    val progressCompleteDF = notcompletedEnrolments.join(joinedCoursesDF, "courseid").withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes"))).withColumn("completed", completed(col("contentstatus"), col("leafnodescount"))).cache();
+    val progressCompleteDF = notcompletedEnrolments.join(joinedCoursesDF, "courseid").withColumn("contentstatus", updateContentStatusMap(col("contentstatus"), col("leafnodes"))).withColumn("completed", completed(col("contentstatus"), col("leafnodescount")))
     val missingCompletionDateCount = progressCompleteDF.filter(col("completed") === "Yes").count();
 
     notcompletedEnrolments.unpersist(true);
@@ -171,7 +171,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     joinedDF.unpersist(true);
     
     // Fix blank enrolment dates
-    val blankEnrolmentDatesDF = enrolmentDF.filter(col("enrolleddate").isNull).cache();
+    val blankEnrolmentDatesDF = enrolmentDF.filter(col("enrolleddate").isNull)
     val blankEnrolmentCount = blankEnrolmentDatesDF.count()
     if(blankEnrolmentCount > 0) {
       updateEnrolmentDates(blankEnrolmentDatesDF, courseBatchMinDF);

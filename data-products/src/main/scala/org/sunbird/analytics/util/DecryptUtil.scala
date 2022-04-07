@@ -9,7 +9,8 @@ import org.apache.commons.lang3.StringUtils
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.util.JobLogger
 import org.sunbird.cloud.storage.conf.AppConf
-import sun.misc.BASE64Decoder
+import java.util.Base64
+
 
 object DecryptUtil extends Serializable {
     
@@ -59,7 +60,7 @@ object DecryptUtil extends Serializable {
             while ( {
                 i < ITERATIONS
             }) {
-                val decordedValue = new BASE64Decoder().decodeBuffer(valueToDecrypt)
+                val decordedValue = Base64.getDecoder.decode(valueToDecrypt)
                 val decValue = c.doFinal(decordedValue)
                 dValue = new String(decValue, StandardCharsets.UTF_8).substring(sunbird_encryption.length)
                 valueToDecrypt = dValue
