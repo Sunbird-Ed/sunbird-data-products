@@ -13,8 +13,8 @@ jobs:
             echo $(java -version)
 
             git clone https://github.com/sowmya-dixit/sunbird-core-dataproducts.git
-            git clone https://github.com/sowmya-dixit/sunbird-analytics-core.git
-            cd sunbird-analytics-core && git checkout release-4.7.0
+            git clone https://github.com/project-sunbird/sunbird-analytics-core.git
+            cd sunbird-analytics-core && git checkout release-4.8.5
             cd sunbird-core-dataproducts && git checkout release-4.7.0
 
             # if [ -z $CIRCLE_PR_NUMBER ]; then
