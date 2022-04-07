@@ -89,7 +89,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
       .select("batchid", "name", "startdate", "enddate");
     
-    val joinedDF = enrolmentDF.join(courseBatchDF, "batchid").cache()
+    val joinedDF = enrolmentDF.join(courseBatchDF, "batchid").cache();
     
     val missingEnrolmentDate = joinedDF.filter(col("enrolleddate").isNull).count()
     val missingCompletionDate = joinedDF.filter(col("completedon").isNull).count()
@@ -152,7 +152,7 @@ object CollectionReconciliationJob extends optional.Application with IJob with B
     // $COVERAGE-OFF$ Disabling scoverage for main and execute method
     implicit val sc = spark.sparkContext;
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
-      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate"))).cache()
+      .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate"))).cache();
     val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType());
     val courseBatchMinDF = courseBatchDF.withColumn("hasSVGCertificate", hasSVGCertificate(col("cert_templates")))
       .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
