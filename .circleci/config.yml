@@ -8,7 +8,7 @@ jobs:
       - attach_workspace:
           at: . 
       - run:
-          name: clone analytics core data product
+          name: clone analytics core
           command: |
             echo $(java -version)
             if [ -z $CIRCLE_PR_NUMBER ]; then
