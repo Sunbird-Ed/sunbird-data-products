@@ -28,11 +28,18 @@ node() {
         }
 
             stage('Build') {
-                sh ("export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64 \
-                 export PATH=$JAVA_HOME/bin:$PATH \
-                 mvn -f etl-jobs/pom.xml \
-                -Dlog4j.configuration=$WORKSPACE/logs \
-                -Dcobertura.report.format=xml clean cobertura:cobertura package")
+                // sh ("export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64 \
+                //  export PATH=$JAVA_HOME/bin:$PATH \
+                //  mvn -f etl-jobs/pom.xml \
+                // -Dlog4j.configuration=$WORKSPACE/logs \
+                // -Dcobertura.report.format=xml clean cobertura:cobertura package")
+
+               sh '''
+                export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
+                export PATH=$JAVA_HOME/bin:$PATH
+                echo $(java -version)
+                mvn -f etl-jobs/pom.xml -Dlog4j.configuration=$WORKSPACE/logs -Dcobertura.report.format=xml clean cobertura:cobertura package
+                ''' 
             }
 
             stage('Publish_test_results') {
