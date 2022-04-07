@@ -28,7 +28,9 @@ node() {
         }
 
             stage('Build') {
-                sh ("mvn -f etl-jobs/pom.xml \
+                sh ("export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64 \
+                 export PATH=$JAVA_HOME/bin:$PATH \
+                 mvn -f etl-jobs/pom.xml \
                 -Dlog4j.configuration=$WORKSPACE/logs \
                 -Dcobertura.report.format=xml clean cobertura:cobertura package")
             }
