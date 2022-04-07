@@ -62,6 +62,7 @@ jobs:
       - run:
           name: sonar
           command: |
+            export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
             echo $(java -version)
             cd data-products && mvn -X sonar:sonar -Dsonar.projectKey=Sunbird-Ed_sunbird-data-products  -Dsonar.host.url=https://sonarcloud.io -Dsonar.exclusions=/home/circleci/project/adhoc-scripts/**,/home/circleci/project/replay-scripts/** -Dsonar.scala.coverage.reportPaths=/home/circleci/project/data-products/target/scoverage.xml -Dsonar.organization=sunbird-ed
 workflows:
