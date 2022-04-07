@@ -35,10 +35,11 @@ node() {
                 // -Dcobertura.report.format=xml clean cobertura:cobertura package")
 
                sh '''
+                cd etl-jobs
                 export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
                 export PATH=$JAVA_HOME/bin:$PATH
                 echo $(java -version)
-                mvn -f etl-jobs/pom.xml -Dlog4j.configuration=$WORKSPACE/logs -Dcobertura.report.format=xml clean cobertura:cobertura package
+                mvn clean install -DskipTests
                 ''' 
             }
 
