@@ -30,7 +30,7 @@ node() {
             stage('Build') {
                sh '''
                 cd etl-jobs
-                export JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-amd64
+                export JAVA_HOME=/usr/lib/jvm/jdk-11.0.2
                 export PATH=$JAVA_HOME/bin:$PATH
                 echo $(java -version)
                 mvn clean install -DskipTests
