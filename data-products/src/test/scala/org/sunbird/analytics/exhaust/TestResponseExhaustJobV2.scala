@@ -8,14 +8,13 @@ import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.scalamock.scalatest.MockFactory
 import org.sunbird.analytics.exhaust.collection.ResponseExhaustJobV2
-import org.sunbird.analytics.job.report.BaseReportSpec
-import org.sunbird.analytics.util.{EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
+import org.sunbird.analytics.util.{BaseSpec, EmbeddedCassandra, EmbeddedPostgresql, RedisConnect}
 import redis.clients.jedis.Jedis
 import redis.embedded.RedisServer
 
 import scala.collection.JavaConverters._
 
-class TestResponseExhaustJobV2 extends BaseReportSpec with MockFactory with BaseReportsJob {
+class TestResponseExhaustJobV2 extends BaseSpec with MockFactory with BaseReportsJob {
 
   val jobRequestTable = "job_request"
   implicit var spark: SparkSession = _

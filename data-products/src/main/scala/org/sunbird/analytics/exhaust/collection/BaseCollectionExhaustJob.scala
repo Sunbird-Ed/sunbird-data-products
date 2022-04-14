@@ -37,7 +37,7 @@ case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[St
 case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"))
 case class CollectionBatchResponse(batchId: String, file: String, status: String, statusMsg: String, execTime: Long, fileSize: Long)
 case class CollectionDetails(result: Result)
-case class Result(content: List[CollectionInfo])
+case class Result(content: List[CollectionInfo], question: List[CollectionInfo], questionset: List[CollectionInfo])
 case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String], status: String)
 case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int], duplicateRequests: Option[Int])
 case class ProcessedRequest(channel: String, batchId: String, filePath: String, fileSize: Long)
@@ -457,10 +457,27 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def searchContent(searchFilter: Map[String, AnyRef])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     // TODO: Handle limit and do a recursive search call
+    implicit val sqlContext = new SQLContext(spark.sparkContext)
+    import sqlContext.implicits._
+
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
-    val response = RestUtil.post[CollectionDetails](apiURL, request).result.content
-    spark.createDataFrame(response).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status")
+    val contentresponse = RestUtil.post[CollectionDetails](apiURL, request).result.content
+    val questionresponse = RestUtil.post[CollectionDetails](apiURL, request).result.question
+    val questionsetresponse = RestUtil.post[CollectionDetails](apiURL, request).result.questionset
+
+    var contentDf = spark.createDataFrame(List[CollectionInfo]()).toDF().withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status")
+
+    if (contentresponse != null) {
+      contentDf = contentDf.unionByName(spark.createDataFrame(contentresponse).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
+    }
+    if (questionresponse != null) {
+      contentDf = contentDf.unionByName(spark.createDataFrame(questionresponse).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
+    }
+    if (questionsetresponse != null) {
+      contentDf = contentDf.unionByName(spark.createDataFrame(questionsetresponse).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
+    }
+    contentDf
   }
 
   def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
