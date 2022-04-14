@@ -49,7 +49,7 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
     val enrolmentWithCompletions = userEnrolmentDF.withColumn("completionPercentage", UDFUtils.completionPercentage(col("contentstatus"), lit(leafNodesCount)));
     val enrolledUsersToBatch = updateCertificateStatus(enrolmentWithCompletions).select(filterColumns.head, filterColumns.tail: _*)
     // Get selfAssess contents for generate score percentage
-    val supportedContentIds: List[AssessmentData] = getContents(hierarchyData, AppConf.getConfig("assessment.metrics.supported.contenttype"))
+    val supportedContentIds: List[AssessmentData] = getContents(hierarchyData)
     val activityAggData: DataFrame = if (supportedContentIds.nonEmpty) {
       getActivityAggData(collectionBatch)
         // filter the selfAssess Contents from the "agg" column
@@ -94,10 +94,16 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
   }
 
 
-  def getContents(hierarchyData: DataFrame, contentType: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[AssessmentData] = {
+  def getContents(hierarchyData: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[AssessmentData] = {
+    val assessmentFilters = Map(
+      "assessmentTypes" -> AppConf.getConfig("assessment.metrics.supported.contenttype").split(",").toList,
+      "questionTypes" -> Option(AppConf.getConfig("assessment.metrics.supported.objecttype")).getOrElse("QuestionSet").split(",").toList,
+      "primaryCategories" -> AppConf.getConfig("assessment.metrics.supported.primaryCategories").split(",").toList
+    )
+
     hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
-      filterAssessmentsFromHierarchy(List(hierarchy), List(contentType), AssessmentData(row.getString(0), List()))
+      filterAssessmentsFromHierarchy(List(hierarchy), assessmentFilters, AssessmentData(row.getString(0), List()))
     }).collect().toList
   }
 
@@ -111,18 +117,25 @@ object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExha
     hierarchy.getOrElse("leafNodesCount", 0).asInstanceOf[Int]
   }
 
-  def filterAssessmentsFromHierarchy(data: List[Map[String, AnyRef]], assessmentTypes: List[String], prevData: AssessmentData): AssessmentData = {
+  def filterAssessmentsFromHierarchy(data: List[Map[String, AnyRef]], assessmentFilters: Map[String, List[String]], prevData: AssessmentData): AssessmentData = {
     if (data.nonEmpty) {
+      val assessmentTypes = assessmentFilters("assessmentTypes")
+      val questionTypes = assessmentFilters("questionTypes")
+      val primaryCatFilter = assessmentFilters("primaryCategories")
+
       val list = data.map(childNode => {
         // TODO: need to change to primaryCategory after 3.3.0
         val contentType = childNode.getOrElse("contentType", "").asInstanceOf[String]
-        val updatedIds = (if (assessmentTypes.contains(contentType)) {
+        val objectType = childNode.getOrElse("objectType", "").asInstanceOf[String]
+        val primaryCategory = childNode.getOrElse("primaryCategory", "").asInstanceOf[String]
+
+        val updatedIds = (if (assessmentTypes.contains(contentType) || (questionTypes.contains(objectType) && primaryCatFilter.contains(primaryCategory))) {
           List(childNode.get("identifier").get.asInstanceOf[String])
         } else List()) ::: prevData.assessmentIds
         val updatedAssessmentData = AssessmentData(prevData.courseid, updatedIds)
         val children = childNode.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
         if (null != children && children.nonEmpty) {
-          filterAssessmentsFromHierarchy(children, assessmentTypes, updatedAssessmentData)
+          filterAssessmentsFromHierarchy(children, assessmentFilters, updatedAssessmentData)
         } else updatedAssessmentData
       })
       val courseId = list.head.courseid

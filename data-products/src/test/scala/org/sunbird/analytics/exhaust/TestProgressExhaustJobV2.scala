@@ -123,7 +123,7 @@ class TestProgressExhaustJobV2 extends BaseSpec with MockFactory with BaseReport
     new HadoopFileUtil().delete(spark.sparkContext.hadoopConfiguration, outputLocation)
 
     //Test coverage for filterAssessmentsFromHierarchy method
-    val assessmentData = ProgressExhaustJobV2.filterAssessmentsFromHierarchy(List(), List(), AssessmentData("do_1130928636168192001667", List()))
+    val assessmentData = ProgressExhaustJobV2.filterAssessmentsFromHierarchy(List(), Map(), AssessmentData("do_1130928636168192001667", List()))
     assessmentData.courseid should be("do_1130928636168192001667")
     assert(assessmentData.assessmentIds.isEmpty)
 
