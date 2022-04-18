@@ -462,20 +462,21 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
     val apiURL = Constants.COMPOSITE_SEARCH_URL
     val request = JSONUtils.serialize(searchFilter)
-    val contentresponse = RestUtil.post[CollectionDetails](apiURL, request).result.content
-    val questionresponse = RestUtil.post[CollectionDetails](apiURL, request).result.question
-    val questionsetresponse = RestUtil.post[CollectionDetails](apiURL, request).result.questionset
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val contents = response.content
+    val questions = response.question
+    val questionsets = response.questionset
 
     var contentDf = spark.createDataFrame(List[CollectionInfo]()).toDF().withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status")
 
-    if (contentresponse != null) {
-      contentDf = contentDf.unionByName(spark.createDataFrame(contentresponse).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
+    if (contents != null) {
+      contentDf = contentDf.unionByName(spark.createDataFrame(contents).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
     }
-    if (questionresponse != null) {
-      contentDf = contentDf.unionByName(spark.createDataFrame(questionresponse).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
+    if (questions != null) {
+      contentDf = contentDf.unionByName(spark.createDataFrame(questions).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
     }
-    if (questionsetresponse != null) {
-      contentDf = contentDf.unionByName(spark.createDataFrame(questionsetresponse).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
+    if (questionsets != null) {
+      contentDf = contentDf.unionByName(spark.createDataFrame(questionsets).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
     }
     contentDf
   }
