@@ -1,6 +1,6 @@
 package org.sunbird.analytics.exhaust.collection
 
-import org.apache.spark.sql.functions.{col, explode_outer, round, when}
+import org.apache.spark.sql.functions.{col, explode_outer, from_unixtime, round}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.conf.AppConf
@@ -83,6 +83,7 @@ object ResponseExhaustJobV2 extends optional.Application with BaseCollectionExha
     val assessAggData = ExhaustUtil.getArchivedData(store, filePath, container, Map("batchId" -> batch.batchId, "collectionId"-> batch.collectionId), Option(format))
 
     assessAggData.withColumn("question", UDFUtils.convertStringToList(col("question")))
+      .withColumn("last_attempted_on", from_unixtime(col("last_attempted_on")/1000, "yyyy-MM-dd HH:mm:ss"))
   }
 
   def prepareReportDf(df: DataFrame): DataFrame = {
