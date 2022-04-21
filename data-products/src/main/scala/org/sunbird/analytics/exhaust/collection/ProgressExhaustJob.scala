@@ -24,6 +24,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
   override def getReportPath() = "progress-exhaust/";
   override def getReportKey() = "progress";
   private val persistedDF:scala.collection.mutable.ListBuffer[DataFrame] = scala.collection.mutable.ListBuffer[DataFrame]();
+  private val defaultObjectType = "QuestionSet";
 
   override def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "state", "district", "cluster", "orgname", "schooludisecode", "schoolname", "block", "board", "rootorgid", "usertype", "usersubtype")
@@ -108,10 +109,12 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     import spark.implicits._
     val contentDataDF = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
+      val objectTypeFilter = Option(AppConf.getConfig("assessment.metrics.supported.objecttype")).getOrElse("")
+      val questionTypes = if (objectTypeFilter.isEmpty) defaultObjectType else objectTypeFilter
 
       val assessmentFilters = Map(
         "assessmentTypes" -> AppConf.getConfig("assessment.metrics.supported.contenttype").split(",").toList,
-        "questionTypes" -> Option(AppConf.getConfig("assessment.metrics.supported.objecttype")).getOrElse("QuestionSet").split(",").toList,
+        "questionTypes" -> questionTypes.split(",").toList,
         "primaryCategories" -> AppConf.getConfig("assessment.metrics.supported.primaryCategories").split(",").toList
       )
 
