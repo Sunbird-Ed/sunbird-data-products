@@ -108,10 +108,12 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
     import spark.implicits._
     val contentDataDF = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
+      val objectTypeFilter = Option(AppConf.getConfig("assessment.metrics.supported.objecttype")).getOrElse("")
+      val questionTypes = if (objectTypeFilter.isEmpty) "QuestionSet" else objectTypeFilter
 
       val assessmentFilters = Map(
         "assessmentTypes" -> AppConf.getConfig("assessment.metrics.supported.contenttype").split(",").toList,
-        "questionTypes" -> Option(AppConf.getConfig("assessment.metrics.supported.objecttype")).getOrElse("QuestionSet").split(",").toList,
+        "questionTypes" -> questionTypes.split(",").toList,
         "primaryCategories" -> AppConf.getConfig("assessment.metrics.supported.primaryCategories").split(",").toList
       )
 
