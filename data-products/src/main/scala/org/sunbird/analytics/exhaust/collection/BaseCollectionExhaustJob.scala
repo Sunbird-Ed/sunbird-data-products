@@ -464,8 +464,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val response = RestUtil.post[CollectionDetails](apiURL, request).result
     var contentDf = spark.createDataFrame(List[CollectionInfo]()).toDF().withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status")
 
-    for ((resultName: String, results: AnyRef) <- response) {
-      if (resultName.toLowerCase != "count") {
+    for ((resultKey: String, results: AnyRef) <- response) {
+      if (resultKey.toLowerCase != "count") {
         val contents = JSONUtils.deserialize[List[CollectionInfo]](JSONUtils.serialize(results))
         contentDf = contentDf.unionByName(spark.createDataFrame(contents).withColumnRenamed("name", "collectionName").select("channel", "identifier", "collectionName", "userConsent", "status"))
       }
