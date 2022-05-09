@@ -24,6 +24,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   override def getReportPath() = "progress-exhaust/";
   override def getReportKey() = "progress";
   private val persistedDF:scala.collection.mutable.ListBuffer[DataFrame] = scala.collection.mutable.ListBuffer[DataFrame]();
+  private val defaultObjectType = "QuestionSet";
 
   override def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "state", "district", "cluster", "orgname", "schooludisecode", "schoolname", "block", "board", "rootorgid", "usertype", "usersubtype")
@@ -108,7 +109,16 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     import spark.implicits._
     val contentDataDF = hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
-      filterAssessmentsFromHierarchy(List(hierarchy), List(AppConf.getConfig("assessment.metrics.supported.contenttype")), AssessmentData(row.getString(0), List()))
+      val objectTypeFilter = Option(AppConf.getConfig("assessment.metrics.supported.objecttype")).getOrElse("")
+      val questionTypes = if (objectTypeFilter.isEmpty) defaultObjectType else objectTypeFilter
+
+      val assessmentFilters = Map(
+        "assessmentTypes" -> AppConf.getConfig("assessment.metrics.supported.contenttype").split(",").toList,
+        "questionTypes" -> questionTypes.split(",").toList,
+        "primaryCategories" -> AppConf.getConfig("assessment.metrics.supported.primaryCategories").split(",").toList
+      )
+
+      filterAssessmentsFromHierarchy(List(hierarchy), assessmentFilters, AssessmentData(row.getString(0), List()))
     }).toDF()
       .select(col("courseid"), explode_outer(col("assessmentIds")).as("contentid"))
 
@@ -161,26 +171,6 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
       .select("userid", "courseid", "batchid", "completionPercentage", "l1identifier", "l1completionPercentage")
 
     resDf.cache()
-  }
-
-  def filterAssessmentsFromHierarchy(data: List[Map[String, AnyRef]], assessmentTypes: List[String], prevData: AssessmentData): AssessmentData = {
-    if (data.nonEmpty) {
-      val list = data.map(childNode => {
-        // TODO: need to change to primaryCategory after 3.3.0
-        val contentType = childNode.getOrElse("contentType", "").asInstanceOf[String]
-        val updatedIds = (if (assessmentTypes.contains(contentType)) {
-          List(childNode.get("identifier").get.asInstanceOf[String])
-        } else List()) ::: prevData.assessmentIds
-        val updatedAssessmentData = AssessmentData(prevData.courseid, updatedIds)
-        val children = childNode.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
-        if (null != children && children.nonEmpty) {
-          filterAssessmentsFromHierarchy(children, assessmentTypes, updatedAssessmentData)
-        } else updatedAssessmentData
-      })
-      val courseId = list.head.courseid
-      val assessmentIds = list.flatMap(x => x.assessmentIds).distinct
-      AssessmentData(courseId, assessmentIds)
-    } else prevData
   }
 
   def parseCourseHierarchy(data: List[Map[String, AnyRef]], levelCount: Int, prevData: CourseData, depthLevel: Int): CourseData = {

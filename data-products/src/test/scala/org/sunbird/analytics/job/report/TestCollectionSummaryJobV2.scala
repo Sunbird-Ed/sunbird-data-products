@@ -86,6 +86,8 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     })
     batch1.select("medium").collect().map(_(0)).toList.mkString("") should be("null")
     batch1.select("subject").collect().map(_(0)).toList.mkString("") should be("null")
+    batch1.select("usertype").collect().map(_(0)).toList.mkString("") should be("teacher")
+    batch1.select("usersubtype").collect().map(_(0)).toList.mkString("") should be("other")
 
     val batch2 = reportData.filter(col("batchid") === "batch-0130271096968396800" && col("courseid") === "do_1130264512015646721166")
     batch2.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
@@ -102,6 +104,8 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch2.select("createdfor").collect().map(_(0)).map(x => {
       x.asInstanceOf[mutable.WrappedArray[String]](0) should be("ORG_001")
     })
+    batch2.select("usertype").collect().map(_(0)).toList.mkString("") should be("OTHER")
+    batch2.select("usersubtype").collect().map(_(0)).toList.mkString("") should be("other")
 
     val batch3 = reportData.filter(col("batchid") === "batch-01303150537737011211" && col("courseid") === "do_1130314965721088001129")
     batch3.select("state").collect().map(_ (0)).toList.contains("KA") should be(true)
@@ -123,6 +127,9 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     batch3.select("subject").collect().map(_(0)).map(x => {
       x.asInstanceOf[mutable.WrappedArray[String]](0) should be("Physics")
     })
+    batch3.select("usertype").collect().map(_(0)).toList.mkString("") should be("OTHER")
+    batch3.select("usersubtype").collect().map(_(0)).toList.mkString("") should be("")
+
     CollectionSummaryJobV2.saveToBlob(reportData, jobConfig)
   }
 

@@ -42,8 +42,18 @@
                 },
                 {
                   "type": "path",
+                  "name": "acceptedContributions",
+                  "expr": "$.data.acceptedContributions[*]"
+                },
+                {
+                  "type": "path",
                   "name": "rejectedContents",
                   "expr": "$.data.rejectedContents[*]"
+                },
+                {
+                  "type": "path",
+                  "name": "rejectedContributions",
+                  "expr": "$.data.rejectedContributions[*]"
                 },
                 {
                   "type": "path",
@@ -434,6 +444,11 @@
                   "type": "path",
                   "name": "rejectComment",
                   "expr": "$.data.rejectComment"
+                },
+                {
+                  "type": "path",
+                  "name": "reusedContributions",
+                  "expr": "$.data.reusedContributions[*]"
                 }
               ]
             },
@@ -465,7 +480,15 @@
                 },
                 {
                   "type": "string",
+                  "name": "acceptedContributions"
+                },
+                {
+                  "type": "string",
                   "name": "rejectedContents"
+                },
+                {
+                  "type": "string",
+                  "name": "rejectedContributions"
                 },
                 {
                   "type": "number",
@@ -656,6 +679,9 @@
                 {
                   "type": "string",
                   "name": "rejectComment"
+                },
+                {
+                  "name": "reusedContributions"
                 }
               ],
               "dimensionsExclusions": []

@@ -5,10 +5,12 @@ import java.util.{Date, Properties}
 import java.util.concurrent.CompletableFuture
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.util.LongAccumulator
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
+import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
@@ -114,6 +116,19 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     if (!requestData.contains("conversationId")) false else true
   }
 
+  def getConversationDates(requestData: Map[String, AnyRef], conversationDF: DataFrame): Map[String, String] = {
+    val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+    val previousDay = fmt.print(DateTime.now().minusDays(1))
+    val startDate: String = Option(requestData.getOrElse("startDate", null).asInstanceOf[String])
+      .getOrElse(Option(conversationDF.head().getAs[Date]("startDate"))
+        .getOrElse(previousDay)).toString
+    val endDate = Option(requestData.getOrElse("endDate", null).asInstanceOf[String])
+      .getOrElse(Option(conversationDF.head().getAs[Date]("endDate"))
+        .getOrElse(previousDay)).toString
+    Map("conversationStartDate" -> startDate, "conversationEndDate" -> endDate)
+
+  }
+
   def processRequest(request: JobRequest, storageConfig: StorageConfig)(implicit spark: SparkSession, sc: SparkContext, fc: FrameworkContext, config: JobConfig): JobRequest = {
 
     val requestData = JSONUtils.deserialize[Map[String, AnyRef]](request.request_data)
@@ -124,8 +139,9 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     if (conversationDF.count() > 0) {
       val telemetryDF = if (!config.search.`type`.equals("none")) {
         fc.inputEventsCount = sc.longAccumulator("InputEventsCount");
-        val startDate = conversationDF.head().getAs[Date]("startDate").toString
-        val endDate = conversationDF.head().getAs[Date]("endDate").toString
+
+        val startDate = getConversationDates(requestData, conversationDF)("conversationStartDate")
+        val endDate = getConversationDates(requestData, conversationDF)("conversationEndDate")
         // prepare config with start & end dates
         val queryConf = config.search.queries.get.apply(0)
         val query = Query(queryConf.bucket, queryConf.prefix, Option(startDate), Option(endDate), None, None, None, None, None, queryConf.file)
@@ -181,12 +197,11 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     val pass = AppConf.getConfig("uci.conversation.postgres.pass")
     val connProperties: Properties = getUCIPostgresConnectionProps(user, pass)
     /**
-      * Fetch conversation for a specific conversation ID and Tenant
-      */
-    fetchData(conversationURL, connProperties, conversationTable).select("id", "name", "owners", "startDate", "endDate")
+     * Fetch conversation for a specific conversation ID and Tenant
+     */
+    fetchData(conversationURL, connProperties, conversationTable).select("id", "name", "ownerOrgID", "startDate", "endDate")
       .filter(col("id") === conversationId)
-      .filter(array_contains(col("owners"), tenant)) // Filtering only tenant specific report
-
+      .filter(col("ownerOrgID") === tenant)
   }
 
   def getUCIPostgresConnectionProps(user: String, pass: String): Properties = {
@@ -215,7 +230,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
 
   def getFilePath(conversationId: String, requestId: String)(implicit config: JobConfig): String = {
     val requestIdPath = if (requestId.nonEmpty) requestId.concat("/") else ""
-   getReportPath() + requestIdPath + conversationId + "_" + getReportKey() + "_" + getDate()
+    getReportPath() + requestIdPath + conversationId + "_" + getReportKey() + "_" + getDate()
   }
 
   def getDate(): String = {

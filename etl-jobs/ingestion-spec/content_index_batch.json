@@ -77,6 +77,11 @@
               },
               {
                 "type": "path",
+                "name": "primaryCategory",
+                "expr": "$.data.primaryCategory"
+              },
+              {
+                "type": "path",
                 "name": "createdBy",
                 "expr": "$.data.createdBy"
               },
@@ -465,6 +470,10 @@
               {
                 "type": "string",
                 "name": "contentType"
+              },
+              {
+                "type": "string",
+                "name": "primaryCategory"
               },
               {
                 "type": "string",

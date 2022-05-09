@@ -5,7 +5,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{col, lit, unix_timestamp, when}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
-import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
@@ -15,6 +15,8 @@ import org.sunbird.analytics.exhaust.collection.UDFUtils
 
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, TimeZone}
+import org.apache.spark
+
 import scala.collection.immutable.List
 
 case class CourseBatchStatusMetrics(unStarted: Long, inProgress: Long, completed: Long)
@@ -26,15 +28,15 @@ object CourseBatchStatusUpdaterJob extends IJob with BaseReportsJob {
 
   // $COVERAGE-OFF$ Disabling scoverage for main and execute method
   override def main(config: String)(implicit sc: Option[SparkContext], fc: Option[FrameworkContext]): Unit = {
-    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     val jobName: String = "CourseBatchStatusUpdaterJob"
+    implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](config)
     JobLogger.init(jobName)
     JobLogger.start(s"$jobName started executing", Option(Map("config" -> config, "model" -> jobName)))
     implicit val frameworkContext: FrameworkContext = getReportingFrameworkContext()
     implicit val spark: SparkSession = openSparkSession(jobConfig)
     implicit val sc: SparkContext = spark.sparkContext
-    spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
     try {
+      spark.setCassandraConf("LMSCluster", CassandraConnectorConf.ConnectionHostParam.option(AppConf.getConfig("sunbird.courses.cluster.host")))
       val res = CommonUtil.time(execute(fetchData))
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map(
         "time-taken" -> res._1,
@@ -42,11 +44,15 @@ object CourseBatchStatusUpdaterJob extends IJob with BaseReportsJob {
         "in-progress" -> res._2.inProgress,
         "completed" -> res._2.completed
       )))
-    } finally {
+    } catch {
+      case ex: Exception =>
+        JobLogger.log(ex.getMessage, None, ERROR);
+        JobLogger.end(s"$jobName execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
+    }
+    finally {
       frameworkContext.closeContext()
       spark.close()
     }
-
   }
 
   // $COVERAGE-ON$ Disabling scoverage for main and execute method
@@ -59,7 +65,7 @@ object CourseBatchStatusUpdaterJob extends IJob with BaseReportsJob {
     res
   }
 
-  def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext): CourseBatchStatusMetrics = {
+  def updateBatchStatus(updaterConfig: JobConfig, collectionBatchDF: DataFrame)(implicit sc: SparkContext, spark: SparkSession): CourseBatchStatusMetrics = {
     val currentDate = getDateFormat().format(new Date)
     val computedDF = collectionBatchDF.withColumn("updated_status",
       when(unix_timestamp(lit(currentDate), "yyyy-MM-dd").gt(unix_timestamp(col("enddate"), "yyyy-MM-dd")), 2).otherwise(
@@ -80,10 +86,11 @@ object CourseBatchStatusUpdaterJob extends IJob with BaseReportsJob {
   }
 
   def getCollectionBatchDF(fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit spark: SparkSession): DataFrame = {
+    val convertDate = spark.udf.register("convertDate", convertDateFn)
     fetchData(spark, collectionBatchDBSettings, cassandraFormat, new StructType())
-      .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
-      .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
-      .withColumn("enrollmentenddate", UDFUtils.getLatestValue(col("enrollment_enddate"), col("enrollmentenddate")))
+      .withColumn("startdate", UDFUtils.getLatestValue(convertDate(col("start_date")), col("startdate")))
+      .withColumn("enddate", UDFUtils.getLatestValue(convertDate(col("end_date")), col("enddate")))
+      .withColumn("enrollmentenddate", UDFUtils.getLatestValue(convertDate(col("enrollment_enddate")), col("enrollmentenddate")))
       .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
   }
 
@@ -159,11 +166,18 @@ object CourseBatchStatusUpdaterJob extends IJob with BaseReportsJob {
     dateFormatter.setTimeZone(TimeZone.getTimeZone("IST"))
     dateFormatter
   }
-
-  def formatDate(date: String): String = {
+  
+  def formatDate(date: String) = {
     Option(date).map(x => {
-      val dateFormatter = getDateFormat()
-      dateFormatter.format(dateFormatter.parse(x))
+      getDateFormat().format(getDateFormat().parse(x))
+    }).orNull
+  }
+
+  def convertDateFn : String => String = (date: String) => {
+    Option(date).map(x => {
+      val utcDateFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      utcDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"))
+      getDateFormat().format(utcDateFormatter.parse(x))
     }).orNull
   }
 

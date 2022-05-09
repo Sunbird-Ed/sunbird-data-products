@@ -1,0 +1,3 @@
+content_id,attempt_id,user_id,course_id,batch_id,created_on,last_attempted_on,total_max_score,total_score,updated_on,grand_total,question
+do_112876961957437440179,attempt-001,user-008,do_11306040245271756813015,batch-001,null,1626327000000,10,10,1626327000000,10,[]
+do_11307593493010022418,attempt-001,user-010,do_11306040245271756813015,batch-001,null,1626327000000,15,15,1626327000000,15,[]

@@ -8,7 +8,7 @@ import org.scalatest._
 /**
  * @author Santhosh
  */
-class BaseSpec extends FlatSpec with Matchers with BeforeAndAfterAll {
+class BaseSpec extends FlatSpec with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   def getSparkContext(): SparkContext = {
     val sc = getSparkSession().sparkContext

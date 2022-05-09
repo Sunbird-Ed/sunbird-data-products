@@ -28,8 +28,8 @@ object StateAdminReportJob extends IJob with StateAdminReportHelper {
     val objectKey = AppConf.getConfig("admin.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey);
     
-  //$COVERAGE-OFF$ Disabling scoverage for main and execute method
-  def name(): String = "StateAdminReportJob"
+    //$COVERAGE-OFF$ Disabling scoverage for main and execute method
+    def name(): String = "StateAdminReportJob"
 
     def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
 
@@ -51,14 +51,20 @@ object StateAdminReportJob extends IJob with StateAdminReportHelper {
         JobLogger.end("ExternalIdReportJob zip completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name)))
     }
     
-  // $COVERAGE-ON$ Enabling scoverage for other methods
-   def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
+    // $COVERAGE-ON$ Enabling scoverage for other methods
+    def generateExternalIdReport() (implicit sparkSession: SparkSession, fc: FrameworkContext) = {
         import sparkSession.implicits._
+        val DECLARED_EMAIL: String = "declared-email"
+        val DECLARED_PHONE: String = "declared-phone"
         // val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
-        //loading user_declarations table details based on declared values and location details and appending org-external-id if present
+        // loading user_declarations table details based on declared values and location details and appending org-external-id if present
         // val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
         val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace))
-        val userSelfDeclaredUserInfoDataDF = userSelfDeclaredDataDF.select(col("*"), col("userinfo").getItem("declared-email").as("declared-email"), col("userinfo").getItem("declared-phone").as("declared-phone"),
+        val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_consent", "keyspace" -> sunbirdKeyspace))
+        val activeConsentDF = userConsentDataDF.where(col("status") === "ACTIVE" && lower(col("object_type")) ===  "organisation")
+        val activeSelfDeclaredDF = userSelfDeclaredDataDF.join(activeConsentDF, userSelfDeclaredDataDF.col("userid") === activeConsentDF.col("user_id") && userSelfDeclaredDataDF.col("orgid") === activeConsentDF.col("consumer_id"), "left_semi").
+           select(userSelfDeclaredDataDF.col("*"))
+        val userSelfDeclaredUserInfoDataDF = activeSelfDeclaredDF.select(col("*"), col("userinfo").getItem(DECLARED_EMAIL).as(DECLARED_EMAIL), col("userinfo").getItem(DECLARED_PHONE).as(DECLARED_PHONE),
             col("userinfo").getItem("declared-school-name").as("declared-school-name"), col("userinfo").getItem("declared-school-udise-code").as("declared-school-udise-code"),col("userinfo").getItem("declared-ext-id").as("declared-ext-id")).drop("userinfo");
         val locationDF = locationData()
         //to-do later check if externalid is necessary not-null check is necessary
@@ -67,7 +73,7 @@ object StateAdminReportJob extends IJob with StateAdminReportHelper {
             select(userSelfDeclaredUserInfoDataDF.col("*"), orgExternalIdDf.col("*"))
         
         //decrypting email and phone values
-        val userDecrpytedDataDF = decryptPhoneEmailInDF(userSelfDeclaredExtIdDF, "declared-email", "declared-phone")
+        val userDecrpytedDataDF = decryptPhoneEmailInDF(userSelfDeclaredExtIdDF, DECLARED_EMAIL, DECLARED_PHONE)
         //appending decrypted values to the user-external-identifier dataframe
         val userExternalDecryptData  = userSelfDeclaredExtIdDF.join(userDecrpytedDataDF, userSelfDeclaredExtIdDF.col("userid") === userDecrpytedDataDF.col("userid"), "left_outer").
             select(userSelfDeclaredExtIdDF.col("*"), userDecrpytedDataDF.col("decrypted-email"), userDecrpytedDataDF.col("decrypted-phone"))
@@ -76,7 +82,7 @@ object StateAdminReportJob extends IJob with StateAdminReportHelper {
         val userDf = loadData(sparkSession, Map("table" -> "user", "keyspace" -> sunbirdKeyspace), None).
             select(col(  "userid"),
                 concat_ws(" ", col("firstname"), col("lastname")).as("Name"),
-                col("email").as("profileemail"), col("phone").as("profilephone"), col("rootorgid"), col("profileusertype"), col("profilelocation"))
+                col("email").as("profileemail"), col("phone").as("profilephone"), col("rootorgid"), col("profileusertypes"), col("profilelocation"))
         val userWithProfileDF = appendUserProfileTypeWithLocation(userDf);
         
         val commonUserDf = userWithProfileDF.join(userExternalDecryptData, userWithProfileDF.col("userid") === userExternalDecryptData.col("userid"), "inner").
@@ -103,8 +109,8 @@ object StateAdminReportJob extends IJob with StateAdminReportHelper {
     
     def appendUserProfileTypeWithLocation(userDf: DataFrame) : DataFrame = {
         val userProfileDf = userDf.withColumn("locationids", locationIdList(col("profilelocation"))).
-            withColumn("usertype", addUserType(col("profileusertype"))).
-            withColumn("usersubtype", addUserSubType(col("profileusertype")))
+            withColumn("usertype", addUserType(col("profileusertypes"), lit("type"))).
+            withColumn("usersubtype", addUserType(col("profileusertypes"), lit("subType")))
         userProfileDf
     }
     
@@ -209,24 +215,17 @@ object StateAdminReportJob extends IJob with StateAdminReportHelper {
     
     val locationIdList = udf[List[String], String](locationIdListFunction)
     
-    def profileTypeFunction(profileType: String) : String = {
-        if(profileType != null && !profileType.isEmpty) {
-            val profileUserType = JSONUtils.deserialize[Map[String, String]](profileType)
-            val usertypeList = profileUserType.filter(f => f._1.equalsIgnoreCase("type")).map(f => f._2)
-            if (!usertypeList.isEmpty) usertypeList.head else ""
+    def parseProfileTypeFunction(profileUserTypesStr: String, typeKey: String) : String = {
+        if(profileUserTypesStr != null && profileUserTypesStr.nonEmpty) {
+            val profileUserType = JSONUtils.deserialize[List[Map[String, String]]](profileUserTypesStr)
+            profileUserType.foldLeft(List[String]())((resultType, userType) => {
+                val typeVal:String = userType.getOrElse(typeKey, "")
+
+                if (typeVal != null && typeVal.nonEmpty && !resultType.contains(typeVal)) resultType :+ typeVal else resultType
+            }).mkString(",")
         } else ""
     }
-    val addUserType = udf[String, String](profileTypeFunction)
-    
-    def profileSubTypeFunction(profileSubType: String) : String = {
-        if(profileSubType != null && !profileSubType.isEmpty) {
-            val profileUserSubType = JSONUtils.deserialize[Map[String, String]](profileSubType)
-            val userSubTypeList = profileUserSubType.filter(f => f._1.equalsIgnoreCase("subType")).map(f => f._2)
-            if (!userSubTypeList.isEmpty) userSubTypeList.head else ""
-        } else ""
-    }
-    
-    val addUserSubType = udf[String, String](profileSubTypeFunction)
-    
+
+    val addUserType = udf[String, String, String](parseProfileTypeFunction)
 
 }

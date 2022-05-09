@@ -5,37 +5,61 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.cassandra.CassandraSparkSessionFunctions
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.apache.spark.sql.functions.col
-import org.ekstep.analytics.framework.Level.INFO
+import org.ekstep.analytics.framework.Level.{ERROR, INFO}
+import org.ekstep.analytics.framework.conf.AppConf
+import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
+import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, JobContext}
-
-import scala.collection.Map
+import org.joda.time.DateTime
+import scala.collection.immutable.List
 
 object CassandraMigratorJob extends IJob {
 
   implicit val className = "org.ekstep.analytics.updater.CassandraMigratorJob"
-  implicit val fc = new FrameworkContext();
+//  implicit val fc = new FrameworkContext();
 
   def name(): String = "CassandraMigratorJob"
 
   override def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None): Unit = {
     val jobConfig = JSONUtils.deserialize[JobConfig](config)
     implicit val sparkContext = if (sc.isEmpty) CommonUtil.getSparkContext(JobContext.parallelization, jobConfig.appName.getOrElse(jobConfig.model)) else sc.get
+    implicit val frameworkContext: FrameworkContext = if (fc.isEmpty) new FrameworkContext() else fc.get
     val jobName = jobConfig.appName.getOrElse(name())
     JobLogger.init(jobName)
     JobLogger.start(jobName + " Started executing", Option(Map("config" -> config, "model" -> name)))
-    val totalEvents = migrateData(jobConfig)
-    JobLogger.end(jobName + " Completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "outputEvents" -> totalEvents)))
-    CommonUtil.closeSparkContext()
+    try {
+      val res = CommonUtil.time({migrateData(jobConfig)})
+      // generate metric event and push it to kafka topic
+      val metrics = List(Map("id" -> "total-records-migrated", "value" -> res._2.asInstanceOf[AnyRef]), Map("id" -> "time-taken-secs", "value" -> Double.box(res._1 / 1000).asInstanceOf[AnyRef]))
+      val metricEvent = getMetricJson(jobName, Option(new DateTime().toString(CommonUtil.dateFormat)), "SUCCESS", metrics)
+      // $COVERAGE-OFF$
+      if (AppConf.getConfig("push.metrics.kafka").toBoolean)
+        KafkaDispatcher.dispatch(Array(metricEvent), Map("topic" -> AppConf.getConfig("metric.kafka.topic"), "brokerList" -> AppConf.getConfig("metric.kafka.broker")))
+      // $COVERAGE-ON$
+      JobLogger.end(jobName + " Completed successfully!", "SUCCESS", Option(Map("config" -> config, "model" -> name, "total-records-migrated" -> res._2)))
+    }  catch {
+      case ex: Exception =>
+        JobLogger.log(ex.getMessage, None, ERROR);
+        JobLogger.end(jobName + " execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
+        // generate metric event and push it to kafka topic in case of failure
+        val metricEvent = getMetricJson(jobName, Option(new DateTime().toString(CommonUtil.dateFormat)), "FAILED", List())
+        // $COVERAGE-OFF$
+        if (AppConf.getConfig("push.metrics.kafka").toBoolean) {
+          KafkaDispatcher.dispatch(Array(metricEvent), Map("topic" -> AppConf.getConfig("metric.kafka.topic"), "brokerList" -> AppConf.getConfig("metric.kafka.broker")))
+        }
+      // $COVERAGE-ON$
+    } finally {
+      CommonUtil.closeSparkContext()
+    }
   }
 
-  def migrateData(jobConfig: JobConfig)(implicit sc: SparkContext): Unit = {
-    // val sqlContext = new SQLContext(sc)
-    val modelParams = jobConfig.modelParams.get.asInstanceOf[Map[String,String]]
-    // val spark = sqlContext.sparkSession
-    val spark = SparkSession.builder.config(sc.getConf).getOrCreate().sparkSession
-    val cassandraFormat = "org.apache.spark.sql.cassandra"
-    val keyspaceName = modelParams.getOrElse("keyspace","")
+  def migrateData(jobConfig: JobConfig)(implicit sc: SparkContext): Long = {
+    val sqlContext = new SQLContext(sc)
+    val modelParams =jobConfig.modelParams.get.asInstanceOf[Map[String,String]]
+    val spark = sqlContext.sparkSession
+    val cassandraFormat = "org.apache.spark.sql.cassandra";
+    val keyspaceName =modelParams.getOrElse("keyspace","")
     val cDataTableName = modelParams.getOrElse("cassandraDataTable","")
     val cMigrateTableName = modelParams.getOrElse("cassandraMigrateTable", "")
     val result = CommonUtil.time({
@@ -77,6 +101,7 @@ object CassandraMigratorJob extends IJob {
       (migratedData)
     })
     JobLogger.log("Time to complete migration of cassandra table", Some(Map("timeTaken" -> finalResult._1)), INFO)
+    result._2._1
   }
 
 }
