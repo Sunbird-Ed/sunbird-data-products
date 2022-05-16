@@ -60,7 +60,7 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
     if (null != value && value.nonEmpty)
       value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
     else null
-  }, new ArrayType(MapType(StringType, StringType), true))
+  })
 
   it should "generate the report for all the batches" in {
     initializeDefaultMockData()

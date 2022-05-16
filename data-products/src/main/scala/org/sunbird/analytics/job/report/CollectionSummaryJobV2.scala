@@ -19,7 +19,7 @@ import org.sunbird.analytics.util.{CourseUtils, UserData}
 
 import scala.collection.immutable.List
 
-object CollectionSummaryJobV2 extends optional.Application with IJob with BaseReportsJob {
+object CollectionSummaryJobV2 extends IJob with BaseReportsJob {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "ReportCluster");
@@ -103,7 +103,7 @@ object CollectionSummaryJobV2 extends optional.Application with IJob with BaseRe
 
   def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
     implicit val sparkSession: SparkSession = spark
-    implicit val sqlContext: SQLContext = spark.sqlContext
+    // implicit val sqlContext: SQLContext = spark.sqlContext
     import spark.implicits._
     val userCachedDF = getUserData(spark, fetchData = fetchData).select("userid", "state", "district", "orgname", "usertype", "usersubtype")
     val processBatches: DataFrame = filterBatches(spark, fetchData, config)

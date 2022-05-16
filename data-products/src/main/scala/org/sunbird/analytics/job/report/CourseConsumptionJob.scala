@@ -5,7 +5,7 @@ import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobDriver}
 import org.sunbird.analytics.model.report.CourseConsumptionModel
 
-object CourseConsumptionJob extends optional.Application with IJob {
+object CourseConsumptionJob extends IJob {
 
   implicit val className = "org.ekstep.analytics.job.CourseConsumptionJob"
 

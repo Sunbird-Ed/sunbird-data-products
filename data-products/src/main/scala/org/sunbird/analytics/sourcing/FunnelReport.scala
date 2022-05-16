@@ -37,7 +37,7 @@ case class FunnelResult(program_id:String, reportDate: String, projectName: Stri
 case class VisitorResult(date: String, visitors: String, slug: String, reportName: String)
 case class DruidTextbookData(visitors: Int)
 
-object FunnelReport extends optional.Application with IJob with BaseReportsJob {
+object FunnelReport extends IJob with BaseReportsJob {
 
   implicit val className = "org.sunbird.analytics.job.report.FunnelReport"
   val jobName = "Funnel Report Job"

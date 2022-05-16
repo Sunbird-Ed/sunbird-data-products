@@ -14,8 +14,8 @@ import java.time.Duration
 
 object EmbeddedCassandra {
 
-  System.setProperty("cassandra.unsafesystem", "true");
-  EmbeddedCassandraServerHelper.startEmbeddedCassandra("cassandra.yaml", 30000L);
+  System.setProperty("cassandra.unsafesystem", "true")
+  EmbeddedCassandraServerHelper.startEmbeddedCassandra("cassandra.yaml", 30000L)
   val connector = CassandraConnector(getSparkConf())
   val session: CqlSession = CqlSession.builder()
     .addContactPoint(new InetSocketAddress("localhost", AppConf.getConfig("cassandra.service.embedded.connection.port").toInt))
@@ -29,11 +29,11 @@ object EmbeddedCassandra {
     conf.setMaster("local[*]");
     conf.set("spark.cassandra.connection.port", AppConf.getConfig("cassandra.service.embedded.connection.port"))
     conf.set("spark.cassandra.connection.host", "localhost")
-    conf;
+    conf
   }
 
   def setup() {
-    dataLoader.load(new FileCQLDataSet(AppConf.getConfig("cassandra.cql_path"), true, true));
+    dataLoader.load(new FileCQLDataSet(AppConf.getConfig("cassandra.cql_path"), true, true))
   }
 
   def loadData(cqlFile: String) {

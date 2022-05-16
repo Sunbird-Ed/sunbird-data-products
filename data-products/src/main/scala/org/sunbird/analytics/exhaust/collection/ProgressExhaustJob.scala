@@ -16,7 +16,7 @@ case class CourseData(courseid: String, leafNodesCount: String, level1Data: List
 case class Level1Data(l1identifier: String, l1leafNodesCount: String)
 case class AssessmentData(courseid: String, assessmentIds: List[String])
 
-object ProgressExhaustJob extends optional.Application with BaseCollectionExhaustJob {
+object ProgressExhaustJob extends BaseCollectionExhaustJob {
 
   override def getClassName = "org.sunbird.analytics.exhaust.collection.ProgressExhaustJob"
   override def jobName() = "ProgressExhaustJob";
@@ -197,7 +197,7 @@ object ProgressExhaustJob extends optional.Application with BaseCollectionExhaus
       })
       val courseId = list.head.courseid
       val leafNodeCount = list.head.leafNodesCount
-      val level1Data = list.map(x => x.level1Data).flatten.toList
+      val level1Data = list.flatMap(x => x.level1Data)
       CourseData(courseId, leafNodeCount, level1Data)
     } else prevData
   }

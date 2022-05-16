@@ -26,7 +26,7 @@ case class AssessmentCorrectionMetrics(batchId: String, contentId: String, inval
 case class ContentMeta(totalQuestions: Int, contentType: String, contentId: String)
 
 
-object AssessmentScoreCorrectionJob extends optional.Application with IJob with BaseReportsJob {
+object AssessmentScoreCorrectionJob extends IJob with BaseReportsJob {
   implicit val className: String = "org.sunbird.analytics.audit.AssessmentScoreCorrectionJob"
   val cassandraFormat = "org.apache.spark.sql.cassandra"
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster")

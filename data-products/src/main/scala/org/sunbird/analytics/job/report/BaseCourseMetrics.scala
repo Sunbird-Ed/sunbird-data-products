@@ -4,7 +4,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.SparkSession
 import org.ekstep.analytics.framework.AlgoInput
 import org.ekstep.analytics.framework.AlgoOutput
@@ -32,7 +31,7 @@ trait BaseCourseMetrics[T <: AnyRef, A <: BaseCourseMetricsOutput, B <: AlgoOutp
   }
 
   def getCourseMetrics(spark: SparkSession, config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
-    implicit val sqlContext = new SQLContext(sc)
+    implicit val spark: SparkSession = SparkSession.builder().config(sc.getConf).getOrCreate()
     val courses = CourseUtils.getCourse(config)
     val courseBatch = CourseUtils.getCourseBatchDetails(spark, CourseUtils.loadData)
     val tenantInfo = CourseUtils.getTenantInfo(spark, CourseUtils.loadData)

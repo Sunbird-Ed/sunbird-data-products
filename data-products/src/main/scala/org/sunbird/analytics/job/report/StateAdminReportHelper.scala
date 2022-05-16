@@ -62,11 +62,11 @@ trait StateAdminReportHelper extends BaseReportsJob {
   }
 
   def loadOrganisationSlugDF()(implicit sparkSession: SparkSession) = {
-    loadOrganisationData.filter(col(colName = "slug").isNotNull).cache();
+    loadOrganisationData.filter(col(colName = "slug").isNotNull).cache()
   }
   
   def loadOrganisationData()(implicit sparkSession: SparkSession) = {
-    loadData(sparkSession, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace), None).select(
+    loadData(sparkSession, Map("table" -> "organisation", "keyspace" -> sunbirdKeyspace)).select(
       col("id").as("id"),
       col("rootorgid").as("rootorgid"),
       col("channel").as("channel"),

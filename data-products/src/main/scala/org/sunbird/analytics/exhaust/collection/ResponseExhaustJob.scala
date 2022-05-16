@@ -8,7 +8,7 @@ import org.ekstep.analytics.framework.FrameworkContext
 import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.conf.AppConf
 
-object ResponseExhaustJob extends optional.Application with BaseCollectionExhaustJob {
+object ResponseExhaustJob extends BaseCollectionExhaustJob {
   
   override def getClassName = "org.sunbird.analytics.exhaust.collection.ResponseExhaustJob"
   override def jobName() = "ResponseExhaustJob";

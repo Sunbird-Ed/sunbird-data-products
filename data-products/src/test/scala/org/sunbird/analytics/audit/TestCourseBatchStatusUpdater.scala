@@ -21,13 +21,11 @@ class TestCourseBatchStatusUpdater extends BaseReportSpec with MockFactory {
   var reporterMock: BaseReportsJob = mock[BaseReportsJob]
   val sunbirdCoursesKeyspace = "sunbird_courses"
 
-
   val convertMethod = udf((value: mutable.WrappedArray[String]) => {
     if (null != value && value.nonEmpty)
       value.toList.map(str => JSONUtils.deserialize(str)(manifest[Map[String, String]])).toArray
     else null
-  }, new ArrayType(MapType(StringType, StringType), true))
-
+  })
 
   override def beforeAll(): Unit = {
     super.beforeAll()

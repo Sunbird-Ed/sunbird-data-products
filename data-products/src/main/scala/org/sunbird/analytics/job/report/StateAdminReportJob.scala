@@ -20,7 +20,7 @@ import scala.collection.mutable.ListBuffer
 case class UserSelfDeclared(userid: String, orgid: String, persona: String, errortype: String,
                             status: String, userinfo: Map[String, String])
 
-object StateAdminReportJob extends optional.Application with IJob with StateAdminReportHelper {
+object StateAdminReportJob extends IJob with StateAdminReportHelper {
 
     implicit val className: String = "org.ekstep.analytics.job.StateAdminReportJob"
     
@@ -56,9 +56,10 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         import sparkSession.implicits._
         val DECLARED_EMAIL: String = "declared-email"
         val DECLARED_PHONE: String = "declared-phone"
-        val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
-        //loading user_declarations table details based on declared values and location details and appending org-external-id if present
-        val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+        // val userSelfDeclaredEncoder = Encoders.product[UserSelfDeclared].schema
+        // loading user_declarations table details based on declared values and location details and appending org-external-id if present
+        // val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace), Some(userSelfDeclaredEncoder))
+        val userSelfDeclaredDataDF = loadData(sparkSession, Map("table" -> "user_declarations", "keyspace" -> sunbirdKeyspace))
         val userConsentDataDF = loadData(sparkSession, Map("table" -> "user_consent", "keyspace" -> sunbirdKeyspace))
         val activeConsentDF = userConsentDataDF.where(col("status") === "ACTIVE" && lower(col("object_type")) ===  "organisation")
         val activeSelfDeclaredDF = userSelfDeclaredDataDF.join(activeConsentDF, userSelfDeclaredDataDF.col("userid") === activeConsentDF.col("user_id") && userSelfDeclaredDataDF.col("orgid") === activeConsentDF.col("consumer_id"), "left_semi").
@@ -189,7 +190,7 @@ object StateAdminReportJob extends optional.Application with IJob with StateAdmi
         resultDf.saveToBlobStore(storageConfig, "csv", "declared_user_detail", Option(Map("header" -> "true")), Option(Seq("provider")))
         resultDf
     }
-    
+
     def locationIdListFunction(location: String): List[String] = {
         var locations = new ListBuffer[String]()
         try {

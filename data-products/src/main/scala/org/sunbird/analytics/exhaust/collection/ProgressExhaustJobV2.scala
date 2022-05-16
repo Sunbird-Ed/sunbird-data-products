@@ -7,7 +7,7 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JSONUtils
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 
-object ProgressExhaustJobV2 extends optional.Application with BaseCollectionExhaustJob {
+object ProgressExhaustJobV2 extends BaseCollectionExhaustJob {
 
   override def getClassName = "org.sunbird.analytics.exhaust.collection.ProgressExhaustJobV2"
 

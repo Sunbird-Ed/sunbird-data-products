@@ -1,5 +1,9 @@
 package org.sunbird.analytics.exhaust.uci
 
+import java.sql.{Connection, DriverManager}
+import java.util.{Date, Properties}
+import java.util.concurrent.CompletableFuture
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -11,14 +15,17 @@ import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.dispatcher.KafkaDispatcher
 import org.ekstep.analytics.framework.driver.BatchJobDriver.getMetricJson
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
+import org.ekstep.analytics.framework.{V3Event, _}
+import org.ekstep.analytics.util.Constants
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
 
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{Date, Properties}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.LongAccumulator
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
+
 import scala.collection.immutable.List
 
 trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
@@ -142,9 +149,9 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
         // Fetch telemetry data
         val rdd = DataFetcher.fetchBatchData[V3Event](fetcherQuery);
         // apply eid filter using config
-        val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort);
+        val data = DataFilter.filterAndSort[V3Event](rdd, config.filters, config.sort)
         // apply pdata.id, tenant and conversation id filter
-        val pdataId = config.modelParams.getOrElse(Map()).get("botPdataId").getOrElse("")
+        val pdataId = config.modelParams.getOrElse(Map()).getOrElse("botPdataId", "")
         val filteredData = data
           .filter{f => (f.context.pdata.getOrElse(V3PData("", None, None)).id.equals(pdataId) && f.context.channel.equals(request.requested_channel))}
           .filter{f =>
@@ -152,9 +159,7 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
               .map{f => f.id}
             if (conversationIds.contains(conversationId)) true else false
           }
-        // convert rdd to DF
-        val dataCount = sc.longAccumulator("UCITelemetryCount")
-        getTelemetryDF(filteredData, dataCount)
+        getTelemetryDF(filteredData)
       }
       else spark.emptyDataFrame
 
@@ -212,14 +217,11 @@ trait BaseUCIExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob
     JobContext.parallelization = CommonUtil.getParallelization(config)
     val sparkSession = CommonUtil.getSparkSession(JobContext.parallelization, config.appName.getOrElse(config.model))
     setReportsStorageConfiguration(config)(sparkSession)
-    sparkSession;
+    sparkSession
   }
 
-  def getTelemetryDF(data: RDD[V3Event], dataCount: LongAccumulator)(implicit spark: SparkSession): DataFrame = {
-    spark.sqlContext.read.json(data.map(f => {
-      dataCount.add(1)
-      JSONUtils.serialize(f)
-    }))
+  def getTelemetryDF(data: RDD[V3Event])(implicit spark: SparkSession): DataFrame = {
+    spark.read.json(spark.createDataset[String](data.map(JSONUtils.serialize(_)))(Encoders.STRING))
   }
 
   def fetchData(url: String, props: Properties, table: String)(implicit spark: SparkSession): DataFrame = {

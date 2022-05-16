@@ -91,7 +91,7 @@ object TextBookUtils {
     val conf = Map("reportConfig"-> configMap,"store"->config("store"),"folderPrefix"->config("folderPrefix"),"filePath"->config("filePath"),"container"->config("container"),"format"->config("format"),"key"->config("key"))
     val scansDf = sc.parallelize(dialcodeScans).toDF().dropDuplicates("dialcodes")
 
-    reportConfig.output.map { f =>
+    reportConfig.output.foreach { f =>
       CourseUtils.postDataToBlob(scansDf,f,conf)
     }
   }
@@ -152,20 +152,21 @@ object TextBookUtils {
     var etbDialcode = prevData
     var dialcode = ""
 
-    data.map(units => {
+    data.foreach(units => {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         textbook = units :: newData
         val textbookContent = ContentInfo("","","",response.medium,response.gradeLevel,response.subject,"","",Option(""),0,"",0,List(),"",Option(List[ContentInfo]()),0,"")
         val levelNames = textbook.reverse
-        val dialcodeValues = textbook.lift(0).getOrElse(textbookContent).dialcodes
+        val dialcodeValues = textbook.headOption.getOrElse(textbookContent).dialcodes
         val dialcodeNames = if(null != dialcodeValues) dialcodeValues.head else ""
         dialcode = dialcodeNames
         val noOfContents = units.leafNodesCount
         val dialcodes = units.dialcodes
-        val nodeType = if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked" else if(null != noOfContents && noOfContents!=0 && null != dialcodes && dialcodes.nonEmpty) "QR Linked" else "Leaf Node"
+        val nodeType = if(null != dialcodes && dialcodes.nonEmpty) "Leaf Node & QR Linked"
+          else if(noOfContents != 0 && null != dialcodes && dialcodes.nonEmpty) "QR Linked" else "Leaf Node"
         val node = if(dialcodeNames.nonEmpty) nodeType else ""
         val nodeValue = if(response.status.equalsIgnoreCase("Draft") && node.isEmpty) "Leaf Node" else node
-        val report = DialcodeExceptionData(textbookData.channel,response.identifier,getString(response.medium),getString(response.gradeLevel), getString(response.subject),response.name,levelNames.lift(0).getOrElse(textbookContent).name,levelNames.lift(1).getOrElse(textbookContent).name,levelNames.lift(2).getOrElse(textbookContent).name,levelNames.lift(3).getOrElse(textbookContent).name,levelNames.lift(4).getOrElse(textbookContent).name, dialcodeNames,response.status,nodeValue,noOfContents,0,"","ETB_dialcode_data")
+        val report = DialcodeExceptionData(textbookData.channel, response.identifier, getString(response.medium), getString(response.gradeLevel), getString(response.subject), response.name, levelNames.headOption.getOrElse(textbookContent).name, levelNames.lift(1).getOrElse(textbookContent).name, levelNames.lift(2).getOrElse(textbookContent).name,levelNames.lift(3).getOrElse(textbookContent).name, levelNames.lift(4).getOrElse(textbookContent).name, dialcodeNames,response.status,nodeValue,noOfContents,0,"","ETB_dialcode_data")
         etbDialcode = report :: etbDialcode
         if(units.children.isDefined) {
           etbDialcode=parseETBDialcode(textbookData,units.children.getOrElse(List[ContentInfo]()),response,textbook,etbDialcode)
@@ -181,14 +182,14 @@ object TextBookUtils {
     var chapterDialcodeReport= List[DialcodeExceptionData]()
     if(null != response && response.children.isDefined && "Live".equals(response.status)) {
       val lengthOfChapters = response.children.get.length
-      if(null != response.dialcodes && null != response.leafNodesCount && response.leafNodesCount==0) {
+      if(null != response.dialcodes && response.leafNodesCount == 0) {
         dialcodeReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, "","","","","",response.dialcodes(0),"","",0,0,"T1","DCE_dialcode_data") :: dialcodeReport
       }
-      response.children.get.map(chapters => {
+      response.children.get.foreach(chapters => {
         val term = if(index<=lengthOfChapters/2) "T1"  else "T2"
         index = index+1
         val report = parseDCEDialcode(textbook,chapters.children.getOrElse(List[ContentInfo]()),response,term,chapters.name,List[ContentInfo]())
-        if(null != chapters.leafNodesCount && chapters.leafNodesCount == 0) {
+        if(chapters.leafNodesCount == 0) {
           val dialcodes = if(null != chapters.dialcodes) chapters.dialcodes.head else ""
           val chapterReport = DialcodeExceptionData(textbook.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, chapters.name,"","","","",dialcodes,"","",0,0,term,"DCE_dialcode_data")
           chapterDialcodeReport = chapterReport :: chapterDialcodeReport
@@ -215,15 +216,15 @@ object TextBookUtils {
     var dceDialcode= prevData
     var dialcode = ""
 
-    data.map(units => {
+    data.foreach(units => {
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         textbook = units :: newData
-        if(null != units.leafNodesCount && units.leafNodesCount == 0 && null != units.dialcodes) {
+        if(units.leafNodesCount == 0 && null != units.dialcodes) {
           val textbookInfo = getTextBookInfo(textbook)
           val levelNames = textbookInfo._1.filter(_.nonEmpty)
-          val dialcodes = textbookInfo._2.lift(0).getOrElse("")
+          val dialcodes = textbookInfo._2.headOption.getOrElse("")
           dialcode = dialcodes
-          val report = DialcodeExceptionData(textbookData.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, l1,levelNames.lift(0).getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,"","",0,0,term,"DCE_dialcode_data")
+          val report = DialcodeExceptionData(textbookData.channel, response.identifier, getString(response.medium), getString(response.gradeLevel),getString(response.subject), response.name, l1,levelNames.headOption.getOrElse(""),levelNames.lift(1).getOrElse(""),levelNames.lift(2).getOrElse(""),levelNames.lift(3).getOrElse(""),dialcodes,"","",0,0,term,"DCE_dialcode_data")
           dceDialcode = report :: dceDialcode
           if(units.children.isDefined) {
             dceDialcode = parseDCEDialcode(textbookData,units.children.getOrElse(List[ContentInfo]()),response,term,l1,textbook,dceDialcode)
@@ -305,20 +306,21 @@ object TextBookUtils {
     var tempValue = 0
     var indexValue = index
     var term = termValue
-    data.map(units => {
+    data.foreach(units => {
       if(null != units.dialcodes){
         counterValue=counterValue+1
-        if(null != units.leafNodesCount && units.leafNodesCount>0) { counterQrLinked=counterQrLinked+1 }
+        if(units.leafNodesCount > 0) { counterQrLinked=counterQrLinked+1 }
         else {
           counterNotLinked=counterNotLinked+1
           if("T1".equals(term)) { term1NotLinked=term1NotLinked+1 }
           else { term2NotLinked = term2NotLinked+1 }
         }
       }
+
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {
         val output = parseDCETextbook(identifier,term,units.children.getOrElse(List[ContentInfo]()),index,counterValue,counterQrLinked,counterNotLinked,term1NotLinked,term2NotLinked,lengthOfChapters)
         indexValue = indexValue+1
-        if(null != units.depth && units.depth == 1) { term = if(null != units.index && units.index<=lengthOfChapters/2) "T1"  else "T2"}
+        if(units.depth == 1) { term = if(units.index<=lengthOfChapters/2) "T1"  else "T2"}
         tempValue = output._1
         counterQrLinked = output._3
         counterNotLinked = output._4
@@ -357,9 +359,9 @@ object TextBookUtils {
     var contentNotLinked = contentNotLinkedQR
     var leafNodeswithoutContent = leafNodesContent
     var totalLeafNodes = leafNodesCount
-    data.map(units => {
+    data.foreach(units => {
       if(null != units.dialcodes){
-        if(null != units.leafNodesCount && units.leafNodesCount>0) { qrLinkedContent=qrLinkedContent+1 }
+        if(units.leafNodesCount > 0) { qrLinkedContent=qrLinkedContent+1 }
         else { contentNotLinked=contentNotLinked+1 }
       }
       if(TBConstants.textbookunit.equals(units.contentType.getOrElse(""))) {

@@ -11,7 +11,9 @@ import org.scalatest._
 class BaseSpec extends FlatSpec with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   def getSparkContext(): SparkContext = {
-    getSparkSession().sparkContext;
+    val sc = getSparkSession().sparkContext
+    sc.setLogLevel("ERROR")
+    sc
   }
 
   def getSparkConf(): SparkConf = {
@@ -26,15 +28,16 @@ class BaseSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Before
     conf.set("spark.redis.host", "localhost")
     conf.set("spark.redis.port", "6341")
     conf.set("spark.redis.db", "0")
-    conf;
+    conf.set("spark.sql.legacy.timeParserPolicy", "LEGACY")
+    conf
   }
 
   override def beforeAll() {
-    EmbeddedCassandra.setup();
+    EmbeddedCassandra.setup()
   }
 
   override def afterAll() {
-    EmbeddedCassandra.close();
+    EmbeddedCassandra.close()
   }
   
   def getSparkSession() : SparkSession = {

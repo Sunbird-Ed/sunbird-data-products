@@ -2,7 +2,7 @@ package org.sunbird.analytics.model.report
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.ekstep.analytics.framework._
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{JSONUtils, JobLogger}
@@ -24,10 +24,10 @@ object CourseConsumptionModel extends BaseCourseMetrics[Empty, BaseCourseMetrics
   override def name: String = "CourseConsumptionModel"
 
   override def algorithm(events: RDD[BaseCourseMetricsOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[CourseConsumptionOutput] = {
-    implicit val sqlContext = new SQLContext(sc)
+    implicit val sparkSession: SparkSession = SparkSession.builder().config(sc.getConf).getOrCreate()
 
-    val druidConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(config.get("reportConfig").get)).metrics.map(_.druidQuery)
-    val druidResponse = DruidDataFetcher.getDruidData(druidConfig(0))
+    val druidConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(config("reportConfig"))).metrics.map(_.druidQuery)
+    val druidResponse = DruidDataFetcher.getDruidData(druidConfig.head)
     val coursePlaysRDD = druidResponse.map{f => JSONUtils.deserialize[CoursePlays](f)}
 
     val courseBatchDetailsWKeys = events.map(f => (CourseKeys(f.courseId, f.batchId), f))
@@ -43,13 +43,13 @@ object CourseConsumptionModel extends BaseCourseMetrics[Empty, BaseCourseMetrics
   }
 
   override def postProcess(data: RDD[CourseConsumptionOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[CourseConsumptionOutput] = {
-    implicit val sqlContext = new SQLContext(sc)
+    implicit val sparkSession: SparkSession = SparkSession.builder().config(sc.getConf).getOrCreate()
     if (data.count() > 0) {
       val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
       val reportConfig = JSONUtils.deserialize[ReportConfig](JSONUtils.serialize(configMap))
 
-      import sqlContext.implicits._
-      reportConfig.output.map { f =>
+      import sparkSession.implicits._
+      reportConfig.output.foreach { f =>
           val df = data.toDF().na.fill(0L)
           CourseUtils.postDataToBlob(df, f,config)
       }

@@ -5,7 +5,7 @@ import org.ekstep.analytics.framework.util.JobLogger
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobDriver}
 import org.sunbird.analytics.model.report.CourseEnrollmentModel
 
-object CourseEnrollmentJob extends optional.Application with IJob {
+object CourseEnrollmentJob extends IJob {
   implicit val className = "org.ekstep.analytics.job.CourseEnrollmentJob"
 
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {

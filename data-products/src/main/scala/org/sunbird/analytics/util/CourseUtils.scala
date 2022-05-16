@@ -43,12 +43,12 @@ object CourseUtils {
   val defaultContentStatus: Array[String] = Array("Live", "Unlisted", "Retired")
   val defaultContentFields: Array[String] = Array("identifier","name","organisation","channel","status","keywords","createdFor","medium","subject")
 
-  def getCourse(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext, sqlContext: SQLContext): DataFrame = {
-    import sqlContext.implicits._
+  def getCourse(config: Map[String, AnyRef])(implicit fc: FrameworkContext, sparkSession: SparkSession): DataFrame = {
+    import sparkSession.implicits._
     val apiURL = Constants.COMPOSITE_SEARCH_URL
-    val request = JSONUtils.serialize(config.get("esConfig").get)
+    val request = JSONUtils.serialize(config("esConfig"))
     val response = RestUtil.post[CourseDetails](apiURL, request).result.content
-    val resRDD = sc.parallelize(response)
+    val resRDD = sparkSession.sparkContext.parallelize(response)
     resRDD.toDF("channel", "identifier", "courseName")
   }
 

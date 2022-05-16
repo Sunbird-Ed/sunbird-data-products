@@ -10,7 +10,7 @@ import org.sunbird.analytics.util.AESWrapper
 import java.util.Properties
 import scala.collection.immutable.List
 
-object UCIPrivateExhaustJob extends optional.Application with BaseUCIExhaustJob {
+object UCIPrivateExhaustJob extends BaseUCIExhaustJob {
 
   val identityTable: String = AppConf.getConfig("uci.postgres.table.identities")
   val userRegistrationTable: String = AppConf.getConfig("uci.postgres.table.user_registration")

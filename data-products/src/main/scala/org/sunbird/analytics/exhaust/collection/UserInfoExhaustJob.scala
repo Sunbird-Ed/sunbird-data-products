@@ -5,7 +5,7 @@ import org.apache.spark.sql.functions._
 import org.ekstep.analytics.framework.{FrameworkContext, JobConfig}
 import org.sunbird.analytics.exhaust.JobRequest
 
-object UserInfoExhaustJob extends optional.Application with BaseCollectionExhaustJob with Serializable {
+object UserInfoExhaustJob extends BaseCollectionExhaustJob with Serializable {
 
   override def getClassName = "org.sunbird.analytics.exhaust.collection.UserInfoExhaustJob"
   override def jobName() = "UserInfoExhaustJob";

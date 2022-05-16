@@ -2,11 +2,10 @@ package org.sunbird.analytics.model.report
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
-
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.ekstep.analytics.framework.fetcher.DruidDataFetcher
 import org.ekstep.analytics.framework.util.{HTTPClient, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{AlgoOutput, DataFetcher, Empty, FrameworkContext, IBatchModelTemplate, JobConfig, Level, Output}
@@ -66,8 +65,8 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
   }
 
   override def postProcess(events: RDD[FinalOutput], config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): RDD[FinalOutput] = {
-    implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    implicit val sparkSession: SparkSession = SparkSession.builder().config(sc.getConf).getOrCreate()
+    import sparkSession.implicits._
 
     if(events.count() > 0) {
       val configMap = config("reportConfig").asInstanceOf[Map[String, AnyRef]]
@@ -91,7 +90,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
       val scansDF = getScanCounts(config)
 
-      reportConfig.output.map { f =>
+      reportConfig.output.foreach { f =>
         val reportConfig = config("reportConfig").asInstanceOf[Map[String,AnyRef]]
         val mergeConf = reportConfig.getOrElse("mergeConfig", Map()).asInstanceOf[Map[String,AnyRef]]
 
@@ -136,8 +135,8 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
   }
 
   def generateAggReports(etbDf: DataFrame, dceDf: DataFrame, outputConf: OutputConfig, aggConf: List[Map[String, AnyRef]])(implicit sc: SparkContext, fc: FrameworkContext): Unit = {
-    implicit val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    implicit val sparkSession: SparkSession = SparkSession.builder().config(sc.getConf).getOrCreate()
+    import sparkSession.implicits._
 
     //dce_qr_content_status_grade.csv
     val dceGradeDf = dceDf.select($"slug",$"contentLinkedQR",$"withoutContentQR",explode_outer(split('gradeLevel,",")).as("Class"))
@@ -217,11 +216,9 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
 
   }
 
-  def getScanCounts(config: Map[String, AnyRef])(implicit sc: SparkContext, fc: FrameworkContext): DataFrame = {
-    implicit val sqlContext = new SQLContext(sc)
-
+  def getScanCounts(config: Map[String, AnyRef])(implicit sparkSession: SparkSession, fc: FrameworkContext): DataFrame = {
     val store = config("store")
-    val conf = config.get("etbFileConfig").get.asInstanceOf[Map[String, AnyRef]]
+    val conf = config("etbFileConfig").asInstanceOf[Map[String, AnyRef]]
     val url = store match {
       case "local" =>
         conf("filePath").asInstanceOf[String]
@@ -232,7 +229,7 @@ object ETBMetricsModel extends IBatchModelTemplate[Empty,Empty,FinalOutput,Final
         s"wasb://$bucket@$key.blob.core.windows.net/$file"
     }
 
-    val scansCount = sqlContext.sparkSession.read
+    val scansCount = sparkSession.read
       .option("header","true")
       .csv(url)
 

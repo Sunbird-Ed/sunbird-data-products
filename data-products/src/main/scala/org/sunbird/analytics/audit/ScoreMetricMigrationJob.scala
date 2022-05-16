@@ -14,7 +14,7 @@ import org.sunbird.analytics.job.report.BaseReportsJob
 
 import java.util.Date
 
-object ScoreMetricMigrationJob extends optional.Application with IJob with BaseReportsJob {
+object ScoreMetricMigrationJob extends IJob with BaseReportsJob {
   val userActivityAggDBSettings = Map("table" -> "user_activity_agg", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "LMSCluster")
   val assessmentAggregatorDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "LMSCluster")
   val cassandraUrl = "org.apache.spark.sql.cassandra"
