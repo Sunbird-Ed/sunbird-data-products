@@ -3,8 +3,8 @@ package org.sunbird.analytics.job.report
 import java.time.{ZoneOffset, ZonedDateTime}
 
 import cats.syntax.either._
-import ing.wbaa.druid.client.DruidClient
-import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResponseTimeseriesImpl, DruidResult, QueryType}
+import com.ing.wbaa.druid.client.DruidClient
+import com.ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResponseTimeseriesImpl, DruidResult, QueryType}
 import io.circe.Json
 import io.circe.parser.parse
 import org.ekstep.analytics.framework.util.JSONUtils
