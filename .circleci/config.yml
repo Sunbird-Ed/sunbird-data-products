@@ -15,7 +15,7 @@ jobs:
               target_branch=$(echo "${prdata}" | jq -r '.base.ref')
             fi
             echo $target_branch
-            git clone https://github.com/project-sunbird/sunbird-analytics-core.git
+            git clone https://github.com/sowmya-dixit/sunbird-analytics-core.git
             branchExists=$(cd sunbird-analytics-core && git ls-remote --heads origin $target_branch)
             echo $branchExists
             if [ -z ${branchExists} ]; then
@@ -25,7 +25,7 @@ jobs:
             else
                 cd sunbird-analytics-core && git checkout $target_branch
             fi
-            cd ../ && git clone https://github.com/project-sunbird/sunbird-core-dataproducts.git
+            cd ../ && git clone https://github.com/sowmya-dixit/sunbird-core-dataproducts.git
             branchExists=$(cd sunbird-core-dataproducts && git ls-remote --heads origin $target_branch)
             echo $branchExists
             if [ -z ${branchExists} ]; then
