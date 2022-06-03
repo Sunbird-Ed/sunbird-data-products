@@ -75,6 +75,7 @@ object CollectionSummaryJobV2 extends IJob with BaseReportsJob {
       .select("courseid", "batchid", "enddate", "startdate", "cert_templates" , "name")
       .withColumnRenamed("name", "batchname")
       .withColumn("hascertified", when(col("cert_templates").isNotNull && size(col("cert_templates").cast("map<string, map<string, string>>")) > 0, "Y").otherwise("N"))
+      .cache()
   }
 
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
