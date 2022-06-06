@@ -42,7 +42,7 @@ object UCIPrivateExhaustJob extends BaseUCIExhaustJob {
       .withColumn("device_id_uuid", col("device_id"))
       // Decrypt the username column to get the mobile num based on the consent value
       .withColumn("device_id", when(col("consent") === true, decrypt(col("username"))).otherwise(col("device_id")))
-      .select("applications_id", "name", "device_id", "username", "device_id_uuid")
+      .select("applications_id", "name", "device_id", "username", "device_id_uuid").cache()
     organizeDF(finalDF, columnMapping, columnsOrder)
   }
 
@@ -88,6 +88,6 @@ object UCIPrivateExhaustJob extends BaseUCIExhaustJob {
       .select("id", "data")
       .withColumnRenamed("id", "device_id")
       .withColumn("consent", consentValue(col("data")))
-      .select("device_id", "data", "consent")
+      .select("device_id", "data", "consent").cache()
   }
 }

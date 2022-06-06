@@ -70,6 +70,6 @@ object UCIResponseExhaustJob extends BaseUCIExhaustJob {
     val consentValue = spark.udf.register("consent", getConsentValueFn)
     fetchData(fusionAuthURL, fushionAuthconnectionProps, userTable).select("id", "data")
       .withColumnRenamed("id", "device_id")
-      .withColumn("consent", consentValue(col("data")))
+      .withColumn("consent", consentValue(col("data"))).cache()
   }
 }

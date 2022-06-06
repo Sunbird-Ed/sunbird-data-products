@@ -92,7 +92,7 @@ object CourseBatchStatusUpdaterJob extends IJob with BaseReportsJob {
       .withColumn("startdate", UDFUtils.getLatestValue(convertDate(col("start_date")), col("startdate")))
       .withColumn("enddate", UDFUtils.getLatestValue(convertDate(col("end_date")), col("enddate")))
       .withColumn("enrollmentenddate", UDFUtils.getLatestValue(convertDate(col("enrollment_enddate")), col("enrollmentenddate")))
-      .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status")
+      .select("courseid", "batchid", "startdate", "name", "enddate", "enrollmentenddate", "enrollmenttype", "createdfor", "status").cache()
   }
 
   def getCourseMetaData(row: Row, dateFormat: SimpleDateFormat): Map[String, AnyRef] = {
