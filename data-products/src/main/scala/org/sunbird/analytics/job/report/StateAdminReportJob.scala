@@ -110,7 +110,7 @@ object StateAdminReportJob extends IJob with StateAdminReportHelper {
     def appendUserProfileTypeWithLocation(userDf: DataFrame) : DataFrame = {
         val userProfileDf = userDf.withColumn("locationids", locationIdList(col("profilelocation"))).
             withColumn("usertype", addUserType(col("profileusertypes"), lit("type"))).
-            withColumn("usersubtype", addUserType(col("profileusertypes"), lit("subType")))
+            withColumn("usersubtype", addUserType(col("profileusertypes"), lit("subType"))).cache()
         userProfileDf
     }
     

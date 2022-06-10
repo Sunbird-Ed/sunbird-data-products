@@ -83,11 +83,11 @@ object CollectionReconciliationJob extends IJob with BaseReportsJob {
     // $COVERAGE-OFF$ Disabling scoverage for main and execute method
     val enrolmentDF = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
       .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
-      .select("userid", "batchid", "courseid", "contentstatus", "enrolleddate", "completedon", "certificates");
+      .select("userid", "batchid", "courseid", "contentstatus", "enrolleddate", "completedon", "certificates").cache()
     val courseBatchDF = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
       .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
       .withColumn("enddate", UDFUtils.getLatestValue(col("end_date"), col("enddate")))
-      .select("batchid", "name", "startdate", "enddate");
+      .select("batchid", "name", "startdate", "enddate").cache()
     
     val joinedDF = enrolmentDF.join(courseBatchDF, "batchid").cache();
     
@@ -214,7 +214,7 @@ object CollectionReconciliationJob extends IJob with BaseReportsJob {
     val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid")
       .withColumnRenamed("_4", "lastcompletedtime").withColumnRenamed("_5", "last_completed_time")
       .withColumn("lastcompletedtime", UDFUtils.getLatestValue(col("last_completed_time"), col("lastcompletedtime")))
-      .select("userid", "batchid", "courseid", "lastcompletedtime")
+      .select("userid", "batchid", "courseid", "lastcompletedtime").cache()
     val enrolmentWithRevisedDtDF = enrolmentJoinedDF.groupBy("userid", "batchid", "courseid").agg(max(col("lastcompletedtime")).alias("lastreviseddate")).withColumn("lastrevisedon", unix_timestamp(col("lastreviseddate"), "yyyy-MM-dd HH:mm:ss:SSS"))
     enrolmentWithRevisedDtDF.join(courseBatchDF, "batchid")
       .withColumn("endedon", unix_timestamp(col("enddate"), "yyyy-MM-dd"))
@@ -233,7 +233,7 @@ object CollectionReconciliationJob extends IJob with BaseReportsJob {
     val joinedRdd = enrolmentRDD.joinWithCassandraTable("sunbird_courses", "user_content_consumption", SomeColumns("contentid", "status", "lastcompletedtime", "last_completed_time"), SomeColumns("userid", "batchid", "courseid")).cache();
     val finalRDD = joinedRdd.map(f => (f._1.userid, f._1.batchid, f._1.courseid, f._2.getStringOption(2).getOrElse(null), f._2.getStringOption(3).orNull)).filter(f => f._4 != null || f._5 != null)
     val enrolmentJoinedDF = finalRDD.toDF().withColumnRenamed("_1", "userid").withColumnRenamed("_2", "batchid").withColumnRenamed("_3", "courseid").withColumnRenamed("_4", "lastcompletedtime").withColumnRenamed("_5", "last_completed_time")
-      .withColumn("lastcompletedtime", UDFUtils.getLatestValue(col("last_completed_time"), col("lastcompletedtime")))
+      .withColumn("lastcompletedtime", UDFUtils.getLatestValue(col("last_completed_time"), col("lastcompletedtime"))).cache()
     val enrolmentWithRevisedDtDF = enrolmentJoinedDF.groupBy("userid", "batchid", "courseid").agg(min(col("lastcompletedtime")).alias("lastreviseddate")).withColumn("lastrevisedon", unix_timestamp(col("lastreviseddate"), "yyyy-MM-dd HH:mm:ss:SSS"))
     
     val finalEnrolmentDF = enrolmentDF.join(enrolmentWithRevisedDtDF, Seq("userid", "batchid", "courseid"), "left_outer")

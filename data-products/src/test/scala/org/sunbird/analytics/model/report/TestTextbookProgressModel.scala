@@ -4,8 +4,8 @@ import java.time.{ZoneOffset, ZonedDateTime}
 import java.util
 
 import akka.stream.scaladsl.Source
-import ing.wbaa.druid.client.DruidClient
-import ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResult, QueryType}
+import com.ing.wbaa.druid.client.DruidClient
+import com.ing.wbaa.druid.{DruidConfig, DruidQuery, DruidResponse, DruidResult, QueryType}
 import io.circe.Json
 import cats.syntax.either._
 import io.circe.parser.parse
