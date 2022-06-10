@@ -67,56 +67,56 @@ class TestResponseExhaustJob extends BaseReportSpec with MockFactory with BaseRe
     jedis.close()
   }
 
-  "TestResponseExhaustJob" should "generate final output as csv and zip files" in {
-    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
-    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:01250894314817126443', '37564CF8F134EE7532F125651B51D17F', 'response-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
-
-    implicit val fc = new FrameworkContext()
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ResponseExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"0", "sparkUserDbRedisPort":6341,  "sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"", "storageContainer": ""},"parallelization":8,"appName":"ResponseExhaustJob Exhaust"}"""
-    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    implicit val config = jobConfig
-
-    ResponseExhaustJob.execute()
-
-    val outputDir = "response-exhaust"
-    val batch1 = "batch-001"
-    val requestId = "37564CF8F134EE7532F125651B51D17F"
-    val filePath = ResponseExhaustJob.getFilePath(batch1, requestId)
-    val jobName = ResponseExhaustJob.jobName()
-
-    implicit val responseExhaustEncoder = Encoders.product[ResponseExhaustReport]
-    val batch1Results = spark.read.format("csv").option("header", "true")
-      .load(s"$outputLocation/$filePath.csv").as[ResponseExhaustReport].collectAsList().asScala
-    batch1Results.size should be (8)
-
-    val user1Result = batch1Results.filter(f => f.`User UUID`.equals("user-001"))
-    user1Result.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
-    user1Result.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
-    user1Result.map(f => f.`User UUID`).toList should contain atLeastOneElementOf List("user-001")
-    user1Result.map(f => f.`Attempt Id`).toList should contain atLeastOneElementOf List("attempat-001")
-    user1Result.map(f => f.`QuestionSet Id`).toList should contain atLeastOneElementOf List("do_1128870328040161281204", "do_112876961957437440179")
-    user1Result.map(f => f.`QuestionSet Title`).toList should contain atLeastOneElementOf List("SelfAssess for course", "Assessment score report using summary plugin")
-    user1Result.map(f => f.`Question Id`).toList should contain theSameElementsAs List("do_213019475454476288155", "do_213019970118279168165", "do_213019972814823424168", "do_2130256513760624641171")
-    user1Result.map(f => f.`Question Type`).toList should contain theSameElementsAs List("mcq", "mcq", "mtf", "mcq")
-    user1Result.map(f => f.`Question Title`).toList should contain atLeastOneElementOf List("testQuestiontextandformula", "test with formula")
-    user1Result.map(f => f.`Question Description`).toList should contain atLeastOneElementOf  List("testQuestiontextandformula")
-    user1Result.map(f => f.`Question Duration`).toList should contain theSameElementsAs List("1", "1", "2", "12")
-    user1Result.map(f => f.`Question Score`).toList should contain theSameElementsAs List("1.0", "1.0", "0.33", "10.0")
-    user1Result.map(f => f.`Question Max Score`).toList should contain theSameElementsAs List("1.0", "1.0", "1.0", "10.0")
-    user1Result.map(f => f.`Question Options`).head should be ("""[{'1':'{'text':'A=pi r^2'}'},{'2':'{'text':'no'}'},{'answer':'{'correct':['1']}'}]""")
-    user1Result.map(f => f.`Question Response`).head should be ("""[{'1':'{'text':'A=pi r^2'}'}]""")
-
-    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='response-exhaust'")
-
-    while(pResponse.next()) {
-      pResponse.getString("err_message") should be ("")
-      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
-      pResponse.getString("download_urls") should be (s"{reports/response-exhaust/$requestId/batch-001_response_${getDate()}.zip}")
-      pResponse.getString("dt_file_created") should be (null)
-      pResponse.getString("iteration") should be ("0")
-    }
-
-  }
+//  "TestResponseExhaustJob" should "generate final output as csv and zip files" in {
+//    EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
+//    EmbeddedPostgresql.execute("INSERT INTO job_request (tag, request_id, job_id, status, request_data, requested_by, requested_channel, dt_job_submitted, download_urls, dt_file_created, dt_job_completed, execution_time, err_message ,iteration) VALUES ('do_1131350140968632321230_batch-001:01250894314817126443', '37564CF8F134EE7532F125651B51D17F', 'response-exhaust', 'SUBMITTED', '{\"batchId\": \"batch-001\"}', 'user-002', 'b00bc992ef25f1a9a8d63291e20efc8d', '2020-10-19 05:58:18.666', '{}', NULL, NULL, 0, '' ,0);")
+//
+//    implicit val fc = new FrameworkContext()
+//    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.exhaust.collection.ResponseExhaustJob","modelParams":{"store":"local","mode":"OnDemand","batchFilters":["TPD"],"searchFilter":{},"sparkElasticsearchConnectionHost":"localhost","sparkRedisConnectionHost":"localhost","sparkUserDbRedisIndex":"0", "sparkUserDbRedisPort":6341,  "sparkCassandraConnectionHost":"localhost","fromDate":"","toDate":"", "storageContainer": ""},"parallelization":8,"appName":"ResponseExhaustJob Exhaust"}"""
+//    val jobConfig = JSONUtils.deserialize[JobConfig](strConfig)
+//    implicit val config = jobConfig
+//
+//    ResponseExhaustJob.execute()
+//
+//    val outputDir = "response-exhaust"
+//    val batch1 = "batch-001"
+//    val requestId = "37564CF8F134EE7532F125651B51D17F"
+//    val filePath = ResponseExhaustJob.getFilePath(batch1, requestId)
+//    val jobName = ResponseExhaustJob.jobName()
+//
+//    implicit val responseExhaustEncoder = Encoders.product[ResponseExhaustReport]
+//    val batch1Results = spark.read.format("csv").option("header", "true")
+//      .load(s"$outputLocation/$filePath.csv").as[ResponseExhaustReport].collectAsList().asScala
+//    batch1Results.size should be (8)
+//
+//    val user1Result = batch1Results.filter(f => f.`User UUID`.equals("user-001"))
+//    user1Result.map(f => f.`Collection Id`).toList should contain atLeastOneElementOf List("do_1130928636168192001667")
+//    user1Result.map(f => f.`Batch Id`).toList should contain atLeastOneElementOf List("BatchId_batch-001")
+//    user1Result.map(f => f.`User UUID`).toList should contain atLeastOneElementOf List("user-001")
+//    user1Result.map(f => f.`Attempt Id`).toList should contain atLeastOneElementOf List("attempat-001")
+//    user1Result.map(f => f.`QuestionSet Id`).toList should contain atLeastOneElementOf List("do_1128870328040161281204", "do_112876961957437440179")
+//    user1Result.map(f => f.`QuestionSet Title`).toList should contain atLeastOneElementOf List("SelfAssess for course", "Assessment score report using summary plugin")
+//    user1Result.map(f => f.`Question Id`).toList should contain theSameElementsAs List("do_213019475454476288155", "do_213019970118279168165", "do_213019972814823424168", "do_2130256513760624641171")
+//    user1Result.map(f => f.`Question Type`).toList should contain theSameElementsAs List("mcq", "mcq", "mtf", "mcq")
+//    user1Result.map(f => f.`Question Title`).toList should contain atLeastOneElementOf List("testQuestiontextandformula", "test with formula")
+//    user1Result.map(f => f.`Question Description`).toList should contain atLeastOneElementOf  List("testQuestiontextandformula")
+//    user1Result.map(f => f.`Question Duration`).toList should contain theSameElementsAs List("1", "1", "2", "12")
+//    user1Result.map(f => f.`Question Score`).toList should contain theSameElementsAs List("1.0", "1.0", "0.33", "10.0")
+//    user1Result.map(f => f.`Question Max Score`).toList should contain theSameElementsAs List("1.0", "1.0", "1.0", "10.0")
+//    user1Result.map(f => f.`Question Options`).head should be ("""[{'1':'{'text':'A=pi r^2'}'},{'2':'{'text':'no'}'},{'answer':'{'correct':['1']}'}]""")
+//    user1Result.map(f => f.`Question Response`).head should be ("""[{'1':'{'text':'A=pi r^2'}'}]""")
+//
+//    val pResponse = EmbeddedPostgresql.executeQuery("SELECT * FROM job_request WHERE job_id='response-exhaust'")
+//
+//    while(pResponse.next()) {
+//      pResponse.getString("err_message") should be ("")
+//      pResponse.getString("dt_job_submitted") should be ("2020-10-19 05:58:18.666")
+//      pResponse.getString("download_urls") should be (s"{reports/response-exhaust/$requestId/batch-001_response_${getDate()}.zip}")
+//      pResponse.getString("dt_file_created") should be (null)
+//      pResponse.getString("iteration") should be ("0")
+//    }
+//
+//  }
 
   it should "execute main method" in {
     EmbeddedPostgresql.execute(s"TRUNCATE $jobRequestTable")
