@@ -6,7 +6,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.elasticsearch.spark._
 import org.sunbird.analytics.util.JSONUtils
 
-import scala.collection.JavaConversions._
 import scala.collection.Map
 
 object ESRedisIndexer {
@@ -37,13 +36,13 @@ object ESRedisIndexer {
             .set("spark.redis.max.pipeline.size", config.getString("redis.max.pipeline.size"))
 
         val sc = new SparkContext(conf)
-        val keys = config.getStringList("elasticsearch.index.source.keys").toList
+        val keys = config.getStringList("elasticsearch.index.source.keys").toArray
         val keyDelimiter = config.getString("elasticsearch.index.source.keyDelimiter")
 
         // todo: log details
         def getKey(data: String): String = {
             val record = JSONUtils.deserialize[Map[String, AnyRef]](data)
-            keys.map(value => record(value)).mkString(keyDelimiter)
+            keys.map(value => record(value.asInstanceOf[String])).mkString(keyDelimiter)
         }
 
         sc.toRedisKV(
