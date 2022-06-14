@@ -27,15 +27,15 @@ node() {
             }
         }
 
-            stage('Build') {
-                sh ("mvn -f etl-jobs/pom.xml \
-                -Dlog4j.configuration=$WORKSPACE/logs \
-                -Dcobertura.report.format=xml clean cobertura:cobertura package")
-            }
-
-            stage('Publish_test_results') {
-               cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/target/site/cobertura/coverage.xml', conditionalCoverageTargets: '70, 0, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '80, 0, 0', maxNumberOfBuilds: 0, methodCoverageTargets: '80, 0, 0', onlyStable: false, sourceEncoding: 'ASCII', zoomCoverageChart: false 
-            }
+             stage('Build') {
+                          sh '''
+                           cd etl-jobs
+                           export JAVA_HOME=/usr/lib/jvm/jdk-11.0.2
+                           export PATH=$JAVA_HOME/bin:$PATH
+                           echo $(java -version)
+                           mvn clean install -DskipTests
+                           '''
+             }
 
             stage('Archive artifacts'){
                 sh """
