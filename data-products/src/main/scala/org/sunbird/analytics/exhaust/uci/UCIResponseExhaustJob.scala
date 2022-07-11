@@ -37,7 +37,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
         .withColumn("conversation_id", lit(conversationId))
         .withColumn("conversation_name", lit(conversationName))
         .withColumn("device_id",col("context.did"))
-        .withColumn("session_id", col("rollup.l5"))
+        .withColumn("session_id", col("context.sid"))
         .withColumn("question_id" , col("edata.item.id"))
         .withColumn("question_type", col("edata.item.type"))
         .withColumn("question_title", col("edata.item.title"))
