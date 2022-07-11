@@ -23,7 +23,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
     "Question Title", "Question Description", "Question Response Time", "Question Score", "Question Max Score",
     "Question Options", "Question Response", "X Path", "Eof", "Timestamp")
   private val columnMapping = Map("mid" -> "Message ID", "conversation_id" -> "Conversation ID", "conversation_name" -> "Conversation Name",
-    "device_id" -> "Device ID", "session_id" => "Session Id", "question_id" -> "Question Id", "question_type" -> "Question Type", "question_title" -> "Question Title",
+    "device_id" -> "Device ID", "session_id" -> "Session Id", "question_id" -> "Question Id", "question_type" -> "Question Type", "question_title" -> "Question Title",
     "question_description" -> "Question Description", "question_duration" -> "Question Response Time", "question_score" -> "Question Score", "question_maxscore" -> "Question Max Score",
     "question_response" -> "Question Response", "question_option" -> "Question Options", "x_path" -> "X Path", "eof" -> "Eof", "timestamp" -> "Timestamp")
 
