@@ -415,13 +415,15 @@
                 "name": "rejectComment",
                 "expr": "$.data.rejectComment"
               },
-	      {
-                "type": "string",
-                "name": "verticals"
+              {
+                "type": "path",
+                "name": "verticals",
+                "expr": "$.data.verticals"
               },
               {
-                "type": "string",
-                "name": "programs"
+                "type": "path",
+                "name": "programs",
+                "expr": "$.data.programs"
               }
             ]
           },
