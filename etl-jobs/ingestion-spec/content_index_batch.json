@@ -414,6 +414,14 @@
                 "type": "path",
                 "name": "rejectComment",
                 "expr": "$.data.rejectComment"
+              },
+	      {
+                "type": "string",
+                "name": "verticals"
+              },
+              {
+                "type": "string",
+                "name": "programs"
               }
             ]
           },
@@ -620,6 +628,14 @@
               {
                 "type": "string",
                 "name": "rejectComment"
+              },
+	      {
+                "type": "string",
+                "name": "verticals"
+              },
+              {
+                "type": "string",
+                "name": "programs"
               }
             ],
             "dimensionsExclusions": []
