@@ -418,12 +418,12 @@
 	      {
                 "type": "path",
                 "name": "verticals",
-                "expr": "$.data.verticals"
+                "expr": "$.data.verticals[*]"
               },
               {
                 "type": "path",
                 "name": "programs",
-                "expr": "$.data.programs"
+                "expr": "$.data.programs[*]"
               }
             ]
           },
@@ -632,11 +632,9 @@
                 "name": "rejectComment"
               },
 	      {
-                "type": "string",
                 "name": "verticals"
               },
               { 
-                "type": "string",
                 "name": "programs"
               }
             ],
