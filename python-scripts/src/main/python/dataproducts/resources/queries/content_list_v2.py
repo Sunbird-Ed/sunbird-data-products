@@ -37,6 +37,8 @@ def init():
             "mimeType",
             "status",
             "creator",
+            "verticals",
+            "programs",
             "createdOn",
             "lastPublishedOn",
             "me_averageRating",
