@@ -141,9 +141,9 @@ class ContentConsumption:
             post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards', slug, 'content_aggregated.csv'))
         
 
-        overall.to_csv(result_loc_.parent.joinpath('portal_dashboards',slug, 'content_aggregated.csv'),
+        overall.to_csv(result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_aggregated.csv'),
                                       index=False, encoding='utf-8-sig')
-            create_json(result_loc_.parent.joinpath('portal_dashboards',slag, 'content_aggregated.csv'))
+            create_json(result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_aggregated.csv'))
             post_data_to_blob(result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_aggregated.csv'))
 
     @staticmethod
@@ -254,11 +254,11 @@ class ContentConsumption:
 
 
         weekly.to_csv(
-                result_loc_.parent.joinpath('portal_dashboards',slug, 'content_consumption_lastweek.csv'),
+                result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_consumption_lastweek.csv'),
                 index=False, encoding='utf-8-sig')
-            create_json(result_loc_.parent.joinpath('portal_dashboards',slug, 'content_consumption_lastweek.csv'))
+            create_json(result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_consumption_lastweek.csv'))
             post_data_to_blob(
-                result_loc_.parent.joinpath('portal_dashboards',slug, 'content_consumption_lastweek.csv'))
+                result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_consumption_lastweek.csv'))
         weekly.to_csv(
                 result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_consumption_lastweek_{}.csv'.format(slug)),
                 index=False, encoding='utf-8-sig')
