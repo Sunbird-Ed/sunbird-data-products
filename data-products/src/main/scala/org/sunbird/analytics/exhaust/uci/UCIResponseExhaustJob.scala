@@ -19,11 +19,11 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
   override def getReportKey() = "response";
   override def zipEnabled(): Boolean = false;
 
-  private val columnsOrder = List("Message ID", "Conversation ID", "Conversation Name", "Device ID", "Question Id", "Question Type",
+  private val columnsOrder = List("Message ID", "Conversation ID", "Conversation Name", "Device ID", "Session ID", "Question Id", "Question Type",
     "Question Title", "Question Description", "Question Duration", "Question Score", "Question Max Score",
     "Question Options", "Question Response", "X Path", "Eof", "Timestamp")
   private val columnMapping = Map("mid" -> "Message ID", "conversation_id" -> "Conversation ID", "conversation_name" -> "Conversation Name",
-    "device_id" -> "Device ID", "question_id" -> "Question Id", "question_type" -> "Question Type", "question_title" -> "Question Title",
+    "device_id" -> "Device ID", "session_id" -> "Session ID", "question_id" -> "Question Id", "question_type" -> "Question Type", "question_title" -> "Question Title",
     "question_description" -> "Question Description", "question_duration" -> "Question Duration", "question_score" -> "Question Score", "question_maxscore" -> "Question Max Score",
     "question_response" -> "Question Response", "question_option" -> "Question Options", "x_path" -> "X Path", "eof" -> "Eof", "timestamp" -> "Timestamp")
 
@@ -37,6 +37,7 @@ object UCIResponseExhaustJob extends optional.Application with BaseUCIExhaustJob
         .withColumn("conversation_id", lit(conversationId))
         .withColumn("conversation_name", lit(conversationName))
         .withColumn("device_id",col("context.did"))
+        .withColumn("session_id",col("context.sid"))
         .withColumn("question_id" , col("edata.item.id"))
         .withColumn("question_type", col("edata.item.type"))
         .withColumn("question_title", col("edata.item.title"))
