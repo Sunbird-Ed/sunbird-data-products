@@ -162,7 +162,7 @@ class ContentConsumption:
         content_model['channel'] = content_model['channel'].astype(str)
         # content_model['mimeType'] = content_model['mimeType'].apply(mime_type)
         content_model = content_model[
-            ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'contentType', 'identifier', 'name', 'creator', 'creator','verticals','programs',
+            ['channel', 'board', 'medium', 'gradeLevel', 'subject', 'contentType', 'identifier', 'name', 'creator','verticals','programs',
              'mimeType', 'createdOn', 'lastPublishedOn', 'tb_id', 'tb_name', 'me_totalRatings', 'me_averageRating']]
         content_model.set_index('identifier', inplace=True)
         result_loc_.joinpath(date_.strftime('%Y-%m-%d')).mkdir(exist_ok=True)
@@ -192,14 +192,14 @@ class ContentConsumption:
         content_plays.drop(['Total time spent on App', 'Total time spent on Portal'], axis=1, inplace=True)
         weekly = content_model.join(content_plays).reset_index()
         weekly = weekly[['channel', 'board', 'medium', 'gradeLevel', 'subject', 'identifier',
-                         'name', 'mimeType', 'createdOn', 'creator', 'creator','verticals','programs', 'lastPublishedOn',
+                         'name', 'mimeType', 'createdOn', 'creator','verticals','programs', 'lastPublishedOn',
                          'tb_id', 'tb_name', 'me_averageRating', 'me_totalRatings',
                          'Number of plays on App', 'Number of plays on Portal',
                          'Total No of Plays (App and Portal)', 'Average Play Time in mins on App',
                          'Average Play Time in mins on Portal',
                          'Average Play Time in mins (On App and Portal)']]
         weekly.columns = ['channel', 'Board', 'Medium', 'Grade', 'Subject', 'Content ID', 'Content Name',
-                          'Mime Type', 'Created On', 'Creator (User Name)', 'creator','verticals','programs', 'Last Published On',
+                          'Mime Type', 'Created On', 'Creator (User Name)','verticals','programs', 'Last Published On',
                           'Linked Textbook Id(s)', 'Linked Textbook Name(s)',
                           'Average Rating(out of 5)', 'Total No of Ratings',
                           'Number of Plays on App', 'Number of Plays on Portal', 'Total No of Plays (App and Portal)',
@@ -250,6 +250,16 @@ class ContentConsumption:
             post_data_to_blob(
                 result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_consumption_lastweek_{}.csv'.format(slug)),
                 backup=True)
+        weekly.to_csv(
+                result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_consumption_lastweek.csv'),
+                index=False, encoding='utf-8-sig')
+        create_json(result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_consumption_lastweek.csv'))
+        post_data_to_blob(
+                result_loc_.parent.joinpath('portal_dashboards','mhrd', 'content_consumption_lastweek.csv'))
+        weekly.to_csv(
+                result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_consumption_lastweek_{}.csv'.format(slug)),
+                index=False, encoding='utf-8-sig')
+        post_data_to_blob(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_consumption_lastweek_{}.csv'.format(slug)),backup=True)
 
     @staticmethod
     def get_last_week_report(result_loc_, date_, num_weeks):
