@@ -150,7 +150,7 @@ def get_tenant_info(result_loc_, org_search_, date_):
     :param date_: datetime object to pass to file path
     :return: None
     """
-    url = "{}v1/org/search".format(org_search_)
+    url = "{}org/v2/search".format(org_search_)
     payload = """{
         "request":{
             "filters": {
@@ -663,7 +663,7 @@ def get_tb_content_mapping(result_loc_, date_, content_search_):
     :param content_search_: ip and port of the server hosting LP content search API
     """
     content_model = pd.read_csv(result_loc_.joinpath(date_.strftime('%Y-%m-%d'), 'content_model_snapshot.csv'))
-    tb_url = "{}v3/search".format(content_search_)
+    tb_url = "{}v1/search".format(content_search_)
     payload = """{
                 "request": {
                     "filters": {
