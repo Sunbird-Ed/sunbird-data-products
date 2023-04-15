@@ -187,6 +187,7 @@ trait OnDemandExhaustJob {
         storageConfig.fileName
     }
     val objKey = url.replace(filePrefix, "");
+    JobLogger.log("***DEBUG***", Some(Map("URL" -> url, "FILEPREFIX" -> filePrefix, "OBJKEY" -> objKey, "LOCALPATH" -> localPath)), INFO)
     if (storageConfig.store.equals("local")) {
       fc.getHadoopFileUtil().copy(filePrefix, localPath, conf)
     }
