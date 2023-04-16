@@ -190,6 +190,7 @@ trait OnDemandExhaustJob {
     JobLogger.log("Request is zipAndEncrypt", Some(Map("requestId" -> request.request_id, "url" -> url)), INFO)
     JobLogger.log("Request is zipAndEncrypt", Some(Map("requestId" -> request.request_id, "filePrefix" -> filePrefix)), INFO)
     JobLogger.log("Request is zipAndEncrypt", Some(Map("requestId" -> request.request_id, "localPath" -> localPath)), INFO)
+    JobLogger.log("Request is zipAndEncrypt", Some(Map("requestId" -> request.request_id, "objKey" -> objKey)), INFO)
     if (storageConfig.store.equals("local")) {
       fc.getHadoopFileUtil().copy(filePrefix, localPath, conf)
     }
