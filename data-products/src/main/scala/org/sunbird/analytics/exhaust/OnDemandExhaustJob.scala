@@ -172,6 +172,8 @@ trait OnDemandExhaustJob {
   private def zipAndEncrypt(url: String, storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): String = {
 
     val path = Paths.get(url);
+    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "key" -> storageConfig.accountKey.getOrElse(""))), INFO)
+    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "secret" -> storageConfig.secretKey.getOrElse(""))), INFO)
     val storageService = fc.getStorageService(storageConfig.store, storageConfig.accountKey.getOrElse(""), storageConfig.secretKey.getOrElse(""));
     val tempDir = AppConf.getConfig("spark_output_temp_dir") + request.request_id + "/"
     val localPath = tempDir + path.getFileName;
