@@ -122,7 +122,9 @@ object FunnelReport extends IJob with BaseReportsJob {
       .drop("channel","id","program_id")
       .persist(StorageLevel.MEMORY_ONLY)
 
-    val storageConfig = getStorageConfig("reports", "")
+    // support to other CSP and report container should be read from configuration
+    // val storageConfig = getStorageConfig("reports", "")
+    val storageConfig = getStorageConfig(config, "")
     saveReportToBlob(funnelReport, configMap, storageConfig, "FunnelReport")
 
     funnelReport.unpersist(true)
