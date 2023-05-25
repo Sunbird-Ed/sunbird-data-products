@@ -43,7 +43,6 @@ object FunnelReport extends IJob with BaseReportsJob {
   val jobName = "Funnel Report Job"
   val db = AppConf.getConfig("postgres.db")
   val url = AppConf.getConfig("postgres.url") + s"$db"
-  val globalContainer = AppConf.getConfig("cloud.container.reports")
   val connProperties = CommonUtil.getPostgresConnectionProps
   val programTable = "program"
   val nominationTable = "nomination"
@@ -124,13 +123,8 @@ object FunnelReport extends IJob with BaseReportsJob {
       .persist(StorageLevel.MEMORY_ONLY)
 
     // support to other CSP and report container should be read from configuration
-    // val storageConfig = getStorageConfig("reports", "")
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val container = modelParams.getOrElse("storageContainer", "reports").asInstanceOf[String]
-    print("container for Funnel Report: " + container)
-    JobLogger.log(s"saving report in bucket - ${container}", None, Level.INFO)
-    // use global container for the report - this is only a fallback if required
-    // val storageConfig = getStorageConfig(globalContainer, "")
     val storageConfig = getStorageConfig(container, "")
     saveReportToBlob(funnelReport, configMap, storageConfig, "FunnelReport")
 
