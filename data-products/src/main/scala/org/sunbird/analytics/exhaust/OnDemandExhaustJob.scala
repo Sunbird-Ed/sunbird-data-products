@@ -172,8 +172,6 @@ trait OnDemandExhaustJob {
   private def zipAndEncrypt(url: String, storageConfig: StorageConfig, request: JobRequest)(implicit conf: Configuration, fc: FrameworkContext): String = {
 
     val path = Paths.get(url);
-    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "key" -> storageConfig.accountKey.getOrElse(""))), INFO)
-    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "secret" -> storageConfig.secretKey.getOrElse(""))), INFO)
     val storageService = fc.getStorageService(storageConfig.store, storageConfig.accountKey.getOrElse(""), storageConfig.secretKey.getOrElse(""));
     val tempDir = AppConf.getConfig("spark_output_temp_dir") + request.request_id + "/"
     val localPath = tempDir + path.getFileName;
@@ -189,11 +187,6 @@ trait OnDemandExhaustJob {
         storageConfig.fileName
     }
     val objKey = url.replace(filePrefix, "");
-    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "url" -> url)), INFO)
-    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "filePrefix" -> filePrefix)), INFO)
-    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "localPath" -> localPath)), INFO)
-    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "objKey" -> objKey)), INFO)
-    JobLogger.log("Request is zipAndEncrypt1", Some(Map("requestId" -> request.request_id, "objKey" -> objKey)), INFO)
     if (storageConfig.store.equals("local")) {
       fc.getHadoopFileUtil().copy(filePrefix, localPath, conf)
     }
