@@ -52,10 +52,7 @@ trait BaseReportsJob {
     val storageSecret = modelParams.getOrElse("storageSecretConfig", "reports_storage_secret").asInstanceOf[String];
     val storageEndpoint = modelParams.getOrElse("storageEndpoint", "reports_storage_endpoint").asInstanceOf[String];
     store.toLowerCase() match {
-      case "s3" =>
-        spark.sparkContext.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AppConf.getConfig(storageKey));
-        spark.sparkContext.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", AppConf.getConfig(storageSecret));
-      case "oci" =>
+      case "s3" | "oci" =>
         spark.sparkContext.hadoopConfiguration.set("fs.s3n.awsAccessKeyId", AppConf.getConfig(storageKey));
         spark.sparkContext.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", AppConf.getConfig(storageSecret));
       case "azure" =>
