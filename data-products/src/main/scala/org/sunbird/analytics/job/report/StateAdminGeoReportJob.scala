@@ -45,8 +45,6 @@ object StateAdminGeoReportJob extends IJob with StateAdminReportHelper {
     val container = AppConf.getConfig("cloud.container.reports")
     val objectKey = AppConf.getConfig("admin.metrics.cloud.objectKey")
     val storageConfig = getStorageConfig(container, objectKey)
-    print("container for Admin Geo Report: " + container)
-    print("objectKey for Admin Geo Report: " + objectKey);
     val organisationDF: DataFrame = loadOrganisationSlugDF()
     val subOrgDF: DataFrame = generateSubOrgData(organisationDF)
     val blockData:DataFrame = generateBlockLevelData(subOrgDF)
