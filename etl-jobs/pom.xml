@@ -24,7 +24,7 @@
             <exclusions>
                 <exclusion>
                     <artifactId>jets3t</artifactId>
-                    <groupId>net.java.dev.jets3t</groupId>
+                    <groupId>org.jets3t</groupId>
                 </exclusion>
                 <exclusion>
                     <groupId>org.apache.xbean</groupId>
