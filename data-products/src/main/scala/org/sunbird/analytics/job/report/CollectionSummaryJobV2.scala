@@ -17,6 +17,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.collection.UDFUtils
 import org.sunbird.analytics.util.{CourseUtils, UserData}
 
+
 import scala.collection.immutable.List
 
 object CollectionSummaryJobV2 extends IJob with BaseReportsJob {
@@ -95,6 +96,11 @@ object CollectionSummaryJobV2 extends IJob with BaseReportsJob {
     JobLogger.log(s"Total distinct Course Id's ${courseIds.size}", None, INFO)
     val courseInfo = CourseUtils.getCourseInfo(courseIds, None, config.modelParams.get.getOrElse("batchSize", 50).asInstanceOf[Int], Option(config.modelParams.get.getOrElse("contentStatus", CourseUtils.defaultContentStatus.toList).asInstanceOf[List[String]].toArray), Option(config.modelParams.get.getOrElse("contentFields", CourseUtils.defaultContentFields.toList).asInstanceOf[List[String]].toArray)).toDF(contentFields: _*)
     JobLogger.log(s"Total fetched records from content search ${courseInfo.count()}", None, INFO)
+    println("processBathc")
+    processBatches.show(100, false)
+    println("courseInfo")
+    courseInfo.show(100, false)
+
     processBatches.join(courseInfo, processBatches.col("courseid") === courseInfo.col("identifier"), "inner")
       .withColumn("collectionname", col("name"))
       .withColumnRenamed("status", "contentstatus")
@@ -112,7 +118,9 @@ object CollectionSummaryJobV2 extends IJob with BaseReportsJob {
       .join(userCachedDF, Seq("userid"), "inner").persist()
     val searchFilter = config.modelParams.get.get("searchFilter").asInstanceOf[Option[Map[String, AnyRef]]]
     val reportDF: DataFrame = if (null == searchFilter || searchFilter.isEmpty) getContentMetaData(processBatches, spark) else processBatches
+    println("reportDF" + reportDF.show(100, false))
     val processedBatches = computeValues(reportDF)
+    println("processedBatches" + processedBatches.show(100, false))
     processedBatches.select(filterColumns.head, filterColumns.tail: _*)
   }
 

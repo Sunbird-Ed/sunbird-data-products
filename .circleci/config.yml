@@ -55,7 +55,7 @@ jobs:
             cd data-products && mvn scoverage:report
       - save_cache:
           key: dp-dependency-cache-{{ checksum "data-products/pom.xml" }}
-          paths: ~/.m2
+          paths: ~/.m2 
       - run:
           name: sonar
           command: |
