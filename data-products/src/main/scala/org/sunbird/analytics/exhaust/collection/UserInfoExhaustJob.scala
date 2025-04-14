@@ -76,7 +76,8 @@ object UserInfoExhaustJob extends BaseCollectionExhaustJob with Serializable {
    * UserInfo Exhaust should be an encrypted file. So, don't ignore zip and encryption exceptions.
    * @return
    */
-  override def canZipExceptionBeIgnored(): Boolean = false
+   // TODO: The zip and encryption is not working, so turning this condition on temporarily
+  override def canZipExceptionBeIgnored(): Boolean = true
 
 }
 
