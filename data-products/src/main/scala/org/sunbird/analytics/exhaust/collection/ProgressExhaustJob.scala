@@ -62,8 +62,6 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     val enrolledUsersToBatch = updateCertificateStatus(enrolmentWithCompletions).select(filterColumns.head, filterColumns.tail: _*)
     //val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
     val progressDF = getProgressDF(enrolledUsersToBatch, null, assessmentAggDF);
-    println("progressDF")
-    progressDF.show(false)
     organizeDF(progressDF, columnMapping, columnsOrder);
   }
 

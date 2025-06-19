@@ -148,14 +148,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
-    println("custodianOrgId", custodianOrgId)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchNumber = modelParams.get("batchNumber")
     val maxErrorMessageLength: Int = modelParams.getOrElse("maxErrorMessageLength", MAX_ERROR_MESSAGE_CHAR).asInstanceOf[Int]
-    println("===JobID", jobId())
-    println("===batchNumber", batchNumber)
     val requests = getRequests(jobId(), batchNumber)
-    println("requests......" + requests.length)
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId(), "totalRequests" -> requests.length)), INFO)
@@ -367,8 +363,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           //val totalModules = getTotalModule(batch.collectionId)
 
           val completedModules: DataFrame = getCompletedModule(batch.batchId, batch.collectionId)
-          println("====completedModules=====")
-          completedModules.show(false)
           val userEnrolmentBatchDF = userEnrolmentDf.where(col("batchid") === batch.batchId && col("courseid") === batch.collectionId)
             .join(userCachedDF, Seq("userid"), "inner")
             .withColumn("collectionName", lit(batch.collectionName))
@@ -663,7 +657,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       .withColumn("province", UDFUtils.extractProvince(col("profileConfig")))
     df.select(cols.head, cols.tail: _*)
       .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"))
-    //df.show(false)
     if (persist) df.persist() else df
   }
 
