@@ -56,7 +56,7 @@ trait OnDemandExhaustJob {
   def zipEnabled(): Boolean = true;
 
   def getRequests(jobId: String, batchNumber: Option[AnyRef])(implicit spark: SparkSession, fc: FrameworkContext): Array[JobRequest] = {
-
+    println("get req..")
     val encoder = Encoders.product[JobRequest]
     val reportConfigsDf = spark.read.jdbc(url, requestsTable, connProperties)
       .where(col("job_id") === jobId && col("iteration") < 3).filter(col("status").isin(jobStatus: _*));
@@ -65,6 +65,7 @@ trait OnDemandExhaustJob {
     JobLogger.log("fetched records count" + filteredReportConfigDf.count(), None, INFO)
 
     val requests = filteredReportConfigDf.withColumn("status", lit("PROCESSING")).as[JobRequest](encoder).collect()
+    println("requests" + requests.length)
     requests
   }
 

@@ -11,10 +11,10 @@ import org.ekstep.analytics.framework.JobConfig
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.JSONUtils
 
-case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
-case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
-case class Level1Data(l1identifier: String, l1leafNodesCount: String)
-case class AssessmentData(courseid: String, assessmentIds: List[String])
+//case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
+//case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
+//case class Level1Data(l1identifier: String, l1leafNodesCount: String)
+//case class AssessmentData(courseid: String, assessmentIds: List[String])
 
 object ProgressExhaustJob extends BaseCollectionExhaustJob {
 
@@ -27,7 +27,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   private val defaultObjectType = "QuestionSet";
 
   override def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "state", "district", "cluster", "orgname", "schooludisecode", "schoolname", "block", "board", "rootorgid", "usertype", "usersubtype")
+    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province")
   }
   
   override def getEnrolmentColumns() : Seq[String] = {
@@ -42,16 +42,17 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   private val contentHierarchyDBSettings = Map("table" -> "content_hierarchy", "keyspace" -> AppConf.getConfig("sunbird.content.hierarchy.keyspace"), "cluster" -> "ContentCluster");
 
-  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid",  "state", "district", "orgname", "schooludisecode", "schoolname", "board", "block", "cluster", "usertype", "usersubtype", "enrolleddate", "completedon", "certificatestatus", "completionPercentage");
-  private val columnsOrder = List("Collection Id", "Collection Name", "Batch Id", "Batch Name", "User UUID", "State", "District", "Org Name", "School Id",
-    "School Name", "Block Name", "Cluster Name", "User Type", "User Sub Type", "Declared Board", "Enrolment Date", "Completion Date", "Certificate Status", "Progress", "Total Score")
-  private val columnMapping = Map("courseid" -> "Collection Id", "collectionName" -> "Collection Name", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User UUID",
-    "state" -> "State", "district" -> "District", "orgname" -> "Org Name", "schooludisecode" -> "School Id", "schoolname" -> "School Name", "block" -> "Block Name",
-    "cluster" -> "Cluster Name", "usertype" -> "User Type", "usersubtype" -> "User Sub Type", "board" -> "Declared Board", "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date",
-    "completionPercentage" -> "Progress", "total_sum_score" -> "Total Score", "certificatestatus" -> "Certificate Status")
+  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid",  "orgname",  "usertype", "enrolleddate", "completedon", "certificatestatus", "completionPercentage");
+  private val columnsOrder = List("Course ID", "Course Name", "Course Code", "Learner Profile", "Batch Id", "Batch Name", "User ID", "User Name", "First Name", "Last Name", "Email ID", "FMPS ID", "CIN", "Province", "Org Name", "User Type", "Enrolment Date", "Completion Date", "Total Modules", "Completed Modules",  "Certificate Status", "Progress", "Global Quiz Score")
+
+  private val columnMapping = Map("courseid" -> "Course ID", "collectionName" -> "Course Name", "coursecode" -> "Course Code", "learnerprofile" -> "Learner Profile", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User ID", "orgname" -> "Org Name", "usertype" -> "User Type",  "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date",
+    "completionPercentage" -> "Progress", "total_sum_score" -> "Global Quiz Score", "certificatestatus" -> "Certificate Status", "username" -> "User Name", "firstname" -> "First Name", "lastname" -> "Last Name", "email" -> "Email ID", "fmpsid" -> "FMPS ID", "cin" -> "CIN", "province" -> "Province", "total_activities" -> "Total Modules", "completed_activities" -> "Completed Modules" )
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val hierarchyData = loadCollectionHierarchy(collectionBatch.collectionId)
+
+    println("========== Process Batch =========")
+
     //val collectionAggDF = getCollectionAggWithModuleData(collectionBatch, hierarchyData).withColumn("batchid", lit(collectionBatch.batchId));
     //val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     val assessmentAggDF = getAssessmentDF(collectionBatch, userEnrolmentDF, hierarchyData);
@@ -60,6 +61,8 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     val enrolledUsersToBatch = updateCertificateStatus(enrolmentWithCompletions).select(filterColumns.head, filterColumns.tail: _*)
     //val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
     val progressDF = getProgressDF(enrolledUsersToBatch, null, assessmentAggDF);
+    println("progressDF")
+    progressDF.show(false)
     organizeDF(progressDF, columnMapping, columnsOrder);
   }
 
@@ -83,7 +86,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   def updateCertificateStatus(userEnrolmentDF: DataFrame): DataFrame = {
     userEnrolmentDF.withColumn("certificatestatus", when(col("certificates").isNotNull && size(col("certificates").cast("array<map<string, string>>")) > 0, "Issued")
       .when(col("issued_certificates").isNotNull && size(col("issued_certificates").cast("array<map<string, string>>")) > 0, "Issued").otherwise(""))
-      .withColumn("board", UDFUtils.extractFromArrayString(col("board")))
+      //.withColumn("board", UDFUtils.extractFromArrayString(col("board")))
   }
 
   def filterAssessmentDF(assessmentDF: DataFrame): DataFrame = {

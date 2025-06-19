@@ -17,11 +17,11 @@ import org.ekstep.analytics.util.Constants
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
-import org.sunbird.analytics.util.DecryptUtil
+import org.sunbird.analytics.util.{DecryptUtil, RedisConnect, RedisSafeSearch}
+
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
-
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.sunbird.analytics.exhaust.collection.ResponseExhaustJobV2.Question
 
@@ -29,9 +29,17 @@ import scala.collection.immutable.List
 import scala.collection.mutable.ListBuffer
 
 
-case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
-                    phone: Option[String] = Option(""), rootorgid: String, block: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""), cluster: Option[String] = Option(""),
-                    usertype: Option[String] = Option(""), usersubtype: Option[String] = Option(""))
+case class UserData(userid: String,  orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
+                    phone: Option[String] = Option(""), rootorgid: String, block: Option[String] = Option(""),
+                    usertype: Option[String] = Option(""), profileConfig: Option[String] = None)
+
+case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
+
+case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
+
+case class Level1Data(l1identifier: String, l1leafNodesCount: String)
+
+case class AssessmentData(courseid: String, assessmentIds: List[String])
 
 case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]], batchFilter: Option[List[String]])
 case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"))
@@ -42,6 +50,7 @@ case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], succ
 case class ProcessedRequest(channel: String, batchId: String, filePath: String, fileSize: Long)
 
 trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
+  private val activityAggDBSettings = Map("table" -> "user_activity_agg", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
 
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid");
   private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
@@ -52,6 +61,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   private val redisFormat = "org.apache.spark.sql.redis";
   val cassandraFormat = "org.apache.spark.sql.cassandra";
   val MAX_ERROR_MESSAGE_CHAR = 250
+  val redisConnection = new RedisConnect(AppConf.getConfig("sunbird.course.redis.host"), AppConf.getConfig("sunbird.course.redis.port").toInt)
+  var jedis = redisConnection.getConnection(AppConf.getConfig("sunbird.course.redis.relationCache.id").toInt)
 
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -131,10 +142,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   def executeOnDemand(custodianOrgId: String, userCachedDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Metrics = {
+    println("custodianOrgId", custodianOrgId)
     val modelParams = config.modelParams.getOrElse(Map[String, Option[AnyRef]]());
     val batchNumber = modelParams.get("batchNumber")
     val maxErrorMessageLength: Int = modelParams.getOrElse("maxErrorMessageLength", MAX_ERROR_MESSAGE_CHAR).asInstanceOf[Int]
+    println("===JobID", jobId())
+    println("===batchNumber", batchNumber)
     val requests = getRequests(jobId(), batchNumber)
+    println("requests......" + requests.length)
     val storageConfig = getStorageConfig(config, AppConf.getConfig("collection.exhaust.store.prefix"))
     val totalRequests = new AtomicInteger(requests.length)
     JobLogger.log("Total Requests are ", Some(Map("jobId" -> jobId(), "totalRequests" -> requests.length)), INFO)
@@ -340,10 +355,21 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       val userEnrolmentDf = getUserEnrolmentDF(parallelBatch.map(f => f.batchId), persist = true)
       val batchResponseList= for (batch <- parallelBatch) yield {
         if (checkRequestProcessCriteria(processedCount, processedSize)) {
+          val courseCode = getCourseCode(batch.collectionId)
+          val learnerProfile = getLearnerProfile(batch.collectionId)
+          val totalModules = getTotalModule(batch.collectionId)
+
+          val completedModules: DataFrame = getCompletedModule(batch.batchId, totalModules)
           val userEnrolmentBatchDF = userEnrolmentDf.where(col("batchid") === batch.batchId && col("courseid") === batch.collectionId)
             .join(userCachedDF, Seq("userid"), "inner")
             .withColumn("collectionName", lit(batch.collectionName))
             .withColumn("batchName", lit(batch.batchName))
+            .withColumn("coursecode", lit(courseCode))
+            .withColumn("learnerprofile", lit(learnerProfile))
+            .join(completedModules, userEnrolmentDf("userid") === completedModules("user_id"), "left")
+            .withColumn("total_activities", coalesce(col("total_activities"), lit(0)))
+            .withColumn("completed_activities", coalesce(col("completed_activities"), lit(0)))
+            .drop("user_id")
             .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt,col("userid"),col("courseid"),col("batchid"))
           val filteredDF = filterUsers(batch, userEnrolmentBatchDF).persist()
           val res = CommonUtil.time(filteredDF.count);
@@ -475,6 +501,106 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     contentDf
   }
 
+  def getCourseCode(courseId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): String = {
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val searchFilter = Map(
+      "request" -> Map(
+        "filters" -> Map(
+          "identifier" -> courseId,
+          "status" -> List("Live")
+        ),
+        "limit" -> 1,
+        "fields" -> List("code"),
+        "offset" -> null
+      )
+    )
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val result = response.getOrElse("content", List())
+    val codeList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
+    codeList.headOption.flatMap(_.get("code")).map(_.toString).getOrElse("")
+  }
+
+  def getLearnerProfile(courseId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): String = {
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val searchFilter = Map(
+      "request" -> Map(
+        "filters" -> Map(
+          "primaryCategory" -> "Learner Profile",
+          "children" -> List(courseId),
+          "status" -> List("Live")
+        ),
+        "limit" -> 100,
+        "sort_by" -> Map(
+          "lastPublishedOn" -> "desc"
+        ),
+        "fields" -> List("identifier", "lastPublishedOn", "code", "name"),
+        "offset" -> null
+      )
+    )
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val result = response.getOrElse("content", List())
+    val learnerProfileList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
+    learnerProfileList.headOption.flatMap(_.get("name")).map(_.toString).getOrElse("")
+  }
+
+  def getTotalModule(courseId: String): List[String] = {
+    val nodes = RedisSafeSearch.searchLeafNodes(s"$courseId*", 1000, jedis)
+    println("nodes", nodes)
+    val unitIds = nodes.flatMap { case (key, _) =>
+      println(s"Processing key: $key")
+      if (key.endsWith(":leafnodes")) {
+        val base = key.stripSuffix(":leafnodes")
+        println(s"Base after strip: '$base'")
+        val parts = base.split(":")
+        println(s"Parts: ${parts.mkString(",")}")
+        if (parts.length == 2) {
+          println(s"Extracted unit id: ${parts(1)}")
+          Some(parts(1))
+        } else {
+          println("Did not match expected pattern (2 parts)")
+          None
+        }
+      } else {
+        println("Key does not end with ':leafnodes'")
+        None
+      }
+    }.filterNot(_ == courseId).distinct.toList
+    println("Extracted unitIds: " + unitIds)
+    unitIds
+  }
+
+  def getCompletedModule(batchId: String, activities: List[String])
+                        (implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+    import spark.implicits._
+
+    // Step 1: Load and transform the user_activity_agg data
+    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
+      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(activities: _*))
+      .select("user_id", "activity_id", "agg", "context_id")
+      .map(row => {
+        val completedCount = row.getAs[Map[String, Int]]("agg").getOrElse("completedCount", 0)
+        UserAggData(row.getString(0), row.getString(1), completedCount, row.getString(3))
+      }).toDF()
+
+    // Step 2: Add is_completed column (1 if completedCount == 2)
+    val withCompletionFlag = userAggDF.withColumn(
+      "is_completed",
+      when(col("completedCount") === 2, 1).otherwise(0)
+    )
+
+    // Step 3: Group by user_id and calculate total & completed activity counts
+    val result = withCompletionFlag
+      .groupBy("user_id")
+      .agg(
+        count("activity_id").alias("activities_attempted"),
+        sum("is_completed").alias("completed_activities")
+      )
+      .withColumn("total_activities", lit(activities.length))
+    result.select("user_id", "total_activities", "completed_activities")
+  }
+
   def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
     val df = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
       .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
@@ -485,8 +611,14 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def getUserCacheDF(cols: Seq[String], persist: Boolean)(implicit spark: SparkSession): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    val df = loadData(userCacheDBSettings, redisFormat, schema).withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).select(cols.head, cols.tail: _*)
-      .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt,col("userid"))
+    val df = loadData(userCacheDBSettings, redisFormat, schema)
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
+      .withColumn("cin", UDFUtils.extractCIN(col("profileConfig")))
+      .withColumn("fmpsid", UDFUtils.extractFMPSID(col("profileConfig")))
+      .withColumn("province", UDFUtils.extractProvince(col("profileConfig")))
+    df.select(cols.head, cols.tail: _*)
+      .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"))
+    df.show(false)
     if (persist) df.persist() else df
   }
 
@@ -610,4 +742,48 @@ object UDFUtils extends Serializable {
 
   def convertStringToList: UserDefinedFunction =
     udf { str: String => JSONUtils.deserialize[List[Question]](str) }
+
+
+  def extractFieldFromProfileConfigFun(profileConfig: Any, field: String): String = {
+    try {
+      profileConfig match {
+        case str: String if str.nonEmpty =>
+          // Parse as JSON array of JSON strings (escaped)
+          try {
+            val arr = JSONUtils.deserialize[Seq[String]](str)
+            arr.headOption match {
+              case Some(jsonStr) =>
+                try {
+                  val json = JSONUtils.deserialize[Map[String, String]](jsonStr)
+                  json.getOrElse(field, "")
+                } catch {
+                  case _: Exception => ""
+                }
+              case None => ""
+            }
+          } catch {
+            case _: Exception => ""
+          }
+        case arr: Seq[_] if arr.nonEmpty && arr.head.isInstanceOf[String] =>
+          // Defensive: handle if profileConfig is already a Seq[String]
+          arr.headOption match {
+            case Some(jsonStr: String) =>
+              try {
+                val json = JSONUtils.deserialize[Map[String, String]](jsonStr)
+                json.getOrElse(field, "")
+              } catch {
+                case _: Exception => ""
+              }
+            case _ => ""
+          }
+        case _ => ""
+      }
+    } catch {
+      case _: Exception => ""
+    }
+  }
+
+  val extractCIN = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "cin"))
+  val extractFMPSID = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "idFmps"))
+  val extractProvince = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "province"))
 }
