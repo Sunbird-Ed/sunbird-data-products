@@ -29,11 +29,11 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   override def getUserCacheColumns(): Seq[String] = {
     Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province")
   }
-  
+
   override def getEnrolmentColumns() : Seq[String] = {
     Seq("batchid", "userid", "courseid", "active", "certificates", "issued_certificates", "enrolleddate", "completedon", "contentstatus")
   }
-  
+
   override def unpersistDFs() {
     persistedDF.foreach(f => f.unpersist(true))
   }
@@ -94,7 +94,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     val df = Window.partitionBy("userid", "batchid", "courseid", "content_id").orderBy(desc(columnName))
     assessmentDF.withColumn("rownum", row_number.over(df)).where(col("rownum") === 1).drop("rownum")
   }
-  
+
   def getAssessmentAggData(userEnrolmentDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val df = loadData(assessmentAggDBSettings, cassandraFormat, new StructType())
       .select("course_id", "batch_id", "user_id", "content_id", "total_max_score", "total_score", "grand_total", "last_attempted_on")
@@ -141,7 +141,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   def loadCollectionHierarchy(identifier: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     loadData(contentHierarchyDBSettings, cassandraFormat, new StructType()).where(col("identifier") === s"${identifier}").select("identifier", "hierarchy")
   }
-  
+
   def getLeafNodeCount(hierarchyData: DataFrame) : Int = {
     hierarchyData.rdd.map(row => {
       val hierarchy = JSONUtils.deserialize[Map[String, AnyRef]](row.getString(1))
