@@ -48,8 +48,8 @@ object RedisSafeSearch {
         val scanResult: ScanResult[String] = jedis.scan(cursor, scanParams)
         cursor = scanResult.getCursor
         scanResult.getResult.forEach { key =>
-          val value = jedis.get(key)
-          results += ((key, value))
+          // Only collect the key name, not the value
+          results += ((key, ""))
         }
         iterations += 1
         if (iterations >= maxIterations) {

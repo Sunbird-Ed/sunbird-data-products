@@ -57,7 +57,7 @@ case class ProcessedRequest(channel: String, batchId: String, filePath: String, 
 
 trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
   private val activityAggDBSettings = Map("table" -> "user_activity_agg", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
-
+  private val encryptedFields = Array("email", "phone");
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid");
   private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
   private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
@@ -123,7 +123,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
     val res = CommonUtil.time({
       val userDF = getUserCacheDF(getUserCacheColumns(), persist = true)
-      (userDF.count(), userDF)
+      (userDF.count(), decryptUserInfo(userDF))
     })
     JobLogger.log("Time to fetch enrolment details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
     val userCachedDF = res._2._2;
@@ -364,11 +364,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         if (checkRequestProcessCriteria(processedCount, processedSize)) {
           val courseCode = getCourseCode(batch.collectionId)
           val learnerProfile = getLearnerProfile(batch.collectionId)
-          println("learnerProfile===", learnerProfile)
-          println("courseCode===", courseCode)
-          val totalModules = getTotalModule(batch.collectionId)
+          //val totalModules = getTotalModule(batch.collectionId)
 
-          val completedModules: DataFrame = getCompletedModule(batch.batchId, totalModules)
+          val completedModules: DataFrame = getCompletedModule(batch.batchId, batch.collectionId)
           println("====completedModules=====")
           completedModules.show(false)
           val userEnrolmentBatchDF = userEnrolmentDf.where(col("batchid") === batch.batchId && col("courseid") === batch.collectionId)
@@ -594,34 +592,58 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     unitIds
   }
 
-  def getCompletedModule(batchId: String, activities: List[String])
+  def getLeafNodesCountMap(courseId: String): Map[String, Int] = {
+    val unitIds = getTotalModule(courseId)
+    unitIds.map { id =>
+      val key = s"$courseId:$id:leafnodes"
+      println("key..." + key)
+      val count = jedis.smembers(key).size()
+      println("count..." + count)
+      id -> count
+    }.toMap
+  }
+
+  def getCompletedModule(batchId: String, courseId: String)
                         (implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     import spark.implicits._
 
-    // Step 1: Load and transform the user_activity_agg data
+    // Get the courseId from activities if possible (assuming all activities belong to the same course)
+    // If not, you may need to pass courseId as a parameter
+    //val courseId = if (activities.nonEmpty) activities.head.split("-").head else ""
+    val leafNodesCountMap = getLeafNodesCountMap(courseId)
+    println("leafNodesCountMap===", JSONUtils.serialize(leafNodesCountMap))
+
     val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
-      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(activities: _*))
-      .select("user_id", "activity_id", "agg", "context_id")
+      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(leafNodesCountMap.keySet.toSeq.map(_.asInstanceOf[Any]): _*))
+      .select("user_id", "activity_id", "aggregates", "context_id")
       .map(row => {
-        val completedCount = row.getAs[Map[String, Int]]("agg").getOrElse("completedCount", 0)
-        UserAggData(row.getString(0), row.getString(1), completedCount, row.getString(3))
-      }).toDF()
+        val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
+          case Some(n: Number) => n.intValue()
+          case _ => 0
+        }
+        val activityId = row.getString(1)
+        val leafCount = leafNodesCountMap.getOrElse(activityId, 0)
+        val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
+        (row.getString(0), activityId, completedCount, row.getString(3), isCompleted, leafCount)
+      }).toDF("user_id", "activity_id", "completedCount", "context_id", "is_completed", "leafNodesCount")
 
-    // Step 2: Add is_completed column (1 if completedCount == 2)
-    val withCompletionFlag = userAggDF.withColumn(
-      "is_completed",
-      when(col("completedCount") === 2, 1).otherwise(0)
-    )
-
-    // Step 3: Group by user_id and calculate total & completed activity counts
-    val result = withCompletionFlag
+    val result = userAggDF
       .groupBy("user_id")
       .agg(
         count("activity_id").alias("activities_attempted"),
         sum("is_completed").alias("completed_activities")
       )
-      .withColumn("total_activities", lit(activities.length))
+      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
     result.select("user_id", "total_activities", "completed_activities")
+  }
+
+  def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+    val schema = userDF.schema
+    val decryptFields = schema.fields.filter(field => encryptedFields.contains(field.name))
+    val resultDF = decryptFields.foldLeft(userDF) { (df, field) =>
+      df.withColumn(field.name, UDFUtils.toDecrypt(col(field.name)))
+    }
+    resultDF
   }
 
   def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
@@ -702,6 +724,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
     reportDF.withColumn("batchid", concat(lit("BatchId_"), col("batchid"))).toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
+
+
+
 
   /** END - Utility Methods */
 
@@ -810,4 +835,8 @@ object UDFUtils extends Serializable {
   val extractCIN = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "cin"))
   val extractFMPSID = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "idFmps"))
   val extractProvince = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "province"))
+
+
+
+
 }

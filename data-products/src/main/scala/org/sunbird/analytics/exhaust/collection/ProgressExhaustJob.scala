@@ -44,7 +44,8 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
 
   private val filterColumns = Seq("courseid", "coursecode", "collectionName", "batchid", "batchName", "userid",  "orgname", "usertype", "enrolleddate", "completedon", "certificatestatus", "completionPercentage", "firstname", "lastname", "username", "email", "cin", "fmpsid", "province", "learnerprofile", "completed_activities", "total_activities");
 
-  private val columnsOrder = List("Course ID", "Course Name", "Course Code", "Learner Profile", "Batch Id", "Batch Name", "User ID", "User Name", "First Name", "Last Name", "Email ID", "FMPS ID", "CIN", "Province", "Org Name", "User Type", "Enrolment Date", "Completion Date", "Total Modules", "Completed Modules",  "Certificate Status", "Progress", "Global Quiz Score")
+  private val columnsOrder = List( "User ID", "First Name", "Last Name", "User Name", "Email ID", "FMPS ID", "CIN", "Province", "Org Name",  "User Type", "Learner Profile", "Course Code", "Course Name",
+    "Course ID",  "Batch Id", "Batch Name",  "Enrolment Date", "Completion Date", "Total Modules", "Completed Modules",  "Progress", "Global Quiz Score", "Certificate Status")
 
   private val columnMapping = Map("courseid" -> "Course ID", "collectionName" -> "Course Name", "coursecode" -> "Course Code", "learnerprofile" -> "Learner Profile", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User ID", "orgname" -> "Org Name", "usertype" -> "User Type",  "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date",
     "completionPercentage" -> "Progress", "total_sum_score" -> "Global Quiz Score", "certificatestatus" -> "Certificate Status", "username" -> "User Name", "firstname" -> "First Name", "lastname" -> "Last Name", "email" -> "Email ID", "fmpsid" -> "FMPS ID", "cin" -> "CIN", "province" -> "Province", "total_activities" -> "Total Modules", "completed_activities" -> "Completed Modules" )
@@ -133,7 +134,8 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     val assessmentAggSpec = Window.partitionBy("userid", "batchid", "courseid")
     val df = dataDF.withColumn("agg_score", sum("total_score") over assessmentAggSpec)
       .withColumn("agg_max_score", sum("total_max_score") over assessmentAggSpec)
-      .withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%"))).persist()
+      .withColumn("total_sum_score", concat(col("agg_score"), lit("/"), col("agg_max_score"))).persist()
+      //.withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%"))).persist()
     persistedDF.append(df);
     df;
   }
