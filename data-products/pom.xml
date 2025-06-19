@@ -335,12 +335,12 @@
 			<version>2.0.1</version> <!-- Optional upgrade -->
 			<scope>test</scope>
 		</dependency>
-		<dependency>
- 			<groupId>io.zonky.test.postgres</groupId>
- 			<artifactId>embedded-postgres-binaries-darwin-amd64</artifactId>
- 			<version>17.5.0</version>
- 			<scope>runtime</scope>
- 		</dependency>
+<!--		<dependency>-->
+<!-- 			<groupId>io.zonky.test.postgres</groupId>-->
+<!-- 			<artifactId>embedded-postgres-binaries-darwin-amd64</artifactId>-->
+<!-- 			<version>17.5.0</version>-->
+<!-- 			<scope>runtime</scope>-->
+<!-- 		</dependency>-->
 		<dependency>
 			<groupId>com.konghq</groupId>
 			<artifactId>unirest-java</artifactId>

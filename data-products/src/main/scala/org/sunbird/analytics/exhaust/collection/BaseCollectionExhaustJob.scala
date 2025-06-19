@@ -515,7 +515,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def getCourseCode(courseId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): String = {
     val apiURL = Constants.COMPOSITE_SEARCH_URL
-    println("API URL" + apiURL)
     val searchFilter = Map(
       "request" -> Map(
         "filters" -> Map(
@@ -529,7 +528,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     )
     val request = JSONUtils.serialize(searchFilter)
     val response = RestUtil.post[CollectionDetails](apiURL, request).result
-    println("=== get course code response====", JSONUtils.serialize(response))
     val result = response.getOrElse("content", List())
     val codeList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
     codeList.headOption.flatMap(_.get("code")).map(_.toString).getOrElse("")
@@ -554,7 +552,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     )
     val request = JSONUtils.serialize(searchFilter)
     val response = RestUtil.post[CollectionDetails](apiURL, request).result
-    println("=== learner profile response====", JSONUtils.serialize(response))
     val result = response.getOrElse("content", List())
     val learnerProfileList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
     learnerProfileList.headOption.flatMap(_.get("name")).map(_.toString).getOrElse("")
@@ -562,7 +559,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def getTotalModule(courseId: String): List[String] = {
     val nodes = RedisSafeSearch.searchLeafNodes(s"$courseId*", 1000, jedis)
-    println("nodes", nodes)
     val unitIds = nodes.flatMap { case (key, _) =>
       println(s"Processing key: $key")
       if (key.endsWith(":leafnodes")) {
@@ -696,6 +692,33 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         val children = childNode.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
         if (null != children && children.nonEmpty) {
           filterAssessmentsFromHierarchy(children, assessmentFilters, updatedAssessmentData)
+        } else updatedAssessmentData
+      })
+      val courseId = list.head.courseid
+      val assessmentIds = list.map(x => x.assessmentIds).flatten.distinct
+      AssessmentData(courseId, assessmentIds)
+    } else prevData
+  }
+
+  def filterAllAssessmentsFromHierarchy(data: List[Map[String, AnyRef]], assessmentFilters: Map[String, List[String]], prevData: AssessmentData): AssessmentData = {
+    if (data.nonEmpty) {
+      val assessmentTypes = assessmentFilters("assessmentTypes")
+      val questionTypes = assessmentFilters("questionTypes")
+      val primaryCatFilter = assessmentFilters("primaryCategories")
+
+      val list = data.map(childNode => {
+        // TODO: need to change to primaryCategory after 3.3.0
+        val contentType = childNode.getOrElse("contentType", "").asInstanceOf[String]
+        val objectType = childNode.getOrElse("objectType", "").asInstanceOf[String]
+        val primaryCategory = childNode.getOrElse("primaryCategory", "").asInstanceOf[String]
+
+        val updatedIds = (if (assessmentTypes.contains(contentType) || (questionTypes.contains(objectType)  && primaryCatFilter.contains(primaryCategory))) {
+          List(childNode.get("identifier").get.asInstanceOf[String])
+        } else List()) ::: prevData.assessmentIds
+        val updatedAssessmentData = AssessmentData(prevData.courseid, updatedIds)
+        val children = childNode.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
+        if (null != children && children.nonEmpty) {
+          filterAllAssessmentsFromHierarchy(children, assessmentFilters, updatedAssessmentData)
         } else updatedAssessmentData
       })
       val courseId = list.head.courseid
