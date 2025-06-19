@@ -42,7 +42,8 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   private val contentHierarchyDBSettings = Map("table" -> "content_hierarchy", "keyspace" -> AppConf.getConfig("sunbird.content.hierarchy.keyspace"), "cluster" -> "ContentCluster");
 
-  private val filterColumns = Seq("courseid", "collectionName", "batchid", "batchName", "userid",  "orgname",  "usertype", "enrolleddate", "completedon", "certificatestatus", "completionPercentage");
+  private val filterColumns = Seq("courseid", "coursecode", "collectionName", "batchid", "batchName", "userid",  "orgname", "usertype", "enrolleddate", "completedon", "certificatestatus", "completionPercentage", "firstname", "lastname", "username", "email", "cin", "fmpsid", "province", "learnerprofile", "completed_activities", "total_activities");
+
   private val columnsOrder = List("Course ID", "Course Name", "Course Code", "Learner Profile", "Batch Id", "Batch Name", "User ID", "User Name", "First Name", "Last Name", "Email ID", "FMPS ID", "CIN", "Province", "Org Name", "User Type", "Enrolment Date", "Completion Date", "Total Modules", "Completed Modules",  "Certificate Status", "Progress", "Global Quiz Score")
 
   private val columnMapping = Map("courseid" -> "Course ID", "collectionName" -> "Course Name", "coursecode" -> "Course Code", "learnerprofile" -> "Learner Profile", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User ID", "orgname" -> "Org Name", "usertype" -> "User Type",  "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date",
@@ -51,8 +52,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val hierarchyData = loadCollectionHierarchy(collectionBatch.collectionId)
 
-    println("========== Process Batch =========")
-
+    //userEnrolmentDF.show(false)
     //val collectionAggDF = getCollectionAggWithModuleData(collectionBatch, hierarchyData).withColumn("batchid", lit(collectionBatch.batchId));
     //val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     val assessmentAggDF = getAssessmentDF(collectionBatch, userEnrolmentDF, hierarchyData);
