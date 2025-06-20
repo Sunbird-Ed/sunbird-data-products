@@ -372,6 +372,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
             .join(completedModules, userEnrolmentDf("userid") === completedModules("user_id"), "left")
             .withColumn("total_activities", coalesce(col("total_activities"), lit(0)))
             .withColumn("completed_activities", coalesce(col("completed_activities"), lit(0)))
+            .withColumn("module_progress", when(col("total_activities") > 0, round((col("completed_activities") / col("total_activities")) * 100, 2)).otherwise(lit(0)))
             .drop("user_id")
             .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"), col("courseid"), col("batchid"))
 

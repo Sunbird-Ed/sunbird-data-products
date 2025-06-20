@@ -42,13 +42,13 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
   private val assessmentAggDBSettings = Map("table" -> "assessment_aggregator", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
   private val contentHierarchyDBSettings = Map("table" -> "content_hierarchy", "keyspace" -> AppConf.getConfig("sunbird.content.hierarchy.keyspace"), "cluster" -> "ContentCluster");
 
-  private val filterColumns = Seq("courseid", "coursecode", "collectionName", "batchid", "batchName", "userid",  "orgname", "usertype", "enrolleddate", "completedon", "certificatestatus", "completionPercentage", "firstname", "lastname", "username", "email", "cin", "fmpsid", "province", "learnerprofile", "completed_activities", "total_activities");
+  private val filterColumns = Seq("courseid", "coursecode", "collectionName", "batchid", "batchName", "userid",  "orgname", "usertype", "enrolleddate", "completedon", "certificatestatus", "module_progress", "firstname", "lastname", "username", "email", "cin", "fmpsid", "province", "learnerprofile", "completed_activities", "total_activities");
 
   private val columnsOrder = List( "User ID", "First Name", "Last Name", "User Name", "Email ID", "FMPS ID", "CIN", "Province", "Org Name",  "User Type", "Learner Profile", "Course Code", "Course Name",
     "Course ID",  "Batch Id", "Batch Name",  "Enrolment Date", "Completion Date", "Total Modules", "Completed Modules",  "Course Progress", "Global Quiz Score", "Certificate Status")
 
   private val columnMapping = Map("courseid" -> "Course ID", "collectionName" -> "Course Name", "coursecode" -> "Course Code", "learnerprofile" -> "Learner Profile", "batchid" -> "Batch Id", "batchName" -> "Batch Name", "userid" -> "User ID", "orgname" -> "Org Name", "usertype" -> "User Type",  "enrolleddate" -> "Enrolment Date", "completedon" -> "Completion Date",
-    "completionPercentage" -> "Course Progress", "total_sum_score" -> "Global Quiz Score", "certificatestatus" -> "Certificate Status", "username" -> "User Name", "firstname" -> "First Name", "lastname" -> "Last Name", "email" -> "Email ID", "fmpsid" -> "FMPS ID", "cin" -> "CIN", "province" -> "Province", "total_activities" -> "Total Modules", "completed_activities" -> "Completed Modules" )
+    "module_progress" -> "Course Progress", "total_sum_score" -> "Global Quiz Score", "certificatestatus" -> "Certificate Status", "username" -> "User Name", "firstname" -> "First Name", "lastname" -> "Last Name", "email" -> "Email ID", "fmpsid" -> "FMPS ID", "cin" -> "CIN", "province" -> "Province", "total_activities" -> "Total Modules", "completed_activities" -> "Completed Modules" )
 
   override def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
     val hierarchyData = loadCollectionHierarchy(collectionBatch.collectionId)
@@ -58,8 +58,8 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     //val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     val assessmentAggDF = getAssessmentDF(collectionBatch, userEnrolmentDF, hierarchyData);
     val leafNodesCount = getLeafNodeCount(hierarchyData);
-    val enrolmentWithCompletions = userEnrolmentDF.withColumn("completionPercentage", UDFUtils.completionPercentage(col("contentstatus"), lit(leafNodesCount)));
-    val enrolledUsersToBatch = updateCertificateStatus(enrolmentWithCompletions).select(filterColumns.head, filterColumns.tail: _*)
+    //val enrolmentWithCompletions = userEnrolmentDF.withColumn("completionPercentage", UDFUtils.completionPercentage(col("contentstatus"), lit(leafNodesCount)));
+    val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     //val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
     val progressDF = getProgressDF(enrolledUsersToBatch, null, assessmentAggDF).drop("total_max_score", "total_score", "agg_score", "grand_total", "agg_max_score", "content_id")
     organizeDF(progressDF, columnMapping, columnsOrder);
@@ -77,7 +77,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     //val progressDF = collectionAggPivotDF.join(assessmentAggPivotDF, Seq("courseid", "batchid", "userid"), "left_outer")
     //userEnrolmentDF.join(progressDF, Seq("courseid", "batchid", "userid"), "left_outer")
     userEnrolmentDF.join(assessmentAggDF, Seq("courseid", "batchid", "userid"), "left_outer")
-      .withColumn("completionPercentage", when(col("completedon").isNotNull, 100).otherwise(col("completionPercentage")))
+      //.withColumn("completionPercentage", when(col("completedon").isNotNull, 100).otherwise(col("completionPercentage")))
       .withColumn("completedon", when(col("completedon").isNotNull, date_format(col("completedon"), "dd/MM/yyyy")).otherwise(""))
       .withColumn("enrolleddate", date_format(to_date(col("enrolleddate")), "dd/MM/yyyy"))
   }
