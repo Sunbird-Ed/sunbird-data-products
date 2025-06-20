@@ -635,7 +635,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     userAggDF
 
 
-
     //    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
     //      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(leafNodesCountMap.keySet.toSeq.map(_.asInstanceOf[Any]): _*))
     //      .select("user_id", "activity_id", "aggregates", "context_id")
