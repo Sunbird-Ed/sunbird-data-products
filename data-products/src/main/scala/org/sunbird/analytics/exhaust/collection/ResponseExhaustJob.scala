@@ -69,29 +69,36 @@ object ResponseExhaustJob extends BaseCollectionExhaustJob {
   def getUserContentConsumption(collectionBatch: CollectionBatch)
                                (implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
-    // 1. Load data from Cassandra
+    // 1. Load data from Cassandra and materialize in Spark before using Spark SQL expressions
     val rawDF = loadData(userContentConsumptionDBSettings, cassandraFormat, new StructType())
       .select("userid", "contentid", "status", "courseid", "batchid")
       .filter(col("courseid") === collectionBatch.collectionId && col("batchid") === collectionBatch.batchId)
-      .withColumn("status", when(col("status") === 2, lit("COMPLETED")).otherwise(lit("INCOMPLETE")))
+      .cache() // Materialize in Spark to avoid pushdown errors
 
-    // ✅ Correct: filtering on the course and batch IDs
+    val rawDFWithStatus = rawDF.withColumn("status", when(col("status") === 2, lit("COMPLETED")).otherwise(lit("INCOMPLETE")))
 
-    // 2. Pivot contentid to become column names with status as value
-    val pivotedDF = rawDF
+    // Extract unique content IDs from rawDFWithStatus
+    val contentIds = rawDFWithStatus.select("contentid").distinct().collect().map(_.getString(0)).toList
+
+    // Call getContentNames and convert result to DataFrame
+    val contentNamesList = getContentNames(contentIds)
+    import spark.implicits._
+    val contentNamesDF = contentNamesList
+      .map(row => (row.getOrElse("identifier", "").toString, row.getOrElse("name", "").toString))
+      .toDF("identifier", "name")
+
+    // Join rawDFWithStatus with contentNamesDF to get content name for each contentid
+    val rawWithNamesDF = rawDFWithStatus.join(contentNamesDF, rawDFWithStatus("contentid") === contentNamesDF("identifier"), "left")
+      .withColumnRenamed("name", "contentname")
+      .drop("identifier")
+
+    // Pivot on contentname instead of contentid
+    val pivotedDF = rawWithNamesDF
       .groupBy("userid", "courseid", "batchid")
-      .pivot("contentid")
+      .pivot("contentname")
       .agg(first("status"))
 
-    // ✅ Correct: this will produce one row per user+course+batch, and columns like do_xyz -> 2
-
-    // 3. Rename pivoted columns to include _status suffix
-    //    val renamedCols = pivotedDF.columns.map { colName =>
-    //      if (!Set("userid", "courseid", "batchid").contains(colName))
-    //        pivotedDF(colName).as(s"${colName}-Status")
-    //      else
-    //        pivotedDF(colName)
-    //    }
+    // Rename pivoted columns to include _status suffix
     val renamedCols = pivotedDF.columns.map { colName =>
       if (!Set("userid", "courseid", "batchid").contains(colName)) {
         when(pivotedDF(colName).isNull, lit("INCOMPLETE"))
@@ -102,14 +109,12 @@ object ResponseExhaustJob extends BaseCollectionExhaustJob {
       }
     }
 
-    // ✅ Correct: avoids renaming groupBy keys and applies _status to pivoted content IDs
-
-    // 4. Apply renamed columns
     pivotedDF.select(renamedCols: _*)
   }
 
 
-  def getProgressDF(userEnrolmentDF: DataFrame, collectionAggDF: DataFrame, assessmentAggDF: DataFrame): DataFrame = {
+
+  def getProgressDF(userEnrolmentDF: DataFrame, collectionAggDF: DataFrame, assessmentAggDF: DataFrame)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
 
     //    val collectionAggPivotDF = collectionAggDF.groupBy("courseid", "batchid", "userid", "completionPercentage").pivot(concat(col("l1identifier"), lit(" - Progress"))).agg(first(col("l1completionPercentage")))
     //      .drop("null")
@@ -119,8 +124,20 @@ object ResponseExhaustJob extends BaseCollectionExhaustJob {
     //        .getItem(0) * 100) / (split(first("grand_total"), "\\/")
     //        .getItem(1))), lit("%")))
 
-    val assessmentAggPivotDF = assessmentAggDF
-      .withColumn("content_score", concat(col("content_id"), lit(" - Score")))
+
+    val contentIds = assessmentAggDF.select("content_id").distinct().collect().map(_.getString(0)).toList
+    val contentNamesList = getContentNames(contentIds)
+    import spark.implicits._
+    val contentNamesDF = contentNamesList
+      .map(row => (row.getOrElse("identifier", "").toString, row.getOrElse("name", "").toString))
+      .toDF("identifier", "name")
+
+   val joinedAssessmentDF  = assessmentAggDF.join(contentNamesDF, assessmentAggDF("content_id") === contentNamesDF("identifier"), "left")
+
+
+
+    val assessmentAggPivotDF = joinedAssessmentDF
+      .withColumn("content_score", concat(col("name"), lit(" - Score")))
       .groupBy("courseid", "batchid", "userid")
       .pivot("content_score")
       .agg(concat(

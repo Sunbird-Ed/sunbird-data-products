@@ -558,6 +558,25 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     learnerProfileList.headOption.flatMap(_.get("name")).map(_.toString).getOrElse("")
   }
 
+  def getContentNames(contentIds: List[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val searchFilter = Map(
+      "request" -> Map(
+        "filters" -> Map(
+          "identifier" -> contentIds,
+          "status" -> List("Live")
+        ),
+        "fields" -> ("name"),
+        "offset" -> null
+      )
+    )
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val result = response.getOrElse("content", List())
+    JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
+  }
+
+
   def getTotalModule(courseId: String): List[String] = {
     val nodes = RedisSafeSearch.searchLeafNodes(s"$courseId*", 1000, jedis)
     val unitIds = nodes.flatMap { case (key, _) =>
@@ -587,9 +606,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val unitIds = getTotalModule(courseId)
     unitIds.map { id =>
       val key = s"$courseId:$id:leafnodes"
-      println("key..." + key)
       val count = jedis.smembers(key).size()
-      println("count..." + count)
       id -> count
     }.toMap
   }
@@ -602,10 +619,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     // If not, you may need to pass courseId as a parameter
     //val courseId = if (activities.nonEmpty) activities.head.split("-").head else ""
     val leafNodesCountMap = getLeafNodesCountMap(courseId)
-    println("leafNodesCountMap===", JSONUtils.serialize(leafNodesCountMap))
-
     val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
-      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(leafNodesCountMap.keySet.toSeq.map(_.asInstanceOf[Any]): _*))
+      .filter(col("context_id") === s"cb:$batchId" && col("activity_id") === courseId)
       .select("user_id", "activity_id", "aggregates", "context_id")
       .map(row => {
         val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
@@ -613,19 +628,37 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
           case _ => 0
         }
         val activityId = row.getString(1)
-        val leafCount = leafNodesCountMap.getOrElse(activityId, 0)
-        val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
-        (row.getString(0), activityId, completedCount, row.getString(3), isCompleted, leafCount)
-      }).toDF("user_id", "activity_id", "completedCount", "context_id", "is_completed", "leafNodesCount")
+        val leafCount = leafNodesCountMap.keySet.size
+        //val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
+        (row.getString(0), activityId, completedCount, row.getString(3), leafCount)
+      }).toDF("user_id", "activity_id", "completed_activities", "context_id", "total_activities")
+    userAggDF
 
-    val result = userAggDF
-      .groupBy("user_id")
-      .agg(
-        count("activity_id").alias("activities_attempted"),
-        sum("is_completed").alias("completed_activities")
-      )
-      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
-    result.select("user_id", "total_activities", "completed_activities")
+
+
+    //    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
+    //      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(leafNodesCountMap.keySet.toSeq.map(_.asInstanceOf[Any]): _*))
+    //      .select("user_id", "activity_id", "aggregates", "context_id")
+    //      .map(row => {
+    //        val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
+    //          case Some(n: Number) => n.intValue()
+    //          case _ => 0
+    //        }
+    //        val activityId = row.getString(1)
+    //        val leafCount = leafNodesCountMap.getOrElse(activityId, 0)
+    //        val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
+    //        (row.getString(0), activityId, completedCount, row.getString(3), isCompleted, leafCount)
+    //      }).toDF("user_id", "activity_id", "completedCount", "context_id", "is_completed", "leafNodesCount")
+
+    //    val result = userAggDF
+    //      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
+    //      .withColumn("completed_activities", )
+    ////      .agg(
+    ////        count("activity_id").alias("activities_attempted"),
+    ////        sum("is_completed").alias("completed_activities")
+    ////      )
+    //      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
+    //    result.select("user_id", "total_activities", "completed_activities")
   }
 
   def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
@@ -713,7 +746,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         val objectType = childNode.getOrElse("objectType", "").asInstanceOf[String]
         val primaryCategory = childNode.getOrElse("primaryCategory", "").asInstanceOf[String]
 
-        val updatedIds = (if (assessmentTypes.contains(contentType) || (questionTypes.contains(objectType)  && primaryCatFilter.contains(primaryCategory))) {
+        val updatedIds = (if (assessmentTypes.contains(contentType) || (questionTypes.contains(objectType) && primaryCatFilter.contains(primaryCategory))) {
           List(childNode.get("identifier").get.asInstanceOf[String])
         } else List()) ::: prevData.assessmentIds
         val updatedAssessmentData = AssessmentData(prevData.courseid, updatedIds)
@@ -741,8 +774,6 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
     reportDF.withColumn("batchid", concat(lit("BatchId_"), col("batchid"))).toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
-
-
 
 
   /** END - Utility Methods */
@@ -852,8 +883,6 @@ object UDFUtils extends Serializable {
   val extractCIN = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "cin"))
   val extractFMPSID = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "idFmps"))
   val extractProvince = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "province"))
-
-
 
 
 }

@@ -57,7 +57,7 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     //val collectionAggDF = getCollectionAggWithModuleData(collectionBatch, hierarchyData).withColumn("batchid", lit(collectionBatch.batchId));
     //val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     val assessmentAggDF = getAssessmentDF(collectionBatch, userEnrolmentDF, hierarchyData);
-    val leafNodesCount = getLeafNodeCount(hierarchyData);
+    //val leafNodesCount = getLeafNodeCount(hierarchyData);
     //val enrolmentWithCompletions = userEnrolmentDF.withColumn("completionPercentage", UDFUtils.completionPercentage(col("contentstatus"), lit(leafNodesCount)));
     val enrolledUsersToBatch = updateCertificateStatus(userEnrolmentDF).select(filterColumns.head, filterColumns.tail: _*)
     //val progressDF = getProgressDF(enrolledUsersToBatch, collectionAggDF, assessmentAggDF);
@@ -133,7 +133,6 @@ object ProgressExhaustJob extends BaseCollectionExhaustJob {
     val df = dataDF.withColumn("agg_score", sum("total_score") over assessmentAggSpec)
       .withColumn("agg_max_score", sum("total_max_score") over assessmentAggSpec)
       .withColumn("total_sum_score", concat(col("agg_score"), lit("/"), col("agg_max_score"))).persist()
-    //.withColumn("total_sum_score", concat(ceil((col("agg_score") * 100) / col("agg_max_score")), lit("%"))).persist()
     persistedDF.append(df);
     df;
   }
