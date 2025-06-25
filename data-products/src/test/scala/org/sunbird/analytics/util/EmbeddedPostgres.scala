@@ -69,6 +69,30 @@ object EmbeddedPostgresql {
     execute(query)
   }
 
+  def createUserSummaryReport(): Unit = {
+    val tableName: String = "user_summary_report"
+    val query =
+      s"""
+         |CREATE TABLE IF NOT EXISTS $tableName (
+         |   userid TEXT PRIMARY KEY,
+         |   firstname TEXT,
+         |   lastname TEXT,
+         |   username TEXT,
+         |   email TEXT,
+         |   usertype TEXT,
+         |   cin TEXT,
+         |   fmpsid TEXT,
+         |   province TEXT,
+         |   orgname TEXT,
+         |   num_courses_enrolled INTEGER,
+         |   num_courses_started INTEGER,
+         |   num_courses_completed INTEGER,
+         |   updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+         |)
+      """.stripMargin
+    execute(query)
+  }
+
 
   def createConversationTable(): Unit = {
     val tableName: String = "bot"

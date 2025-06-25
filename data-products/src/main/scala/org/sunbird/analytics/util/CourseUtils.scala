@@ -1,7 +1,7 @@
 package org.sunbird.analytics.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.ekstep.analytics.framework.Level.{ERROR, INFO}
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
@@ -176,5 +176,50 @@ object CourseUtils {
     val response = RestUtil.post[Map[String, String]](apiUrl, ingestionData, None)
     JobLogger.log(s"Ingestion Task Id: $response", None, INFO)
   }
+
+  def extractFieldFromProfileConfigFun(profileConfig: Any, field: String): String = {
+    try {
+      profileConfig match {
+        case str: String if str.nonEmpty =>
+          // Parse as JSON array of JSON strings (escaped)
+          try {
+            val arr = JSONUtils.deserialize[Seq[String]](str)
+            arr.headOption match {
+              case Some(jsonStr) =>
+                try {
+                  val json = JSONUtils.deserialize[Map[String, String]](jsonStr)
+                  json.getOrElse(field, "")
+                } catch {
+                  case _: Exception => ""
+                }
+              case None => ""
+            }
+          } catch {
+            case _: Exception => ""
+          }
+        case arr: Seq[_] if arr.nonEmpty && arr.head.isInstanceOf[String] =>
+          // Defensive: handle if profileConfig is already a Seq[String]
+          arr.headOption match {
+            case Some(jsonStr: String) =>
+              try {
+                val json = JSONUtils.deserialize[Map[String, String]](jsonStr)
+                json.getOrElse(field, "")
+              } catch {
+                case _: Exception => ""
+              }
+            case _ => ""
+          }
+        case _ => ""
+      }
+    } catch {
+      case _: Exception => ""
+    }
+  }
+
+  val extractCIN = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "cin"))
+  val extractFMPSID = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "idFmps"))
+  val extractProvince = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "province"))
+
+
 
 }
