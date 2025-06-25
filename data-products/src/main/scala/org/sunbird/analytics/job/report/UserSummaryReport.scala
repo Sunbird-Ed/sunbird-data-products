@@ -14,9 +14,13 @@ import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.sunbird.analytics.exhaust.collection.UDFUtils
-import org.sunbird.analytics.util.UserData
 
 import java.util.Properties
+
+case class UserCols(userid: String, orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
+                    phone: Option[String] = Option(""), rootorgid: String,
+                    usertype: Option[String] = Option(""), profileConfig: Option[String] = None, createddate: Option[String] = Option(""))
+
 
 object UserSummaryReport extends IJob with BaseReportsJob {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
@@ -24,7 +28,7 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "ReportCluster");
   private val encryptedFields = Array("email", "phone");
-  private val reportCols = Seq("userid", "firstname", "lastname", "username", "email", "usertype", "cin", "fmpsid", "province", "orgname", "num_courses_enrolled", "num_courses_started", "num_courses_completed")
+  private val reportCols = Seq("userid", "firstname", "lastname", "username", "email", "usertype", "cin", "fmpsid", "province", "orgname", "createddate", "num_courses_enrolled", "num_courses_started", "num_courses_completed")
 
 
   val connProperties: Properties = CommonUtil.getPostgresConnectionProps()
@@ -57,7 +61,7 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   }
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province")
+    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province", "createddate")
   }
 
   def getUserEnrolromentColumns(): Seq[String] = {
@@ -75,7 +79,7 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   // $COVERAGE-ON$
   def getUserCacheDF(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val cols = getUserCacheColumns()
-    val schema = Encoders.product[UserData].schema
+    val schema = Encoders.product[UserCols].schema
     val df = fetchData(spark, userCacheDBSettings, redisFormat, schema)
       .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
       .withColumn("cin", UDFUtils.extractCIN(col("profileConfig")))
@@ -106,7 +110,6 @@ object UserSummaryReport extends IJob with BaseReportsJob {
     resultDF
   }
 
-
   def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
     implicit val sparkSession: SparkSession = spark
     val userEnrolmentDF = getUserEnrollment(spark, fetchData)
@@ -117,17 +120,16 @@ object UserSummaryReport extends IJob with BaseReportsJob {
     // Compute metrics per user
     val userCourseAggDF = userJoinedDF.groupBy("userid")
       .agg(
-        count(when(col("enrolled_date").isNotNull, true)).as("num_courses_enrolled"),
-        count(when((col("progress") > 0 || col("status") === 1) && col("enrolled_date").isNotNull, true)).as("num_courses_started"),
-        count(when((col("status") === 2) && col("enrolled_date").isNotNull, true)).as("num_courses_completed")
+        count(when(col("enrolleddate").isNotNull, true)).as("num_courses_enrolled"),
+        count(when((col("progress") > 0 || col("status") === 1) && col("enrolleddate").isNotNull, true)).as("num_courses_started"),
+        count(when((col("status") === 2) && col("enrolleddate").isNotNull, true)).as("num_courses_completed")
       )
     // Join back to user info for reporting
     val userSummaryDF = userCachedDF.join(userCourseAggDF, Seq("userid"), "left")
+      .na.fill(0, Seq("num_courses_enrolled", "num_courses_started", "num_courses_completed"))
     val decryptedSummary = decryptUserInfo(userSummaryDF)
     val finalDF = decryptedSummary.select(reportCols.head, reportCols.tail: _*)
     finalDF
-
-
   }
 
   def saveToPostgres(reportData: DataFrame): Unit = {
@@ -149,7 +151,7 @@ object UserSummaryReport extends IJob with BaseReportsJob {
       objectKey,
       jobConfig)
     JobLogger.log(s"Uploading reports to blob storage", None, INFO)
-    reportData.saveToBlobStore(storageConfig, "json", s"${reportPath}report-${getDate}", Option(Map("header" -> "true")), None)
+    reportData.saveToBlobStore(storageConfig, "csv", s"${reportPath}user-summary-report-${getDate}", Option(Map("header" -> "true")), None)
   }
 
   def getDate: String = {
