@@ -135,7 +135,6 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   def saveToPostgres(reportData: DataFrame): Unit = {
     import org.apache.spark.sql.functions.current_timestamp
     val reportDataWithUpdate = reportData.withColumn("updated_date", current_timestamp())
-    reportDataWithUpdate.show(false) // Debug: print DataFrame before writing to Postgres
     reportDataWithUpdate.write
       .mode("overwrite") // Use "overwrite" for full refresh, or implement upsert logic as needed
       .jdbc(url, requestsTable, connProperties)

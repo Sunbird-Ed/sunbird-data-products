@@ -103,7 +103,7 @@ object ResponseExhaustJob extends BaseCollectionExhaustJob {
       if (!Set("userid", "courseid", "batchid").contains(colName)) {
         when(pivotedDF(colName).isNull, lit("INCOMPLETE"))
           .otherwise(pivotedDF(colName))
-          .as(s"${colName} - Status")
+          .as(s"Status: ${colName}")
       } else {
         pivotedDF(colName)
       }
@@ -137,7 +137,7 @@ object ResponseExhaustJob extends BaseCollectionExhaustJob {
 
 
     val assessmentAggPivotDF = joinedAssessmentDF
-      .withColumn("content_score", concat(col("name"), lit(" - Score")))
+      .withColumn("content_score", concat(lit("Score:"), col("name")))
       .groupBy("courseid", "batchid", "userid")
       .pivot("content_score")
       .agg(concat(
