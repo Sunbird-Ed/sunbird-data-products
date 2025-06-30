@@ -619,24 +619,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     // If not, you may need to pass courseId as a parameter
     //val courseId = if (activities.nonEmpty) activities.head.split("-").head else ""
     val leafNodesCountMap = getLeafNodesCountMap(courseId)
-    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
-      .filter(col("context_id") === s"cb:$batchId" && col("activity_id") === courseId)
-      .select("user_id", "activity_id", "aggregates", "context_id")
-      .map(row => {
-        val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
-          case Some(n: Number) => n.intValue()
-          case _ => 0
-        }
-        val activityId = row.getString(1)
-        val leafCount = leafNodesCountMap.keySet.size
-        //val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
-        (row.getString(0), activityId, completedCount, row.getString(3), leafCount)
-      }).toDF("user_id", "activity_id", "completed_activities", "context_id", "total_activities")
-    userAggDF
-
-
     //    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
-    //      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(leafNodesCountMap.keySet.toSeq.map(_.asInstanceOf[Any]): _*))
+    //      .filter(col("context_id") === s"cb:$batchId" && col("activity_id") === courseId)
     //      .select("user_id", "activity_id", "aggregates", "context_id")
     //      .map(row => {
     //        val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
@@ -644,20 +628,36 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     //          case _ => 0
     //        }
     //        val activityId = row.getString(1)
-    //        val leafCount = leafNodesCountMap.getOrElse(activityId, 0)
-    //        val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
-    //        (row.getString(0), activityId, completedCount, row.getString(3), isCompleted, leafCount)
-    //      }).toDF("user_id", "activity_id", "completedCount", "context_id", "is_completed", "leafNodesCount")
+    //        val leafCount = leafNodesCountMap.keySet.size
+    //        //val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
+    //        (row.getString(0), activityId, completedCount, row.getString(3), leafCount)
+    //      }).toDF("user_id", "activity_id", "completed_activities", "context_id", "total_activities")
+    //    userAggDF
 
-    //    val result = userAggDF
-    //      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
-    //      .withColumn("completed_activities", )
-    ////      .agg(
-    ////        count("activity_id").alias("activities_attempted"),
-    ////        sum("is_completed").alias("completed_activities")
-    ////      )
-    //      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
-    //    result.select("user_id", "total_activities", "completed_activities")
+
+    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
+      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(leafNodesCountMap.keySet.toSeq.map(_.asInstanceOf[Any]): _*))
+      .select("user_id", "activity_id", "aggregates", "context_id")
+      .map(row => {
+        val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
+          case Some(n: Number) => n.intValue()
+          case _ => 0
+        }
+        val activityId = row.getString(1)
+        val leafCount = leafNodesCountMap.getOrElse(activityId, 0)
+        val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
+        (row.getString(0), activityId, completedCount, row.getString(3), isCompleted, leafCount)
+      }).toDF("user_id", "activity_id", "completedCount", "context_id", "is_completed", "leafNodesCount")
+
+    val result = userAggDF
+      .groupBy("user_id")
+      //.withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
+      .agg(
+        count("activity_id").alias("activities_attempted"),
+        sum("is_completed").alias("completed_activities")
+      )
+      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
+    result.select("user_id", "total_activities", "completed_activities")
   }
 
   def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
