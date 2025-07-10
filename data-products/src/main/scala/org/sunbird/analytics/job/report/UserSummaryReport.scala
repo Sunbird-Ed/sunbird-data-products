@@ -28,7 +28,7 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "ReportCluster");
   private val encryptedFields = Array("email", "phone");
-  private val reportCols = Seq("userid", "firstname", "lastname", "username", "email", "usertype", "cin", "fmpsid", "province", "orgname", "createddate", "num_courses_enrolled", "num_courses_started", "num_courses_completed")
+  private val reportCols = Seq("userid", "firstname", "lastname", "username", "email", "usertype", "cin", "fmpsid", "province", "designation", "orgname", "createddate", "num_courses_enrolled", "num_courses_started", "num_courses_completed", "course_metrics")
 
 
   val connProperties: Properties = CommonUtil.getPostgresConnectionProps()
@@ -61,7 +61,7 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   }
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province", "createddate")
+    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province", "createddate", "designation")
   }
 
   def getUserEnrolromentColumns(): Seq[String] = {
@@ -85,6 +85,7 @@ object UserSummaryReport extends IJob with BaseReportsJob {
       .withColumn("cin", UDFUtils.extractCIN(col("profileConfig")))
       .withColumn("fmpsid", UDFUtils.extractFMPSID(col("profileConfig")))
       .withColumn("province", UDFUtils.extractProvince(col("profileConfig")))
+      .withColumn("designation", UDFUtils.extractDesignation(col("profileConfig")))
     val selectedDF = df.select(cols.head, cols.tail: _*)
       .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"))
     selectedDF.persist()
@@ -122,13 +123,24 @@ object UserSummaryReport extends IJob with BaseReportsJob {
       .agg(
         count(when(col("enrolleddate").isNotNull, true)).as("num_courses_enrolled"),
         count(when((col("progress") > 0 || col("status") === 1) && col("enrolleddate").isNotNull, true)).as("num_courses_started"),
-        count(when((col("status") === 2) && col("enrolleddate").isNotNull, true)).as("num_courses_completed")
+        count(when((col("status") === 2) && col("enrolleddate").isNotNull, true)).as("num_courses_completed"),
+        collect_set(when(col("enrolleddate").isNotNull, col("courseid"))).as("courses_enrolled"),
+        collect_set(when((col("progress") > 0 || col("status") === 1) && col("enrolleddate").isNotNull, col("courseid"))).as("courses_started"),
+        collect_set(when((col("status") === 2) && col("enrolleddate").isNotNull, col("courseid"))).as("courses_completed")
       )
     // Join back to user info for reporting
     val userSummaryDF = userCachedDF.join(userCourseAggDF, Seq("userid"), "left")
       .na.fill(0, Seq("num_courses_enrolled", "num_courses_started", "num_courses_completed"))
     val decryptedSummary = decryptUserInfo(userSummaryDF)
-    val finalDF = decryptedSummary.select(reportCols.head, reportCols.tail: _*)
+    val withCourseMetrics = decryptedSummary.withColumn(
+      "course_metrics",
+      to_json(struct(
+        col("courses_enrolled"),
+        col("courses_started"),
+        col("courses_completed")
+      ))
+    )
+    val finalDF = withCourseMetrics.select(reportCols.head, reportCols.tail: _*)
     finalDF
   }
 
