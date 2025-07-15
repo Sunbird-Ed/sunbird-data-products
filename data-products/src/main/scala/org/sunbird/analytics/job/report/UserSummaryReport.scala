@@ -1,3 +1,4 @@
+
 package org.sunbird.analytics.job.report
 
 import com.datastax.spark.connector.cql.CassandraConnectorConf
@@ -9,17 +10,24 @@ import org.apache.spark.sql.types.StructType
 import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
-import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
+import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger, RestUtil}
 import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.ekstep.analytics.util.Constants
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.sunbird.analytics.exhaust.collection.UDFUtils
 
 import java.util.Properties
 
+
 case class UserCols(userid: String, orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
                     phone: Option[String] = Option(""), rootorgid: String,
                     usertype: Option[String] = Option(""), profileConfig: Option[String] = None, createddate: Option[String] = Option(""))
+
+// Move these case classes to top-level (object scope) for Jackson compatibility
+case class CourseInfo(identifier: String, name: String, code: String)
+case class SearchResult(content: List[CourseInfo])
+case class Response(result: SearchResult)
 
 
 object UserSummaryReport extends IJob with BaseReportsJob {
@@ -132,7 +140,35 @@ object UserSummaryReport extends IJob with BaseReportsJob {
     val userSummaryDF = userCachedDF.join(userCourseAggDF, Seq("userid"), "left")
       .na.fill(0, Seq("num_courses_enrolled", "num_courses_started", "num_courses_completed"))
     val decryptedSummary = decryptUserInfo(userSummaryDF)
-    val withCourseMetrics = decryptedSummary.withColumn(
+
+    // Step 1: Collect all unique course IDs from the DataFrame
+    val allCourseIds = decryptedSummary
+      .select(explode(flatten(array(col("courses_enrolled"), col("courses_started"), col("courses_completed")))))
+      .distinct()
+      .rdd.map(r => r.getString(0)).collect().toList
+
+    // Step 2: Fetch course details in a single batch
+    val courseDetailsMap = getCourseDetails(allCourseIds)
+    val broadcastedCourseMap = spark.sparkContext.broadcast(courseDetailsMap)
+
+    // Step 3: Create a UDF that uses the broadcasted map for enrichment
+    val enrichCoursesUDF = udf((courseIds: Seq[String]) => {
+      if (courseIds == null) null
+      else {
+        val courseMap = broadcastedCourseMap.value
+        courseIds.map { id =>
+          val (code, name) = courseMap.getOrElse(id, ("", ""))
+          Map("course_id" -> id, "name" -> name, "code" -> code)
+        }
+      }
+    })
+
+    val withEnriched = decryptedSummary
+      .withColumn("courses_enrolled", enrichCoursesUDF(col("courses_enrolled")))
+      .withColumn("courses_started", enrichCoursesUDF(col("courses_started")))
+      .withColumn("courses_completed", enrichCoursesUDF(col("courses_completed")))
+
+    val withCourseMetrics = withEnriched.withColumn(
       "course_metrics",
       to_json(struct(
         col("courses_enrolled"),
@@ -168,6 +204,65 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   def getDate: String = {
     val dateFormat: DateTimeFormatter = DateTimeFormat.forPattern("yyyyMMdd").withZone(DateTimeZone.forOffsetHoursMinutes(5, 30));
     dateFormat.print(System.currentTimeMillis());
+  }
+
+  def getCourseDetails(courseIds: List[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Map[String, (String, String)] = {
+    if (courseIds.isEmpty) return Map.empty
+
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val batchSize = 500 // Assuming the API has a limit on the number of identifiers per request
+    val courseBatches = courseIds.distinct.grouped(batchSize).toList
+
+    val courseDetails = courseBatches.flatMap { batch =>
+      val searchFilter = Map(
+        "request" -> Map(
+          "filters" -> Map(
+            "identifier" -> batch,
+            "status" -> List("Live")
+          ),
+          "fields" -> List("name", "code", "identifier"),
+          "limit" -> batch.size
+        )
+      )
+      val request = JSONUtils.serialize(searchFilter)
+      try {
+        val response = RestUtil.post[Response](apiURL, request)
+        if (response != null && response.result != null && response.result.content != null) {
+          response.result.content
+        } else {
+          List.empty[CourseInfo]
+        }
+      } catch {
+        case e: Exception =>
+          JobLogger.log("Error fetching course details from API", Option(Map("error" -> e.getMessage)), INFO)
+          List.empty[CourseInfo]
+      }
+    }
+
+    courseDetails.map(c => c.identifier -> (c.code, c.name)).toMap
+  }
+
+  // Returns (code, name) as a tuple. Returns ("", "") if not found.
+  def getCourseCodeAndName(courseId: List[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): (String, String) = {
+    case class CollectionDetails(result: Map[String, AnyRef])
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val searchFilter = Map(
+      "request" -> Map(
+        "filters" -> Map(
+          "identifier" -> courseId,
+          "status" -> List("Live")
+        ),
+        "fields" -> List("name", "code"),
+        "offset" -> null
+      )
+    )
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val result = response.getOrElse("content", List())
+    val codeList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
+    val code = codeList.headOption.flatMap(_.get("code")).map(_.toString).getOrElse("")
+    val name = codeList.headOption.flatMap(_.get("name")).map(_.toString).getOrElse("")
+    (code, name)
   }
 
 
