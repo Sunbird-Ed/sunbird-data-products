@@ -2,6 +2,7 @@ package org.sunbird.analytics.util
 
 import org.slf4j.LoggerFactory
 import redis.clients.jedis.Jedis
+import redis.clients.jedis.{Jedis, ScanParams, ScanResult}
 
 class RedisConnect(redisHost: String, redisPort: Int) extends java.io.Serializable {
 
@@ -34,4 +35,32 @@ class RedisConnect(redisHost: String, redisPort: Int) extends java.io.Serializab
   }
 
   def getConnection: Jedis = getConnection(db = 0)
+}
+
+object RedisSafeSearch {
+  def searchLeafNodes(pattern: String, maxIterations: Int = 10000, jedis: Jedis): List[(String, String)] = {
+    val scanParams = new ScanParams().`match`(pattern).count(100)
+    var cursor = "0"
+    val results = scala.collection.mutable.ListBuffer.empty[(String, String)]
+    var iterations = 0
+    try {
+      do {
+        val scanResult: ScanResult[String] = jedis.scan(cursor, scanParams)
+        cursor = scanResult.getCursor
+        scanResult.getResult.forEach { key =>
+          // Only collect the key name, not the value
+          results += ((key, ""))
+        }
+        iterations += 1
+        if (iterations >= maxIterations) {
+          println(s"Max Redis scan iterations ($maxIterations) reached, aborting scan to avoid infinite loop.")
+          return results.toList
+        }
+      } while (cursor != "0")
+    } catch {
+      case ex: Exception =>
+        println(s"Error scanning Redis: ${ex.getMessage}")
+    }
+    results.toList
+  }
 }

@@ -17,11 +17,11 @@ import org.ekstep.analytics.util.Constants
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.analytics.exhaust.{BaseReportsJob, JobRequest, OnDemandExhaustJob}
-import org.sunbird.analytics.util.DecryptUtil
+import org.sunbird.analytics.util.{DecryptUtil, RedisConnect, RedisSafeSearch}
+
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
-
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.sunbird.analytics.exhaust.collection.ResponseExhaustJobV2.Question
 
@@ -29,20 +29,35 @@ import scala.collection.immutable.List
 import scala.collection.mutable.ListBuffer
 
 
-case class UserData(userid: String, state: Option[String] = Option(""), district: Option[String] = Option(""), orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
-                    phone: Option[String] = Option(""), rootorgid: String, block: Option[String] = Option(""), schoolname: Option[String] = Option(""), schooludisecode: Option[String] = Option(""), board: Option[String] = Option(""), cluster: Option[String] = Option(""),
-                    usertype: Option[String] = Option(""), usersubtype: Option[String] = Option(""))
+case class UserData(userid: String, orgname: Option[String] = Option(""), firstname: Option[String] = Option(""), lastname: Option[String] = Option(""), email: Option[String] = Option(""),
+                    phone: Option[String] = Option(""), rootorgid: String, block: Option[String] = Option(""),
+                    usertype: Option[String] = Option(""), profileConfig: Option[String] = None)
+
+case class UserAggData(user_id: String, activity_id: String, completedCount: Int, context_id: String)
+
+case class CourseData(courseid: String, leafNodesCount: String, level1Data: List[Level1Data])
+
+case class Level1Data(l1identifier: String, l1leafNodesCount: String)
+
+case class AssessmentData(courseid: String, assessmentIds: List[String])
 
 case class CollectionConfig(batchId: Option[String], searchFilter: Option[Map[String, AnyRef]], batchFilter: Option[List[String]])
+
 case class CollectionBatch(batchId: String, collectionId: String, batchName: String, custodianOrgId: String, requestedOrgId: String, collectionOrgId: String, collectionName: String, userConsent: Option[String] = Some("No"))
+
 case class CollectionBatchResponse(batchId: String, file: String, status: String, statusMsg: String, execTime: Long, fileSize: Long)
+
 case class CollectionDetails(result: Map[String, AnyRef])
+
 case class CollectionInfo(channel: String, identifier: String, name: String, userConsent: Option[String], status: String)
+
 case class Metrics(totalRequests: Option[Int], failedRequests: Option[Int], successRequests: Option[Int], duplicateRequests: Option[Int])
+
 case class ProcessedRequest(channel: String, batchId: String, filePath: String, fileSize: Long)
 
 trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExhaustJob with Serializable {
-
+  private val activityAggDBSettings = Map("table" -> "user_activity_agg", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
+  private val encryptedFields = Array("email", "phone");
   private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid");
   private val userConsentDBSettings = Map("table" -> "user_consent", "keyspace" -> AppConf.getConfig("sunbird.user.keyspace"), "cluster" -> "UserCluster");
   private val collectionBatchDBSettings = Map("table" -> "course_batch", "keyspace" -> AppConf.getConfig("sunbird.courses.keyspace"), "cluster" -> "LMSCluster");
@@ -52,6 +67,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   private val redisFormat = "org.apache.spark.sql.redis";
   val cassandraFormat = "org.apache.spark.sql.cassandra";
   val MAX_ERROR_MESSAGE_CHAR = 250
+  val redisConnection = new RedisConnect(AppConf.getConfig("sunbird.course.redis.host"), AppConf.getConfig("sunbird.course.redis.port").toInt)
+  var jedis = redisConnection.getConnection(AppConf.getConfig("sunbird.course.redis.relationCache.id").toInt)
 
   /** START - Job Execution Methods */
   def main(config: String)(implicit sc: Option[SparkContext] = None, fc: Option[FrameworkContext] = None) {
@@ -73,7 +90,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         KafkaDispatcher.dispatch(Array(metricEvent), Map("topic" -> AppConf.getConfig("metric.kafka.topic"), "brokerList" -> AppConf.getConfig("metric.kafka.broker")))
       // $COVERAGE-ON$
       JobLogger.end(s"$jobName completed execution", "SUCCESS", Option(Map("timeTaken" -> res._1, "totalRequests" -> res._2.totalRequests, "successRequests" -> res._2.successRequests, "failedRequests" -> res._2.failedRequests, "duplicateRequests" -> res._2.duplicateRequests)))
-    }  catch {
+    } catch {
       case ex: Exception =>
         JobLogger.log(ex.getMessage, None, ERROR);
         JobLogger.end(jobName + " execution failed", "FAILED", Option(Map("model" -> jobName, "statusMsg" -> ex.getMessage)));
@@ -82,7 +99,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         // $COVERAGE-OFF$
         if (AppConf.getConfig("push.metrics.kafka").toBoolean)
           KafkaDispatcher.dispatch(Array(metricEvent), Map("topic" -> AppConf.getConfig("metric.kafka.topic"), "brokerList" -> AppConf.getConfig("metric.kafka.broker")))
-        // $COVERAGE-ON$
+      // $COVERAGE-ON$
     } finally {
       frameworkContext.closeContext();
       spark.close()
@@ -106,7 +123,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
     val res = CommonUtil.time({
       val userDF = getUserCacheDF(getUserCacheColumns(), persist = true)
-      (userDF.count(), userDF)
+      (userDF.count(), decryptUserInfo(userDF))
     })
     JobLogger.log("Time to fetch enrolment details", Some(Map("timeTaken" -> res._1, "count" -> res._2._1)), INFO)
     val userCachedDF = res._2._2;
@@ -141,16 +158,16 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
     val dupRequests = getDuplicateRequests(requests)
     val dupRequestsList = dupRequests.values.flatten.map(f => f.request_id).toList
-    val filteredRequests = requests.filter(f => ! dupRequestsList.contains(f.request_id))
+    val filteredRequests = requests.filter(f => !dupRequestsList.contains(f.request_id))
     JobLogger.log("The Request count details", Some(Map("Total Requests" -> requests.length, "filtered Requests" -> filteredRequests.length, "Duplicate Requests" -> dupRequestsList.length)), INFO)
 
-    val requestsCompleted :ListBuffer[ProcessedRequest] = ListBuffer.empty
+    val requestsCompleted: ListBuffer[ProcessedRequest] = ListBuffer.empty
 
     val result = for (request <- filteredRequests) yield {
       val updRequest: JobRequest = {
         try {
-          val processedCount = if(requestsCompleted.isEmpty) 0 else requestsCompleted.count(f => f.channel.equals(request.requested_channel))
-          val processedSize = if(requestsCompleted.isEmpty) 0 else requestsCompleted.filter(f => f.channel.equals(request.requested_channel)).map(f => f.fileSize).sum
+          val processedCount = if (requestsCompleted.isEmpty) 0 else requestsCompleted.count(f => f.channel.equals(request.requested_channel))
+          val processedSize = if (requestsCompleted.isEmpty) 0 else requestsCompleted.filter(f => f.channel.equals(request.requested_channel)).map(f => f.fileSize).sum
           JobLogger.log("Channel details at executeOnDemand", Some(Map("channel" -> request.requested_channel, "file size" -> processedSize, "completed batches" -> processedCount)), INFO)
 
           if (checkRequestProcessCriteria(processedCount, processedSize)) {
@@ -176,7 +193,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
         }
       }
       // check for duplicates and update with same urls
-      if (dupRequests.contains(updRequest.request_id)){
+      if (dupRequests.contains(updRequest.request_id)) {
         val dupReq = dupRequests(updRequest.request_id)
         val res = for (req <- dupReq) yield {
           val dupUpdReq = markDuplicateRequest(req, updRequest)
@@ -188,7 +205,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     }
     CompletableFuture.allOf(result: _*) // Wait for all the async tasks to complete
     val completedResult = result.map(f => f.join()); // Get the completed job requests
-    Metrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")), duplicateRequests =  Some(dupRequestsList.length))
+    Metrics(totalRequests = Some(requests.length), failedRequests = Some(completedResult.count(x => x.status.toUpperCase() == "FAILED")), successRequests = Some(completedResult.count(x => x.status.toUpperCase == "SUCCESS")), duplicateRequests = Some(dupRequestsList.length))
   }
 
   def markDuplicateRequest(request: JobRequest, referenceRequest: JobRequest): JobRequest = {
@@ -213,25 +230,25 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val collectionConfig = JSONUtils.deserialize[CollectionConfig](request.request_data)
     val batches = if (collectionConfig.batchId.isDefined) List(collectionConfig.batchId.get) else collectionConfig.batchFilter.getOrElse(List[String]())
     if (batches.length <= batchLimit) {
-      val completedBatches :ListBuffer[ProcessedRequest]= if(request.processed_batches.getOrElse("[]").equals("[]")) ListBuffer.empty[ProcessedRequest] else {
+      val completedBatches: ListBuffer[ProcessedRequest] = if (request.processed_batches.getOrElse("[]").equals("[]")) ListBuffer.empty[ProcessedRequest] else {
         JSONUtils.deserialize[ListBuffer[ProcessedRequest]](request.processed_batches.get)
       }
       markRequestAsProcessing(request)
-      val completedBatchIds = completedBatches.map(f=> f.batchId)
+      val completedBatchIds = completedBatches.map(f => f.batchId)
       val collectionBatches = getCollectionBatches(collectionConfig.batchId, collectionConfig.batchFilter, collectionConfig.searchFilter, custodianOrgId, request.requested_channel)
-      val collectionBatchesData = collectionBatches._2.filter(p=> !completedBatchIds.contains(p.batchId))
+      val collectionBatchesData = collectionBatches._2.filter(p => !completedBatchIds.contains(p.batchId))
       //SB-26292: The request should fail if the course is retired with err_message: The request is made for retired collection
-      if(collectionBatches._2.size > 0) {
+      if (collectionBatches._2.size > 0) {
         val result = CommonUtil.time(processBatches(userCachedDF, collectionBatchesData, storageConfig, Some(request.request_id), Some(request.requested_channel), processedRequests.toList))
         val response = result._2;
         val failedBatches = response.filter(p => p.status.equals("FAILED"))
-        val processingBatches= response.filter(p => p.status.equals("PROCESSING"))
-        response.filter(p=> p.status.equals("SUCCESS")).foreach(f => completedBatches += ProcessedRequest(request.requested_channel, f.batchId,f.file, f.fileSize))
+        val processingBatches = response.filter(p => p.status.equals("PROCESSING"))
+        response.filter(p => p.status.equals("SUCCESS")).foreach(f => completedBatches += ProcessedRequest(request.requested_channel, f.batchId, f.file, f.fileSize))
         if (response.size == 0) {
           markRequestAsFailed(request, "No data found")
         } else if (failedBatches.size > 0) {
           markRequestAsFailed(request, failedBatches.map(f => f.statusMsg).mkString(","), Option(JSONUtils.serialize(completedBatches)))
-        } else if(processingBatches.size > 0 ){
+        } else if (processingBatches.size > 0) {
           markRequestAsSubmitted(request, JSONUtils.serialize(completedBatches))
         } else {
           request.status = "SUCCESS";
@@ -260,7 +277,7 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     updateStatus(request);
   }
 
-  def getCollectionBatches(batchId: Option[String], batchFilter: Option[List[String]], searchFilter: Option[Map[String, AnyRef]], custodianOrgId: String, requestedOrgId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): (String,List[CollectionBatch]) = {
+  def getCollectionBatches(batchId: Option[String], batchFilter: Option[List[String]], searchFilter: Option[Map[String, AnyRef]], custodianOrgId: String, requestedOrgId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): (String, List[CollectionBatch]) = {
 
     val encoder = Encoders.product[CollectionBatch];
     val collectionBatches = getCollectionBatchDF(persist = false)
@@ -269,7 +286,9 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       if (batches.count() > 0) {
         val collectionIds = batches.select("courseid").dropDuplicates().collect().map(f => f.get(0));
         val collectionDF = validCollection(collectionIds)
-        if (collectionDF.count() == 0) { ("The request is made for retired collection", List()) }
+        if (collectionDF.count() == 0) {
+          ("The request is made for retired collection", List())
+        }
         else {
           val joinedDF = batches.join(collectionDF, batches("courseid") === collectionDF("identifier"), "inner");
           val finalDF = joinedDF.withColumn("custodianOrgId", lit(custodianOrgId))
@@ -291,60 +310,73 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
   }
 
   /**
-    *
-    * @param collectionIds
-    *    - Filter the collection ids where status=Retired
-    * @return Dataset[Row] of valid collection Id
-    */
+   *
+   * @param collectionIds
+   *    - Filter the collection ids where status=Retired
+   * @return Dataset[Row] of valid collection Id
+   */
   def validCollection(collectionIds: Array[Any])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): Dataset[Row] = {
     val searchContentDF = searchContent(Map("request" -> Map("filters" -> Map("identifier" -> collectionIds, "status" -> Array("Live", "Unlisted", "Retired")), "fields" -> Array("channel", "identifier", "name", "userConsent", "status"))));
     searchContentDF.filter(col("status").notEqual("Retired"))
   }
 
   /**
-    *
-    * @param collectionBatches,  batchId, batchFilter
-    * If batchFilter is defined
-    *    Step 1: Filter the duplictae batches from batchFilter list
-    * Common Step
-    * Step 2: Validate if the batchid is correct by checking in coursebatch table
-    *
-    * @return Dataset[Row] of valid batchid
-    */
-  def validateBatches(collectionBatches: DataFrame, batchId: Option[String], batchFilter: Option[List[String]]): Dataset[Row]  = {
+   *
+   * @param collectionBatches ,  batchId, batchFilter
+   *                          If batchFilter is defined
+   *                          Step 1: Filter the duplictae batches from batchFilter list
+   *                          Common Step
+   *                          Step 2: Validate if the batchid is correct by checking in coursebatch table
+   * @return Dataset[Row] of valid batchid
+   */
+  def validateBatches(collectionBatches: DataFrame, batchId: Option[String], batchFilter: Option[List[String]]): Dataset[Row] = {
     if (batchId.isDefined) {
       collectionBatches.filter(col("batchid") === batchId.get)
     } else {
       /**
-        * Filter out the duplicate batches from batchFilter
-        * eg: Input: List["batch-001", "batch-002", "batch-001"]
-        * Output: List["batch-001", "batch-002"]
-        */
+       * Filter out the duplicate batches from batchFilter
+       * eg: Input: List["batch-001", "batch-002", "batch-001"]
+       * Output: List["batch-001", "batch-002"]
+       */
       val distinctBatch = batchFilter.get.distinct
       if (batchFilter.size != distinctBatch.size) JobLogger.log("Duplicate Batches are filtered:: TotalDistinctBatches: " + distinctBatch.size)
       collectionBatches.filter(col("batchid").isin(distinctBatch: _*))
     }
   }
 
-  def processBatches(userCachedDF: DataFrame, collectionBatches: List[CollectionBatch], storageConfig: StorageConfig, requestId: Option[String], requestChannel: Option[String], processedRequests: List[ProcessedRequest] )(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
+  def processBatches(userCachedDF: DataFrame, collectionBatches: List[CollectionBatch], storageConfig: StorageConfig, requestId: Option[String], requestChannel: Option[String], processedRequests: List[ProcessedRequest])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): List[CollectionBatchResponse] = {
 
-    var processedCount = if(processedRequests.isEmpty) 0 else processedRequests.count(f => f.channel.equals(requestChannel.getOrElse("")))
-    var processedSize = if(processedRequests.isEmpty) 0 else processedRequests.filter(f => f.channel.equals(requestChannel.getOrElse(""))).map(f => f.fileSize).sum
+    var processedCount = if (processedRequests.isEmpty) 0 else processedRequests.count(f => f.channel.equals(requestChannel.getOrElse("")))
+    var processedSize = if (processedRequests.isEmpty) 0 else processedRequests.filter(f => f.channel.equals(requestChannel.getOrElse(""))).map(f => f.fileSize).sum
     JobLogger.log("Channel details at processBatches", Some(Map("channel" -> requestChannel, "file size" -> processedSize, "completed batches" -> processedCount)), INFO)
 
     var newFileSize: Long = 0
     val batches = filterCollectionBatches(collectionBatches)
     val parallelProcessLimit = AppConf.getConfig("exhaust.parallel.batch.load.limit").toInt
-    val parallelBatches = batches.sliding(parallelProcessLimit,parallelProcessLimit).toList
-    for(parallelBatch <- parallelBatches) yield {
+    val parallelBatches = batches.sliding(parallelProcessLimit, parallelProcessLimit).toList
+    for (parallelBatch <- parallelBatches) yield {
       val userEnrolmentDf = getUserEnrolmentDF(parallelBatch.map(f => f.batchId), persist = true)
-      val batchResponseList= for (batch <- parallelBatch) yield {
+      val batchResponseList = for (batch <- parallelBatch) yield {
         if (checkRequestProcessCriteria(processedCount, processedSize)) {
+          val courseCode = getCourseCode(batch.collectionId)
+          val learnerProfile = getLearnerProfile(batch.collectionId)
+          //val totalModules = getTotalModule(batch.collectionId)
+
+          val completedModules: DataFrame = getCompletedModule(batch.batchId, batch.collectionId)
           val userEnrolmentBatchDF = userEnrolmentDf.where(col("batchid") === batch.batchId && col("courseid") === batch.collectionId)
             .join(userCachedDF, Seq("userid"), "inner")
             .withColumn("collectionName", lit(batch.collectionName))
             .withColumn("batchName", lit(batch.batchName))
-            .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt,col("userid"),col("courseid"),col("batchid"))
+            .withColumn("coursecode", lit(Option(courseCode).getOrElse("")))
+            .withColumn("learnerprofile", lit(Option(learnerProfile).getOrElse("")))
+            .join(completedModules, userEnrolmentDf("userid") === completedModules("user_id"), "left")
+            .withColumn("total_activities", coalesce(col("total_activities"), lit(0)))
+            .withColumn("completed_activities", coalesce(col("completed_activities"), lit(0)))
+            .withColumn("module_progress", when(col("total_activities") > 0, round((col("completed_activities") / col("total_activities")) * 100, 2)).otherwise(lit(0)))
+            .drop("user_id")
+            .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"), col("courseid"), col("batchid"))
+
+
           val filteredDF = filterUsers(batch, userEnrolmentBatchDF).persist()
           val res = CommonUtil.time(filteredDF.count);
           JobLogger.log("Time to fetch batch enrolment", Some(Map("timeTaken" -> res._1, "count" -> res._2)), INFO)
@@ -380,11 +412,11 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
       Map<"hash-1", List<JobRequest1, JobRequest3>, "hash-2", List<JobRequest2>>
     */
     val reqHashMap: scala.collection.mutable.Map[String, List[JobRequest]] = scala.collection.mutable.Map()
-    requests.foreach{ req =>
+    requests.foreach { req =>
       // get hash
       val key = Array(req.request_data, req.encryption_key.getOrElse(""), req.requested_by).mkString("|")
       val hash = MessageDigest.getInstance("MD5").digest(key.getBytes).map("%02X".format(_)).mkString
-      if(!reqHashMap.contains(hash)) reqHashMap.put(hash, List(req))
+      if (!reqHashMap.contains(hash)) reqHashMap.put(hash, List(req))
       else {
         val newList = reqHashMap(hash) ++ List(req)
         reqHashMap.put(hash, newList)
@@ -405,11 +437,17 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   /** START - Overridable Methods */
   def processBatch(userEnrolmentDF: DataFrame, collectionBatch: CollectionBatch)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame;
-  def unpersistDFs(){};
+
+  def unpersistDFs() {};
+
   def jobId(): String;
+
   def jobName(): String;
+
   def getReportPath(): String;
+
   def getReportKey(): String;
+
   def filterCollectionBatches(collectionBatches: List[CollectionBatch]): List[CollectionBatch] = {
     collectionBatches
   }
@@ -418,9 +456,10 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     Seq("userid", "state", "district", "rootorgid")
   }
 
-  def getEnrolmentColumns() : Seq[String] = {
+  def getEnrolmentColumns(): Seq[String] = {
     Seq("batchid", "userid", "courseid")
   }
+
   /** END - Overridable Methods */
 
   /** START - Utility Methods */
@@ -447,8 +486,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     import spark.implicits._
     val userDf = loadData(userEnrolmentDBSettings, cassandraFormat, new StructType())
     val batchDf = spark.sparkContext.parallelize(batchIds).toDF("batchid")
-    val df = batchDf.join(userDf,Seq("batchid")).where(lower(col("active")).equalTo("true")
-       && (col("enrolleddate").isNotNull || col("enrolled_date").isNotNull))
+    val df = batchDf.join(userDf, Seq("batchid")).where(lower(col("active")).equalTo("true")
+        && (col("enrolleddate").isNotNull || col("enrolled_date").isNotNull))
       .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
       .select(cols.head, cols.tail: _*)
 
@@ -475,6 +514,161 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     contentDf
   }
 
+  def getCourseCode(courseId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): String = {
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val searchFilter = Map(
+      "request" -> Map(
+        "filters" -> Map(
+          "identifier" -> courseId,
+          "status" -> List("Live")
+        ),
+        "limit" -> 1,
+        "fields" -> List("code"),
+        "offset" -> null
+      )
+    )
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val result = response.getOrElse("content", List())
+    val codeList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
+    codeList.headOption.flatMap(_.get("code")).map(_.toString).getOrElse("")
+  }
+
+  def getLearnerProfile(courseId: String)(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): String = {
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val searchFilter = Map(
+      "request" -> Map(
+        "filters" -> Map(
+          "primaryCategory" -> "Learner Profile",
+          "children" -> List(courseId),
+          "status" -> List("Live")
+        ),
+        "limit" -> 100,
+        "sort_by" -> Map(
+          "lastPublishedOn" -> "desc"
+        ),
+        "fields" -> List("identifier", "lastPublishedOn", "code", "name"),
+        "offset" -> null
+      )
+    )
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val result = response.getOrElse("content", List())
+    val learnerProfileList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
+    learnerProfileList.headOption.flatMap(_.get("name")).map(_.toString).getOrElse("")
+  }
+
+  def getContentNames(contentIds: List[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig) = {
+    val apiURL = Constants.COMPOSITE_SEARCH_URL
+    val searchFilter = Map(
+      "request" -> Map(
+        "filters" -> Map(
+          "identifier" -> contentIds,
+          "status" -> List("Live")
+        ),
+        "fields" -> ("name"),
+        "offset" -> null
+      )
+    )
+    val request = JSONUtils.serialize(searchFilter)
+    val response = RestUtil.post[CollectionDetails](apiURL, request).result
+    val result = response.getOrElse("content", List())
+    JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
+  }
+
+
+  def getTotalModule(courseId: String): List[String] = {
+    val nodes = RedisSafeSearch.searchLeafNodes(s"$courseId*", 1000, jedis)
+    val unitIds = nodes.flatMap { case (key, _) =>
+      println(s"Processing key: $key")
+      if (key.endsWith(":leafnodes")) {
+        val base = key.stripSuffix(":leafnodes")
+        println(s"Base after strip: '$base'")
+        val parts = base.split(":")
+        println(s"Parts: ${parts.mkString(",")}")
+        if (parts.length == 2) {
+          println(s"Extracted unit id: ${parts(1)}")
+          Some(parts(1))
+        } else {
+          println("Did not match expected pattern (2 parts)")
+          None
+        }
+      } else {
+        println("Key does not end with ':leafnodes'")
+        None
+      }
+    }.filterNot(_ == courseId).distinct.toList
+    println("Extracted unitIds: " + unitIds)
+    unitIds
+  }
+
+  def getLeafNodesCountMap(courseId: String): Map[String, Int] = {
+    val unitIds = getTotalModule(courseId)
+    unitIds.map { id =>
+      val key = s"$courseId:$id:leafnodes"
+      val count = jedis.smembers(key).size()
+      id -> count
+    }.toMap
+  }
+
+  def getCompletedModule(batchId: String, courseId: String)
+                        (implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): DataFrame = {
+    import spark.implicits._
+
+    // Get the courseId from activities if possible (assuming all activities belong to the same course)
+    // If not, you may need to pass courseId as a parameter
+    //val courseId = if (activities.nonEmpty) activities.head.split("-").head else ""
+    val leafNodesCountMap = getLeafNodesCountMap(courseId)
+    //    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
+    //      .filter(col("context_id") === s"cb:$batchId" && col("activity_id") === courseId)
+    //      .select("user_id", "activity_id", "aggregates", "context_id")
+    //      .map(row => {
+    //        val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
+    //          case Some(n: Number) => n.intValue()
+    //          case _ => 0
+    //        }
+    //        val activityId = row.getString(1)
+    //        val leafCount = leafNodesCountMap.keySet.size
+    //        //val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
+    //        (row.getString(0), activityId, completedCount, row.getString(3), leafCount)
+    //      }).toDF("user_id", "activity_id", "completed_activities", "context_id", "total_activities")
+    //    userAggDF
+
+
+    val userAggDF = loadData(activityAggDBSettings, cassandraFormat, new StructType())
+      .filter(col("context_id") === s"cb:$batchId" && col("activity_id").isin(leafNodesCountMap.keySet.toSeq.map(_.asInstanceOf[Any]): _*))
+      .select("user_id", "activity_id", "aggregates", "context_id")
+      .map(row => {
+        val completedCount = row.getAs[Map[String, Any]]("aggregates").get("completedCount") match {
+          case Some(n: Number) => n.intValue()
+          case _ => 0
+        }
+        val activityId = row.getString(1)
+        val leafCount = leafNodesCountMap.getOrElse(activityId, 0)
+        val isCompleted = if (completedCount == leafCount && leafCount > 0) 1 else 0
+        (row.getString(0), activityId, completedCount, row.getString(3), isCompleted, leafCount)
+      }).toDF("user_id", "activity_id", "completedCount", "context_id", "is_completed", "leafNodesCount")
+
+    val result = userAggDF
+      .groupBy("user_id")
+      //.withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
+      .agg(
+        count("activity_id").alias("activities_attempted"),
+        sum("is_completed").alias("completed_activities")
+      )
+      .withColumn("total_activities", lit(leafNodesCountMap.keySet.size))
+    result.select("user_id", "total_activities", "completed_activities")
+  }
+
+  def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+    val schema = userDF.schema
+    val decryptFields = schema.fields.filter(field => encryptedFields.contains(field.name))
+    val resultDF = decryptFields.foldLeft(userDF) { (df, field) =>
+      df.withColumn(field.name, UDFUtils.toDecrypt(col(field.name)))
+    }
+    resultDF
+  }
+
   def getCollectionBatchDF(persist: Boolean)(implicit spark: SparkSession): DataFrame = {
     val df = loadData(collectionBatchDBSettings, cassandraFormat, new StructType())
       .withColumn("startdate", UDFUtils.getLatestValue(col("start_date"), col("startdate")))
@@ -485,8 +679,13 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
 
   def getUserCacheDF(cols: Seq[String], persist: Boolean)(implicit spark: SparkSession): DataFrame = {
     val schema = Encoders.product[UserData].schema
-    val df = loadData(userCacheDBSettings, redisFormat, schema).withColumn("username", concat_ws(" ", col("firstname"), col("lastname"))).select(cols.head, cols.tail: _*)
-      .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt,col("userid"))
+    val df = loadData(userCacheDBSettings, redisFormat, schema)
+      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
+      .withColumn("cin", UDFUtils.extractCIN(col("profileConfig")))
+      .withColumn("fmpsid", UDFUtils.extractFMPSID(col("profileConfig")))
+      .withColumn("province", UDFUtils.extractProvince(col("profileConfig")))
+    df.select(cols.head, cols.tail: _*)
+      .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"))
     if (persist) df.persist() else df
   }
 
@@ -534,6 +733,33 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     } else prevData
   }
 
+  def filterAllAssessmentsFromHierarchy(data: List[Map[String, AnyRef]], assessmentFilters: Map[String, List[String]], prevData: AssessmentData): AssessmentData = {
+    if (data.nonEmpty) {
+      val assessmentTypes = assessmentFilters("assessmentTypes")
+      val questionTypes = assessmentFilters("questionTypes")
+      val primaryCatFilter = assessmentFilters("primaryCategories")
+
+      val list = data.map(childNode => {
+        // TODO: need to change to primaryCategory after 3.3.0
+        val contentType = childNode.getOrElse("contentType", "").asInstanceOf[String]
+        val objectType = childNode.getOrElse("objectType", "").asInstanceOf[String]
+        val primaryCategory = childNode.getOrElse("primaryCategory", "").asInstanceOf[String]
+
+        val updatedIds = (if (assessmentTypes.contains(contentType) || (questionTypes.contains(objectType) && primaryCatFilter.contains(primaryCategory))) {
+          List(childNode.get("identifier").get.asInstanceOf[String])
+        } else List()) ::: prevData.assessmentIds
+        val updatedAssessmentData = AssessmentData(prevData.courseid, updatedIds)
+        val children = childNode.getOrElse("children", List()).asInstanceOf[List[Map[String, AnyRef]]]
+        if (null != children && children.nonEmpty) {
+          filterAllAssessmentsFromHierarchy(children, assessmentFilters, updatedAssessmentData)
+        } else updatedAssessmentData
+      })
+      val courseId = list.head.courseid
+      val assessmentIds = list.map(x => x.assessmentIds).flatten.distinct
+      AssessmentData(courseId, assessmentIds)
+    } else prevData
+  }
+
   def logTime[R](block: => R, message: String): R = {
     val res = CommonUtil.time(block);
     JobLogger.log(message, Some(Map("timeTaken" -> res._1)), INFO)
@@ -547,6 +773,8 @@ trait BaseCollectionExhaustJob extends BaseReportsJob with IJob with OnDemandExh
     val columnWithOrder = (finalColumnOrder ::: dynamicColumns).distinct
     reportDF.withColumn("batchid", concat(lit("BatchId_"), col("batchid"))).toDF(colNames: _*).select(columnWithOrder.head, columnWithOrder.tail: _*).na.fill("")
   }
+
+
   /** END - Utility Methods */
 
 }
@@ -590,7 +818,7 @@ object UDFUtils extends Serializable {
   def completionPercentageFunction(statusMap: Map[String, Int], leafNodesCount: Int): Int = {
     try {
       val completedContent = statusMap.count(p => p._2 == 2)
-      if(completedContent >= leafNodesCount) 100 else Math.round(((completedContent.toFloat/leafNodesCount) * 100))
+      if (completedContent >= leafNodesCount) 100 else Math.round(((completedContent.toFloat / leafNodesCount) * 100))
     } catch {
       case ex: Exception =>
         ex.printStackTrace();
@@ -610,4 +838,51 @@ object UDFUtils extends Serializable {
 
   def convertStringToList: UserDefinedFunction =
     udf { str: String => JSONUtils.deserialize[List[Question]](str) }
+
+
+  def extractFieldFromProfileConfigFun(profileConfig: Any, field: String): String = {
+    try {
+      profileConfig match {
+        case str: String if str.nonEmpty =>
+          // Parse as JSON array of JSON strings (escaped)
+          try {
+            val arr = JSONUtils.deserialize[Seq[String]](str)
+            arr.headOption match {
+              case Some(jsonStr) =>
+                try {
+                  val json = JSONUtils.deserialize[Map[String, String]](jsonStr)
+                  json.getOrElse(field, "")
+                } catch {
+                  case _: Exception => ""
+                }
+              case None => ""
+            }
+          } catch {
+            case _: Exception => ""
+          }
+        case arr: Seq[_] if arr.nonEmpty && arr.head.isInstanceOf[String] =>
+          // Defensive: handle if profileConfig is already a Seq[String]
+          arr.headOption match {
+            case Some(jsonStr: String) =>
+              try {
+                val json = JSONUtils.deserialize[Map[String, String]](jsonStr)
+                json.getOrElse(field, "")
+              } catch {
+                case _: Exception => ""
+              }
+            case _ => ""
+          }
+        case _ => ""
+      }
+    } catch {
+      case _: Exception => ""
+    }
+  }
+
+  val extractCIN = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "cin"))
+  val extractFMPSID = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "idFmps"))
+  val extractProvince = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "province"))
+  val extractDesignation = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "designation"))
+
+
 }
