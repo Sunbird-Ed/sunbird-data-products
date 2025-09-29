@@ -37,20 +37,38 @@ object ContentDataIndexerJob extends IJob with BaseReportsJob {
             val docType =  modelParams.getOrElse("elasticsearchQueryType", "").asInstanceOf[String]
             // query to fetch all 'Live' status contents of objectType 'Content'
             val query = modelParams.getOrElse("elasticsearchQueryJsonString", "{\"query\":{\"bool\":{\"must\":[{\"match\":{\"status\":{\"query\":\"Live\"}}},{\"match\":{\"objectType\":{\"query\":\"Content\"}}}]}}}").asInstanceOf[String]
-            val fieldsCsv = modelParams.get("elasticsearchReadFields") // Not being used currently
+            val fieldsCsv = modelParams.getOrElse("elasticsearchReadFields", "").asInstanceOf[String]
 
             val indexPath = if (docType.trim.nonEmpty) s"$index/${docType.trim}" else index
 
             // Fetch from Elasticsearch
-            val jsonRdd = spark.sparkContext.esJsonRDD(indexPath, query).map(_._2)
+            val dataset = modelParams.getOrElse("dataset", "content-snapshot-data").asInstanceOf[String]
+            val jsonRdd = spark.sparkContext.esJsonRDD(indexPath, query)
+                .map(_._2)
+                .map { rec =>
+                    val recordMap = JSONUtils.deserialize[Map[String, AnyRef]](rec)
+                    JSONUtils.serialize(recordMap + ("dataset" -> dataset))
+                }
+
+            // Optionally project only requested fields (plus dataset) if fieldsCsv is provided
+            val filteredJsonRdd = if (fieldsCsv.trim.isEmpty) {
+                jsonRdd
+            } else {
+                val fieldsToKeep = fieldsCsv.split(",").map(_.trim).filter(_.nonEmpty).toSet
+                jsonRdd.map { rec =>
+                    val recordMap = JSONUtils.deserialize[Map[String, AnyRef]](rec)
+                    val projected = recordMap.filter { case (k, _) => fieldsToKeep.contains(k) } + ("dataset" -> dataset)
+                    JSONUtils.serialize(projected)
+                }
+            }
             
             // Publish records to Kafka using Dispatcher
             val topic = modelParams.getOrElse("topic", "dev.ingest").asInstanceOf[String]
             val brokerList = modelParams.getOrElse("brokerList", "").asInstanceOf[String]
             implicit val scForDispatcher: SparkContext = spark.sparkContext
-            OutputDispatcher.dispatch(Dispatcher("kafka", Map("brokerList" -> brokerList, "topic" -> topic)), jsonRdd);
+            OutputDispatcher.dispatch(Dispatcher("kafka", Map("brokerList" -> brokerList, "topic" -> topic)), filteredJsonRdd);
             
-            jsonRdd.unpersist()
+            filteredJsonRdd.unpersist()
 
         } 
         finally {
