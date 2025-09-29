@@ -64,7 +64,7 @@ object UserInfoExhaustJob extends BaseCollectionExhaustJob with Serializable {
     consentDF.filter(col("consentflag") === "true")
   }
 
-  def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
+  override def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
 
     val schema = userDF.schema
     val decryptFields = schema.fields.filter(field => encryptedFields.contains(field.name));

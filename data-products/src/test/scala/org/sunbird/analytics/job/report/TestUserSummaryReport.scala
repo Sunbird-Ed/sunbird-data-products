@@ -66,9 +66,9 @@ class TestCollectionSummaryJobV2 extends BaseReportSpec with MockFactory {
   it should "generate the report for all the batches" in {
     initializeDefaultMockData()
     implicit val mockFc: FrameworkContext = mock[FrameworkContext]
-    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.CollectionSummaryJobV2","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel","status","keywords","createdFor","medium", "subject"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"Collection Summary Report"}""".stripMargin
+    val strConfig = """{"search":{"type":"none"},"model":"org.sunbird.analytics.job.report.UserSummaryReport","modelParams":{"searchFilter":{"request":{"filters":{"status":["Live"],"contentType":"Course"},"fields":["identifier","name","organisation","channel","status","keywords","createdFor","medium", "subject"],"limit":10000}},"store":"azure","sparkElasticsearchConnectionHost":"{{ sunbird_es_host }}","sparkRedisConnectionHost":"{{ metadata2_redis_host }}","sparkUserDbRedisIndex":"12","sparkCassandraConnectionHost":"{{ core_cassandra_host }}","fromDate":"$(date --date yesterday '+%Y-%m-%d')","toDate":"$(date --date yesterday '+%Y-%m-%d')","specPath":"src/test/resources/ingestion-spec/summary-ingestion-spec.json"},"parallelization":8,"appName":"User Summary Report"}""".stripMargin
     implicit val jobConfig: JobConfig = JSONUtils.deserialize[JobConfig](strConfig)
-    val reportData = CollectionSummaryJobV2.prepareReport(spark, reporterMock.fetchData)
+    val reportData = UserSummaryReport.prepareReport(spark, reporterMock.fetchData _)
 
     // Read and print all records from user_summary_report table in embedded Postgres
     import java.sql.DriverManager

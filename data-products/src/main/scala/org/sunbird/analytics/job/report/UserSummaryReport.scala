@@ -16,6 +16,7 @@ import org.ekstep.analytics.util.Constants
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.sunbird.analytics.exhaust.collection.UDFUtils
+import org.sunbird.analytics.exhaust.UserCacheSupport
 
 import java.util.Properties
 
@@ -30,12 +31,9 @@ case class SearchResult(content: List[CourseInfo])
 case class Response(result: SearchResult)
 
 
-object UserSummaryReport extends IJob with BaseReportsJob {
+object UserSummaryReport extends IJob with BaseReportsJob with UserCacheSupport {
   val cassandraUrl = "org.apache.spark.sql.cassandra"
-  private val redisFormat = "org.apache.spark.sql.redis";
-  private val userCacheDBSettings = Map("table" -> "user", "infer.schema" -> "true", "key.column" -> "userid")
   private val userEnrolmentDBSettings = Map("table" -> "user_enrolments", "keyspace" -> AppConf.getConfig("sunbird.user.report.keyspace"), "cluster" -> "ReportCluster");
-  private val encryptedFields = Array("email", "phone");
   private val reportCols = Seq("userid", "firstname", "lastname", "username", "email", "usertype", "cin", "fmpsid", "province", "designation", "orgname", "createddate", "num_courses_enrolled", "num_courses_started", "num_courses_completed", "course_metrics")
 
 
@@ -68,10 +66,6 @@ object UserSummaryReport extends IJob with BaseReportsJob {
     }
   }
 
-  def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province", "createddate", "designation")
-  }
-
   def getUserEnrolromentColumns(): Seq[String] = {
     Seq("userid", "courseid", "batchid", "active", "completedon", "completionpercentage", "enrolled_date", "datetime", "enrolleddate", "progress", "status")
   }
@@ -85,22 +79,6 @@ object UserSummaryReport extends IJob with BaseReportsJob {
   }
 
   // $COVERAGE-ON$
-  def getUserCacheDF(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
-    val cols = getUserCacheColumns()
-    val schema = Encoders.product[UserCols].schema
-    val df = fetchData(spark, userCacheDBSettings, redisFormat, schema)
-      .withColumn("username", concat_ws(" ", col("firstname"), col("lastname")))
-      .withColumn("cin", UDFUtils.extractCIN(col("profileConfig")))
-      .withColumn("fmpsid", UDFUtils.extractFMPSID(col("profileConfig")))
-      .withColumn("province", UDFUtils.extractProvince(col("profileConfig")))
-      .withColumn("designation", UDFUtils.extractDesignation(col("profileConfig")))
-    val selectedDF = df.select(cols.head, cols.tail: _*)
-      .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"))
-    selectedDF.persist()
-    selectedDF
-
-  }
-
   def getUserEnrollment(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
     val cols = getUserEnrolromentColumns()
     val df = fetchData(spark, userEnrolmentDBSettings, cassandraUrl, new StructType())
@@ -108,15 +86,6 @@ object UserSummaryReport extends IJob with BaseReportsJob {
       .withColumn("enrolleddate", UDFUtils.getLatestValue(col("enrolled_date"), col("enrolleddate")))
     df.select(cols.head, cols.tail: _*)
       .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"))
-  }
-
-  def decryptUserInfo(userDF: DataFrame)(implicit spark: SparkSession): DataFrame = {
-    val schema = userDF.schema
-    val decryptFields = schema.fields.filter(field => encryptedFields.contains(field.name))
-    val resultDF = decryptFields.foldLeft(userDF) { (df, field) =>
-      df.withColumn(field.name, UDFUtils.toDecrypt(col(field.name)))
-    }
-    resultDF
   }
 
   def prepareReport(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame)(implicit fc: FrameworkContext, config: JobConfig): DataFrame = {
@@ -241,30 +210,5 @@ object UserSummaryReport extends IJob with BaseReportsJob {
 
     courseDetails.map(c => c.identifier -> (c.code, c.name)).toMap
   }
-
-  // Returns (code, name) as a tuple. Returns ("", "") if not found.
-  def getCourseCodeAndName(courseId: List[String])(implicit spark: SparkSession, fc: FrameworkContext, config: JobConfig): (String, String) = {
-    case class CollectionDetails(result: Map[String, AnyRef])
-    val apiURL = Constants.COMPOSITE_SEARCH_URL
-    val searchFilter = Map(
-      "request" -> Map(
-        "filters" -> Map(
-          "identifier" -> courseId,
-          "status" -> List("Live")
-        ),
-        "fields" -> List("name", "code"),
-        "offset" -> null
-      )
-    )
-    val request = JSONUtils.serialize(searchFilter)
-    val response = RestUtil.post[CollectionDetails](apiURL, request).result
-    val result = response.getOrElse("content", List())
-    val codeList = JSONUtils.deserialize[List[Map[String, Any]]](JSONUtils.serialize(result))
-    val code = codeList.headOption.flatMap(_.get("code")).map(_.toString).getOrElse("")
-    val name = codeList.headOption.flatMap(_.get("name")).map(_.toString).getOrElse("")
-    (code, name)
-  }
-
-
 }
 
