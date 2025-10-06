@@ -883,6 +883,6 @@ object UDFUtils extends Serializable {
   val extractFMPSID = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "idFmps"))
   val extractProvince = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "province"))
   val extractDesignation = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "designation"))
-
+  val extractTrainingGroup = udf((profileConfig: Any) => extractFieldFromProfileConfigFun(profileConfig, "trainingGroup"))
 
 }

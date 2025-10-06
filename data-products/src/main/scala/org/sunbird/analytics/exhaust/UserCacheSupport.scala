@@ -19,7 +19,7 @@ trait UserCacheSupport {
   protected val encryptedFields: Array[String] = Array("email", "phone")
 
   def getUserCacheColumns(): Seq[String] = {
-    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province", "createddate", "designation")
+    Seq("userid", "firstname", "lastname", "email", "orgname", "rootorgid", "usertype", "username", "cin", "fmpsid", "province", "createddate", "designation", "training_group")
   }
 
   def getUserCacheDF(spark: SparkSession, fetchData: (SparkSession, Map[String, String], String, StructType) => DataFrame): DataFrame = {
@@ -31,6 +31,7 @@ trait UserCacheSupport {
       .withColumn("fmpsid", UDFUtils.extractFMPSID(col("profileConfig")))
       .withColumn("province", UDFUtils.extractProvince(col("profileConfig")))
       .withColumn("designation", UDFUtils.extractDesignation(col("profileConfig")))
+      .withColumn("training_group", UDFUtils.extractTrainingGroup(col("profileConfig")))
     val selectedDF = df.select(cols.head, cols.tail: _*)
       .repartition(AppConf.getConfig("exhaust.user.parallelism").toInt, col("userid"))
     selectedDF.persist()
