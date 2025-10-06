@@ -101,13 +101,10 @@ object UserSummaryReport extends IJob with BaseReportsJob with UserCacheSupport 
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
 
-    val outputFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS'+0000'")
-    outputFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
-
     try {
       (Option(completedOn), Option(lastContentAccessTime)) match {
         case (Some(completed), Some(lastAccess)) if completed.nonEmpty && lastAccess.nonEmpty =>
-          // Both values present - calculate difference
+          // Both values present - calculate difference as duration
           val completedDate = if (completed.contains("T")) {
             val isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
             isoFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
@@ -125,16 +122,17 @@ object UserSummaryReport extends IJob with BaseReportsJob with UserCacheSupport 
           }
 
           val diffMillis = Math.abs(completedDate.getTime - lastAccessDate.getTime)
-          val diffDate = new java.util.Date(diffMillis)
-          outputFormat.format(diffDate)
+
+          // Convert milliseconds to MM:SS format
+          formatDuration(diffMillis)
 
         case (Some(completed), _) if completed.nonEmpty =>
-          // Only completed date present
-          completed
+          // Only completed date present - return null
+          null
 
         case (_, Some(lastAccess)) if lastAccess.nonEmpty =>
-          // Only last access time present
-          lastAccess
+          // Only last access time present - return null
+          null
 
         case _ =>
           // Both null or empty
@@ -142,10 +140,21 @@ object UserSummaryReport extends IJob with BaseReportsJob with UserCacheSupport 
       }
     } catch {
       case _: Exception =>
-        // If parsing fails, return whichever value is available, or null
-        if (Option(completedOn).exists(_.nonEmpty)) completedOn
-        else if (Option(lastContentAccessTime).exists(_.nonEmpty)) lastContentAccessTime
-        else null
+        // If parsing fails, return null
+        null
+    }
+  }
+
+  // Helper function to format duration in milliseconds to minutes:seconds format
+  private def formatDuration(durationMillis: Long): String = {
+    val totalSeconds = durationMillis / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+
+    if (minutes == 0 && seconds == 0) {
+      null
+    } else {
+      f"$minutes:${seconds}%02d"
     }
   }
 
