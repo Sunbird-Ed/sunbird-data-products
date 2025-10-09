@@ -10,7 +10,7 @@ import org.ekstep.analytics.framework.Level.INFO
 import org.ekstep.analytics.framework.conf.AppConf
 import org.ekstep.analytics.framework.util.DatasetUtil.extensions
 import org.ekstep.analytics.framework.util.{CommonUtil, JSONUtils, JobLogger}
-import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig}
+import org.ekstep.analytics.framework.{FrameworkContext, IJob, JobConfig, Dispatcher, OutputDispatcher}
 import org.joda.time.DateTimeZone
 import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.sunbird.analytics.exhaust.UserCacheSupport
@@ -31,15 +31,30 @@ object UserMasterDataIndexerV2 extends IJob with BaseReportsJob with UserCacheSu
     try {
       val res = CommonUtil.time(prepareReport(spark, fetchData))
       val reportData = res._2
-      
+
       // Print record count
       val recordCount = reportData.count()
       println(s"Total records in reportData: $recordCount")
-      
+
       // Print first 5 records
       println("First 5 records in reportData:")
       reportData.show(5, truncate = false)
-      
+
+      // Optionally publish to Kafka based on configuration
+      val modelParams = jobConfig.modelParams.getOrElse(Map[String, AnyRef]())
+      val publishToKafka = modelParams.getOrElse("publishToKafka", Boolean.box(false)).asInstanceOf[Boolean]
+      if (publishToKafka) {
+        val topic = modelParams.getOrElse("topic", "").asInstanceOf[String]
+        val brokerList = modelParams.getOrElse("brokerList", "").asInstanceOf[String]
+        if (topic.trim.nonEmpty && brokerList.trim.nonEmpty) {
+          implicit val scForDispatcher: SparkContext = spark.sparkContext
+          val jsonRdd = reportData.toJSON.rdd
+          OutputDispatcher.dispatch(Dispatcher("kafka", Map("brokerList" -> brokerList, "topic" -> topic)), jsonRdd)
+        } else {
+          JobLogger.log("Kafka publish enabled but 'topic' or 'brokerList' is missing; skipping publish", None, INFO)
+        }
+      }
+
       reportData.unpersist()
     } finally {
       frameworkContext.closeContext()
